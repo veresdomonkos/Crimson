@@ -3,3 +3,6 @@ project(Crimson)
 
 add_subdirectory(engine)
 add_subdirectory(editor)
+
+add_subdirectory(external/glfw)
+add_subdirectory(external/imgui)
