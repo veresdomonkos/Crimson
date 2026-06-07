@@ -4,4 +4,4 @@ add_library(Engine STATIC
 
 target_include_directories(Engine PUBLIC include)
 
-target_link_libraries(Engine PRIVATE glfw imgui)
+target_link_libraries(Engine PRIVATE glfw imgui glad)
