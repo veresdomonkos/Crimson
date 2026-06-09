@@ -1,6 +1,9 @@
 #include <iostream>
 
+#include <crimson/core/application.hpp>
+
 int main(int argc, char *argv[])
 {
-    std::cout << "Hello world!" << std::endl;
+    crimson::Application app;
+    app.Run();
 }
