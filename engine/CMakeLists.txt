@@ -3,8 +3,8 @@ add_library(Engine STATIC
 	"include/crimson/core/core.hpp"
 	"include/crimson/core/window.hpp"
 	"include/crimson/core/events.hpp"
-	"include/crimson/platform/windows/windows_window.hpp"
 	"src/core/application.cpp" 
+	"src/platform/windows/windows_window.hpp"
 	"src/platform/windows/windows_window.cpp" 
 )
 
