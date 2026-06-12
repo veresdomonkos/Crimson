@@ -7,6 +7,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/render_command_queue.hpp
         include/crimson/renderer/render_commands.hpp
         include/crimson/renderer/renderer_api.hpp
+		include/crimson/core/log.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -16,6 +17,7 @@ set(ENGINE_IMPLEMENTATION
         src/platform/opengl/opengl_backend_glfw.cpp
         src/platform/opengl/opengl_backend.hpp
         src/renderer/renderer_backend.cpp
+		src/core/log.cpp
 )
 
 add_library(Engine STATIC
@@ -38,4 +40,5 @@ target_link_libraries(Engine
     PRIVATE
         glfw
         glad
+		fmt::fmt
 )

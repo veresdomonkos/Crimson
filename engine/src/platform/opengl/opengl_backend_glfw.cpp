@@ -1,8 +1,8 @@
 #include "opengl_backend.hpp"
 
 #include <glad/glad.h>
-#include <iostream>
 #include <GLFW/glfw3.h>
+#include "crimson/core/log.hpp"
 
 namespace crimson
 {
@@ -16,14 +16,14 @@ namespace crimson
         {
             if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
             {
-                std::cerr << "[Renderer] Failed to initialize GLAD!" << std::endl;
+                LOG_ERROR("[Renderer] Failed to initialize GLAD!");
                 return;
             }
 
-            std::cout << "[Renderer] GLAD Initialized successfully!" << std::endl;
-            std::cout << "[Renderer] OpenGL Version: " << glGetString(GL_VERSION) << std::endl;
-            std::cout << "[Renderer] GPU Vendor:     " << glGetString(GL_VENDOR) << std::endl;
-            std::cout << "[Renderer] Renderer:       " << glGetString(GL_RENDERER) << std::endl;
+            LOG_WARN("[Renderer] GLAD Initialized successfully!");
+            LOG_INFO("[Renderer] OpenGL Version: {}", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
+            LOG_INFO("[Renderer] GPU Vendor:     {}", reinterpret_cast<const char*>(glGetString(GL_VENDOR)));
+            LOG_INFO("[Renderer] Renderer:       {}", reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
         }
 
         s_gladInitialized = true;

@@ -1,6 +1,5 @@
 #include "glfw_window.hpp"
-
-#include <iostream>
+#include "crimson/core/log.hpp"
 
 namespace crimson
 {
@@ -17,7 +16,7 @@ namespace crimson::glfw
 		{
 			if (!glfwInit())
 			{
-				std::cerr << "[Error] Failed to initialize GLFW!\n";
+				LOG_ERROR("[Error] Failed to initialize GLFW!");
 				return;
 			}
 
@@ -28,7 +27,7 @@ namespace crimson::glfw
 
 		if (!m_handle)
 		{
-			std::cerr << "[Error] Failed to create GLFW Window!\n";
+			LOG_ERROR("[Error] Failed to create GLFW Window!");
 			glfwTerminate();
 			return;
 		}
