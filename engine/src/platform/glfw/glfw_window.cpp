@@ -1,17 +1,17 @@
-#include "windows_window.hpp"
+#include "glfw_window.hpp"
 
 #include <iostream>
 
 namespace crimson
 {
-	std::unique_ptr<Window> Window::Create(const WindowData& windowData) { return std::make_unique<windows::WindowsWindow>(windowData); }
+	std::unique_ptr<Window> Window::Create(const WindowData& windowData) { return std::make_unique<glfw::GLFWWindow>(windowData); }
 }
 
-namespace crimson::windows
+namespace crimson::glfw
 {
 	static bool s_glfwInitialized = false;
 
-	WindowsWindow::WindowsWindow(const WindowData& data) : Window(data), m_handle(nullptr)
+	GLFWWindow::GLFWWindow(const WindowData& data) : Window(data), m_handle(nullptr)
 	{
 		if (!s_glfwInitialized)
 		{
@@ -33,28 +33,22 @@ namespace crimson::windows
 			return;
 		}
 
-		glfwMakeContextCurrent(m_handle);
 		glfwSetWindowUserPointer(m_handle, this);
 
 		glfwSetWindowCloseCallback(m_handle, [](GLFWwindow* window) {
-			WindowsWindow* windowsWindow = static_cast<WindowsWindow*>(glfwGetWindowUserPointer(window));
+			auto* windowsWindow = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
 			WindowCloseEvent event;
 			windowsWindow->m_eventCallbackFn(event);
 		});
 	}
 
-	void WindowsWindow::PollEvents()
+	void GLFWWindow::PollEvents()
 	{
 		glfwPollEvents();
 	}
 
-	void WindowsWindow::Resize(int width, int height)
+	void GLFWWindow::Resize(int width, int height)
 	{
 		glfwSetWindowSize(m_handle, width, height);
-	}
-
-	void windows::WindowsWindow::SwapBuffers()
-	{
-		glfwSwapBuffers(m_handle);
 	}
 }

@@ -10,8 +10,8 @@ namespace crimson
 	struct WindowData
 	{
 		std::string Title;
-		int Width;
-		int Height;
+		uint32_t Width;
+		uint32_t Height;
 		EventCallback EventCallbackFn;
 	};
 
@@ -23,17 +23,18 @@ namespace crimson
 
 		};
 
-		virtual ~Window() {}
+		virtual ~Window() = default;
 			
 		virtual void PollEvents() = 0;
 		virtual void Resize(int width, int height) = 0;
-		virtual void SwapBuffers() = 0;
+
+	    virtual void* GetNativeHandle() = 0;
 
 		static std::unique_ptr<Window> Create(const WindowData& windowData);
 	protected:
 		std::string m_title;
-		int m_width;
-		int m_height;
+		uint32_t m_width;
+		uint32_t m_height;
 		EventCallback m_eventCallbackFn;
 	};
 }
