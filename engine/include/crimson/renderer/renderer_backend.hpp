@@ -9,10 +9,8 @@ namespace crimson
     {
     public:
         virtual ~RendererBackend() = default;
-        virtual void Execute(RenderCommandQueue& commandQueue, void* windowHandle) = 0;
-        virtual void Present(void* windowHandle) = 0;
-        virtual void Initialize(void* windowHandle) = 0;
+        virtual void Execute(const RenderCommandQueue& commandQueue) = 0;
 
-        static std::unique_ptr<RendererBackend> Create();
+        static RendererBackend* Create();
     };
 }

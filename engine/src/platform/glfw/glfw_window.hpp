@@ -9,7 +9,7 @@ namespace crimson::glfw
 	{
 	public:
 		GLFWWindow(const WindowData& data);
-
+        ~GLFWWindow() override;
 		void PollEvents() override;
 		void Resize(int width, int height) override;
 

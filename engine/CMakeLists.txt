@@ -6,18 +6,23 @@ set(ENGINE_PUBLIC_HEADERS
 		include/crimson/renderer/renderer_backend.hpp
         include/crimson/renderer/render_command_queue.hpp
         include/crimson/renderer/render_commands.hpp
-        include/crimson/renderer/renderer_api.hpp
-		include/crimson/core/log.hpp
+        include/crimson/core/log.hpp
+        include/crimson/renderer/renderer.hpp
+        include/crimson/renderer/rendering_context.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
 		src/core/application.cpp
 		src/platform/glfw/glfw_window.hpp
 		src/platform/glfw/glfw_window.cpp
-        src/platform/opengl/opengl_backend_glfw.cpp
+        src/platform/opengl/opengl_backend.cpp
         src/platform/opengl/opengl_backend.hpp
         src/renderer/renderer_backend.cpp
 		src/core/log.cpp
+        src/renderer/renderer.cpp
+        src/platform/opengl/opengl_context_glfw.cpp
+        src/platform/opengl/opengl_context.hpp
+        src/renderer/rendering_context.cpp
 )
 
 add_library(Engine STATIC

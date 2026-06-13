@@ -1,5 +1,6 @@
 #include "glfw_window.hpp"
 #include "crimson/core/log.hpp"
+#include "crimson/renderer/renderer.hpp"
 
 namespace crimson
 {
@@ -8,10 +9,10 @@ namespace crimson
 
 namespace crimson::glfw
 {
-	static bool s_glfwInitialized = false;
-
 	GLFWWindow::GLFWWindow(const WindowData& data) : Window(data), m_handle(nullptr)
 	{
+	    static bool s_glfwInitialized = false;
+
 		if (!s_glfwInitialized)
 		{
 			if (!glfwInit())
@@ -22,6 +23,15 @@ namespace crimson::glfw
 
 			s_glfwInitialized = true;
 		}
+
+	    if (Renderer::API() == RendererAPI::OpenGL)
+	    {
+	        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+	    }
+	    else
+	    {
+	        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	    }
 
 		m_handle = glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
 
@@ -39,9 +49,21 @@ namespace crimson::glfw
 			WindowCloseEvent event;
 			windowsWindow->m_eventCallbackFn(event);
 		});
+
+	    m_renderingContext = RenderingContext::Create(m_handle);
 	}
 
-	void GLFWWindow::PollEvents()
+    GLFWWindow::~GLFWWindow()
+    {
+	    if (m_handle)
+	    {
+	        glfwDestroyWindow(m_handle);
+	    }
+
+	    glfwTerminate();
+    }
+
+    void GLFWWindow::PollEvents()
 	{
 		glfwPollEvents();
 	}

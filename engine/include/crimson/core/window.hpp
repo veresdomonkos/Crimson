@@ -4,6 +4,7 @@
 #include <string>
 #include <memory>
 #include <crimson/core/events.hpp>
+#include <crimson/renderer/rendering_context.hpp>
 
 namespace crimson
 {
@@ -24,7 +25,10 @@ namespace crimson
 		};
 
 		virtual ~Window() = default;
-			
+
+	    void MakeCurrent() { m_renderingContext->MakeCurrent(); }
+	    void SwapBuffers() { m_renderingContext->SwapBuffers(); }
+
 		virtual void PollEvents() = 0;
 		virtual void Resize(int width, int height) = 0;
 
@@ -36,5 +40,6 @@ namespace crimson
 		uint32_t m_width;
 		uint32_t m_height;
 		EventCallback m_eventCallbackFn;
+	    std::unique_ptr<RenderingContext> m_renderingContext;
 	};
 }
