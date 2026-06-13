@@ -5,8 +5,13 @@
 
 #include "crimson/core/log.hpp"
 
-namespace crimson
+namespace crimson::opengl
 {
+    std::unique_ptr<RenderingContext> CreateOpenGLContext(void* windowHandle)
+    {
+        return std::make_unique<OpenGLContext>(windowHandle);
+    }
+
     OpenGLContext::OpenGLContext(void* windowHandle) : m_windowHandle(windowHandle)
     {
         static bool s_gladInitialized = false;

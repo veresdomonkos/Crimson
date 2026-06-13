@@ -3,8 +3,13 @@
 #include <glad/glad.h>
 #include "crimson/core/log.hpp"
 
-namespace crimson
+namespace crimson::opengl
 {
+    RendererBackend* CreateOpenGLBackend()
+    {
+        return new OpenGLBackend();
+    }
+
     OpenGLBackend::OpenGLBackend()
     {
         glEnable(GL_DEPTH_TEST);

@@ -1,16 +1,19 @@
 #include "crimson/renderer/rendering_context.hpp"
-
-#include "../platform/opengl/opengl_context.hpp"
 #include "crimson/renderer/renderer.hpp"
 
 namespace crimson
 {
+    namespace opengl
+    {
+        std::unique_ptr<RenderingContext> CreateOpenGLContext(void* windowHandle);
+    }
+
     std::unique_ptr<RenderingContext> RenderingContext::Create(void *windowHandle)
     {
         switch (Renderer::API())
         {
             case RendererAPI::OpenGL:
-                return std::make_unique<OpenGLContext>(windowHandle);
+                return opengl::CreateOpenGLContext(windowHandle);
             default:
                 return nullptr;
         }

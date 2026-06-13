@@ -5,8 +5,6 @@
 
 namespace crimson
 {
-
-
     class RenderCommandQueue
     {
     public:
@@ -33,9 +31,6 @@ namespace crimson
             new (commandStorage) T(std::forward<Args>(args)...);
             m_writePtr += sizeof(RenderCommandHeader) + sizeof(T);
         }
-
-        const std::byte* GetBufferStart() const { return m_bufferStart; }
-        const std::byte* GetDataEnd() const { return m_writePtr; }
 
         void Clear() { m_writePtr = m_bufferStart; }
 

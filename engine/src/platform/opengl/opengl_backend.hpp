@@ -1,7 +1,7 @@
 #pragma once
 #include "crimson/renderer/renderer_backend.hpp"
 
-namespace crimson
+namespace crimson::opengl
 {
     class OpenGLBackend : public RendererBackend
     {

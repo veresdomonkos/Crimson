@@ -1,7 +1,7 @@
 #pragma once
 #include "crimson/renderer/rendering_context.hpp"
 
-namespace crimson
+namespace crimson::opengl
 {
     class OpenGLContext : public RenderingContext
     {
