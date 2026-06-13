@@ -16,6 +16,21 @@ namespace crimson
          uint32_t Size;
     };
 
+    class RenderCommandView
+    {
+    public:
+        RendererCommandType GetType() const { return m_header.Type; }
+
+        template <typename T>
+        const T& As() const
+        {
+            assert(m_header.Type == T::GetStaticType());
+            return reinterpret_cast<const T&>(*(&m_header + 1));
+        }
+    private:
+        RenderCommandHeader m_header;
+    };
+
 #define REGISTER_RENDER_COMMAND(Type) static RendererCommandType GetStaticType() { return RendererCommandType::Type; } \
 
     struct ClearCommand

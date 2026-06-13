@@ -14,26 +14,20 @@ namespace crimson
 
     void OpenGLBackend::Execute(const RenderCommandQueue& commandQueue)
     {
-        const std::byte* ptr = commandQueue.GetBufferStart();
-        const std::byte* endPtr = commandQueue.GetDataEnd();
-
-        while (ptr < endPtr)
+        for (auto& commandView : commandQueue)
         {
-            auto* header = reinterpret_cast<const RenderCommandHeader*>(ptr);
-            switch (header->Type)
+            switch (commandView.GetType())
             {
                 case RendererCommandType::Clear:
                 {
-                    auto *command = reinterpret_cast<const ClearCommand*>(header + 1);
-                    glClearColor(command->Color.r, command->Color.g, command->Color.b, command->Color.a);
+                    const auto& command = commandView.As<ClearCommand>();
+                    glClearColor(command.Color.r, command.Color.g, command.Color.b, command.Color.a);
                     glClear( GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
                     break;
                 }
                 default:
                     break;
             }
-
-            ptr += sizeof(RenderCommandHeader) + header->Size;
         }
     }
 }

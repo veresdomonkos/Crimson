@@ -1,12 +1,12 @@
 #pragma once
 
 #include <cstddef>
-#include <cstdint>
-
 #include "render_commands.hpp"
 
 namespace crimson
 {
+
+
     class RenderCommandQueue
     {
     public:
@@ -38,6 +38,33 @@ namespace crimson
         const std::byte* GetDataEnd() const { return m_writePtr; }
 
         void Clear() { m_writePtr = m_bufferStart; }
+
+        class iterator
+        {
+        public:
+            iterator(std::byte* ptr) : m_ptr(ptr) {}
+
+            iterator& operator++()
+            {
+                m_ptr += sizeof(RenderCommandHeader) + reinterpret_cast<RenderCommandHeader*>(m_ptr)->Size;
+                return *this;
+            }
+
+            RenderCommandView& operator*() const
+            {
+                return reinterpret_cast<RenderCommandView&>(*m_ptr);
+            }
+
+            bool operator!=(const iterator& other) const
+            {
+                return  m_ptr != other.m_ptr;
+            }
+        private:
+            std::byte* m_ptr;
+        };
+
+        iterator begin() const { return m_bufferStart; }
+        iterator end() const { return m_writePtr; }
     private:
         std::byte* m_bufferStart;
         std::byte* m_writePtr;
