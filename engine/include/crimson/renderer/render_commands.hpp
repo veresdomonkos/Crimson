@@ -2,12 +2,15 @@
 #include <cstdint>
 #include <glm/glm.hpp>
 
+#include "render_core.hpp"
+
 namespace crimson
 {
     enum class RendererCommandType : uint32_t
     {
         None,
-        Clear
+        Clear,
+        DrawIndexed
     };
 
     struct RenderCommandHeader
@@ -40,5 +43,21 @@ namespace crimson
         ClearCommand(const glm::vec4& color) : Color(color) {}
 
         REGISTER_RENDER_COMMAND(Clear)
+    };
+
+    struct DrawIndexedCommand
+    {
+        ResourceHandle VertexBufferHandle;
+        ResourceHandle IndexBufferHandle;
+        ResourceHandle ShaderHandle;
+        uint32_t IndexCount;
+
+        DrawIndexedCommand(ResourceHandle vbo, ResourceHandle ibo, ResourceHandle shader, uint32_t indexCount)
+            : VertexBufferHandle(vbo)
+            , IndexBufferHandle(ibo)
+            , ShaderHandle(shader)
+            , IndexCount(indexCount) {}
+
+        REGISTER_RENDER_COMMAND(DrawIndexed)
     };
 }

@@ -5,11 +5,6 @@
 
 namespace crimson::opengl
 {
-    RendererBackend* CreateOpenGLBackend()
-    {
-        return new OpenGLBackend();
-    }
-
     OpenGLBackend::OpenGLBackend()
     {
         glEnable(GL_DEPTH_TEST);
@@ -25,9 +20,18 @@ namespace crimson::opengl
             {
                 case RendererCommandType::Clear:
                 {
-                    const auto& command = commandView.As<ClearCommand>();
-                    glClearColor(command.Color.r, command.Color.g, command.Color.b, command.Color.a);
+                    const auto& cmd = commandView.As<ClearCommand>();
+                    glClearColor(cmd.Color.r, cmd.Color.g, cmd.Color.b, cmd.Color.a);
                     glClear( GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+                    break;
+                }
+                case RendererCommandType::DrawIndexed:
+                {
+                    const auto& cmd = commandView.As<DrawIndexedCommand>();
+                    //glUseProgram(static_cast<GLuint>(cmd.ShaderHandle));
+                    glBindVertexArray(static_cast<GLuint>(cmd.VertexBufferHandle));
+                    glVertexArrayElementBuffer(static_cast<GLuint>(cmd.VertexBufferHandle), static_cast<GLuint>(cmd.IndexBufferHandle));
+                    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(cmd.IndexCount), GL_UNSIGNED_INT, nullptr);
                     break;
                 }
                 default:

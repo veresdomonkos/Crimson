@@ -9,6 +9,9 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/core/log.hpp
         include/crimson/renderer/renderer.hpp
         include/crimson/renderer/rendering_context.hpp
+        include/crimson/renderer/render_core.hpp
+        include/crimson/renderer/buffers/vertex_buffer.hpp
+        include/crimson/renderer/buffers/index_buffer.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -23,6 +26,12 @@ set(ENGINE_IMPLEMENTATION
         src/platform/opengl/opengl_context_glfw.cpp
         src/platform/opengl/opengl_context.hpp
         src/renderer/rendering_context.cpp
+        src/renderer/buffers/vertex_buffer.cpp
+        src/platform/opengl/opengl_vertex_buffer.cpp
+        src/platform/opengl/opengl_vertex_buffer.hpp
+        src/renderer/buffers/index_buffer.cpp
+        src/platform/opengl/opengl_index_buffer.hpp
+        src/platform/opengl/opengl_index_buffer.cpp
 )
 
 add_library(Engine STATIC

@@ -20,12 +20,30 @@ namespace crimson
 	{
 	    m_window->MakeCurrent();
 
+	    float vertices[] = {
+	        -0.5f, -0.5f, 0.0f,
+             0.5f, -0.5f, 0.0f,
+             0.0f,  0.5f, 0.0f
+        };
+
+	    uint32_t indices[] = {
+	        0, 1, 2
+        };
+
+	    auto vertexBuffer = VertexBuffer::Create(vertices, sizeof(vertices));
+	    auto indexBuffer = IndexBuffer::Create(indices, 3);
+
+	    vertexBuffer->SetLayout({
+	        { ShaderDataType::Float3, "a_Position" }
+        });
+
 		while (m_running)
 		{
             m_window->PollEvents();
 
 		    Renderer::BeginScene();
-		    Renderer::Clear(glm::vec4(0, 0, 1, 1));
+		    Renderer::Clear(glm::vec4(0.8f, 0.1f, 0.2f, 1.0f));
+		    Renderer::DrawIndexed(vertexBuffer, indexBuffer);
 		    Renderer::EndScene();
 
 		    m_window->SwapBuffers();

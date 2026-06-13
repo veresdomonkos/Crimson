@@ -1,5 +1,7 @@
 #pragma once
 #include "renderer_backend.hpp"
+#include "buffers/index_buffer.hpp"
+#include "buffers/vertex_buffer.hpp"
 
 namespace crimson
 {
@@ -15,6 +17,7 @@ namespace crimson
         static void Initialize();
         static void Shutdown();
         static void Clear(const glm::vec4& color);
+        static void DrawIndexed(const std::shared_ptr<VertexBuffer>& vertexBuffer, const std::shared_ptr<IndexBuffer>& indexBuffer);
         static void BeginScene();
         static void EndScene();
 

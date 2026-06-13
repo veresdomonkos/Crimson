@@ -19,6 +19,11 @@ namespace crimson
         s_commandQueue->Submit<ClearCommand>(color);
     }
 
+    void Renderer::DrawIndexed(const std::shared_ptr<VertexBuffer>& vertexBuffer, const std::shared_ptr<IndexBuffer>& indexBuffer)
+    {
+        s_commandQueue->Submit<DrawIndexedCommand>(vertexBuffer->GetHandle(), indexBuffer->GetHandle(), 0, indexBuffer->GetCount());
+    }
+
     void Renderer::BeginScene()
     {
     }
