@@ -1,34 +1,30 @@
 #include "crimson/core/application.hpp"
 
 #include "crimson/core/core.hpp"
-#include "crimson/renderer/renderer.hpp"
 
 namespace crimson
 {
 	Application::Application() : m_running(true)
 	{
 		m_window = Window::Create(WindowData{ "My Window", 1280, 720, BIND_FN(OnEvent) });
-	    Renderer::Initialize();
+	    m_renderer = Renderer::Create();
+	    m_primarySurface = m_renderer->Initialize(*m_window);
 	}
 
     Application::~Application()
     {
-	    Renderer::Shutdown();
+
     }
 
     void Application::Run()
 	{
-	    m_window->MakeCurrent();
-
 		while (m_running)
 		{
-            m_window->PollEvents();
+		    m_window->PollEvents();
 
-		    Renderer::BeginScene();
-		    Renderer::Clear(glm::vec4(0, 0, 1, 1));
-		    Renderer::EndScene();
-
-		    m_window->SwapBuffers();
+            Frame frame = m_renderer->BeginFrame(m_primarySurface);
+		    frame.Clear({0.8, 0.2, 0.3, 1});
+		    m_renderer->EndFrame(frame);
 		}
 	}
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "crimson/core/window.hpp"
+#include "crimson/renderer/renderer.hpp"
 
 namespace crimson
 {
@@ -13,6 +14,8 @@ namespace crimson
 		void OnEvent(Event& event);
 	private:
 		std::unique_ptr<Window> m_window;
+	    SurfaceHandle m_primarySurface;
+	    std::unique_ptr<Renderer> m_renderer;
 		bool m_running;
 	};
 }

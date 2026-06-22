@@ -1,31 +1,24 @@
 #include "crimson/renderer/renderer.hpp"
 
+#include "../platform/opengl/opengl_renderer.hpp"
+#include "crimson/core/core.hpp"
+#include "crimson/core/log.hpp"
+#include "crimson/renderer/renderer_api.hpp"
+
 namespace crimson
 {
-    void Renderer::Initialize()
+    Unique<Renderer> Renderer::Create()
     {
-        s_backend = RendererBackend::Create();
-        s_commandQueue = new RenderCommandQueue(2 * 1024 * 1024);
-    }
-
-    void Renderer::Shutdown()
-    {
-        delete s_backend;
-        delete s_commandQueue;
-    }
-
-    void Renderer::Clear(const glm::vec4& color)
-    {
-        s_commandQueue->Submit<ClearCommand>(color);
-    }
-
-    void Renderer::BeginScene()
-    {
-    }
-
-    void Renderer::EndScene()
-    {
-        s_backend->Execute(*s_commandQueue);
-        s_commandQueue->Clear();
+        switch (RendererAPI::GetType())
+        {
+            case RendererAPIType::OpenGL:
+                return CreateUnique<opengl::OpenGLRenderer>();
+            case RendererAPIType::Vulkan:
+                LOG_ERROR("Vulkan Renderer is not implemented");
+                return nullptr;
+            default:
+                LOG_ERROR("Unknown RendererAPI type");
+                return nullptr;
+        }
     }
 }

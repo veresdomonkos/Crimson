@@ -1,15 +1,32 @@
 #include "glfw_window.hpp"
 #include "crimson/core/log.hpp"
-#include "crimson/renderer/renderer.hpp"
+#include "crimson/renderer/renderer_api.hpp"
 
 namespace crimson
 {
-	std::unique_ptr<Window> Window::Create(const WindowData& windowData) { return std::make_unique<glfw::GLFWWindow>(windowData); }
+	Unique<Window> Window::Create(WindowData data)
+	{
+	    switch(RendererAPI::GetType())
+	    {
+	        case RendererAPIType::OpenGL:
+	            glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+	            break;
+
+	        case RendererAPIType::Vulkan:
+	            glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	            break;
+
+	        default:
+	            break;
+	    }
+
+	    return CreateUnique<glfw::GLFWWindow>(std::move(data));
+	}
 }
 
 namespace crimson::glfw
 {
-	GLFWWindow::GLFWWindow(const WindowData& data) : Window(data), m_handle(nullptr)
+	GLFWWindow::GLFWWindow(WindowData data) : m_data(std::move(data)), m_handle(nullptr)
 	{
 	    static bool s_glfwInitialized = false;
 
@@ -24,16 +41,7 @@ namespace crimson::glfw
 			s_glfwInitialized = true;
 		}
 
-	    if (Renderer::API() == RendererAPI::OpenGL)
-	    {
-	        glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
-	    }
-	    else
-	    {
-	        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	    }
-
-		m_handle = glfwCreateWindow(m_width, m_height, m_title.c_str(), nullptr, nullptr);
+		m_handle = glfwCreateWindow(static_cast<int>(m_data.Width), static_cast<int>(m_data.Height), m_data.Title.c_str(), nullptr, nullptr);
 
 		if (!m_handle)
 		{
@@ -47,10 +55,8 @@ namespace crimson::glfw
 		glfwSetWindowCloseCallback(m_handle, [](GLFWwindow* window) {
 			auto* windowsWindow = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
 			WindowCloseEvent event;
-			windowsWindow->m_eventCallbackFn(event);
+			windowsWindow->m_data.EventCallbackFn(event);
 		});
-
-	    m_renderingContext = RenderingContext::Create(m_handle);
 	}
 
     GLFWWindow::~GLFWWindow()
@@ -66,10 +72,5 @@ namespace crimson::glfw
     void GLFWWindow::PollEvents()
 	{
 		glfwPollEvents();
-	}
-
-	void GLFWWindow::Resize(int width, int height)
-	{
-		glfwSetWindowSize(m_handle, width, height);
 	}
 }

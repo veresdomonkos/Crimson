@@ -1,26 +1,17 @@
 #pragma once
-#include "renderer_backend.hpp"
+#include "frame.hpp"
+#include "resource_manager.hpp"
 
 namespace crimson
 {
-    enum class RendererAPI
-    {
-        None,
-        OpenGL
-    };
-
     class Renderer
     {
     public:
-        static void Initialize();
-        static void Shutdown();
-        static void Clear(const glm::vec4& color);
-        static void BeginScene();
-        static void EndScene();
-
-        static RendererAPI API() { return RendererAPI::OpenGL; }
-    private:
-        inline static RendererBackend* s_backend = nullptr;
-        inline static RenderCommandQueue* s_commandQueue = nullptr;
+        virtual ~Renderer() = default;
+        virtual SurfaceHandle Initialize(const Window& primaryWindow) = 0;
+        virtual ResourceManager& GetResourceManager() = 0;
+        virtual Frame BeginFrame(SurfaceHandle surface) = 0;
+        virtual void EndFrame(Frame& frame) = 0;
+        static Unique<Renderer> Create();
     };
 }

@@ -8,13 +8,16 @@ namespace crimson::glfw
 	class GLFWWindow : public Window
 	{
 	public:
-		GLFWWindow(const WindowData& data);
+		explicit GLFWWindow(WindowData data);
         ~GLFWWindow() override;
-		void PollEvents() override;
-		void Resize(int width, int height) override;
 
-	    void* GetNativeHandle() override { return m_handle; }
+		void PollEvents() override;
+
+	    uint32_t Width() const override { return m_data.Width; }
+	    uint32_t Height() const override { return m_data.Height; }
+	    void* GetNativeHandle() const override { return m_handle; }
 	private:
+	    WindowData m_data;
 		GLFWwindow* m_handle;
 	};
 }
