@@ -9,7 +9,7 @@ namespace crimson
     class Frame
     {
     public:
-        Frame(RenderSurfaceHandle surfaceHandle, size_t commandBufferSize) : m_surfaceHandle(surfaceHandle), m_commandBuffer(commandBufferSize) {}
+        Frame(RenderSurfaceHandle surfaceHandle, RenderCommandBuffer& commandBuffer) : m_surfaceHandle(surfaceHandle), m_commandBuffer(commandBuffer) {}
 
         void BeginRenderPass(const RenderPassInfo& info)
         {
@@ -25,6 +25,6 @@ namespace crimson
         RenderSurfaceHandle GetSurfaceHandle() const { return m_surfaceHandle; }
     protected:
         RenderSurfaceHandle m_surfaceHandle;
-        RenderCommandBuffer m_commandBuffer;
+        RenderCommandBuffer& m_commandBuffer;
     };
 }

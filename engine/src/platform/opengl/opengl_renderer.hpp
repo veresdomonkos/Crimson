@@ -7,6 +7,7 @@ namespace crimson::opengl
     class OpenGLRenderer : public Renderer
     {
     public:
+        OpenGLRenderer() : m_commandBuffer(2 * 1024 * 1024) {}
         RenderSurfaceHandle Initialize(const Window& primaryWindow) override;
         void Shutdown() override;
         ResourceManager& GetResourceManager() override { return  m_resourceManager; }
@@ -16,6 +17,6 @@ namespace crimson::opengl
         void ExecuteBeginRenderPass(const BeginRenderPassCommand& cmd);
     private:
         OpenGLResourceManager m_resourceManager;
-
+        RenderCommandBuffer m_commandBuffer;
     };
 }

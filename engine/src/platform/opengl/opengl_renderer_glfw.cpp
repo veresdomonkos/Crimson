@@ -43,7 +43,8 @@ namespace crimson::opengl
         auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(surfaceHandle).WindowHandle);
         glfwMakeContextCurrent(window);
 
-        return Frame(surfaceHandle, 2 * 1024 * 1024);
+        m_commandBuffer.Clear();
+        return Frame(surfaceHandle, m_commandBuffer);
     }
 
     void OpenGLRenderer::EndFrame(Frame& frame)

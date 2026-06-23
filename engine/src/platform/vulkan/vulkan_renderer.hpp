@@ -12,7 +12,7 @@ namespace crimson::vulkan
     class VulkanRenderer : public Renderer
     {
     public:
-        VulkanRenderer() : m_resourceManager(m_device) {}
+        VulkanRenderer() : m_resourceManager(m_device), m_commandBuffer(2 * 1024 * 1024) {}
 
         RenderSurfaceHandle Initialize(const Window& primaryWindow) override;
         void Shutdown() override;
@@ -23,5 +23,6 @@ namespace crimson::vulkan
     private:
         VulkanDevice m_device;
         VulkanResourceManager m_resourceManager;
+        RenderCommandBuffer m_commandBuffer;
     };
 }

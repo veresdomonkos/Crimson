@@ -49,7 +49,7 @@ namespace crimson::vulkan
         {
             // TODO: get actual new extent from window
             vkDeviceWaitIdle(m_device.GetDevice());
-            return Frame(surface, 2 * 1024 * 1024);
+            return Frame(surface, m_commandBuffer);
         }
 
         vulkanSurface.CurrentAcquireSemaphore = acquireSem;
@@ -79,7 +79,8 @@ namespace crimson::vulkan
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
             0, 0, nullptr, 0, nullptr, 1, &barrier);
 
-        return Frame(surface, 2 * 1024 * 1024);
+        m_commandBuffer.Clear();
+        return Frame(surface, m_commandBuffer);
     }
 
     void VulkanRenderer::EndFrame(Frame& frame)
