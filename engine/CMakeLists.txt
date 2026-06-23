@@ -3,7 +3,6 @@ set(ENGINE_PUBLIC_HEADERS
 		include/crimson/core/core.hpp
 		include/crimson/core/window.hpp
 		include/crimson/core/events.hpp
-        include/crimson/renderer/render_command_queue.hpp
         include/crimson/renderer/render_commands.hpp
         include/crimson/core/log.hpp
         include/crimson/renderer/renderer_api.hpp
@@ -11,6 +10,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/resource_manager.hpp
         include/crimson/renderer/renderer.hpp
         include/crimson/renderer/Frame.hpp
+        include/crimson/core/command_buffer.hpp
 )
 
 set(ENGINE_IMPLEMENTATION

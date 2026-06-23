@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <glm/glm.hpp>
+#include "crimson/core/command_buffer.hpp"
 
 namespace crimson
 {
@@ -10,26 +11,7 @@ namespace crimson
         Clear
     };
 
-    struct RenderCommandHeader
-    {
-         RendererCommandType Type;
-         uint32_t Size;
-    };
-
-    class RenderCommandView
-    {
-    public:
-        RendererCommandType GetType() const { return m_header.Type; }
-
-        template <typename T>
-        const T& As() const
-        {
-            assert(m_header.Type == T::GetStaticType());
-            return reinterpret_cast<const T&>(*(&m_header + 1));
-        }
-    private:
-        RenderCommandHeader m_header;
-    };
+    using RenderCommandBuffer = CommandBuffer<RendererCommandType>;
 
 #define REGISTER_RENDER_COMMAND(Type) static RendererCommandType GetStaticType() { return RendererCommandType::Type; } \
 

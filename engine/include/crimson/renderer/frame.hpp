@@ -1,6 +1,7 @@
 #pragma once
-#include "render_command_queue.hpp"
+#include "render_commands.hpp"
 #include "render_surface.hpp"
+#include "crimson/core/command_buffer.hpp"
 #include "glm/vec4.hpp"
 
 namespace crimson
@@ -15,10 +16,10 @@ namespace crimson
             m_commandQueue.Submit<ClearCommand>(color);
         }
 
-        RenderCommandQueue& GetCommandQueue() { return m_commandQueue; }
+        RenderCommandBuffer& GetCommandQueue() { return m_commandQueue; }
         SurfaceHandle GetSurfaceHandle() const { return m_surfaceHandle; }
     protected:
         SurfaceHandle m_surfaceHandle;
-        RenderCommandQueue m_commandQueue;
+        RenderCommandBuffer m_commandQueue;
     };
 }
