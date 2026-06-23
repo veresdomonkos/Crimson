@@ -15,7 +15,7 @@ namespace crimson::vulkan
         VulkanRenderer() : m_resourceManager(m_device) {}
 
         SurfaceHandle Initialize(const Window& primaryWindow) override;
-        void Shutdown();
+        void Shutdown() override;
         ResourceManager& GetResourceManager() override;
         Frame BeginFrame(SurfaceHandle surface) override;
         void EndFrame(Frame& frame) override;

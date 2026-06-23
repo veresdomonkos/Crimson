@@ -8,6 +8,7 @@ namespace crimson::opengl
     {
     public:
         SurfaceHandle Initialize(const Window& primaryWindow) override;
+        void Shutdown() override;
         ResourceManager& GetResourceManager() override { return  m_resourceManager; }
         Frame BeginFrame(SurfaceHandle surfaceHandle) override;
         void EndFrame(Frame& frame) override;

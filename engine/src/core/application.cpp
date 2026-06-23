@@ -7,7 +7,7 @@ namespace crimson
 {
 	Application::Application() : m_running(true)
 	{
-		RendererAPI::Init(RendererAPIType::Vulkan);
+		RendererAPI::Init(RendererAPIType::OpenGL);
 		m_window = Window::Create(WindowData{ "My Window", 1280, 720, BIND_FN(OnEvent) });
 	    m_renderer = Renderer::Create();
 	    m_primarySurface = m_renderer->Initialize(*m_window);
@@ -15,7 +15,7 @@ namespace crimson
 
     Application::~Application()
     {
-
+        m_renderer->Shutdown();
     }
 
     void Application::Run()

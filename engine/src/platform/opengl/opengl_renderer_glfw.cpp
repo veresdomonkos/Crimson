@@ -33,6 +33,11 @@ namespace crimson::opengl
         return surfaceHandle;
     }
 
+    void OpenGLRenderer::Shutdown()
+    {
+
+    }
+
     Frame OpenGLRenderer::BeginFrame(SurfaceHandle surfaceHandle)
     {
         auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetSurface(surfaceHandle));
@@ -46,7 +51,7 @@ namespace crimson::opengl
         auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetSurface(frame.GetSurfaceHandle()));
         glfwMakeContextCurrent(window);
 
-        for (const auto& commandView : frame.GetCommandQueue())
+        for (const auto& commandView : frame.GetCommandBuffer())
         {
             switch (commandView.GetType())
             {

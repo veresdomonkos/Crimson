@@ -9,17 +9,17 @@ namespace crimson
     class Frame
     {
     public:
-        Frame(SurfaceHandle surfaceHandle, size_t commandBufferSize) : m_surfaceHandle(surfaceHandle), m_commandQueue(commandBufferSize) {}
+        Frame(SurfaceHandle surfaceHandle, size_t commandBufferSize) : m_surfaceHandle(surfaceHandle), m_commandBuffer(commandBufferSize) {}
 
         void Clear(const glm::vec4& color)
         {
-            m_commandQueue.Submit<ClearCommand>(color);
+            m_commandBuffer.Submit<ClearCommand>(color);
         }
 
-        RenderCommandBuffer& GetCommandQueue() { return m_commandQueue; }
+        RenderCommandBuffer& GetCommandBuffer() { return m_commandBuffer; }
         SurfaceHandle GetSurfaceHandle() const { return m_surfaceHandle; }
     protected:
         SurfaceHandle m_surfaceHandle;
-        RenderCommandBuffer m_commandQueue;
+        RenderCommandBuffer m_commandBuffer;
     };
 }

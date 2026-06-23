@@ -90,7 +90,7 @@ namespace crimson::vulkan
         VkCommandBuffer cmd = swapchain.GetCommandBuffer(frameIdx);
 
         glm::vec4 clearColor{0, 0, 0, 1};
-        for (const auto& command : frame.GetCommandQueue())
+        for (const auto& command : frame.GetCommandBuffer())
         {
             if (command.GetType() == RendererCommandType::Clear)
             {
