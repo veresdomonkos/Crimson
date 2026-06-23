@@ -1,11 +1,13 @@
 #include "crimson/core/application.hpp"
 
 #include "crimson/core/core.hpp"
+#include "crimson/renderer/renderer_api.hpp"
 
 namespace crimson
 {
 	Application::Application() : m_running(true)
 	{
+		RendererAPI::Init(RendererAPIType::Vulkan);
 		m_window = Window::Create(WindowData{ "My Window", 1280, 720, BIND_FN(OnEvent) });
 	    m_renderer = Renderer::Create();
 	    m_primarySurface = m_renderer->Initialize(*m_window);
@@ -23,7 +25,7 @@ namespace crimson
 		    m_window->PollEvents();
 
             Frame frame = m_renderer->BeginFrame(m_primarySurface);
-		    frame.Clear({0.8, 0.2, 0.3, 1});
+		    frame.Clear({0.8, 0.2, 0.9, 1});
 		    m_renderer->EndFrame(frame);
 		}
 	}

@@ -1,3 +1,5 @@
+find_package(Vulkan REQUIRED)
+
 set(ENGINE_PUBLIC_HEADERS
 		include/crimson/core/application.hpp
 		include/crimson/core/core.hpp
@@ -23,6 +25,14 @@ set(ENGINE_IMPLEMENTATION
         src/platform/opengl/opengl_renderer.hpp
         src/platform/opengl/opengl_renderer_glfw.cpp
         src/renderer/renderer.cpp
+		src/platform/vulkan/vulkan_renderer.cpp
+		src/platform/vulkan/vulkan_renderer.hpp
+		src/platform/vulkan/vulkan_resource_manager.cpp
+		src/platform/vulkan/vulkan_resource_manager.hpp
+		src/platform/vulkan/vulkan_device.cpp
+		src/platform/vulkan/vulkan_device.hpp
+		src/platform/vulkan/vulkan_swapchain.cpp
+		src/platform/vulkan/vulkan_swapchain.hpp
 )
 
 add_library(Engine STATIC
@@ -46,4 +56,5 @@ target_link_libraries(Engine
         glfw
         glad
 		fmt::fmt
+		Vulkan::Vulkan
 )
