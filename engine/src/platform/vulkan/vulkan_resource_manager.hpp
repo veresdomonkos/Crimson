@@ -3,6 +3,7 @@
 #include <vulkan/vulkan.h>
 
 #include "vulkan_swapchain.hpp"
+#include "crimson/renderer/handle_registry.hpp"
 #include "crimson/renderer/resource_manager.hpp"
 
 namespace crimson::vulkan
@@ -20,13 +21,11 @@ namespace crimson::vulkan
     {
     public:
         explicit VulkanResourceManager(VulkanDevice& device) : m_device(device) {}
-        SurfaceHandle CreateSurface(const Window& window) override;
-
-        [[nodiscard]] std::unordered_map<SurfaceHandle, VulkanSurface>& GetSurfaces() { return m_surfaces; }
-        [[nodiscard]] const std::unordered_map<SurfaceHandle, VulkanSurface>& GetSurfaces() const { return m_surfaces; }
-
+        RenderSurfaceHandle CreateRenderSurface(const Window& window) override;
+        RenderTargetHandle GetBackBuffer(RenderSurfaceHandle renderSurface) override { return RenderTargetHandle::Invalid(); };
+        VulkanSurface& GetRenderSurface(RenderSurfaceHandle handle) { return m_renderSurfaces.Get(handle);  }
     private:
         VulkanDevice& m_device;
-        std::unordered_map<SurfaceHandle, VulkanSurface> m_surfaces;
+        HandleRegistry<RenderSurfaceHandle, VulkanSurface> m_renderSurfaces;
     };
 }

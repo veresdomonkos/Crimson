@@ -5,12 +5,12 @@
 
 namespace crimson::opengl
 {
-    SurfaceHandle OpenGLRenderer::Initialize(const Window& primaryWindow)
+    RenderSurfaceHandle OpenGLRenderer::Initialize(const Window& primaryWindow)
     {
         auto* window = static_cast<GLFWwindow*>(primaryWindow.GetNativeHandle());
         glfwMakeContextCurrent(window);
 
-        const SurfaceHandle surfaceHandle = m_resourceManager.CreateSurface(primaryWindow);
+        const RenderSurfaceHandle surfaceHandle = m_resourceManager.CreateRenderSurface(primaryWindow);
 
         static bool s_gladInitialized = false;
 
@@ -38,9 +38,9 @@ namespace crimson::opengl
 
     }
 
-    Frame OpenGLRenderer::BeginFrame(SurfaceHandle surfaceHandle)
+    Frame OpenGLRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
     {
-        auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetSurface(surfaceHandle));
+        auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(surfaceHandle).WindowHandle);
         glfwMakeContextCurrent(window);
 
         return Frame(surfaceHandle, 2 * 1024 * 1024);
@@ -48,7 +48,7 @@ namespace crimson::opengl
 
     void OpenGLRenderer::EndFrame(Frame& frame)
     {
-        auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetSurface(frame.GetSurfaceHandle()));
+        auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(frame.GetSurfaceHandle()).WindowHandle);
         glfwMakeContextCurrent(window);
 
         for (const auto& commandView : frame.GetCommandBuffer())
@@ -57,9 +57,15 @@ namespace crimson::opengl
             {
                 case RendererCommandType::Clear:
                 {
-                    const auto& command = commandView.As<ClearCommand>();
-                    glClearColor(command.Color.r, command.Color.g, command.Color.b, command.Color.a);
+                    const auto& cmd = commandView.As<ClearCommand>();
+                    glClearColor(cmd.Color.r, cmd.Color.g, cmd.Color.b, cmd.Color.a);
                     glClear( GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+                    break;
+                }
+                case RendererCommandType::BeginRenderPass:
+                {
+                    const auto& cmd = commandView.As<BeginRenderPassCommand>();
+                    ExecuteBeginRenderPass(cmd);
                     break;
                 }
                 default:
@@ -68,5 +74,36 @@ namespace crimson::opengl
         }
 
         glfwSwapBuffers(window);
+    }
+
+    void OpenGLRenderer::ExecuteBeginRenderPass(const BeginRenderPassCommand& cmd)
+    {
+        const auto& target = m_resourceManager.GetRenderTarget(cmd.Target);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, target.FrameBufferHandle);
+        glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
+
+        GLbitfield clearMask = 0;
+
+        if (HasClearFlag(cmd.ClearFlags, ClearFlags::Color))
+        {
+            glClearColor(cmd.ClearColor.r, cmd.ClearColor.g, cmd.ClearColor.b, cmd.ClearColor.a);
+            clearMask |= GL_COLOR_BUFFER_BIT;
+        }
+
+        if (HasClearFlag(cmd.ClearFlags, ClearFlags::Depth))
+        {
+            glClearDepth(cmd.ClearDepth);
+            clearMask |= GL_DEPTH_BUFFER_BIT;
+        }
+
+        if (HasClearFlag(cmd.ClearFlags, ClearFlags::Stencil))
+        {
+            glClearStencil(static_cast<GLint>(cmd.ClearStencil));
+            clearMask |= GL_STENCIL_BUFFER_BIT;
+        }
+
+        if (clearMask != 0)
+            glClear(clearMask);
     }
 }

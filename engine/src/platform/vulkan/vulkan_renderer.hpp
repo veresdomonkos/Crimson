@@ -4,7 +4,7 @@
 #include "crimson/core/window.hpp"
 #include "crimson/renderer/frame.hpp"
 #include "crimson/renderer/renderer.hpp"
-#include "crimson/renderer/render_surface.hpp"
+#include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/resource_manager.hpp"
 
 namespace crimson::vulkan
@@ -14,10 +14,10 @@ namespace crimson::vulkan
     public:
         VulkanRenderer() : m_resourceManager(m_device) {}
 
-        SurfaceHandle Initialize(const Window& primaryWindow) override;
+        RenderSurfaceHandle Initialize(const Window& primaryWindow) override;
         void Shutdown() override;
         ResourceManager& GetResourceManager() override;
-        Frame BeginFrame(SurfaceHandle surface) override;
+        Frame BeginFrame(RenderSurfaceHandle surface) override;
         void EndFrame(Frame& frame) override;
 
     private:

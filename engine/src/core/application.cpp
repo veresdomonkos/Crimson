@@ -20,12 +20,21 @@ namespace crimson
 
     void Application::Run()
 	{
+	    RenderPassInfo mainRenderPass {
+	        .Target = m_renderer->GetResourceManager().GetBackBuffer(m_primarySurface),
+	        .ClearFlags = ClearFlags::Color | ClearFlags::Depth,
+	        .ClearColor = glm::vec4(1, 0, 0, 1),
+	    };
+
 		while (m_running)
 		{
 		    m_window->PollEvents();
 
             Frame frame = m_renderer->BeginFrame(m_primarySurface);
-		    frame.Clear({0.8, 0.2, 0.9, 1});
+
+		    frame.BeginRenderPass(mainRenderPass);
+		    frame.EndRenderPass();
+
 		    m_renderer->EndFrame(frame);
 		}
 	}

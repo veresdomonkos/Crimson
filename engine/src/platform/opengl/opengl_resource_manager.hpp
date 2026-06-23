@@ -1,4 +1,7 @@
 #pragma once
+#include "opengl_resources.hpp"
+#include "crimson/renderer/resource_handles.hpp"
+#include "crimson/renderer/handle_registry.hpp"
 #include "crimson/renderer/resource_manager.hpp"
 
 namespace crimson::opengl
@@ -6,9 +9,13 @@ namespace crimson::opengl
     class OpenGLResourceManager : public ResourceManager
     {
     public:
-        SurfaceHandle CreateSurface(const Window& window) override;
-        void* GetSurface(SurfaceHandle surfaceHandle) { return m_renderSurfaces[surfaceHandle]; }
+        RenderSurfaceHandle CreateRenderSurface(const Window& window) override;
+        RenderTargetHandle GetBackBuffer(RenderSurfaceHandle renderSurfaceHandle) override;
+
+        OpenGLSurface& GetRenderSurface(RenderSurfaceHandle surfaceHandle) { return m_renderSurfaces.Get(surfaceHandle); }
+        OpenGLRenderTarget GetRenderTarget(RenderTargetHandle handle) { return m_renderTargets.Get(handle); }
     private:
-        std::unordered_map<SurfaceHandle, void*> m_renderSurfaces;
+        HandleRegistry<RenderSurfaceHandle, OpenGLSurface> m_renderSurfaces;
+        HandleRegistry<RenderTargetHandle, OpenGLRenderTarget> m_renderTargets;
     };
 }

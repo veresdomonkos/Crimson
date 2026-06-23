@@ -6,22 +6,21 @@
 
 namespace crimson::vulkan
 {
-    SurfaceHandle VulkanResourceManager::CreateSurface(const Window& window)
+    RenderSurfaceHandle VulkanResourceManager::CreateRenderSurface(const Window& window)
     {
-        static SurfaceHandle id = 0;
         VulkanSurface data{};
 
         auto* glfwWindow = static_cast<GLFWwindow*>(window.GetNativeHandle());
         if (!glfwVulkanSupported())
         {
             LOG_ERROR("[Renderer]: GLFW version doesn't support Vulkan");
-            return 0;
+            return RenderSurfaceHandle::Invalid();
         }
 
         if (glfwCreateWindowSurface(m_device.GetInstance(), glfwWindow, nullptr, &data.Surface) != VK_SUCCESS)
         {
             LOG_ERROR("[Renderer]: Failed to create Vulkan surface!");
-            return 0;
+            return RenderSurfaceHandle::Invalid();
         }
 
         VkBool32 supported = VK_FALSE;
@@ -31,7 +30,7 @@ namespace crimson::vulkan
         if (!supported)
         {
             LOG_ERROR("[Renderer]: Graphics queue does not support present!");
-            return 0;
+            return RenderSurfaceHandle::Invalid();
         }
 
         // Get initial extent from the window
@@ -41,7 +40,6 @@ namespace crimson::vulkan
 
         data.Swapchain = std::make_unique<VulkanSwapchain>(m_device, data.Surface, extent);
 
-        m_surfaces[++id] = std::move(data);
-        return id;
+        return m_renderSurfaces.Register(std::move(data));
     }
 }

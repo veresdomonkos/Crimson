@@ -1,6 +1,6 @@
 #pragma once
-#include "render_commands.hpp"
-#include "render_surface.hpp"
+#include "crimson/renderer/resource_handles.hpp"
+#include "crimson/renderer/render_commands.hpp"
 #include "crimson/core/command_buffer.hpp"
 #include "glm/vec4.hpp"
 
@@ -9,17 +9,22 @@ namespace crimson
     class Frame
     {
     public:
-        Frame(SurfaceHandle surfaceHandle, size_t commandBufferSize) : m_surfaceHandle(surfaceHandle), m_commandBuffer(commandBufferSize) {}
+        Frame(RenderSurfaceHandle surfaceHandle, size_t commandBufferSize) : m_surfaceHandle(surfaceHandle), m_commandBuffer(commandBufferSize) {}
 
-        void Clear(const glm::vec4& color)
+        void BeginRenderPass(const RenderPassInfo& info)
         {
-            m_commandBuffer.Submit<ClearCommand>(color);
+            m_commandBuffer.Submit<BeginRenderPassCommand>(info);
+        }
+
+        void EndRenderPass()
+        {
+
         }
 
         RenderCommandBuffer& GetCommandBuffer() { return m_commandBuffer; }
-        SurfaceHandle GetSurfaceHandle() const { return m_surfaceHandle; }
+        RenderSurfaceHandle GetSurfaceHandle() const { return m_surfaceHandle; }
     protected:
-        SurfaceHandle m_surfaceHandle;
+        RenderSurfaceHandle m_surfaceHandle;
         RenderCommandBuffer m_commandBuffer;
     };
 }

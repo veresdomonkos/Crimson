@@ -5,23 +5,24 @@
 
 namespace crimson::vulkan
 {
-    SurfaceHandle VulkanRenderer::Initialize(const Window& primaryWindow)
+    RenderSurfaceHandle VulkanRenderer::Initialize(const Window& primaryWindow)
     {
         m_device.Init();
-        return m_resourceManager.CreateSurface(primaryWindow);
+        return m_resourceManager.CreateRenderSurface(primaryWindow);
     }
 
     void VulkanRenderer::Shutdown()
     {
         vkDeviceWaitIdle(m_device.GetDevice());
 
+        /*
         for (auto& [handle, surface] : m_resourceManager.GetSurfaces())
         {
             surface.Swapchain.reset(); // destroys swapchain + sync objects
             vkDestroySurfaceKHR(m_device.GetInstance(), surface.Surface, nullptr);
         }
+        */
 
-        m_resourceManager.GetSurfaces().clear();
         m_device.Shutdown();
     }
 
@@ -30,9 +31,9 @@ namespace crimson::vulkan
         return m_resourceManager;
     }
 
-    Frame VulkanRenderer::BeginFrame(SurfaceHandle surface)
+    Frame VulkanRenderer::BeginFrame(RenderSurfaceHandle surface)
     {
-        auto& vulkanSurface      = m_resourceManager.GetSurfaces()[surface];
+        auto& vulkanSurface      = m_resourceManager.GetRenderSurface(surface);
         auto& swapchain    = *vulkanSurface.Swapchain;
         const uint32_t frameIdx = vulkanSurface.CurrentFrameIndex;
 
@@ -83,7 +84,7 @@ namespace crimson::vulkan
 
     void VulkanRenderer::EndFrame(Frame& frame)
     {
-        auto& surface = m_resourceManager.GetSurfaces()[frame.GetSurfaceHandle()];
+        auto& surface = m_resourceManager.GetRenderSurface(frame.GetSurfaceHandle());
         const auto& swapchain = *surface.Swapchain;
         const uint32_t imageIndex = surface.CurrentImageIndex;
         const uint32_t frameIdx = surface.CurrentFrameIndex;
