@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <functional>
 
 namespace crimson
 {
@@ -8,33 +7,29 @@ namespace crimson
     class RenderTargetTag {};
 
     template <typename Tag>
-    struct Handle
+    class Handle
     {
-        Handle() = default;
-        explicit Handle(uint32_t id) : Id(id), Generation(0) {}
+    public:
+        constexpr Handle() = default;
 
-        uint32_t Id = 0;
-        uint32_t Generation = 0;
+        constexpr explicit Handle(std::uint32_t id, std::uint32_t generation)
+            : m_packed((static_cast<std::uint64_t>(generation) << 32) | id) {}
 
-        friend bool operator==(const Handle& a, const Handle& b)
-        {
-            return a.Id == b.Id && a.Generation == b.Generation;
-        }
+        constexpr std::uint32_t GetId() const { return static_cast<std::uint32_t>(m_packed & 0xFFFFFFFF); }
+        constexpr std::uint32_t GetGeneration() const { return static_cast<std::uint32_t>(m_packed >> 32); }
+
+        constexpr std::uint64_t GetRaw() const { return m_packed; }
+
+        constexpr bool IsValid() const { return m_packed != 0; }
+        constexpr explicit operator bool() const { return IsValid(); }
+
+        constexpr bool operator==(const Handle& other) const = default;
 
         static constexpr Handle Invalid() { return Handle{}; }
+    private:
+        std::uint64_t m_packed = 0;
     };
 
     using RenderSurfaceHandle = Handle<RenderSurfaceTag>;
     using RenderTargetHandle = Handle<RenderTargetTag>;
 }
-
-template <typename Tag>
-struct std::hash<crimson::Handle<Tag>>
-{
-    size_t operator()(const crimson::Handle<Tag>& h) const noexcept
-    {
-        size_t seed = std::hash<uint32_t>{}(h.Id);
-        seed ^= std::hash<uint32_t>{}(h.Generation) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
-        return seed;
-    }
-};

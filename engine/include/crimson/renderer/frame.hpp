@@ -18,7 +18,7 @@ namespace crimson
 
         void EndRenderPass()
         {
-
+            m_commandBuffer.Submit<EndRenderPassCommand>();
         }
 
         RenderCommandBuffer& GetCommandBuffer() { return m_commandBuffer; }

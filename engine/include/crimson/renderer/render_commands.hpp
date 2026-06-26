@@ -11,7 +11,8 @@ namespace crimson
     {
         None,
         Clear, // LEGACY
-        BeginRenderPass
+        BeginRenderPass,
+        EndRenderPass
     };
 
     using RenderCommandBuffer = CommandBuffer<RendererCommandType>;
@@ -41,6 +42,11 @@ namespace crimson
               ClearStencil(renderPassInfo.ClearStencil)
         {}
 
-        REGISTER_RENDER_COMMAND(BeginRenderPass);
+        REGISTER_RENDER_COMMAND(BeginRenderPass)
+    };
+
+    struct EndRenderPassCommand
+    {
+        REGISTER_RENDER_COMMAND(EndRenderPass)
     };
 }

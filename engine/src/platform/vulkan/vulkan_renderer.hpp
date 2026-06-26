@@ -17,12 +17,25 @@ namespace crimson::vulkan
         RenderSurfaceHandle Initialize(const Window& primaryWindow) override;
         void Shutdown() override;
         ResourceManager& GetResourceManager() override;
-        Frame BeginFrame(RenderSurfaceHandle surface) override;
+        std::optional<Frame> BeginFrame(RenderSurfaceHandle surface) override;
         void EndFrame(Frame& frame) override;
-
+    private:
+        void TransitionImage(VkCommandBuffer cmd, VkImage image, VkImageAspectFlagBits flagBits, VkImageLayout& currentLayout, VkImageLayout newLayout);
+        void InitializeSynchronizationAndCommands();
+        void ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const BeginRenderPassCommand& cmd);
+        void ExecuteEndRenderPass(VkCommandBuffer cmdBuffer, VulkanRenderTarget& rt);
     private:
         VulkanDevice m_device;
         VulkanResourceManager m_resourceManager;
         RenderCommandBuffer m_commandBuffer;
+
+        const int MAX_FRAMES_IN_FLIGHT = 2;
+        uint32_t m_currentFrameIndex = 0;
+
+        VkCommandPool m_commandPool = VK_NULL_HANDLE;
+
+        std::vector<VkCommandBuffer> m_vkCommandBuffers;
+        std::vector<VkSemaphore> m_imageAvailableSemaphores;
+        std::vector<VkFence> m_inFlightFences;
     };
 }

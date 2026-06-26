@@ -10,6 +10,6 @@ namespace crimson
     public:
         virtual ~ResourceManager() = default;
         virtual RenderSurfaceHandle CreateRenderSurface(const Window& window) = 0;
-        virtual RenderTargetHandle GetBackBuffer(RenderSurfaceHandle renderSurface) = 0;
+        virtual RenderTargetHandle GetBackBuffer(RenderSurfaceHandle renderSurface) const = 0;
     };
 }

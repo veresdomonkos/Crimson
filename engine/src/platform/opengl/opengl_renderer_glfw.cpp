@@ -38,7 +38,7 @@ namespace crimson::opengl
 
     }
 
-    Frame OpenGLRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
+    std::optional<Frame> OpenGLRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
     {
         auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(surfaceHandle).WindowHandle);
         glfwMakeContextCurrent(window);

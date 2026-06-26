@@ -5,6 +5,23 @@
 
 namespace crimson::vulkan
 {
+    uint32_t VulkanDevice::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const
+    {
+        VkPhysicalDeviceMemoryProperties memProperties;
+        vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &memProperties);
+
+        for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++)
+        {
+            if ((typeFilter & (1 << i)) &&
+                (memProperties.memoryTypes[i].propertyFlags & properties) == properties)
+            {
+                return i;
+            }
+        }
+
+        LOG_ERROR("CRIMSON_ERROR: Failed to find suitable memory type for allocation!");
+    }
+
     void VulkanDevice::Init()
     {
         CreateInstance();
@@ -132,9 +149,18 @@ namespace crimson::vulkan
     void VulkanDevice::CreateLogicalDevice()
     {
         uint32_t queueCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueCount, nullptr);
+        vkGetPhysicalDeviceQueueFamilyProperties(
+            m_physicalDevice,
+            &queueCount,
+            nullptr
+        );
+
         std::vector<VkQueueFamilyProperties> queues(queueCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueCount, queues.data());
+        vkGetPhysicalDeviceQueueFamilyProperties(
+            m_physicalDevice,
+            &queueCount,
+            queues.data()
+        );
 
         for (uint32_t i = 0; i < queueCount; i++)
         {
@@ -145,34 +171,57 @@ namespace crimson::vulkan
             }
         }
 
-        if (m_graphicsQueueFamilyIdx == UINT32_MAX)
-        {
-            LOG_ERROR("[Renderer]: No graphics queue found!");
-            return;
-        }
-
         float priority = 1.0f;
+
         VkDeviceQueueCreateInfo queueInfo{};
-        queueInfo.sType            = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
         queueInfo.queueFamilyIndex = m_graphicsQueueFamilyIdx;
-        queueInfo.queueCount       = 1;
+        queueInfo.queueCount = 1;
         queueInfo.pQueuePriorities = &priority;
 
-        const char* deviceExtensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-        VkDeviceCreateInfo deviceInfo{};
-        deviceInfo.sType                   = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        deviceInfo.queueCreateInfoCount    = 1;
-        deviceInfo.pQueueCreateInfos       = &queueInfo;
-        deviceInfo.enabledExtensionCount   = 1;
-        deviceInfo.ppEnabledExtensionNames = deviceExtensions;
 
-        if (vkCreateDevice(m_physicalDevice, &deviceInfo, nullptr, &m_device) != VK_SUCCESS)
+        // Vulkan 1.3 features
+        VkPhysicalDeviceVulkan13Features vulkan13{};
+        vulkan13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+
+        vulkan13.dynamicRendering = VK_TRUE;
+        vulkan13.synchronization2 = VK_TRUE;
+
+
+        const char* extensions[] =
+        {
+            VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        };
+
+
+        VkDeviceCreateInfo deviceInfo{};
+        deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+
+        deviceInfo.pNext = &vulkan13;
+
+        deviceInfo.queueCreateInfoCount = 1;
+        deviceInfo.pQueueCreateInfos = &queueInfo;
+
+        deviceInfo.enabledExtensionCount = 1;
+        deviceInfo.ppEnabledExtensionNames = extensions;
+
+
+        if (vkCreateDevice(
+            m_physicalDevice,
+            &deviceInfo,
+            nullptr,
+            &m_device) != VK_SUCCESS)
         {
             LOG_ERROR("[Renderer]: Failed to create logical device!");
             return;
         }
 
-        vkGetDeviceQueue(m_device, m_graphicsQueueFamilyIdx, 0, &m_graphicsQueue);
+        vkGetDeviceQueue(
+            m_device,
+            m_graphicsQueueFamilyIdx,
+            0,
+            &m_graphicsQueue
+        );
     }
 
     void VulkanDevice::PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &info)

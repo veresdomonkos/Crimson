@@ -15,6 +15,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/handle_registry.hpp
         include/crimson/renderer/resource_handles.hpp
         include/crimson/renderer/core.hpp
+        include/crimson/renderer/resource_manager_base.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -36,6 +37,7 @@ set(ENGINE_IMPLEMENTATION
 		src/platform/vulkan/vulkan_swapchain.cpp
 		src/platform/vulkan/vulkan_swapchain.hpp
         src/platform/opengl/opengl_resources.hpp
+        src/platform/vulkan/vulkan_resources.hpp
 )
 
 add_library(Engine STATIC

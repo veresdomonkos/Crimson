@@ -14,7 +14,7 @@ namespace crimson
 
         virtual ResourceManager& GetResourceManager() = 0;
 
-        virtual Frame BeginFrame(RenderSurfaceHandle surface) = 0;
+        virtual std::optional<Frame> BeginFrame(RenderSurfaceHandle surface) = 0;
         virtual void EndFrame(Frame& frame) = 0;
 
         static Unique<Renderer> Create();
