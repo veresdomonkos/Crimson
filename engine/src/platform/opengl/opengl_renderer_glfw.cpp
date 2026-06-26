@@ -44,7 +44,7 @@ namespace crimson::opengl
         glfwMakeContextCurrent(window);
 
         m_commandBuffer.Clear();
-        return Frame(surfaceHandle, m_commandBuffer);
+        return Frame(surfaceHandle, m_resourceManager.GetCurrentBackBuffer(surfaceHandle), m_commandBuffer);
     }
 
     void OpenGLRenderer::EndFrame(Frame& frame)

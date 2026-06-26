@@ -20,7 +20,7 @@ namespace crimson
 
     void Application::Run()
 	{
-	    RenderPassInfo mainRenderPass {
+	    RenderPassInfo mainPass {
 
 	        .ClearFlags = ClearFlags::Color | ClearFlags::Depth,
 	        .ClearColor = glm::vec4(1, 0, 0, 1),
@@ -35,8 +35,7 @@ namespace crimson
 		    if (!frame)
 		        continue;
 
-		    mainRenderPass.Target = m_renderer->GetResourceManager().GetBackBuffer(m_primarySurface);
-		    frame->BeginRenderPass(mainRenderPass);
+		    frame->BeginRenderPass(mainPass);
 		    frame->EndRenderPass();
 
 		    m_renderer->EndFrame(*frame);

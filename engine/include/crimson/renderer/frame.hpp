@@ -9,10 +9,15 @@ namespace crimson
     class Frame
     {
     public:
-        Frame(RenderSurfaceHandle surfaceHandle, RenderCommandBuffer& commandBuffer) : m_surfaceHandle(surfaceHandle), m_commandBuffer(commandBuffer) {}
+        Frame(RenderSurfaceHandle surfaceHandle, RenderTargetHandle defaultTarget, RenderCommandBuffer& commandBuffer)
+            : m_surfaceHandle(surfaceHandle), m_commandBuffer(commandBuffer), m_defaultTarget(defaultTarget)
+        {}
 
-        void BeginRenderPass(const RenderPassInfo& info)
+        void BeginRenderPass(RenderPassInfo info)
         {
+            if (!info.Target)
+                info.Target = m_defaultTarget;
+
             m_commandBuffer.Submit<BeginRenderPassCommand>(info);
         }
 
@@ -26,5 +31,6 @@ namespace crimson
     protected:
         RenderSurfaceHandle m_surfaceHandle;
         RenderCommandBuffer& m_commandBuffer;
+        RenderTargetHandle m_defaultTarget;
     };
 }

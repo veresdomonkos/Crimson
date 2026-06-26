@@ -34,7 +34,7 @@ namespace crimson::vulkan
         explicit VulkanResourceManager(VulkanDevice& device) : m_device(device) {}
         void Clear();
         RenderSurfaceHandle CreateRenderSurface(const Window& window) override;
-        RenderTargetHandle GetBackBuffer(RenderSurfaceHandle renderSurface) const override;
+        RenderTargetHandle GetCurrentBackBuffer(RenderSurfaceHandle renderSurface) const override;
 
         void RecreateSwapchain(RenderSurfaceHandle handle);
     private:

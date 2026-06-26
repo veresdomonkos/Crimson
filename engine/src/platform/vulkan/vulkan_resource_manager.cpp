@@ -74,7 +74,7 @@ namespace crimson::vulkan
         return m_renderSurfaces.Register(std::move(surface));
     }
 
-    RenderTargetHandle VulkanResourceManager::GetBackBuffer(RenderSurfaceHandle renderSurface) const
+    RenderTargetHandle VulkanResourceManager::GetCurrentBackBuffer(RenderSurfaceHandle renderSurface) const
     {
         const VulkanSurface& surface = m_renderSurfaces.Get(renderSurface);
         return surface.SwapchainTargetHandles[surface.CurrentImageIndex];

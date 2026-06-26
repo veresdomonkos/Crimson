@@ -40,8 +40,8 @@ namespace crimson
     struct RenderPassInfo
     {
         RenderTargetHandle Target;
-        ClearFlags ClearFlags;
-        glm::vec4 ClearColor;
+        ClearFlags ClearFlags = ClearFlags::None;
+        glm::vec4 ClearColor{0, 0, 0, 1};
         float ClearDepth = 1.0f;
         uint32_t ClearStencil = 0;
     };

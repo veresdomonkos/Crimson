@@ -11,6 +11,6 @@ namespace crimson::opengl
     {
     public:
         RenderSurfaceHandle CreateRenderSurface(const Window& window) override;
-        RenderTargetHandle GetBackBuffer(RenderSurfaceHandle handle) const override { return m_renderSurfaces.Get(handle).BackBufferHandle; }
+        RenderTargetHandle GetCurrentBackBuffer(RenderSurfaceHandle handle) const override { return m_renderSurfaces.Get(handle).BackBufferHandle; }
     };
 }
