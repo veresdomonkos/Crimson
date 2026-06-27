@@ -12,7 +12,8 @@ namespace crimson
         None,
         Clear, // LEGACY
         BeginRenderPass,
-        EndRenderPass
+        EndRenderPass,
+        Draw
     };
 
     using RenderCommandBuffer = CommandBuffer<RendererCommandType>;
@@ -48,5 +49,17 @@ namespace crimson
     struct EndRenderPassCommand
     {
         REGISTER_RENDER_COMMAND(EndRenderPass)
+    };
+
+    struct DrawCommand
+    {
+        VertexBufferHandle VertexBuffer;
+        IndexBufferHandle IndexBuffer;
+
+        explicit DrawCommand(VertexBufferHandle vertexBuffer, IndexBufferHandle indexBuffer)
+            : VertexBuffer(vertexBuffer), IndexBuffer(indexBuffer)
+        {}
+
+        REGISTER_RENDER_COMMAND(Draw);
     };
 }

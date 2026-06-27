@@ -41,9 +41,27 @@ namespace crimson::vulkan
         bool IsSwapchain = false;
     };
 
+    struct VulkanVertexBuffer
+    {
+
+    };
+
+    struct VulkanIndexBuffer
+    {
+
+    };
+
+    struct VulkanGraphicsPipeline
+    {
+
+    };
+
     struct VulkanResourceTraits
     {
         using RenderSurface = VulkanSurface;
         using RenderTarget = VulkanRenderTarget;
+        using VertexBuffer = VulkanVertexBuffer;
+        using IndexBuffer = VulkanIndexBuffer;
+        using GraphicsPipeline = VulkanGraphicsPipeline;
     };
 }

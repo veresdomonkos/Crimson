@@ -1,6 +1,7 @@
 #pragma once
-#include "resource_handles.hpp"
+#include "crimson/renderer/resource_handles.hpp"
 #include "glm/vec4.hpp"
+#include "crimson/renderer/buffer_layout.hpp"
 
 namespace crimson
 {

@@ -3,9 +3,6 @@
 
 namespace crimson
 {
-    class RenderSurfaceTag {};
-    class RenderTargetTag {};
-
     template <typename Tag>
     class Handle
     {
@@ -15,12 +12,12 @@ namespace crimson
         constexpr explicit Handle(std::uint32_t id, std::uint32_t generation)
             : m_packed((static_cast<std::uint64_t>(generation) << 32) | id) {}
 
-        constexpr std::uint32_t GetId() const { return static_cast<std::uint32_t>(m_packed & 0xFFFFFFFF); }
-        constexpr std::uint32_t GetGeneration() const { return static_cast<std::uint32_t>(m_packed >> 32); }
+        [[nodiscard]] constexpr std::uint32_t GetId() const { return static_cast<std::uint32_t>(m_packed & 0xFFFFFFFF); }
+        [[nodiscard]] constexpr std::uint32_t GetGeneration() const { return static_cast<std::uint32_t>(m_packed >> 32); }
 
-        constexpr std::uint64_t GetRaw() const { return m_packed; }
+        [[nodiscard]] constexpr std::uint64_t GetRaw() const { return m_packed; }
 
-        constexpr bool IsValid() const { return m_packed != 0; }
+        [[nodiscard]] constexpr bool IsValid() const { return m_packed != 0; }
         constexpr explicit operator bool() const { return IsValid(); }
 
         constexpr bool operator==(const Handle& other) const = default;
@@ -30,6 +27,13 @@ namespace crimson
         std::uint64_t m_packed = 0;
     };
 
+    class RenderSurfaceTag {};
+    class RenderTargetTag {};
+    class VertexBufferTag {};
+    class IndexBufferTag {};
+
     using RenderSurfaceHandle = Handle<RenderSurfaceTag>;
     using RenderTargetHandle = Handle<RenderTargetTag>;
+    using VertexBufferHandle = Handle<VertexBufferTag>;
+    using IndexBufferHandle = Handle<IndexBufferTag>;
 }

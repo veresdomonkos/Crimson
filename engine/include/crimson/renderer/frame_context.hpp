@@ -23,7 +23,10 @@ namespace crimson
         RenderPass(RenderPass&&) noexcept = delete;
         RenderPass& operator=(RenderPass&&) noexcept = delete;
 
-        void Draw() {}
+        void Draw(VertexBufferHandle vertexBuffer, IndexBufferHandle indexBuffer)
+        {
+            m_commandBuffer.Submit<DrawCommand>(vertexBuffer, indexBuffer);
+        }
     private:
         RenderCommandBuffer& m_commandBuffer;
     };

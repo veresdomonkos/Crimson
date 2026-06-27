@@ -1,4 +1,5 @@
 #include "opengl_renderer.hpp"
+#include "utils.hpp"
 #include "crimson/core/log.hpp"
 #include "glad/glad.h"
 #include "GLFW/glfw3.h"
@@ -69,6 +70,12 @@ namespace crimson::opengl
                     ExecuteBeginRenderPass(cmd);
                     break;
                 }
+                case RendererCommandType::Draw:
+                {
+                    const auto& cmd = commandView.As<DrawCommand>();
+                    ExecuteDraw(cmd);
+                    break;
+                }
                 default:
                     break;
             }
@@ -106,5 +113,34 @@ namespace crimson::opengl
 
         if (clearMask != 0)
             glClear(clearMask);
+    }
+
+    void OpenGLRenderer::ExecuteDraw(const DrawCommand &cmd)
+    {
+        OpenGLVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(cmd.VertexBuffer);
+        OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(cmd.IndexBuffer);
+
+        auto& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout =  vertexBuffer.Layout});
+
+        VertexArrayHandle vertexArrayHandle;
+
+        VertexArrayInfo vertexArrayInfo {
+            .VertexBuffer = cmd.VertexBuffer,
+            .IndexBuffer = cmd.IndexBuffer
+        };
+
+        if (auto it = pipeline.VAOCache.find(vertexArrayInfo); it != pipeline.VAOCache.end())
+        {
+            vertexArrayHandle = it->second;
+        }
+        else
+        {
+            vertexArrayHandle = m_resourceManager.CreateVertexArray(vertexArrayInfo);
+            pipeline.VAOCache.emplace(vertexArrayInfo, vertexArrayHandle);
+        }
+
+        VertexArray& vertexArray = m_resourceManager.GetVertexArray(vertexArrayHandle);
+        glBindVertexArray(vertexArray.GLHandle);
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexBuffer.Size / Index::Size(indexBuffer.Type)),  utils::GetGLIndexType(indexBuffer.Type), nullptr);
     }
 }

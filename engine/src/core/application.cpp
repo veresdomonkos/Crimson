@@ -25,6 +25,24 @@ namespace crimson
 	        .ClearColor = glm::vec4(1, 0, 0, 1),
 	    };
 
+	    glm::vec3 vertices[] = { {-0.5f, -0.5, 0}, {0.5f, -0.5, 0}, {0, 0.5f, 0} };
+	    VertexBufferInfo vInfo {
+	        .Layout = { ShaderDataType::Float3 },
+	        .Size = sizeof(vertices),
+	        .Usage = BufferUsage::Static
+	    };
+
+	    VertexBufferHandle vertexBuffer = m_renderer->GetResourceManager().CreateVertexBuffer(vInfo, vertices);
+
+	    uint32_t indices[] = {0, 1, 2};
+	    IndexBufferInfo iInfo {
+	        .Size = sizeof(indices),
+	        .Usage = BufferUsage::Static,
+	        .Type = IndexType::UInt32
+	    };
+
+	    IndexBufferHandle indexBuffer = m_renderer->GetResourceManager().CreateIndexBuffer(iInfo, indices);
+
 		while (m_running)
 		{
 		    m_window->PollEvents();
@@ -36,7 +54,7 @@ namespace crimson
 
 		    {
 		        RenderPass mainPass = frame->BeginRenderPass(mainPassInfo);
-		        mainPass.Draw();
+		        mainPass.Draw(vertexBuffer, indexBuffer);
 		    }
 
 		    m_renderer->EndFrame(*frame);

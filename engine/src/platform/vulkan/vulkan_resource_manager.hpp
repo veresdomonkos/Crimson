@@ -37,6 +37,16 @@ namespace crimson::vulkan
         RenderTargetHandle GetCurrentBackBuffer(RenderSurfaceHandle renderSurface) const override;
 
         void RecreateSwapchain(RenderSurfaceHandle handle);
+
+        // TO DO
+        VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) override { return VertexBufferHandle::Invalid(); }
+        void DestroyVertexBuffer(VertexBufferHandle handle) override { }
+
+        IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) override { return IndexBufferHandle::Invalid(); }
+        void DestroyIndexBuffer(IndexBufferHandle handle) override { }
+
+    protected:
+        VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override { return {}; }
     private:
         RenderTargetHandle CreateRenderTarget(const RenderTargetDesc& desc, bool isSwapchain, std::span<const VkImage> swapchainImages);
         void DestroySwapchainResources(VulkanSurface& surface);

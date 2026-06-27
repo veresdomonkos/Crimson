@@ -15,6 +15,7 @@ namespace crimson::opengl
         void EndFrame(FrameContext& frame) override;
     private:
         void ExecuteBeginRenderPass(const BeginRenderPassCommand& cmd);
+        void ExecuteDraw(const DrawCommand& cmd);
     private:
         OpenGLResourceManager m_resourceManager;
         RenderCommandBuffer m_commandBuffer;
