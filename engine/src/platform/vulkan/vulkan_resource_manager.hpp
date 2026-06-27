@@ -2,7 +2,7 @@
 
 #include <span>
 
-#include "vulkan_swapchain.hpp"
+#include "vulkan_device.hpp"
 #include "crimson/renderer/resource_manager.hpp"
 #include "crimson/renderer/resource_manager_base.hpp"
 #include "vulkan_resources.hpp"

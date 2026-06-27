@@ -38,16 +38,16 @@ namespace crimson::opengl
 
     }
 
-    std::optional<Frame> OpenGLRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
+    std::optional<FrameContext> OpenGLRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
     {
         auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(surfaceHandle).WindowHandle);
         glfwMakeContextCurrent(window);
 
         m_commandBuffer.Clear();
-        return Frame(surfaceHandle, m_resourceManager.GetCurrentBackBuffer(surfaceHandle), m_commandBuffer);
+        return FrameContext(surfaceHandle, m_resourceManager.GetCurrentBackBuffer(surfaceHandle), m_commandBuffer);
     }
 
-    void OpenGLRenderer::EndFrame(Frame& frame)
+    void OpenGLRenderer::EndFrame(FrameContext& frame)
     {
         auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(frame.GetSurfaceHandle()).WindowHandle);
         glfwMakeContextCurrent(window);

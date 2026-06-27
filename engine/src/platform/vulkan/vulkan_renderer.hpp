@@ -2,7 +2,7 @@
 
 #include "vulkan_resource_manager.hpp"
 #include "crimson/core/window.hpp"
-#include "crimson/renderer/frame.hpp"
+#include "crimson/renderer/frame_context.hpp"
 #include "crimson/renderer/renderer.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/resource_manager.hpp"
@@ -17,8 +17,8 @@ namespace crimson::vulkan
         RenderSurfaceHandle Initialize(const Window& primaryWindow) override;
         void Shutdown() override;
         ResourceManager& GetResourceManager() override;
-        std::optional<Frame> BeginFrame(RenderSurfaceHandle surface) override;
-        void EndFrame(Frame& frame) override;
+        std::optional<FrameContext> BeginFrame(RenderSurfaceHandle surface) override;
+        void EndFrame(FrameContext& frame) override;
     private:
         void TransitionImage(VkCommandBuffer cmd, VkImage image, VkImageAspectFlagBits flagBits, VkImageLayout& currentLayout, VkImageLayout newLayout);
         void InitializeSynchronizationAndCommands();

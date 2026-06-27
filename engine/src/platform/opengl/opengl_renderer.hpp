@@ -11,8 +11,8 @@ namespace crimson::opengl
         RenderSurfaceHandle Initialize(const Window& primaryWindow) override;
         void Shutdown() override;
         ResourceManager& GetResourceManager() override { return  m_resourceManager; }
-        std::optional<Frame> BeginFrame(RenderSurfaceHandle surfaceHandle) override;
-        void EndFrame(Frame& frame) override;
+        std::optional<FrameContext> BeginFrame(RenderSurfaceHandle surfaceHandle) override;
+        void EndFrame(FrameContext& frame) override;
     private:
         void ExecuteBeginRenderPass(const BeginRenderPassCommand& cmd);
     private:
