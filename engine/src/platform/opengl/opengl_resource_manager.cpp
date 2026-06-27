@@ -2,10 +2,9 @@
 
 namespace crimson::opengl
 {
-    SurfaceHandle OpenGLResourceManager::CreateSurface(const Window &window)
+    RenderSurfaceHandle OpenGLResourceManager::CreateRenderSurface(const Window &window)
     {
-        static SurfaceHandle id = 0;
-        m_renderSurfaces[++id] = window.GetNativeHandle();
-        return id;
+        RenderTargetHandle backBuffer = m_renderTargets.Register(OpenGLRenderTarget{.Width = window.Width(), .Height = window.Height(), .FrameBufferHandle = 0});
+        return  m_renderSurfaces.Register(OpenGLSurface{.WindowHandle = window.GetNativeHandle(), .BackBufferHandle = backBuffer});
     }
 }

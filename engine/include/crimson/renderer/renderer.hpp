@@ -1,5 +1,5 @@
 #pragma once
-#include "frame.hpp"
+#include "frame_context.hpp"
 #include "resource_manager.hpp"
 
 namespace crimson
@@ -8,11 +8,15 @@ namespace crimson
     {
     public:
         virtual ~Renderer() = default;
-        virtual SurfaceHandle Initialize(const Window& primaryWindow) = 0;
+
+        virtual RenderSurfaceHandle Initialize(const Window& primaryWindow) = 0;
         virtual void Shutdown() = 0;
+
         virtual ResourceManager& GetResourceManager() = 0;
-        virtual Frame BeginFrame(SurfaceHandle surface) = 0;
-        virtual void EndFrame(Frame& frame) = 0;
+
+        virtual std::optional<FrameContext> BeginFrame(RenderSurfaceHandle surface) = 0;
+        virtual void EndFrame(FrameContext& frame) = 0;
+
         static Unique<Renderer> Create();
     };
 }

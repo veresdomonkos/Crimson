@@ -32,6 +32,7 @@ target/
 # CLion / JetBrains
 .idea/
 cmake-build-*/
+.junie/
 
 # Binaries
 *.exe

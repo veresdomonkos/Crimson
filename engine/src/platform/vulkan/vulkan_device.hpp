@@ -22,6 +22,8 @@ namespace crimson::vulkan
         [[nodiscard]] VkQueue GetGraphicsQueue() const { return m_graphicsQueue; }
         [[nodiscard]] uint32_t GetGraphicsQueueFamilyIdx() const { return m_graphicsQueueFamilyIdx; }
 
+        uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
+
         void Init();
         void Shutdown() const;
 

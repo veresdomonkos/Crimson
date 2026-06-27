@@ -8,11 +8,14 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/render_commands.hpp
         include/crimson/core/log.hpp
         include/crimson/renderer/renderer_api.hpp
-        include/crimson/renderer/render_surface.hpp
         include/crimson/renderer/resource_manager.hpp
         include/crimson/renderer/renderer.hpp
-        include/crimson/renderer/Frame.hpp
+        include/crimson/renderer/frame_context.hpp
         include/crimson/core/command_buffer.hpp
+        include/crimson/renderer/handle_registry.hpp
+        include/crimson/renderer/resource_handles.hpp
+        include/crimson/renderer/core.hpp
+        include/crimson/renderer/resource_manager_base.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -31,8 +34,8 @@ set(ENGINE_IMPLEMENTATION
 		src/platform/vulkan/vulkan_resource_manager.hpp
 		src/platform/vulkan/vulkan_device.cpp
 		src/platform/vulkan/vulkan_device.hpp
-		src/platform/vulkan/vulkan_swapchain.cpp
-		src/platform/vulkan/vulkan_swapchain.hpp
+        src/platform/opengl/opengl_resources.hpp
+        src/platform/vulkan/vulkan_resources.hpp
 )
 
 add_library(Engine STATIC

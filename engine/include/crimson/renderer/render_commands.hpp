@@ -1,6 +1,8 @@
 #pragma once
 #include <cstdint>
 #include <glm/glm.hpp>
+
+#include "crimson/renderer/core.hpp"
 #include "crimson/core/command_buffer.hpp"
 
 namespace crimson
@@ -8,7 +10,9 @@ namespace crimson
     enum class RendererCommandType : uint32_t
     {
         None,
-        Clear
+        Clear, // LEGACY
+        BeginRenderPass,
+        EndRenderPass
     };
 
     using RenderCommandBuffer = CommandBuffer<RendererCommandType>;
@@ -22,5 +26,27 @@ namespace crimson
         ClearCommand(const glm::vec4& color) : Color(color) {}
 
         REGISTER_RENDER_COMMAND(Clear)
+    };
+
+    struct BeginRenderPassCommand
+    {
+        RenderTargetHandle Target;
+        ClearFlags ClearFlags;
+        glm::vec4 ClearColor;
+        float ClearDepth;
+        uint32_t ClearStencil;
+
+        explicit BeginRenderPassCommand(const RenderPassInfo& renderPassInfo)
+            : Target(renderPassInfo.Target), ClearFlags(renderPassInfo.ClearFlags),
+              ClearColor(renderPassInfo.ClearColor), ClearDepth(renderPassInfo.ClearDepth),
+              ClearStencil(renderPassInfo.ClearStencil)
+        {}
+
+        REGISTER_RENDER_COMMAND(BeginRenderPass)
+    };
+
+    struct EndRenderPassCommand
+    {
+        REGISTER_RENDER_COMMAND(EndRenderPass)
     };
 }

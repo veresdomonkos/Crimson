@@ -1,6 +1,6 @@
 #pragma once
 
-#include "render_surface.hpp"
+#include "crimson/renderer/resource_handles.hpp"
 #include "crimson/core/window.hpp"
 
 namespace crimson
@@ -9,6 +9,7 @@ namespace crimson
     {
     public:
         virtual ~ResourceManager() = default;
-        virtual SurfaceHandle CreateSurface(const Window& window) = 0;
+        virtual RenderSurfaceHandle CreateRenderSurface(const Window& window) = 0;
+        virtual RenderTargetHandle GetCurrentBackBuffer(RenderSurfaceHandle renderSurface) const = 0;
     };
 }
