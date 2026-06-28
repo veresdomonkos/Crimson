@@ -39,11 +39,11 @@ namespace crimson::vulkan
         void RecreateSwapchain(RenderSurfaceHandle handle);
 
         // TO DO
-        VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) override { return VertexBufferHandle::Invalid(); }
-        void DestroyVertexBuffer(VertexBufferHandle handle) override { }
+        VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) override;
+        void DestroyVertexBuffer(VertexBufferHandle handle) override;
 
-        IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) override { return IndexBufferHandle::Invalid(); }
-        void DestroyIndexBuffer(IndexBufferHandle handle) override { }
+        IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) override;
+        void DestroyIndexBuffer(IndexBufferHandle handle) override;
 
     protected:
         VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override { return {}; }
@@ -54,6 +54,8 @@ namespace crimson::vulkan
         void CreateImage(VkImageCreateInfo info, VulkanImage& image);
         void CreateImageView(VulkanImage& image, VkImageAspectFlags aspect);
         void CreateDepthImage(VulkanImage& image, uint32_t width, uint32_t height, VkFormat format);
+        void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory);
+        void CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
     private:
         VulkanDevice& m_device;
     };
