@@ -38,69 +38,58 @@ namespace crimson::opengl
 
     }
 
-    std::optional<FrameContext> OpenGLRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
+    FrameContext OpenGLRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
     {
         auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(surfaceHandle).WindowHandle);
         glfwMakeContextCurrent(window);
 
-        m_commandBuffer.Clear();
-        return FrameContext(surfaceHandle, m_resourceManager.GetCurrentBackBuffer(surfaceHandle), m_commandBuffer);
+        m_frames[0].Reset();
+        m_frames[0].Init(surfaceHandle, m_resourceManager.GetCurrentBackBuffer(surfaceHandle), true);
+        return m_frames[0].CreateContext();
     }
 
-    void OpenGLRenderer::EndFrame(FrameContext& frame)
+    void OpenGLRenderer::EndFrame(const FrameContext& frameContext)
     {
-        auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(frame.GetSurfaceHandle()).WindowHandle);
+        Frame& frame = m_frames[frameContext.GetIndex()];
+        auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(frame.GetSurface()).WindowHandle);
         glfwMakeContextCurrent(window);
 
-        for (const auto& commandView : frame.GetCommandBuffer())
+        for (const auto& renderPass : frame.GetRenderPasses())
         {
-            switch (commandView.GetType())
+            ExecuteBeginRenderPass(renderPass.Info());
+            for (const auto& draw : renderPass.GetDraws())
             {
-                case RendererCommandType::Clear:
-                {
-                    const auto& cmd = commandView.As<ClearCommand>();
-                    glClearColor(cmd.Color.r, cmd.Color.g, cmd.Color.b, cmd.Color.a);
-                    glClear( GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-                    break;
-                }
-                case RendererCommandType::BeginRenderPass:
-                {
-                    const auto& cmd = commandView.As<BeginRenderPassCommand>();
-                    ExecuteBeginRenderPass(cmd);
-                    break;
-                }
-                default:
-                    break;
+                // Draw
             }
         }
 
         glfwSwapBuffers(window);
     }
 
-    void OpenGLRenderer::ExecuteBeginRenderPass(const BeginRenderPassCommand& cmd)
+    void OpenGLRenderer::ExecuteBeginRenderPass(const RenderPassInfo& info)
     {
-        const auto& target = m_resourceManager.GetRenderTarget(cmd.Target);
+        const auto& target = m_resourceManager.GetRenderTarget(info.Target);
 
         glBindFramebuffer(GL_FRAMEBUFFER, target.FrameBufferHandle);
         glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
 
         GLbitfield clearMask = 0;
 
-        if (HasClearFlag(cmd.ClearFlags, ClearFlags::Color))
+        if (HasClearFlag(info.ClearFlags, ClearFlags::Color))
         {
-            glClearColor(cmd.ClearColor.r, cmd.ClearColor.g, cmd.ClearColor.b, cmd.ClearColor.a);
+            glClearColor(info.ClearColor.r, info.ClearColor.g, info.ClearColor.b, info.ClearColor.a);
             clearMask |= GL_COLOR_BUFFER_BIT;
         }
 
-        if (HasClearFlag(cmd.ClearFlags, ClearFlags::Depth))
+        if (HasClearFlag(info.ClearFlags, ClearFlags::Depth))
         {
-            glClearDepth(cmd.ClearDepth);
+            glClearDepth(info.ClearDepth);
             clearMask |= GL_DEPTH_BUFFER_BIT;
         }
 
-        if (HasClearFlag(cmd.ClearFlags, ClearFlags::Stencil))
+        if (HasClearFlag(info.ClearFlags, ClearFlags::Stencil))
         {
-            glClearStencil(static_cast<GLint>(cmd.ClearStencil));
+            glClearStencil(static_cast<GLint>(info.ClearStencil));
             clearMask |= GL_STENCIL_BUFFER_BIT;
         }
 

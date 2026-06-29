@@ -31,15 +31,17 @@ namespace crimson
 
             auto frame = m_renderer->BeginFrame(m_primarySurface);
 
-		    if (!frame)
+		    if (!frame.ShouldRender())
 		        continue;
 
-		    {
-		        RenderPass mainPass = frame->BeginRenderPass(mainPassInfo);
-		        mainPass.Draw();
-		    }
+		    RenderPass& shadowPass = frame.BeginRenderPass({.ClearFlags = ClearFlags::Depth});
 
-		    m_renderer->EndFrame(*frame);
+		    RenderPass& mainPass = frame.BeginRenderPass(mainPassInfo);
+		    mainPass.Draw({});
+
+		    RenderPass& uiPass = frame.BeginRenderPass({.ClearFlags = ClearFlags::None});
+
+		    m_renderer->EndFrame(frame);
 		}
 	}
 
