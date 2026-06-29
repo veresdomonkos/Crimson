@@ -1,5 +1,5 @@
 add_executable(Editor
-	src/main.cpp
- )
+        src/main.cpp
+)
 
 target_link_libraries(Editor PRIVATE Engine)

@@ -21,8 +21,13 @@ namespace crimson::opengl
 
         VertexArrayHandle CreateVertexArray(const VertexArrayInfo& info);
         VertexArray& GetVertexArray(VertexArrayHandle handle) { return m_vertexArrays.Get(handle); }
+
+        ShaderHandle CreateShader(std::string_view vertexSrc, std::string_view fragmentSrc) override;
+        void DestroyShader(ShaderHandle handle) override;
     protected:
         OpenGLGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo &info) override;
+    private:
+        static GLuint CompileShader(GLenum type, std::string_view source);
     private:
         HandleRegistry<VertexArrayHandle, VertexArray> m_vertexArrays;
     };

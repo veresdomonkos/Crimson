@@ -19,5 +19,8 @@ namespace crimson
 
         virtual IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) = 0;
         virtual void DestroyIndexBuffer(IndexBufferHandle handle) = 0;
+
+        virtual ShaderHandle CreateShader(std::string_view vertexSrc, std::string_view fragmentSrc) = 0;
+        virtual void DestroyShader(ShaderHandle handle) = 0;
     };
 }

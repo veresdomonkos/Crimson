@@ -102,6 +102,7 @@ namespace crimson::opengl
     {
         OpenGLVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(info.VertexBuffer);
         OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(info.IndexBuffer);
+        OpenGLShader& shader = m_resourceManager.GetShader(info.Shader);
 
         auto& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout =  vertexBuffer.Layout});
 
@@ -123,6 +124,7 @@ namespace crimson::opengl
         }
 
         VertexArray& vertexArray = m_resourceManager.GetVertexArray(vertexArrayHandle);
+        glUseProgram(shader.GLHandle);
         glBindVertexArray(vertexArray.GLHandle);
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexBuffer.Size / Index::Size(indexBuffer.Type)),  utils::GetGLIndexType(indexBuffer.Type), nullptr);
     }

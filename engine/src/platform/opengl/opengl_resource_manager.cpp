@@ -1,6 +1,7 @@
 #include "opengl_resource_manager.hpp"
 
 #include "utils.hpp"
+#include "crimson/core/log.hpp"
 
 namespace crimson::opengl
 {
@@ -98,8 +99,78 @@ namespace crimson::opengl
         return m_vertexArrays.Register(vao);
     }
 
+    ShaderHandle OpenGLResourceManager::CreateShader(std::string_view vertexSrc, std::string_view fragmentSrc)
+    {
+        GLuint vertex = CompileShader(GL_VERTEX_SHADER, vertexSrc);
+        GLuint fragment = CompileShader(GL_FRAGMENT_SHADER, fragmentSrc);
+
+        GLuint program = glCreateProgram();
+        glAttachShader(program, vertex);
+        glAttachShader(program, fragment);
+
+        glLinkProgram(program);
+
+        GLint success = 0;
+        glGetProgramiv(program, GL_LINK_STATUS, &success);
+
+        if (!success)
+        {
+            char log[2048];
+
+            glGetProgramInfoLog(program, sizeof(log),nullptr, log);
+            glDeleteProgram(program);
+            glDeleteShader(vertex);
+            glDeleteShader(fragment);
+
+            LOG_ERROR("Shader link error: {}", log);
+            return ShaderHandle::Invalid();
+        }
+
+        glDeleteShader(vertex);
+        glDeleteShader(fragment);
+
+        OpenGLShader shader {.GLHandle = program};
+        return m_shaders.Register(shader);
+    }
+
+    void OpenGLResourceManager::DestroyShader(ShaderHandle handle)
+    {
+        if (handle)
+        {
+            glDeleteProgram(m_shaders.Get(handle).GLHandle);
+        }
+    }
+
     OpenGLGraphicsPipeline OpenGLResourceManager::CreateGraphicsPipeline(const GraphicsPipelineInfo &info)
     {
         return OpenGLGraphicsPipeline{};
+    }
+
+    GLuint OpenGLResourceManager::CompileShader(GLenum type, std::string_view source)
+    {
+        GLuint shader = glCreateShader(type);
+
+        const char* src = source.data();
+        GLint length = static_cast<GLint>(source.size());
+        glShaderSource(shader,1, &src, &length);
+        glCompileShader(shader);
+        GLint success = 0;
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
+
+        if (!success)
+        {
+            char log[2048];
+            glGetShaderInfoLog(
+                shader,
+                sizeof(log),
+                nullptr,
+                log
+            );
+
+            glDeleteShader(shader);
+            LOG_ERROR("Shader compile error: {}", log);
+        }
+
+        return shader;
     }
 }

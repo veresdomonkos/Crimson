@@ -6,6 +6,7 @@ namespace crimson
     struct GraphicsPipelineInfo
     {
         BufferLayout Layout;
+        ShaderHandle Shader;
 
         bool operator==(const GraphicsPipelineInfo &) const = default;
     };
@@ -26,7 +27,7 @@ namespace crimson
                 );
             }
 
-            //HashCombine(hash, key.Layout.GetStride());
+            HashCombine(hash, key.Shader.GetRaw());
 
             return hash;
         }

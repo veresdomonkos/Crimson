@@ -8,17 +8,19 @@ namespace crimson
     template <typename PlatformResourceTraits>
     class ResourceManagerBase : public ResourceManager
     {
-    private:
+    public:
         using RenderSurface = PlatformResourceTraits::RenderSurface;
         using RenderTarget = PlatformResourceTraits::RenderTarget;
         using VertexBuffer = PlatformResourceTraits::VertexBuffer;
         using IndexBuffer = PlatformResourceTraits::IndexBuffer;
         using GraphicsPipeline = PlatformResourceTraits::GraphicsPipeline;
+        using Shader = PlatformResourceTraits::Shader;
     public:
         RenderSurface& GetRenderSurface(RenderSurfaceHandle handle) { return m_renderSurfaces.Get(handle); }
         RenderTarget& GetRenderTarget(RenderTargetHandle handle) { return m_renderTargets.Get(handle); }
         VertexBuffer& GetVertexBuffer(VertexBufferHandle handle) { return m_vertexBuffers.Get(handle); }
         IndexBuffer& GetIndexBuffer(IndexBufferHandle handle) { return m_indexBuffers.Get(handle); }
+        Shader& GetShader(ShaderHandle handle) { return m_shaders.Get(handle); }
 
         GraphicsPipeline& GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info)
         {
@@ -36,6 +38,7 @@ namespace crimson
         HandleRegistry<RenderTargetHandle, RenderTarget> m_renderTargets;
         HandleRegistry<VertexBufferHandle, VertexBuffer> m_vertexBuffers;
         HandleRegistry<IndexBufferHandle, IndexBuffer> m_indexBuffers;
+        HandleRegistry<ShaderHandle, Shader> m_shaders;
         GraphicsPipelineCache<GraphicsPipeline> m_graphicsPipelines;
     };
 }

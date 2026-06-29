@@ -38,13 +38,16 @@ namespace crimson::vulkan
 
         void RecreateSwapchain(RenderSurfaceHandle handle);
 
-        // TO DO
+
         VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) override;
         void DestroyVertexBuffer(VertexBufferHandle handle) override;
 
         IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) override;
         void DestroyIndexBuffer(IndexBufferHandle handle) override;
 
+        // TO DO
+        ShaderHandle CreateShader(std::string_view vertexSrc, std::string_view fragmentSrc) override { return ShaderHandle::Invalid(); };
+        void DestroyShader(ShaderHandle handle) override {};
     protected:
         VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override { return {}; }
     private:

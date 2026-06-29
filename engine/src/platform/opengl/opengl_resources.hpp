@@ -59,12 +59,18 @@ namespace crimson::opengl
         VertexArrayCache VAOCache;
     };
 
+    struct OpenGLShader
+    {
+        GLuint GLHandle{};
+    };
+
     struct OpenglResourceTraits
     {
         using RenderSurface = OpenGLSurface;
         using RenderTarget = OpenGLRenderTarget;
         using VertexBuffer = OpenGLVertexBuffer;
         using IndexBuffer = OpenGLIndexBuffer;
+        using Shader = OpenGLShader;
         using GraphicsPipeline = OpenGLGraphicsPipeline;
     };
 }

@@ -59,6 +59,11 @@ namespace crimson::vulkan
         BufferUsage Usage{};
     };
 
+    struct VulkanShader
+    {
+
+    };
+
     struct VulkanGraphicsPipeline
     {
 
@@ -70,6 +75,7 @@ namespace crimson::vulkan
         using RenderTarget = VulkanRenderTarget;
         using VertexBuffer = VulkanVertexBuffer;
         using IndexBuffer = VulkanIndexBuffer;
+        using Shader = VulkanShader;
         using GraphicsPipeline = VulkanGraphicsPipeline;
     };
 }

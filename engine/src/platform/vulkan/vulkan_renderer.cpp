@@ -306,6 +306,9 @@ namespace crimson::vulkan
             for (const auto& draw : renderPass.GetDraws())
             {
                 // Draw
+                // ExecuteDraw
+                // VulkanVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(draw.VertexBuffer);
+                // VulkanGraphicsPipeline& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout = vertexBuffer.Layout, .Shader = draw.Shader });
             }
 
             ExecuteEndRenderPass(cmdBuffer, rt);
