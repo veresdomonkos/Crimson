@@ -15,10 +15,6 @@ namespace crimson::vulkan
 
     void VulkanRenderer::InitializeSynchronizationAndCommands()
     {
-        m_vkCommandBuffers.resize(MAX_FRAMES_IN_FLIGHT);
-        m_imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        m_inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-
         VkCommandPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
@@ -29,13 +25,15 @@ namespace crimson::vulkan
             LOG_ERROR("[Renderer] Failed to create VkCommandPool!");
         }
 
+        std::array<VkCommandBuffer, MAX_FRAMES_IN_FLIGHT> buffers{};
+
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.commandPool = m_commandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
-        if (vkAllocateCommandBuffers(m_device.GetDevice(), &allocInfo, m_vkCommandBuffers.data()) != VK_SUCCESS)
+        if (vkAllocateCommandBuffers(m_device.GetDevice(), &allocInfo, buffers.data()) != VK_SUCCESS)
         {
             LOG_ERROR("[Renderer] Failed to allocate VkCommandBuffers!");
         }
@@ -49,12 +47,15 @@ namespace crimson::vulkan
 
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            if (vkCreateSemaphore(m_device.GetDevice(), &semaphoreInfo, nullptr, &m_imageAvailableSemaphores[i]) != VK_SUCCESS)
+            m_frames[i].SetIndex(i);
+            m_frameSyncs[i].CommandBuffer = buffers[i];
+
+            if (vkCreateSemaphore(m_device.GetDevice(), &semaphoreInfo, nullptr, &m_frameSyncs[i].ImageAvailableSemaphore) != VK_SUCCESS)
             {
                 LOG_ERROR("[Renderer] Failed to create Vulkan Semaphores!");
             }
 
-            if (vkCreateFence(m_device.GetDevice(), &fenceInfo, nullptr, &m_inFlightFences[i]) != VK_SUCCESS)
+            if (vkCreateFence(m_device.GetDevice(), &fenceInfo, nullptr, &m_frameSyncs[i].InFlightFence) != VK_SUCCESS)
             {
                 LOG_ERROR("[Renderer] Failed to create Vulkan Fences!");
             }
@@ -67,10 +68,10 @@ namespace crimson::vulkan
 
         m_resourceManager.Clear();
 
-        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        for (FrameSync& sync : m_frameSyncs)
         {
-            vkDestroySemaphore(m_device.GetDevice(), m_imageAvailableSemaphores[i], nullptr);
-            vkDestroyFence(m_device.GetDevice(), m_inFlightFences[i], nullptr);
+            vkDestroySemaphore(m_device.GetDevice(), sync.ImageAvailableSemaphore, nullptr);
+            vkDestroyFence(m_device.GetDevice(), sync.InFlightFence, nullptr);
         }
 
         if (m_commandPool != VK_NULL_HANDLE)
@@ -136,9 +137,9 @@ namespace crimson::vulkan
         currentLayout = newLayout;
     }
 
-    void VulkanRenderer::ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const BeginRenderPassCommand& cmd)
+    void VulkanRenderer::ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const RenderPassInfo& info)
     {
-        VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(cmd.Target);
+        VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(info.Target);
 
         for (auto& color : rt.Colors)
         {
@@ -165,10 +166,10 @@ namespace crimson::vulkan
 
             VkClearValue clear{};
             clear.color = {
-                cmd.ClearColor.r,
-                cmd.ClearColor.g,
-                cmd.ClearColor.b,
-                cmd.ClearColor.a
+                info.ClearColor.r,
+                info.ClearColor.g,
+                info.ClearColor.b,
+                info.ClearColor.a
             };
 
             attachment.clearValue = clear;
@@ -186,8 +187,8 @@ namespace crimson::vulkan
             depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             depthAttachment.clearValue.depthStencil =
             {
-                cmd.ClearDepth,
-                cmd.ClearStencil
+                info.ClearDepth,
+                info.ClearStencil
             };
         }
 
@@ -219,10 +220,12 @@ namespace crimson::vulkan
         }
     }
 
-    std::optional<FrameContext> VulkanRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
+    FrameContext VulkanRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
     {
+        m_frames[m_currentFrameIndex].Reset();
+
         VulkanSurface& surface = m_resourceManager.GetRenderSurface(surfaceHandle);
-        VkFence frameFence = m_inFlightFences[m_currentFrameIndex];
+        VkFence frameFence = m_frameSyncs[m_currentFrameIndex].InFlightFence;
 
         vkWaitForFences(
             m_device.GetDevice(),
@@ -238,7 +241,7 @@ namespace crimson::vulkan
             m_device.GetDevice(),
             surface.Swapchain,
             UINT64_MAX,
-            m_imageAvailableSemaphores[m_currentFrameIndex],
+             m_frameSyncs[m_currentFrameIndex].ImageAvailableSemaphore,
             VK_NULL_HANDLE,
             &imageIndex
         );
@@ -246,7 +249,7 @@ namespace crimson::vulkan
         if(result == VK_ERROR_OUT_OF_DATE_KHR)
         {
             m_resourceManager.RecreateSwapchain(surfaceHandle);
-            return std::nullopt;
+            return m_frames[m_currentFrameIndex].CreateContext();
         }
 
         if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
@@ -275,7 +278,7 @@ namespace crimson::vulkan
             &frameFence
         );
 
-        VkCommandBuffer cmd = m_vkCommandBuffers[m_currentFrameIndex];
+        VkCommandBuffer cmd = m_frameSyncs[m_currentFrameIndex].CommandBuffer;
         vkResetCommandBuffer(cmd,0);
 
         VkCommandBufferBeginInfo begin{};
@@ -283,45 +286,37 @@ namespace crimson::vulkan
         begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
         vkBeginCommandBuffer(cmd,&begin);
-        m_commandBuffer.Clear();
-        return FrameContext(surfaceHandle, m_resourceManager.GetCurrentBackBuffer(surfaceHandle), m_commandBuffer);
+        m_frames[m_currentFrameIndex].Init(surfaceHandle, m_resourceManager.GetCurrentBackBuffer(surfaceHandle), true);
+        return m_frames[m_currentFrameIndex].CreateContext();
     }
 
-    void VulkanRenderer::EndFrame(FrameContext& frame)
+    void VulkanRenderer::EndFrame(const FrameContext& frameContext)
     {
-        VkCommandBuffer cmdBuffer = m_vkCommandBuffers[m_currentFrameIndex];
-        VulkanSurface& surface = m_resourceManager.GetRenderSurface(frame.GetSurfaceHandle());
+        Frame& frame = m_frames[frameContext.GetIndex()];
+        VkCommandBuffer cmdBuffer = m_frameSyncs[m_currentFrameIndex].CommandBuffer;
+        VulkanSurface& surface = m_resourceManager.GetRenderSurface(frame.GetSurface());
         uint32_t imageIndex = surface.CurrentImageIndex;
         RenderTargetHandle target = surface.SwapchainTargetHandles[imageIndex];
         VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(target);
 
-        for (const auto& commandHeader : frame.GetCommandBuffer())
+        for (const auto& renderPass : frame.GetRenderPasses())
         {
-            switch (commandHeader.GetType())
+            ExecuteBeginRenderPass(cmdBuffer, renderPass.Info());
+
+            for (const auto& draw : renderPass.GetDraws())
             {
-                case RendererCommandType::BeginRenderPass:
-                {
-                    ExecuteBeginRenderPass(cmdBuffer, commandHeader.As<BeginRenderPassCommand>());
-                    break;
-                }
-
-                case RendererCommandType::EndRenderPass:
-                {
-                    ExecuteEndRenderPass(cmdBuffer, rt);
-                    break;
-                }
-
-                default:
-                    break;
+                // Draw
             }
+
+            ExecuteEndRenderPass(cmdBuffer, rt);
         }
 
         if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
             LOG_ERROR("[Renderer] Failed to end command buffer");
 
-        VkSemaphore waitSemaphore = m_imageAvailableSemaphores[m_currentFrameIndex];
+        VkSemaphore waitSemaphore = m_frameSyncs[m_currentFrameIndex].ImageAvailableSemaphore;
         VkSemaphore signalSemaphore = surface.RenderFinishedSemaphores[imageIndex];
-        VkFence fence = m_inFlightFences[m_currentFrameIndex];
+        VkFence fence = m_frameSyncs[m_currentFrameIndex].InFlightFence;
 
         VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
@@ -359,7 +354,7 @@ namespace crimson::vulkan
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         {
-            m_resourceManager.RecreateSwapchain(frame.GetSurfaceHandle());
+            m_resourceManager.RecreateSwapchain(frame.GetSurface());
         }
 
         m_currentFrameIndex = (m_currentFrameIndex + 1) % MAX_FRAMES_IN_FLIGHT;

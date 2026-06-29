@@ -49,15 +49,13 @@ namespace crimson
 
             auto frame = m_renderer->BeginFrame(m_primarySurface);
 
-		    if (!frame)
+		    if (!frame.ShouldRender())
 		        continue;
 
-		    {
-		        RenderPass mainPass = frame->BeginRenderPass(mainPassInfo);
-		        mainPass.Draw(vertexBuffer, indexBuffer);
-		    }
+		    RenderPass& mainPass = frame.BeginRenderPass(mainPassInfo);
+            mainPass.Draw({.VertexBuffer = vertexBuffer, .IndexBuffer = indexBuffer});
 
-		    m_renderer->EndFrame(*frame);
+		    m_renderer->EndFrame(frame);
 		}
 	}
 

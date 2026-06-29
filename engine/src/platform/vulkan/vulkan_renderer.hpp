@@ -9,33 +9,38 @@
 
 namespace crimson::vulkan
 {
+    struct FrameSync
+    {
+        VkCommandBuffer CommandBuffer{};
+        VkSemaphore ImageAvailableSemaphore{};
+        VkFence InFlightFence{};
+    };
+
     class VulkanRenderer : public Renderer
     {
     public:
-        VulkanRenderer() : m_resourceManager(m_device), m_commandBuffer(2 * 1024 * 1024) {}
+        VulkanRenderer() : m_resourceManager(m_device) {}
 
         RenderSurfaceHandle Initialize(const Window& primaryWindow) override;
         void Shutdown() override;
         ResourceManager& GetResourceManager() override;
-        std::optional<FrameContext> BeginFrame(RenderSurfaceHandle surface) override;
-        void EndFrame(FrameContext& frame) override;
+        FrameContext BeginFrame(RenderSurfaceHandle surface) override;
+        void EndFrame(const FrameContext& frame) override;
     private:
         void TransitionImage(VkCommandBuffer cmd, VkImage image, VkImageAspectFlagBits flagBits, VkImageLayout& currentLayout, VkImageLayout newLayout);
         void InitializeSynchronizationAndCommands();
-        void ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const BeginRenderPassCommand& cmd);
+        void ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const RenderPassInfo& info);
         void ExecuteEndRenderPass(VkCommandBuffer cmdBuffer, VulkanRenderTarget& rt);
     private:
         VulkanDevice m_device;
         VulkanResourceManager m_resourceManager;
-        RenderCommandBuffer m_commandBuffer;
 
-        const int MAX_FRAMES_IN_FLIGHT = 2;
+        constexpr static int MAX_FRAMES_IN_FLIGHT = 2;
         uint32_t m_currentFrameIndex = 0;
 
         VkCommandPool m_commandPool = VK_NULL_HANDLE;
 
-        std::vector<VkCommandBuffer> m_vkCommandBuffers;
-        std::vector<VkSemaphore> m_imageAvailableSemaphores;
-        std::vector<VkFence> m_inFlightFences;
+        std::array<FrameSync, MAX_FRAMES_IN_FLIGHT> m_frameSyncs;
+        std::array<Frame, MAX_FRAMES_IN_FLIGHT> m_frames;
     };
 }

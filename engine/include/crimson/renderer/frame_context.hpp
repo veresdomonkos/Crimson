@@ -1,56 +1,119 @@
 #pragma once
-#include "crimson/renderer/resource_handles.hpp"
+
 #include "crimson/renderer/render_commands.hpp"
-#include "crimson/core/command_buffer.hpp"
-#include "glm/vec4.hpp"
+
+#include <vector>
+#include <cassert>
+#include <span>
 
 namespace crimson
 {
+    constexpr uint32_t MaxRenderPasses = 16;
+
+    struct DrawInfo
+    {
+        VertexBufferHandle VertexBuffer;
+        IndexBufferHandle IndexBuffer;
+    };
+
     class RenderPass
     {
     public:
-        explicit RenderPass(const RenderPassInfo& info, RenderCommandBuffer &m_commandBuffer)
-            : m_commandBuffer(m_commandBuffer)
+        const RenderPassInfo& Info() const
         {
-            m_commandBuffer.Submit<BeginRenderPassCommand>(info);
+            return m_info;
         }
 
-        ~RenderPass()
+        [[nodiscard]] std::span<const DrawInfo> GetDraws() const
         {
-            m_commandBuffer.Submit<EndRenderPassCommand>();
+            return m_drawInfos;
         }
 
-        RenderPass(RenderPass&&) noexcept = delete;
-        RenderPass& operator=(RenderPass&&) noexcept = delete;
-
-        void Draw(VertexBufferHandle vertexBuffer, IndexBufferHandle indexBuffer)
+        void Draw(const DrawInfo& drawInfo)
         {
-            m_commandBuffer.Submit<DrawCommand>(vertexBuffer, indexBuffer);
+            m_drawInfos.emplace_back(drawInfo);
         }
     private:
-        RenderCommandBuffer& m_commandBuffer;
+        void Reset()
+        {
+            m_drawInfos.clear();
+            m_info = {};
+        }
+    private:
+        friend class Frame;
+        friend class FrameContext;
+
+        RenderPassInfo m_info;
+        std::vector<DrawInfo> m_drawInfos;
+    };
+
+    struct FrameData
+    {
+        uint32_t FrameIndex = 0;
+        RenderPass RenderPasses[MaxRenderPasses];
+        uint32_t RenderPassCount = 0;
+        RenderTargetHandle DefaultTarget = RenderTargetHandle::Invalid();
+        RenderSurfaceHandle Surface = RenderSurfaceHandle::Invalid();
+        bool ShouldRender = false;
     };
 
     class FrameContext
     {
     public:
-        FrameContext(RenderSurfaceHandle surfaceHandle, RenderTargetHandle defaultTarget, RenderCommandBuffer& commandBuffer)
-            : m_surfaceHandle(surfaceHandle), m_commandBuffer(commandBuffer), m_defaultTarget(defaultTarget)
-        {}
+        FrameContext(FrameData& data) : m_data(&data) {}
 
-        RenderPass BeginRenderPass(RenderPassInfo info)
+        RenderPass& BeginRenderPass(const RenderPassInfo& info)
         {
-            if (!info.Target)
-                info.Target = m_defaultTarget;
+            assert(m_data->RenderPassCount < MaxRenderPasses);
 
-            return RenderPass(info, m_commandBuffer);
+            auto& pass = m_data->RenderPasses[m_data->RenderPassCount++];
+            pass.m_info = info;
+
+            if (!pass.m_info.Target)
+                pass.m_info.Target = m_data->DefaultTarget;
+
+            return pass;
         }
 
-        RenderCommandBuffer& GetCommandBuffer() { return m_commandBuffer; }
-        RenderSurfaceHandle GetSurfaceHandle() const { return m_surfaceHandle; }
-    protected:
-        RenderSurfaceHandle m_surfaceHandle;
-        RenderCommandBuffer& m_commandBuffer;
-        RenderTargetHandle m_defaultTarget;
+        uint32_t GetIndex() const { return m_data->FrameIndex; }
+        bool ShouldRender() const { return m_data->ShouldRender; }
+    private:
+        FrameData* m_data;
+    };
+
+    class Frame
+    {
+    public:
+        [[nodiscard]] std::span<const RenderPass> GetRenderPasses() const
+        {
+            return std::span(m_data.RenderPasses, m_data.RenderPasses + m_data.RenderPassCount);
+        }
+
+        void Init(RenderSurfaceHandle surface, RenderTargetHandle defaultTarget, bool shouldRender)
+        {
+            m_data.DefaultTarget = defaultTarget;
+            m_data.Surface = surface;
+            m_data.ShouldRender = shouldRender;
+        }
+
+        void Reset()
+        {
+            for (auto it = m_data.RenderPasses; it != m_data.RenderPasses + m_data.RenderPassCount; ++it)
+            {
+                it->Reset();
+            }
+
+            m_data.RenderPassCount = 0;
+            m_data.DefaultTarget = RenderTargetHandle::Invalid();
+            m_data.Surface = RenderSurfaceHandle::Invalid();
+            m_data.ShouldRender = false;
+        }
+
+        void SetIndex(uint32_t index) { m_data.FrameIndex = index; }
+        [[nodiscard]] RenderSurfaceHandle GetSurface() const { return m_data.Surface; }
+
+        FrameContext CreateContext() { return FrameContext(m_data); }
+    private:
+       FrameData m_data;
     };
 }
