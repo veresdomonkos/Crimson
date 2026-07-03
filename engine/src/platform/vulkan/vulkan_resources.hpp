@@ -1,6 +1,13 @@
 #pragma once
 
+#include <optional>
+#include <vector>
+
 #include <vulkan/vulkan.h>
+
+#include "crimson/renderer/buffer_layout.hpp"
+#include "crimson/renderer/buffers.hpp"
+#include "crimson/renderer/resource_handles.hpp"
 
 namespace crimson::vulkan
 {
@@ -61,12 +68,14 @@ namespace crimson::vulkan
 
     struct VulkanShader
     {
-
+        VkShaderModule Vertex = VK_NULL_HANDLE;
+        VkShaderModule Fragment = VK_NULL_HANDLE;
     };
 
     struct VulkanGraphicsPipeline
     {
-
+        VkPipelineLayout Layout = VK_NULL_HANDLE;
+        VkPipeline Pipeline = VK_NULL_HANDLE;
     };
 
     struct VulkanResourceTraits

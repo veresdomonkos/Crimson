@@ -10,6 +10,7 @@ namespace crimson::vulkan
     {
         m_device.Init();
         InitializeSynchronizationAndCommands();
+
         return m_resourceManager.CreateRenderSurface(primaryWindow);
     }
 
@@ -92,43 +93,62 @@ namespace crimson::vulkan
         if (currentLayout == newLayout)
             return;
 
-        VkImageMemoryBarrier2 barrier{};
-        barrier.sType =
-            VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+        VkPipelineStageFlags2 srcStage = VK_PIPELINE_STAGE_2_NONE;
+        VkPipelineStageFlags2 dstStage = VK_PIPELINE_STAGE_2_NONE;
+        VkAccessFlags2 srcAccess = VK_ACCESS_2_NONE;
+        VkAccessFlags2 dstAccess = VK_ACCESS_2_NONE;
 
+        if (currentLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+        {
+            srcStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            srcAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+        }
+        else if (currentLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+        {
+            srcStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+            dstAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+        }
+        else if (currentLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        {
+            srcAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        }
+
+        if (flagBits == VK_IMAGE_ASPECT_COLOR_BIT)
+        {
+            if (newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+            {
+                dstStage = VK_PIPELINE_STAGE_2_NONE;
+                dstAccess = VK_ACCESS_2_NONE;
+            }
+            else
+            {
+                dstStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+                dstAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+            }
+        }
+        else
+        {
+            dstStage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+            dstAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+        }
+
+        VkImageMemoryBarrier2 barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
         barrier.oldLayout = currentLayout;
         barrier.newLayout = newLayout;
-
-        barrier.srcQueueFamilyIndex =
-            VK_QUEUE_FAMILY_IGNORED;
-
-        barrier.dstQueueFamilyIndex =
-            VK_QUEUE_FAMILY_IGNORED;
-
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = image;
-
-        barrier.subresourceRange.aspectMask =
-            flagBits;
-
+        barrier.subresourceRange.aspectMask = flagBits;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.layerCount = 1;
-
-        barrier.srcStageMask =
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-        barrier.dstStageMask =
-            VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-        barrier.srcAccessMask =
-            VK_ACCESS_NONE;
-
-        barrier.dstAccessMask =
-            VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+        barrier.srcStageMask = srcStage;
+        barrier.dstStageMask = dstStage;
+        barrier.srcAccessMask = srcAccess;
+        barrier.dstAccessMask = dstAccess;
 
         VkDependencyInfo dep{};
-        dep.sType =
-            VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
-
+        dep.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
         dep.imageMemoryBarrierCount = 1;
         dep.pImageMemoryBarriers = &barrier;
 
@@ -153,7 +173,7 @@ namespace crimson::vulkan
 
         std::vector<VkRenderingAttachmentInfo> colorAttachments;
 
-        for(auto& color : rt.Colors)
+        for (auto& color : rt.Colors)
         {
             VkRenderingAttachmentInfo attachment{};
 
@@ -178,7 +198,7 @@ namespace crimson::vulkan
 
         VkRenderingAttachmentInfo depthAttachment{};
 
-        if(rt.Depth)
+        if (rt.Depth)
         {
             depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             depthAttachment.imageView = rt.Depth->View;
@@ -199,7 +219,7 @@ namespace crimson::vulkan
         rendering.layerCount = 1;
         rendering.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());;
         rendering.pColorAttachments = colorAttachments.data();
-        if(rt.Depth)
+        if (rt.Depth)
         {
             rendering.pDepthAttachment = &depthAttachment;
         }
@@ -227,16 +247,9 @@ namespace crimson::vulkan
         VulkanSurface& surface = m_resourceManager.GetRenderSurface(surfaceHandle);
         VkFence frameFence = m_frameSyncs[m_currentFrameIndex].InFlightFence;
 
-        vkWaitForFences(
-            m_device.GetDevice(),
-            1,
-            &frameFence,
-            VK_TRUE,
-            UINT64_MAX
-        );
+        vkWaitForFences(m_device.GetDevice(), 1, &frameFence, VK_TRUE, UINT64_MAX);
 
         uint32_t imageIndex;
-
         VkResult result = vkAcquireNextImageKHR(
             m_device.GetDevice(),
             surface.Swapchain,
@@ -246,37 +259,26 @@ namespace crimson::vulkan
             &imageIndex
         );
 
-        if(result == VK_ERROR_OUT_OF_DATE_KHR)
+        if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
             m_resourceManager.RecreateSwapchain(surfaceHandle);
             return m_frames[m_currentFrameIndex].CreateContext();
         }
 
-        if(result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         {
             LOG_ERROR("[Renderer] AcquireNextImage failed");
         }
 
         surface.CurrentImageIndex = imageIndex;
-
-        if(surface.ImagesInFlight[imageIndex] != VK_NULL_HANDLE)
+        if (surface.ImagesInFlight[imageIndex] != VK_NULL_HANDLE)
         {
-            vkWaitForFences(
-                m_device.GetDevice(),
-                1,
-                &surface.ImagesInFlight[imageIndex],
-                VK_TRUE,
-                UINT64_MAX
-            );
+            vkWaitForFences(m_device.GetDevice(), 1, &surface.ImagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
         }
 
         surface.ImagesInFlight[imageIndex] = frameFence;
 
-        vkResetFences(
-            m_device.GetDevice(),
-            1,
-            &frameFence
-        );
+        vkResetFences(m_device.GetDevice(), 1, &frameFence);
 
         VkCommandBuffer cmd = m_frameSyncs[m_currentFrameIndex].CommandBuffer;
         vkResetCommandBuffer(cmd,0);
@@ -287,6 +289,7 @@ namespace crimson::vulkan
 
         vkBeginCommandBuffer(cmd,&begin);
         m_frames[m_currentFrameIndex].Init(surfaceHandle, m_resourceManager.GetCurrentBackBuffer(surfaceHandle), true);
+
         return m_frames[m_currentFrameIndex].CreateContext();
     }
 
@@ -305,17 +308,47 @@ namespace crimson::vulkan
 
             for (const auto& draw : renderPass.GetDraws())
             {
-                // Draw
-                // ExecuteDraw
-                // VulkanVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(draw.VertexBuffer);
-                // VulkanGraphicsPipeline& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout = vertexBuffer.Layout, .Shader = draw.Shader });
+                VulkanVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(draw.VertexBuffer);
+                VulkanIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(draw.IndexBuffer);
+                VulkanGraphicsPipeline& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout = vertexBuffer.Layout, .Shader = draw.Shader });
+
+                if (pipeline.Pipeline == VK_NULL_HANDLE)
+                {
+                    continue;
+                }
+
+                vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Pipeline);
+
+                VkDeviceSize offset = 0;
+                vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &vertexBuffer.Buffer, &offset);
+                vkCmdBindIndexBuffer(cmdBuffer, indexBuffer.Buffer, 0, indexBuffer.Type == IndexType::UInt32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+
+                VkViewport viewport{};
+                viewport.x = 0.0f;
+                viewport.y = static_cast<float>(rt.Height); // hacky shit
+                viewport.width = static_cast<float>(rt.Width);
+                viewport.height = -static_cast<float>(rt.Height); // hacky shit
+                viewport.minDepth = 0.0f;
+                viewport.maxDepth = 1.0f;
+
+                VkRect2D scissor{};
+                scissor.offset = {0, 0};
+                scissor.extent = {rt.Width, rt.Height};
+
+                vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+                vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
+
+                uint32_t indexCount = static_cast<uint32_t>(indexBuffer.Size / Index::Size(indexBuffer.Type));
+                vkCmdDrawIndexed(cmdBuffer, indexCount, 1, 0, 0, 0);
             }
 
             ExecuteEndRenderPass(cmdBuffer, rt);
         }
 
         if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
+        {
             LOG_ERROR("[Renderer] Failed to end command buffer");
+        }
 
         VkSemaphore waitSemaphore = m_frameSyncs[m_currentFrameIndex].ImageAvailableSemaphore;
         VkSemaphore signalSemaphore = surface.RenderFinishedSemaphores[imageIndex];
@@ -333,11 +366,7 @@ namespace crimson::vulkan
         submit.signalSemaphoreCount = 1;
         submit.pSignalSemaphores = &signalSemaphore;
 
-        if (vkQueueSubmit(
-            m_device.GetGraphicsQueue(),
-            1,
-            &submit,
-            fence) != VK_SUCCESS)
+        if (vkQueueSubmit(m_device.GetGraphicsQueue(), 1, &submit, fence) != VK_SUCCESS)
         {
             LOG_ERROR("Queue submit failed");
         }
@@ -350,11 +379,7 @@ namespace crimson::vulkan
         present.pSwapchains = &surface.Swapchain;
         present.pImageIndices = &imageIndex;
 
-        VkResult result = vkQueuePresentKHR(
-            m_device.GetGraphicsQueue(),
-            &present
-        );
-
+        VkResult result = vkQueuePresentKHR(m_device.GetGraphicsQueue(), &present);
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         {
             m_resourceManager.RecreateSwapchain(frame.GetSurface());

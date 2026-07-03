@@ -1,13 +1,14 @@
 #include "crimson/core/application.hpp"
 
 #include "crimson/core/core.hpp"
+#include "crimson/core/log.hpp"
 #include "crimson/renderer/renderer_api.hpp"
 
 namespace crimson
 {
 	Application::Application() : m_running(true)
 	{
-		RendererAPI::Init(RendererAPIType::OpenGL);
+		RendererAPI::Init(RendererAPIType::Vulkan);
 		m_window = Window::Create(WindowData{ "My Window", 1280, 720, BIND_FN(OnEvent) });
 	    m_renderer = Renderer::Create();
 	    m_primarySurface = m_renderer->Initialize(*m_window);
@@ -82,7 +83,11 @@ namespace crimson
         }
         )";
 
-	    ShaderHandle shader = m_renderer->GetResourceManager().CreateShader(vertexShader, fragmentShader);
+		// Temp spv shader paths, later compile the shaders
+		std::string_view vertSrc = "../../editor/assets/shaders/triangle.vert.spv";
+		std::string_view fragSrc = "../../editor/assets/shaders/triangle.frag.spv";
+
+	    ShaderHandle shader = m_renderer->GetResourceManager().CreateShader(vertSrc, fragSrc);
 
 		while (m_running)
 		{

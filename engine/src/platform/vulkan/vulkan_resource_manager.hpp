@@ -38,27 +38,28 @@ namespace crimson::vulkan
 
         void RecreateSwapchain(RenderSurfaceHandle handle);
 
-
         VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) override;
         void DestroyVertexBuffer(VertexBufferHandle handle) override;
 
         IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) override;
         void DestroyIndexBuffer(IndexBufferHandle handle) override;
 
-        // TO DO
-        ShaderHandle CreateShader(std::string_view vertexSrc, std::string_view fragmentSrc) override { return ShaderHandle::Invalid(); };
-        void DestroyShader(ShaderHandle handle) override {};
+        std::vector<uint32_t> ReadBinary(std::string_view path); // temp
+        VkShaderModule CreateShaderModule(VkDevice device, const std::vector<uint32_t> &code); // temp?
+
+        ShaderHandle CreateShader(std::string_view vertexSrc, std::string_view fragmentSrc) override;
+        void DestroyShader(ShaderHandle handle) override;
     protected:
-        VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override { return {}; }
+        VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override;
     private:
         RenderTargetHandle CreateRenderTarget(const RenderTargetDesc& desc, bool isSwapchain, std::span<const VkImage> swapchainImages);
         void DestroySwapchainResources(VulkanSurface& surface);
         void CreateSwapchainResources(VulkanSurface& surface);
-        void CreateImage(VkImageCreateInfo info, VulkanImage& image);
-        void CreateImageView(VulkanImage& image, VkImageAspectFlags aspect);
-        void CreateDepthImage(VulkanImage& image, uint32_t width, uint32_t height, VkFormat format);
-        void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory);
-        void CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size);
+        void CreateImage(VkImageCreateInfo info, VulkanImage& image) const;
+        void CreateImageView(VulkanImage& image, VkImageAspectFlags aspect) const;
+        void CreateDepthImage(VulkanImage& image, uint32_t width, uint32_t height, VkFormat format) const;
+        void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory) const;
+        void CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const;
     private:
         VulkanDevice& m_device;
     };
