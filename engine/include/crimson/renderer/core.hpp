@@ -1,7 +1,6 @@
 #pragma once
 #include "crimson/renderer/resource_handles.hpp"
 #include "glm/vec4.hpp"
-#include "crimson/renderer/buffer_layout.hpp"
 
 namespace crimson
 {
@@ -33,7 +32,7 @@ namespace crimson
         return a;
     }
 
-    constexpr bool HasClearFlag(const ClearFlags value, const ClearFlags flag)
+    static bool HasClearFlag(const ClearFlags value, const ClearFlags flag)
     {
         return (value & flag) != ClearFlags::None;
     }

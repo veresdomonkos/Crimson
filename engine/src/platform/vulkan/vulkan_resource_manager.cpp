@@ -356,26 +356,7 @@ namespace crimson::vulkan
         m_indexBuffers.Unregister(handle);
     }
 
-    std::vector<uint32_t> VulkanResourceManager::ReadBinary(std::string_view path)
-    {
-        std::ifstream file(path.data(), std::ios::ate | std::ios::binary);
-
-        if (!file.is_open())
-        {
-            LOG_ERROR("Failed to open SPIR-V file with path: {}", path);
-            return {};
-        }
-
-        size_t fileSize = file.tellg();
-        std::vector<uint32_t> buffer(fileSize / sizeof(uint32_t));
-
-        file.seekg(0);
-        file.read(reinterpret_cast<char*>(buffer.data()), fileSize);
-
-        return buffer;
-    }
-
-    VkShaderModule VulkanResourceManager::CreateShaderModule(VkDevice device, const std::vector<uint32_t>& code)
+    VkShaderModule VulkanResourceManager::CreateShaderModule(std::span<const uint32_t> code)
     {
         VkShaderModuleCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -383,7 +364,7 @@ namespace crimson::vulkan
         createInfo.pCode = code.data();
 
         VkShaderModule module;
-        if (vkCreateShaderModule(device, &createInfo, nullptr, &module) != VK_SUCCESS)
+        if (vkCreateShaderModule(m_device.GetDevice(), &createInfo, nullptr, &module) != VK_SUCCESS)
         {
             LOG_ERROR("Failed to create shader module!");
             return VK_NULL_HANDLE;
@@ -392,13 +373,10 @@ namespace crimson::vulkan
         return module;
     }
 
-    ShaderHandle VulkanResourceManager::CreateShader(std::string_view vertexSrc, std::string_view fragmentSrc)
+    ShaderHandle VulkanResourceManager::CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary)
     {
-        const auto vertCode = ReadBinary(vertexSrc);
-        const auto fragCode = ReadBinary(fragmentSrc);
-
-        VkShaderModule vertexModule = CreateShaderModule(m_device.GetDevice(), vertCode);
-        VkShaderModule fragmentModule = CreateShaderModule(m_device.GetDevice(), fragCode);
+        VkShaderModule vertexModule = CreateShaderModule(vertexBinary);
+        VkShaderModule fragmentModule = CreateShaderModule(fragmentBinary);
 
         if (vertexModule == VK_NULL_HANDLE || fragmentModule == VK_NULL_HANDLE)
         {

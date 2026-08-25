@@ -325,9 +325,9 @@ namespace crimson::vulkan
 
                 VkViewport viewport{};
                 viewport.x = 0.0f;
-                viewport.y = static_cast<float>(rt.Height); // hacky shit
+                viewport.y = static_cast<float>(rt.Height);
                 viewport.width = static_cast<float>(rt.Width);
-                viewport.height = -static_cast<float>(rt.Height); // hacky shit
+                viewport.height = -static_cast<float>(rt.Height);
                 viewport.minDepth = 0.0f;
                 viewport.maxDepth = 1.0f;
 

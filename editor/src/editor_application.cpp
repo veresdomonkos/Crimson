@@ -1,25 +1,27 @@
-#include "crimson/core/application.hpp"
+#include "editor/editor_application.hpp"
 
-#include "crimson/core/core.hpp"
-#include "crimson/core/log.hpp"
-#include "crimson/renderer/renderer_api.hpp"
+#include <crimson/core/core.hpp>
+#include <crimson/core/log.hpp>
+#include <crimson/renderer/renderer_api.hpp>
 
-namespace crimson
+#include "editor/utils.hpp"
+
+namespace crimson::editor
 {
-	Application::Application() : m_running(true)
+	EditorApplication::EditorApplication() : m_running(true)
 	{
-		RendererAPI::Init(RendererAPIType::Vulkan);
+		RendererAPI::Init(RendererAPIType::OpenGL);
 		m_window = Window::Create(WindowData{ "My Window", 1280, 720, BIND_FN(OnEvent) });
 	    m_renderer = Renderer::Create();
 	    m_primarySurface = m_renderer->Initialize(*m_window);
 	}
 
-    Application::~Application()
+    EditorApplication::~EditorApplication()
     {
         m_renderer->Shutdown();
     }
 
-    void Application::Run()
+    void EditorApplication::Run()
 	{
 	    RenderPassInfo mainPassInfo {
 	        .ClearFlags = ClearFlags::Color | ClearFlags::Depth,
@@ -55,7 +57,7 @@ namespace crimson
 
 	    IndexBufferHandle indexBuffer = m_renderer->GetResourceManager().CreateIndexBuffer(iInfo, indices);
 
-	    const char* vertexShader = R"(
+	    const char* vertexShaderSrc = R"(
         #version 450
 
         layout(location = 0) in vec3 inPosition;
@@ -70,7 +72,7 @@ namespace crimson
         }
         )";
 
-	    const char* fragmentShader = R"(
+	    const char* fragmentShaderSrc = R"(
         #version 450
 
         layout(location = 0) in vec4 fragColor;
@@ -83,11 +85,10 @@ namespace crimson
         }
         )";
 
-		// Temp spv shader paths, later compile the shaders
-		std::string_view vertSrc = "../../editor/assets/shaders/triangle.vert.spv";
-		std::string_view fragSrc = "../../editor/assets/shaders/triangle.frag.spv";
-
-	    ShaderHandle shader = m_renderer->GetResourceManager().CreateShader(vertSrc, fragSrc);
+	    ShaderHandle shader = m_renderer->GetResourceManager().CreateShader(
+	        utils::CompileGLSLToSPIRV(vertexShaderSrc, "vertex"),
+	        utils::CompileGLSLToSPIRV(fragmentShaderSrc, "fragment")
+	    );
 
 		while (m_running)
 		{
@@ -98,14 +99,14 @@ namespace crimson
 		    if (!frame.ShouldRender())
 		        continue;
 
-		    RenderPass& mainPass = frame.BeginRenderPass(mainPassInfo);
-            mainPass.Draw({.VertexBuffer = vertexBuffer, .IndexBuffer = indexBuffer, .Shader = shader});
+		    auto& mainPass = frame.BeginRenderPass(mainPassInfo);
+            mainPass.Draw({vertexBuffer, indexBuffer, shader});
 
 		    m_renderer->EndFrame(frame);
 		}
 	}
 
-	void Application::OnEvent(Event& event)
+	void EditorApplication::OnEvent(Event& event)
 	{
 		EventDispatcher dispatcher(event);
 

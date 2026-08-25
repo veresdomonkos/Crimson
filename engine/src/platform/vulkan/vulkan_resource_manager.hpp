@@ -44,10 +44,7 @@ namespace crimson::vulkan
         IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) override;
         void DestroyIndexBuffer(IndexBufferHandle handle) override;
 
-        std::vector<uint32_t> ReadBinary(std::string_view path); // temp
-        VkShaderModule CreateShaderModule(VkDevice device, const std::vector<uint32_t> &code); // temp?
-
-        ShaderHandle CreateShader(std::string_view vertexSrc, std::string_view fragmentSrc) override;
+        ShaderHandle CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary) override;
         void DestroyShader(ShaderHandle handle) override;
     protected:
         VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override;
@@ -60,6 +57,7 @@ namespace crimson::vulkan
         void CreateDepthImage(VulkanImage& image, uint32_t width, uint32_t height, VkFormat format) const;
         void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory) const;
         void CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const;
+        VkShaderModule CreateShaderModule(std::span<const uint32_t> code);
     private:
         VulkanDevice& m_device;
     };

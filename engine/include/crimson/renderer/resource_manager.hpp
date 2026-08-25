@@ -1,5 +1,7 @@
 #pragma once
 
+#include <span>
+
 #include "crimson/renderer/buffers.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/core/window.hpp"
@@ -20,7 +22,7 @@ namespace crimson
         virtual IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) = 0;
         virtual void DestroyIndexBuffer(IndexBufferHandle handle) = 0;
 
-        virtual ShaderHandle CreateShader(std::string_view vertexSrc, std::string_view fragmentSrc) = 0;
+        virtual ShaderHandle CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary) = 0;
         virtual void DestroyShader(ShaderHandle handle) = 0;
     };
 }

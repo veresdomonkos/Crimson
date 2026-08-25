@@ -1,7 +1,6 @@
 find_package(Vulkan REQUIRED)
 
 set(ENGINE_PUBLIC_HEADERS
-		include/crimson/core/application.hpp
 		include/crimson/core/core.hpp
 		include/crimson/core/window.hpp
 		include/crimson/core/events.hpp
@@ -22,7 +21,6 @@ set(ENGINE_PUBLIC_HEADERS
 )
 
 set(ENGINE_IMPLEMENTATION
-		src/core/application.cpp
 		src/platform/glfw/glfw_window.hpp
 		src/platform/glfw/glfw_window.cpp
         src/core/log.cpp
@@ -60,9 +58,9 @@ target_link_libraries(Engine
     PUBLIC
         glm::glm-header-only
         imgui
+        fmt::fmt
     PRIVATE
         glfw
         glad
-		fmt::fmt
 		Vulkan::Vulkan
 )

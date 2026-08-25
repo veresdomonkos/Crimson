@@ -99,30 +99,37 @@ namespace crimson::opengl
         return m_vertexArrays.Register(vao);
     }
 
-    ShaderHandle OpenGLResourceManager::CreateShader(std::string_view vertexSrc, std::string_view fragmentSrc)
+    ShaderHandle OpenGLResourceManager::CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary)
     {
-        GLuint vertex = CompileShader(GL_VERTEX_SHADER, vertexSrc);
-        GLuint fragment = CompileShader(GL_FRAGMENT_SHADER, fragmentSrc);
+        GLuint vertex = CompileSPIRVShader(GL_VERTEX_SHADER, vertexBinary, "Vertex");
+        if (vertex == 0)
+        {
+            return ShaderHandle::Invalid();
+        }
+
+        GLuint fragment = CompileSPIRVShader(GL_FRAGMENT_SHADER, fragmentBinary, "Fragment");
+        if (fragment == 0)
+        {
+            glDeleteShader(vertex);
+            return ShaderHandle::Invalid();
+        }
 
         GLuint program = glCreateProgram();
         glAttachShader(program, vertex);
         glAttachShader(program, fragment);
-
         glLinkProgram(program);
 
         GLint success = 0;
         glGetProgramiv(program, GL_LINK_STATUS, &success);
-
         if (!success)
         {
             char log[2048];
+            glGetProgramInfoLog(program, sizeof(log), nullptr, log);
+            LOG_ERROR("Shader link error: {}", log);
 
-            glGetProgramInfoLog(program, sizeof(log),nullptr, log);
             glDeleteProgram(program);
             glDeleteShader(vertex);
             glDeleteShader(fragment);
-
-            LOG_ERROR("Shader link error: {}", log);
             return ShaderHandle::Invalid();
         }
 
@@ -169,6 +176,27 @@ namespace crimson::opengl
 
             glDeleteShader(shader);
             LOG_ERROR("Shader compile error: {}", log);
+        }
+
+        return shader;
+    }
+
+    GLuint OpenGLResourceManager::CompileSPIRVShader(GLenum type, std::span<const uint32_t> binary, std::string_view stageName)
+    {
+        GLuint shader = glCreateShader(type);
+
+        glShaderBinary(1, &shader, GL_SHADER_BINARY_FORMAT_SPIR_V, binary.data(), static_cast<GLsizei>(binary.size_bytes()));
+        glSpecializeShader(shader, "main", 0, nullptr, nullptr);
+
+        GLint compiled = 0;
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
+        if (!compiled)
+        {
+            char log[2048];
+            glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
+            LOG_ERROR("{} Shader SPIR-V Specialization error: {}", stageName, log);
+            glDeleteShader(shader);
+            return 0;
         }
 
         return shader;

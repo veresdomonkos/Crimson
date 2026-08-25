@@ -1,5 +1,15 @@
 add_executable(Editor
+        include/editor/editor_application.hpp
+
         src/main.cpp
+        src/editor_application.cpp
+        include/editor/utils.hpp
 )
 
-target_link_libraries(Editor PRIVATE Engine)
+target_include_directories(Editor PUBLIC include)
+
+target_link_libraries(Editor
+        PRIVATE
+            Engine
+            tiny-process-library
+)

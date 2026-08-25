@@ -14,6 +14,7 @@ namespace crimson
 
         virtual ResourceManager& GetResourceManager() = 0;
 
+        FrameContext BeginFrame() { return BeginFrame(RenderSurfaceHandle(0, 1)); }
         virtual FrameContext BeginFrame(RenderSurfaceHandle surface) = 0;
         virtual void EndFrame(const FrameContext& frameContext) = 0;
 

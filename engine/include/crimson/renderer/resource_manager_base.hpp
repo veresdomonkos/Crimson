@@ -1,4 +1,5 @@
 #pragma once
+
 #include "crimson/renderer/graphics_pipeline_cache.hpp"
 #include "crimson/renderer/handle_registry.hpp"
 #include "crimson/renderer/resource_manager.hpp"

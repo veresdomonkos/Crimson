@@ -1,5 +1,7 @@
 #pragma once
 #include "crimson/renderer/buffer_layout.hpp"
+#include "resource_handles.hpp"
+#include <unordered_map>
 
 namespace crimson
 {

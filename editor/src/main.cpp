@@ -1,9 +1,11 @@
+#include <cstring>
 #include <iostream>
+#include <process.hpp>
 
-#include <crimson/core/application.hpp>
+#include "editor/editor_application.hpp"
 
 int main(int argc, char *argv[])
 {
-    crimson::Application app;
+    crimson::editor::EditorApplication app;
     app.Run();
 }

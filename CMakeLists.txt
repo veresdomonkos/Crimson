@@ -18,5 +18,9 @@ add_subdirectory(external/glm)
 #fmt
 add_subdirectory(external/fmt)
 
+#tiny-process-library
+set(CMAKE_POLICY_VERSION_MINIMUM "3.5")
+add_subdirectory(external/tiny-process-library)
+
 add_subdirectory(engine)
 add_subdirectory(editor)

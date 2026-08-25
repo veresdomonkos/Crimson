@@ -4,6 +4,7 @@
 
 #include <vector>
 #include <cassert>
+#include <iostream>
 #include <span>
 
 namespace crimson
@@ -20,6 +21,8 @@ namespace crimson
     class RenderPass
     {
     public:
+        RenderPass() = default;
+
         const RenderPassInfo& Info() const
         {
             return m_info;
@@ -34,6 +37,9 @@ namespace crimson
         {
             m_drawInfos.emplace_back(drawInfo);
         }
+
+        RenderPass(const RenderPass&) = delete;
+        RenderPass& operator=(const RenderPass&) = delete;
     private:
         void Reset()
         {

@@ -6,6 +6,7 @@
 #include "crimson/renderer/renderer.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/resource_manager.hpp"
+#include <array>
 
 namespace crimson::vulkan
 {
