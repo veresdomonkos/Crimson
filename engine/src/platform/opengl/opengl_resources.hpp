@@ -1,6 +1,8 @@
 #pragma once
 
+#include <memory>
 #include <optional>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include <glad/glad.h>
@@ -9,6 +11,7 @@
 #include "crimson/renderer/buffers.hpp"
 #include "crimson/renderer/buffer_layout.hpp"
 #include "crimson/renderer/resource_handles.hpp"
+#include "crimson/renderer/shader_property_info.hpp"
 
 namespace crimson::opengl
 {
@@ -62,6 +65,33 @@ namespace crimson::opengl
     struct OpenGLShader
     {
         GLuint GLHandle{};
+        size_t UBOSize;
+        std::unordered_map<std::string, ShaderPropertyInfo> Properties{};
+    };
+
+    struct OpenGLMaterial
+    {
+        ShaderHandle Shader = ShaderHandle::Invalid();
+
+        std::unique_ptr<std::byte[]> UniformData = nullptr;
+        std::size_t UniformDataSize = 0;
+        GLuint GLBufferHandle = 0;
+
+        //std::vector<TextureHandle> Textures;
+        bool IsDirty = true;
+
+        template<MaterialProperty T>
+        void SetPropertyByOffset(std::size_t offset, const T& value)
+        {
+            *std::launder(reinterpret_cast<T*>(UniformData.get() + offset)) = value;
+            IsDirty = true;
+        }
+
+        template<MaterialProperty T>
+        [[nodiscard]] const T& GetPropertyByOffset(std::size_t offset) const
+        {
+            return *std::launder(reinterpret_cast<const T*>(UniformData.get() + offset));
+        }
     };
 
     struct OpenglResourceTraits
@@ -72,5 +102,6 @@ namespace crimson::opengl
         using IndexBuffer = OpenGLIndexBuffer;
         using Shader = OpenGLShader;
         using GraphicsPipeline = OpenGLGraphicsPipeline;
+        using Material = OpenGLMaterial;
     };
 }

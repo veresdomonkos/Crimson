@@ -57,6 +57,30 @@ namespace crimson::glfw
 			WindowCloseEvent event;
 			windowsWindow->m_data.EventCallbackFn(event);
 		});
+
+	    glfwSetKeyCallback(m_handle, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
+	        auto* windowsWindow = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
+
+            switch (action)
+            {
+                case GLFW_PRESS:
+                {
+                    KeyPressEvent event(static_cast<KeyCode>(key), false);
+                    windowsWindow->m_data.EventCallbackFn(event);
+                    break;
+                }
+                case GLFW_REPEAT:
+                {
+                    KeyPressEvent event(static_cast<KeyCode>(key), true);
+                    windowsWindow->m_data.EventCallbackFn(event);
+                    break;
+                }
+                case GLFW_RELEASE:
+                {
+                    break;
+                }
+            }
+        });
 	}
 
     GLFWWindow::~GLFWWindow()

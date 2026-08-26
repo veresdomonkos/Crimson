@@ -15,7 +15,7 @@ namespace crimson
     {
         VertexBufferHandle VertexBuffer;
         IndexBufferHandle IndexBuffer;
-        ShaderHandle Shader;
+        MaterialHandle Material;
     };
 
     class RenderPass

@@ -1,4 +1,5 @@
 #pragma once
+#include "camera_data.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "glm/vec4.hpp"
 
@@ -44,5 +45,6 @@ namespace crimson
         glm::vec4 ClearColor{0, 0, 0, 1};
         float ClearDepth = 1.0f;
         uint32_t ClearStencil = 0;
+        CameraData Camera{};
     };
 }

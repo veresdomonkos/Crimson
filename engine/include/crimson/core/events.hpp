@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 
 namespace crimson
@@ -7,7 +8,8 @@ namespace crimson
 	enum class EventType
 	{
 		None,
-		WindowClose
+		WindowClose,
+	    KeyPress
 	};
 
 	class Event
@@ -16,11 +18,7 @@ namespace crimson
 		virtual ~Event() = default;
 
 		virtual EventType GetType() const = 0;
-
-		bool IsHandled() { return m_handled; }
-		void SetHandled(bool value) { m_handled = value; }
-	private:
-		bool m_handled;
+		bool Handled;
 	};
 
 	using EventCallback = std::function<void(Event&)>;
@@ -36,7 +34,7 @@ namespace crimson
 			if (m_event.GetType() == T::GetStaticType())
 			{
 				T& concreteEvent = static_cast<T&>(m_event);
-				concreteEvent.SetHandled(handler(concreteEvent));
+				concreteEvent.Handled = handler(concreteEvent);
 				return true;
 			}
 
@@ -56,4 +54,21 @@ virtual EventType GetType() const override { return GetStaticType(); }
 	public:
 		REGISTER_EVENT(WindowClose)
 	};
+
+    using KeyCode = std::uint16_t;
+
+    class KeyPressEvent : public Event
+    {
+    public:
+        REGISTER_EVENT(KeyPress)
+
+        explicit KeyPressEvent(KeyCode keyCode, bool isRepeat = false)
+            : m_keyCode(keyCode), m_isRepeat(isRepeat) {}
+
+        [[nodiscard]] KeyCode GetKeyCode() const { return m_keyCode; }
+        [[nodiscard]] bool IsRepeat() const { return m_isRepeat; }
+    private:
+        KeyCode m_keyCode;
+        bool m_isRepeat = false;
+    };
 }

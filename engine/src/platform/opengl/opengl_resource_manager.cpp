@@ -137,6 +137,7 @@ namespace crimson::opengl
         glDeleteShader(fragment);
 
         OpenGLShader shader {.GLHandle = program};
+        ReflectShader(shader);
         return m_shaders.Register(shader);
     }
 
@@ -148,9 +149,144 @@ namespace crimson::opengl
         }
     }
 
+    MaterialHandle OpenGLResourceManager::CreateMaterial(ShaderHandle shaderHandle)
+    {
+        const OpenGLShader& shader = m_shaders.Get(shaderHandle);
+        if (!shader.GLHandle)
+        {
+            LOG_ERROR("Cannot create material form invalid ShaderHandle!");
+            return MaterialHandle::Invalid();
+        }
+
+        OpenGLMaterial mat;
+        mat.Shader = shaderHandle;
+        mat.UniformDataSize = shader.UBOSize;
+
+        glCreateBuffers(1, &mat.GLBufferHandle);
+        glNamedBufferData(mat.GLBufferHandle, static_cast<GLsizeiptr>(shader.UBOSize), nullptr, GL_DYNAMIC_DRAW);
+
+        if (shader.UBOSize > 0)
+        {
+            mat.UniformData = std::make_unique<std::byte[]>(shader.UBOSize);
+        }
+
+        return m_materials.Register(std::move(mat));
+    }
+
+    void OpenGLResourceManager::DestroyMaterial(MaterialHandle handle)
+    {
+        if (!handle.IsValid())
+        {
+            return;
+        }
+
+        OpenGLMaterial& mat = m_materials.Get(handle);
+
+        if (mat.GLBufferHandle != 0)
+        {
+            glDeleteBuffers(1, &mat.GLBufferHandle);
+            mat.GLBufferHandle = 0;
+        }
+
+        m_materials.Unregister(handle);
+    }
+
     OpenGLGraphicsPipeline OpenGLResourceManager::CreateGraphicsPipeline(const GraphicsPipelineInfo &info)
     {
         return OpenGLGraphicsPipeline{};
+    }
+
+    void OpenGLResourceManager::SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data)
+    {
+        OpenGLMaterial& mat = m_materials.Get(handle);
+        if (mat.Shader == ShaderHandle::Invalid())
+        {
+            LOG_WARN("Invalid MaterialHandle in SetMaterialPropertyByNameImpl!");
+            return;
+        }
+
+        const OpenGLShader& shader = m_shaders.Get(mat.Shader);
+
+        auto it = shader.Properties.find(std::string(name));
+        if (it == shader.Properties.end())
+        {
+            LOG_WARN("Uniform property '{}' not found in Shader!", name);
+            return;
+        }
+
+        const auto& propInfo = it->second;
+
+        if (data.size() > propInfo.Size)
+        {
+            LOG_WARN("Data size ({}) exceeds property size ({}) for '{}'!", data.size(), propInfo.Size, name);
+            return;
+        }
+
+        if (!mat.UniformData || (propInfo.Offset + data.size() > mat.UniformDataSize))
+        {
+            LOG_ERROR("Material buffer overflow writing property '{}'!", name);
+            return;
+        }
+
+        std::copy_n(data.data(), data.size(), mat.UniformData.get() + propInfo.Offset);
+        mat.IsDirty = true;
+    }
+
+    void OpenGLResourceManager::ReflectShader(Shader &shader)
+    {
+        GLuint blockIndex = glGetUniformBlockIndex(shader.GLHandle, "MaterialBlock");
+        if (blockIndex != GL_INVALID_INDEX)
+        {
+            // 1. A MaterialBlock teljes méretének lekérése bájtban
+            GLint blockSize = 0;
+            glGetActiveUniformBlockiv(shader.GLHandle, blockIndex, GL_UNIFORM_BLOCK_DATA_SIZE, &blockSize);
+            shader.UBOSize = static_cast<std::size_t>(blockSize);
+
+            // 2. A blokkban lévő aktív uniformok számának lekérése
+            GLint numUniforms = 0;
+            glGetActiveUniformBlockiv(shader.GLHandle, blockIndex, GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS, &numUniforms);
+
+            if (numUniforms > 0)
+            {
+                // 3. A blokkhoz tartozó uniformok indexeinek lekérése
+                std::vector<GLint> uniformIndices(numUniforms);
+                glGetActiveUniformBlockiv(shader.GLHandle, blockIndex, GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES, uniformIndices.data());
+
+                // 4. Az egyes uniformok offsetjeinek és típusainak lekérése
+                std::vector<GLint> uniformOffsets(numUniforms);
+                std::vector<GLint> uniformTypes(numUniforms);
+                std::vector<GLint> uniformSizes(numUniforms); // tömbök elemszáma
+
+                glGetActiveUniformsiv(shader.GLHandle, numUniforms, reinterpret_cast<const GLuint*>(uniformIndices.data()), GL_UNIFORM_OFFSET, uniformOffsets.data());
+                glGetActiveUniformsiv(shader.GLHandle, numUniforms, reinterpret_cast<const GLuint*>(uniformIndices.data()), GL_UNIFORM_TYPE, uniformTypes.data());
+                glGetActiveUniformsiv(shader.GLHandle, numUniforms, reinterpret_cast<const GLuint*>(uniformIndices.data()), GL_UNIFORM_SIZE, uniformSizes.data());
+
+                // 5. Változónevek és metaadatok kinyerése
+                for (int i = 0; i < numUniforms; ++i)
+                {
+                    char nameBuffer[256];
+                    GLsizei length = 0;
+                    glGetActiveUniformName(shader.GLHandle, uniformIndices[i], sizeof(nameBuffer), &length, nameBuffer);
+
+                    std::string name(nameBuffer);
+
+                    // Ha az OpenGL "MaterialBlock.u_Color" néven adná vissza, levágjuk a blokk nevét:
+                    std::size_t dotPos = name.find_last_of('.');
+                    if (dotPos != std::string::npos)
+                    {
+                        name = name.substr(dotPos + 1);
+                    }
+
+                    // Típus alapján méret becslése/meghatározása (bájtban)
+                    std::size_t elementSize = utils::GetGLTypeSize(uniformTypes[i]);
+
+                    shader.Properties[name] = ShaderPropertyInfo{
+                        .Offset = static_cast<std::size_t>(uniformOffsets[i]),
+                        .Size   = elementSize * uniformSizes[i]
+                    };
+                }
+            }
+        }
     }
 
     GLuint OpenGLResourceManager::CompileShader(GLenum type, std::string_view source)

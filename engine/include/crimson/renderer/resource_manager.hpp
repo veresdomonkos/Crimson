@@ -5,6 +5,7 @@
 #include "crimson/renderer/buffers.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/core/window.hpp"
+#include "shader_property_info.hpp"
 
 namespace crimson
 {
@@ -24,5 +25,20 @@ namespace crimson
 
         virtual ShaderHandle CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary) = 0;
         virtual void DestroyShader(ShaderHandle handle) = 0;
+
+        virtual MaterialHandle CreateMaterial(ShaderHandle shaderHandle) = 0;
+        virtual void DestroyMaterial(MaterialHandle handle) = 0;
+
+        template<MaterialProperty T>
+        void SetMaterialPropertyByName(MaterialHandle handle, std::string_view name, const T& value)
+        {
+            const auto bytes = std::span(
+                reinterpret_cast<const std::byte*>(&value),
+                sizeof(T)
+            );
+            SetMaterialPropertyByNameImpl(handle, name, bytes);
+        }
+    protected:
+        virtual void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) = 0;
     };
 }

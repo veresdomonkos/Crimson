@@ -3,11 +3,56 @@
 #include "vulkan_renderer.hpp"
 #include "crimson/core/log.hpp"
 #include "GLFW/glfw3.h"
+#include <array>
 #include <cstring>
-#include <fstream> // temp
+#include <string>
+#include <spirv_reflect.h>
 
 namespace crimson::vulkan
 {
+    VulkanResourceManager::VulkanResourceManager(VulkanDevice &device)
+        : m_device(device)
+    {
+    }
+
+    void VulkanResourceManager::Init()
+    {
+        std::vector<VkDescriptorPoolSize> poolSizes = {
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 }
+        };
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.maxSets = 1000;
+
+        if (vkCreateDescriptorPool(m_device.GetDevice(), &poolInfo, nullptr, &m_descriptorPool) != VK_SUCCESS)
+        {
+            LOG_ERROR("[Renderer] Failed to create descriptor pool!");
+            m_descriptorPool = VK_NULL_HANDLE;
+        }
+
+        VkDescriptorSetLayoutBinding cameraBinding{};
+        cameraBinding.binding = 0;
+        cameraBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        cameraBinding.descriptorCount = 1;
+        cameraBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &cameraBinding;
+
+        if (vkCreateDescriptorSetLayout(m_device.GetDevice(), &layoutInfo, nullptr, &m_cameraSetLayout) != VK_SUCCESS)
+        {
+            LOG_ERROR("[Renderer] Failed to create camera descriptor set layout!");
+            m_cameraSetLayout = VK_NULL_HANDLE;
+        }
+    }
+
     void VulkanResourceManager::Clear()
     {
         for (const auto& entry : m_graphicsPipelines)
@@ -22,6 +67,11 @@ namespace crimson::vulkan
             if (pipeline.Layout != VK_NULL_HANDLE)
             {
                 vkDestroyPipelineLayout(m_device.GetDevice(), pipeline.Layout, nullptr);
+            }
+
+            if (pipeline.DescriptorSetLayout != VK_NULL_HANDLE)
+            {
+                vkDestroyDescriptorSetLayout(m_device.GetDevice(), pipeline.DescriptorSetLayout, nullptr);
             }
         }
 
@@ -38,9 +88,36 @@ namespace crimson::vulkan
             {
                 vkDestroyShaderModule(m_device.GetDevice(), shader.Fragment, nullptr);
             }
+
+            if (shader.MaterialSetLayout != VK_NULL_HANDLE)
+            {
+                vkDestroyDescriptorSetLayout(m_device.GetDevice(), shader.MaterialSetLayout, nullptr);
+            }
         }
 
         m_shaders.Clear();
+
+        for (const auto& material : m_materials)
+        {
+            if (material.DescriptorSet != VK_NULL_HANDLE)
+            {
+                vkFreeDescriptorSets(m_device.GetDevice(), m_descriptorPool, 1, &material.DescriptorSet);
+            }
+
+            if (material.UniformBuffer != VK_NULL_HANDLE)
+            {
+                if (material.MappedData != nullptr)
+                {
+                    vkUnmapMemory(m_device.GetDevice(), material.UniformBufferMemory);
+                }
+
+                vkDestroyBuffer(m_device.GetDevice(), material.UniformBuffer, nullptr);
+                vkFreeMemory(m_device.GetDevice(), material.UniformBufferMemory, nullptr);
+            }
+        }
+
+        m_materials.Clear();
+
 
         for (const auto& buffer : m_vertexBuffers)
         {
@@ -76,9 +153,12 @@ namespace crimson::vulkan
         {
             for (auto& image : target.Colors)
             {
-                vkDestroyImageView(m_device.GetDevice(), image.View, nullptr);
+                if (image.View != VK_NULL_HANDLE)
+                {
+                    vkDestroyImageView(m_device.GetDevice(), image.View, nullptr);
+                }
 
-                if (image.Memory != VK_NULL_HANDLE)
+                if (image.Image != VK_NULL_HANDLE && image.Memory != VK_NULL_HANDLE)
                 {
                     vkDestroyImage(m_device.GetDevice(), image.Image, nullptr);
                     vkFreeMemory(m_device.GetDevice(), image.Memory, nullptr);
@@ -87,9 +167,12 @@ namespace crimson::vulkan
 
             if (target.Depth)
             {
-                vkDestroyImageView(m_device.GetDevice(), target.Depth->View, nullptr);
+                if (target.Depth->View != VK_NULL_HANDLE)
+                {
+                    vkDestroyImageView(m_device.GetDevice(), target.Depth->View, nullptr);
+                }
 
-                if (target.Depth->Memory != VK_NULL_HANDLE)
+                if (target.Depth->Image != VK_NULL_HANDLE && target.Depth->Memory != VK_NULL_HANDLE)
                 {
                     vkDestroyImage(m_device.GetDevice(), target.Depth->Image, nullptr);
                     vkFreeMemory(m_device.GetDevice(),target.Depth->Memory, nullptr);
@@ -121,14 +204,39 @@ namespace crimson::vulkan
         }
 
         m_renderSurfaces.Clear();
+
+        if (m_descriptorPool != VK_NULL_HANDLE)
+        {
+            vkDestroyDescriptorPool(m_device.GetDevice(), m_descriptorPool, nullptr);
+            m_descriptorPool = VK_NULL_HANDLE;
+        }
+
+        if (m_cameraSetLayout != VK_NULL_HANDLE)
+        {
+            vkDestroyDescriptorSetLayout(m_device.GetDevice(), m_cameraSetLayout, nullptr);
+            m_cameraSetLayout = VK_NULL_HANDLE;
+        }
     }
 
     RenderSurfaceHandle VulkanResourceManager::CreateRenderSurface(const Window& window)
     {
         VulkanSurface surface;
         surface.Extent = { window.Width(), window.Height() };
-        glfwCreateWindowSurface(m_device.GetInstance(), static_cast<GLFWwindow*>(window.GetNativeHandle()), nullptr, &surface.Surface);
-        CreateSwapchainResources(surface);
+        if (glfwCreateWindowSurface(m_device.GetInstance(), static_cast<GLFWwindow*>(window.GetNativeHandle()), nullptr, &surface.Surface) != VK_SUCCESS)
+        {
+            LOG_ERROR("[Resource Manager] Failed to create Vulkan surface");
+            return RenderSurfaceHandle::Invalid();
+        }
+
+        if (!CreateSwapchainResources(surface))
+        {
+            if (surface.Surface != VK_NULL_HANDLE)
+            {
+                vkDestroySurfaceKHR(m_device.GetInstance(), surface.Surface, nullptr);
+            }
+
+            return RenderSurfaceHandle::Invalid();
+        }
 
         return m_renderSurfaces.Register(std::move(surface));
     }
@@ -144,7 +252,10 @@ namespace crimson::vulkan
         vkDeviceWaitIdle(m_device.GetDevice());
         VulkanSurface& surface = GetRenderSurface(handle);
         DestroySwapchainResources(surface);
-        CreateSwapchainResources(surface);
+        if (!CreateSwapchainResources(surface))
+        {
+            LOG_ERROR("[Resource Manager] Failed to recreate Vulkan swapchain");
+        }
     }
 
     RenderTargetHandle VulkanResourceManager::CreateRenderTarget(const RenderTargetDesc &desc, bool isSwapchain, std::span<const VkImage> swapchainImages)
@@ -380,16 +491,8 @@ namespace crimson::vulkan
 
         if (vertexModule == VK_NULL_HANDLE || fragmentModule == VK_NULL_HANDLE)
         {
-            if (vertexModule != VK_NULL_HANDLE)
-            {
-                vkDestroyShaderModule(m_device.GetDevice(), vertexModule, nullptr);
-            }
-
-            if (fragmentModule != VK_NULL_HANDLE)
-            {
-                vkDestroyShaderModule(m_device.GetDevice(), fragmentModule, nullptr);
-            }
-
+            if (vertexModule != VK_NULL_HANDLE)   vkDestroyShaderModule(m_device.GetDevice(), vertexModule, nullptr);
+            if (fragmentModule != VK_NULL_HANDLE) vkDestroyShaderModule(m_device.GetDevice(), fragmentModule, nullptr);
             return ShaderHandle::Invalid();
         }
 
@@ -397,7 +500,89 @@ namespace crimson::vulkan
         shader.Vertex = vertexModule;
         shader.Fragment = fragmentModule;
 
+        ReflectShader(shader, fragmentBinary);
+
+        VkDescriptorSetLayoutBinding materialBinding{};
+        materialBinding.binding = 1;
+        materialBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        materialBinding.descriptorCount = 1;
+        materialBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutCreateInfo materialLayoutInfo{};
+        materialLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        materialLayoutInfo.bindingCount = 1;
+        materialLayoutInfo.pBindings = &materialBinding;
+
+        if (vkCreateDescriptorSetLayout(m_device.GetDevice(), &materialLayoutInfo, nullptr, &shader.MaterialSetLayout) != VK_SUCCESS)
+        {
+            LOG_ERROR("[Renderer] Failed to create Material Descriptor Set Layout");
+            vkDestroyShaderModule(m_device.GetDevice(), vertexModule, nullptr);
+            vkDestroyShaderModule(m_device.GetDevice(), fragmentModule, nullptr);
+            return ShaderHandle::Invalid();
+        }
+
         return m_shaders.Register(shader);
+    }
+
+    void VulkanResourceManager::ReflectShader(VulkanShader& shader, std::span<const uint32_t> fragmentBinary)
+    {
+        // 1. Létrehozzuk a reflexiós modult a fragment shader bájtkódjából
+        SpvReflectShaderModule reflModule;
+        SpvReflectResult result = spvReflectCreateShaderModule(
+            fragmentBinary.size() * sizeof(uint32_t),
+            fragmentBinary.data(),
+            &reflModule
+        );
+
+        if (result != SPV_REFLECT_RESULT_SUCCESS)
+        {
+            // Kezelheted a hibát loggolással
+            return;
+        }
+
+        // 2. Lekérdezzük a shaderben lévő Descriptor Set-eket
+        uint32_t count = 0;
+        spvReflectEnumerateDescriptorSets(&reflModule, &count, nullptr);
+        std::vector<SpvReflectDescriptorSet*> sets(count);
+        spvReflectEnumerateDescriptorSets(&reflModule, &count, sets.data());
+
+        // 3. Bejárjuk a Set-eket és Bindingokat
+        for (auto* set : sets)
+        {
+            for (uint32_t i = 0; i < set->binding_count; ++i)
+            {
+                const SpvReflectDescriptorBinding* binding = set->bindings[i];
+
+                // Megkeressük a Uniform Buffert
+                if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                {
+                    std::string blockName = binding->name ? binding->name : "";
+
+                    // Feltételezzük, hogy a neve "MaterialBlock", vagy a Set 1 / Binding 1 konvenciót használod
+                    if (blockName == "MaterialBlock" || (set->set == 1 && binding->binding == 1))
+                    {
+                        // A UBO teljes mérete bájtban (mint OpenGL-ben a GL_UNIFORM_BLOCK_DATA_SIZE)
+                        shader.MaterialUniformSize = binding->block.size;
+
+                        // A blokkon belüli mezők (tagok) iterálása és mentése
+                        for (uint32_t m = 0; m < binding->block.member_count; ++m)
+                        {
+                            const SpvReflectBlockVariable& member = binding->block.members[m];
+                            std::string memberName(member.name);
+
+                            // Ugyanaz a struktúra, mint OpenGL-ben!
+                            shader.Properties[memberName] = ShaderPropertyInfo{
+                                .Offset = member.offset,
+                                .Size   = member.size
+                            };
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. Takarítás (nagyon fontos, hogy ne legyen memóriaszivárgás!)
+        spvReflectDestroyShaderModule(&reflModule);
     }
 
     void VulkanResourceManager::DestroyShader(ShaderHandle handle)
@@ -405,20 +590,164 @@ namespace crimson::vulkan
         if (!handle)
             return;
 
-        auto&[VertexModule, FragmentModule] = m_shaders.Get(handle);
+        auto& shader = m_shaders.Get(handle);
         VkDevice device = m_device.GetDevice();
 
-        if (VertexModule)
+        if (shader.Vertex)
         {
-            vkDestroyShaderModule(device, VertexModule, nullptr);
+            vkDestroyShaderModule(device, shader.Vertex, nullptr);
         }
 
-        if (FragmentModule)
+        if (shader.Fragment)
         {
-            vkDestroyShaderModule(device, FragmentModule, nullptr);
+            vkDestroyShaderModule(device, shader.Fragment, nullptr);
+        }
+
+        if (shader.MaterialSetLayout != VK_NULL_HANDLE)
+        {
+            vkDestroyDescriptorSetLayout(device, shader.MaterialSetLayout, nullptr);
         }
 
         m_shaders.Unregister(handle);
+    }
+
+    MaterialHandle VulkanResourceManager::CreateMaterial(ShaderHandle shaderHandle)
+    {
+        VulkanShader& shader = GetShader(shaderHandle);
+
+        if (shader.MaterialSetLayout == VK_NULL_HANDLE || shader.MaterialUniformSize == 0)
+        {
+            LOG_ERROR("[Vulkan] Shader is missing material layout or uniform block data");
+            return MaterialHandle::Invalid();
+        }
+
+        VulkanMaterial material{};
+        material.Shader = shaderHandle;
+        material.UniformBufferSize = static_cast<VkDeviceSize>(shader.MaterialUniformSize);
+
+        // 1. Uniform Buffer létrehozása a material adataihoz
+        VkDeviceSize bufferSize = material.UniformBufferSize;
+
+        CreateBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            material.UniformBuffer,
+            material.UniformBufferMemory
+        );
+
+        if (vkMapMemory(m_device.GetDevice(), material.UniformBufferMemory, 0, bufferSize, 0, &material.MappedData) != VK_SUCCESS)
+        {
+            LOG_ERROR("[Vulkan] Failed to map material uniform buffer");
+            vkDestroyBuffer(m_device.GetDevice(), material.UniformBuffer, nullptr);
+            vkFreeMemory(m_device.GetDevice(), material.UniformBufferMemory, nullptr);
+            return MaterialHandle::Invalid();
+        }
+
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = m_descriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &shader.MaterialSetLayout;
+
+        if (vkAllocateDescriptorSets(m_device.GetDevice(), &allocInfo, &material.DescriptorSet) != VK_SUCCESS)
+        {
+            LOG_ERROR("[Vulkan] Failed to allocate material descriptor set!");
+            vkUnmapMemory(m_device.GetDevice(), material.UniformBufferMemory);
+            vkDestroyBuffer(m_device.GetDevice(), material.UniformBuffer, nullptr);
+            vkFreeMemory(m_device.GetDevice(), material.UniformBufferMemory, nullptr);
+            return MaterialHandle::Invalid();
+        }
+
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = material.UniformBuffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = material.UniformBufferSize;
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = material.DescriptorSet;
+        descriptorWrite.dstBinding = 1;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+
+        vkUpdateDescriptorSets(m_device.GetDevice(), 1, &descriptorWrite, 0, nullptr);
+
+        return m_materials.Register(material);
+    }
+
+    void VulkanResourceManager::DestroyMaterial(MaterialHandle handle)
+    {
+        if (!handle)
+        {
+            return;
+        }
+
+        VulkanMaterial& material = m_materials.Get(handle);
+
+        if (material.DescriptorSet != VK_NULL_HANDLE)
+        {
+            vkFreeDescriptorSets(m_device.GetDevice(), m_descriptorPool, 1, &material.DescriptorSet);
+            material.DescriptorSet = VK_NULL_HANDLE;
+        }
+
+        if (material.UniformBuffer != VK_NULL_HANDLE)
+        {
+            if (material.MappedData != nullptr)
+            {
+                vkUnmapMemory(m_device.GetDevice(), material.UniformBufferMemory);
+            }
+
+            vkDestroyBuffer(m_device.GetDevice(), material.UniformBuffer, nullptr);
+            vkFreeMemory(m_device.GetDevice(), material.UniformBufferMemory, nullptr);
+
+            material.UniformBuffer = VK_NULL_HANDLE;
+            material.UniformBufferMemory = VK_NULL_HANDLE;
+            material.MappedData = nullptr;
+        }
+
+        m_materials.Unregister(handle);
+    }
+
+    void VulkanResourceManager::SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data)
+    {
+        if (!handle)
+        {
+            LOG_WARN("[Vulkan] Invalid material handle in SetMaterialPropertyByNameImpl");
+            return;
+        }
+
+        VulkanMaterial& material = m_materials.Get(handle);
+        if (material.Shader == ShaderHandle::Invalid())
+        {
+            LOG_WARN("[Vulkan] Material has no shader");
+            return;
+        }
+
+        const VulkanShader& shader = m_shaders.Get(material.Shader);
+        const auto it = shader.Properties.find(std::string(name));
+        if (it == shader.Properties.end())
+        {
+            LOG_WARN("[Vulkan] Material property '{}' not found", name);
+            return;
+        }
+
+        const ShaderPropertyInfo& prop = it->second;
+        if (data.size() > prop.Size || prop.Offset + data.size() > material.UniformBufferSize)
+        {
+            LOG_WARN("[Vulkan] Material property '{}' write exceeds uniform buffer bounds", name);
+            return;
+        }
+
+        if (material.MappedData == nullptr)
+        {
+            LOG_WARN("[Vulkan] Material uniform buffer is not mapped");
+            return;
+        }
+
+        std::memcpy(static_cast<std::byte*>(material.MappedData) + prop.Offset, data.data(), data.size());
     }
 
     VulkanGraphicsPipeline VulkanResourceManager::CreateGraphicsPipeline(const GraphicsPipelineInfo& info)
@@ -492,9 +821,9 @@ namespace crimson::vulkan
         rasterInfo.rasterizerDiscardEnable = VK_FALSE;
         rasterInfo.polygonMode = VK_POLYGON_MODE_FILL;
         rasterInfo.lineWidth = 1.0f;
-        rasterInfo.cullMode = VK_CULL_MODE_NONE;                // TODO: add culling
-        rasterInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE; // TODO: specify front or backface
-        rasterInfo.depthBiasEnable = VK_FALSE;                  // TODO: depth bias
+        rasterInfo.cullMode = VK_CULL_MODE_NONE;
+        rasterInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterInfo.depthBiasEnable = VK_FALSE;
 
         VkPipelineMultisampleStateCreateInfo multisampleState{};
         multisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
@@ -531,14 +860,27 @@ namespace crimson::vulkan
         dynamicState.dynamicStateCount = 2;
         dynamicState.pDynamicStates = dynamicStates;
 
+        // -------------------------------------------------------------------------
+        // ITT A LÉNYEG: Összekötjük a globális Set 0-t (Kamera) a Set 1-gyel (Shader Anyag)
+        // -------------------------------------------------------------------------
+        VkDescriptorSetLayout setLayouts[2] = {
+            m_cameraSetLayout,         // Set 0: Globális kamera (mindenhol ugyanaz)
+            shader.MaterialSetLayout   // Set 1: Shader-specifikus anyag (amit a reflexió hozott létre)
+        };
+
         VkPipelineLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        layoutInfo.setLayoutCount = 2;              // <--- Pontosan 2 darab set
+        layoutInfo.pSetLayouts = setLayouts;
+        layoutInfo.pushConstantRangeCount = 0;
+        layoutInfo.pPushConstantRanges = nullptr;
 
         VulkanGraphicsPipeline pipeline{};
+
         if (vkCreatePipelineLayout(m_device.GetDevice(), &layoutInfo, nullptr, &pipeline.Layout) != VK_SUCCESS)
         {
             LOG_ERROR("[Renderer] Failed to create Vulkan pipeline layout");
-            return pipeline;
+            return {};
         }
 
         const VkFormat colorAttachmentFormats[] = { VK_FORMAT_B8G8R8A8_UNORM };
@@ -632,7 +974,7 @@ namespace crimson::vulkan
         surface.Swapchain = VK_NULL_HANDLE;
     }
 
-    void VulkanResourceManager::CreateSwapchainResources(VulkanSurface& surface)
+    bool VulkanResourceManager::CreateSwapchainResources(VulkanSurface& surface)
     {
         VkSurfaceCapabilitiesKHR capabilities{};
         vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_device.GetPhysicalDevice(), surface.Surface, &capabilities);
@@ -672,6 +1014,7 @@ namespace crimson::vulkan
         if (vkCreateSwapchainKHR(m_device.GetDevice(), &createInfo, nullptr, &swapchain) != VK_SUCCESS)
         {
             LOG_ERROR("Swapchain create failed");
+            return false;
         }
 
         surface.Extent = extent;
@@ -680,11 +1023,21 @@ namespace crimson::vulkan
 
         uint32_t count = 0;
 
-        vkGetSwapchainImagesKHR(m_device.GetDevice(),swapchain,&count,nullptr);
+        if (vkGetSwapchainImagesKHR(m_device.GetDevice(), swapchain, &count, nullptr) != VK_SUCCESS || count == 0)
+        {
+            LOG_ERROR("Failed to query swapchain images");
+            vkDestroySwapchainKHR(m_device.GetDevice(), swapchain, nullptr);
+            return false;
+        }
 
         std::vector<VkImage> images(count);
 
-        vkGetSwapchainImagesKHR(m_device.GetDevice(), swapchain, &count, images.data());
+        if (vkGetSwapchainImagesKHR(m_device.GetDevice(), swapchain, &count, images.data()) != VK_SUCCESS)
+        {
+            LOG_ERROR("Failed to fetch swapchain images");
+            vkDestroySwapchainKHR(m_device.GetDevice(), swapchain, nullptr);
+            return false;
+        }
 
         surface.SwapchainTargetHandles.resize(count);
         surface.ImagesInFlight.resize(count,VK_NULL_HANDLE);
@@ -711,6 +1064,8 @@ namespace crimson::vulkan
                 LOG_ERROR("Render finished semaphore failed");
             }
         }
+
+        return true;
     }
 
     void VulkanResourceManager::CreateImage(VkImageCreateInfo info, VulkanImage &image) const

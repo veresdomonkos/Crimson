@@ -31,4 +31,23 @@ namespace crimson::opengl::utils
 
         return 0;
     }
+
+    static constexpr std::size_t GetGLTypeSize(GLenum type)
+    {
+        switch (type)
+        {
+            case GL_FLOAT:             return sizeof(float);
+            case GL_FLOAT_VEC2:        return sizeof(float) * 2;
+            case GL_FLOAT_VEC3:        return sizeof(float) * 3;
+            case GL_FLOAT_VEC4:        return sizeof(float) * 4;
+            case GL_INT:               return sizeof(int);
+            case GL_INT_VEC2:          return sizeof(int) * 2;
+            case GL_INT_VEC3:          return sizeof(int) * 3;
+            case GL_INT_VEC4:          return sizeof(int) * 4;
+            case GL_BOOL:              return sizeof(bool);
+            case GL_FLOAT_MAT3:        return sizeof(float) * 9;
+            case GL_FLOAT_MAT4:        return sizeof(float) * 16;
+            default:                   return 0;
+        }
+    }
 }

@@ -18,6 +18,8 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/buffer_layout.hpp
         include/crimson/renderer/buffers.hpp
         include/crimson/renderer/graphics_pipeline_cache.hpp
+        include/crimson/renderer/camera_data.hpp
+        include/crimson/renderer/shader_property_info.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -63,4 +65,5 @@ target_link_libraries(Engine
         glfw
         glad
 		Vulkan::Vulkan
+        spirv-reflect-static
 )

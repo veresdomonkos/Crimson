@@ -1,5 +1,6 @@
 #pragma once
 #include "opengl_resource_manager.hpp"
+#include "crimson/renderer/camera_data.hpp"
 #include "crimson/renderer/renderer.hpp"
 
 
@@ -19,5 +20,6 @@ namespace crimson::opengl
     private:
         OpenGLResourceManager m_resourceManager;
         Frame m_frames[1];
+        GLuint m_cameraUBO{};
     };
 }

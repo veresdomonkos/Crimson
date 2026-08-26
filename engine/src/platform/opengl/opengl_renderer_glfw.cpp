@@ -31,6 +31,12 @@ namespace crimson::opengl
 
         s_gladInitialized = true;
 
+        // Uniform Buffers
+
+        glCreateBuffers(1, &m_cameraUBO);
+        glNamedBufferData(m_cameraUBO, sizeof(CameraData), nullptr, GL_DYNAMIC_DRAW);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_cameraUBO);
+
         return surfaceHandle;
     }
 
@@ -69,6 +75,9 @@ namespace crimson::opengl
 
     void OpenGLRenderer::ExecuteBeginRenderPass(const RenderPassInfo& info)
     {
+        glNamedBufferSubData(m_cameraUBO, 0, sizeof(CameraData), &info.Camera);
+        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_cameraUBO);
+
         const auto& target = m_resourceManager.GetRenderTarget(info.Target);
 
         glBindFramebuffer(GL_FRAMEBUFFER, target.FrameBufferHandle);
@@ -102,7 +111,8 @@ namespace crimson::opengl
     {
         OpenGLVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(info.VertexBuffer);
         OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(info.IndexBuffer);
-        OpenGLShader& shader = m_resourceManager.GetShader(info.Shader);
+        OpenGLMaterial& material = m_resourceManager.GetMaterial(info.Material);
+        OpenGLShader& shader = m_resourceManager.GetShader(material.Shader);
 
         auto& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout =  vertexBuffer.Layout});
 
@@ -124,8 +134,18 @@ namespace crimson::opengl
         }
 
         VertexArray& vertexArray = m_resourceManager.GetVertexArray(vertexArrayHandle);
+
+        if (material.IsDirty)
+        {
+            glNamedBufferSubData(material.GLBufferHandle, 0, static_cast<GLsizeiptr>(material.UniformDataSize), material.UniformData.get());
+            material.IsDirty = false;
+        }
+
+        glBindBufferBase(GL_UNIFORM_BUFFER, 1, material.GLBufferHandle);
+
         glUseProgram(shader.GLHandle);
         glBindVertexArray(vertexArray.GLHandle);
+
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexBuffer.Size / Index::Size(indexBuffer.Type)),  utils::GetGLIndexType(indexBuffer.Type), nullptr);
     }
 }

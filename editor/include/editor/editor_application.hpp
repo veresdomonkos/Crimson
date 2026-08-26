@@ -16,6 +16,8 @@ namespace crimson::editor
 		std::unique_ptr<Window> m_window;
 	    RenderSurfaceHandle m_primarySurface;
 	    std::unique_ptr<Renderer> m_renderer;
+	    glm::vec3 m_cameraPosition{};
+	    CameraData m_camera;
 		bool m_running;
 	};
 }

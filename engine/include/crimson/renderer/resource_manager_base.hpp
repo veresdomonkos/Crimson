@@ -16,12 +16,14 @@ namespace crimson
         using IndexBuffer = PlatformResourceTraits::IndexBuffer;
         using GraphicsPipeline = PlatformResourceTraits::GraphicsPipeline;
         using Shader = PlatformResourceTraits::Shader;
+        using Material = PlatformResourceTraits::Material;
     public:
         RenderSurface& GetRenderSurface(RenderSurfaceHandle handle) { return m_renderSurfaces.Get(handle); }
         RenderTarget& GetRenderTarget(RenderTargetHandle handle) { return m_renderTargets.Get(handle); }
         VertexBuffer& GetVertexBuffer(VertexBufferHandle handle) { return m_vertexBuffers.Get(handle); }
         IndexBuffer& GetIndexBuffer(IndexBufferHandle handle) { return m_indexBuffers.Get(handle); }
         Shader& GetShader(ShaderHandle handle) { return m_shaders.Get(handle); }
+        Material& GetMaterial(MaterialHandle handle) { return  m_materials.Get(handle); }
 
         GraphicsPipeline& GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info)
         {
@@ -40,6 +42,7 @@ namespace crimson
         HandleRegistry<VertexBufferHandle, VertexBuffer> m_vertexBuffers;
         HandleRegistry<IndexBufferHandle, IndexBuffer> m_indexBuffers;
         HandleRegistry<ShaderHandle, Shader> m_shaders;
+        HandleRegistry<MaterialHandle, Material> m_materials;
         GraphicsPipelineCache<GraphicsPipeline> m_graphicsPipelines;
     };
 }

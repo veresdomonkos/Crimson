@@ -3,13 +3,16 @@
 #include "crimson/renderer/renderer.hpp"
 #include <GLFW/glfw3.h>
 #include "crimson/core/log.hpp"
+#include <cstring>
 
 namespace crimson::vulkan
 {
     RenderSurfaceHandle VulkanRenderer::Initialize(const Window& primaryWindow)
     {
         m_device.Init();
+        m_resourceManager.Init();
         InitializeSynchronizationAndCommands();
+        InitCamera();
 
         return m_resourceManager.CreateRenderSurface(primaryWindow);
     }
@@ -67,6 +70,26 @@ namespace crimson::vulkan
     {
         vkDeviceWaitIdle(m_device.GetDevice());
 
+        if (m_cameraDescriptorSet != VK_NULL_HANDLE)
+        {
+            vkFreeDescriptorSets(m_device.GetDevice(), m_resourceManager.GetDescriptorPool(), 1, &m_cameraDescriptorSet);
+            m_cameraDescriptorSet = VK_NULL_HANDLE;
+        }
+
+        if (m_cameraUBOBuffer != VK_NULL_HANDLE)
+        {
+            if (m_cameraMappedData != nullptr)
+            {
+                vkUnmapMemory(m_device.GetDevice(), m_cameraUBOBufferMemory);
+                m_cameraMappedData = nullptr;
+            }
+
+            vkDestroyBuffer(m_device.GetDevice(), m_cameraUBOBuffer, nullptr);
+            vkFreeMemory(m_device.GetDevice(), m_cameraUBOBufferMemory, nullptr);
+            m_cameraUBOBuffer = VK_NULL_HANDLE;
+            m_cameraUBOBufferMemory = VK_NULL_HANDLE;
+        }
+
         m_resourceManager.Clear();
 
         for (FrameSync& sync : m_frameSyncs)
@@ -110,6 +133,7 @@ namespace crimson::vulkan
         }
         else if (currentLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         {
+            srcStage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
             srcAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
         }
 
@@ -160,6 +184,12 @@ namespace crimson::vulkan
     void VulkanRenderer::ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const RenderPassInfo& info)
     {
         VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(info.Target);
+
+        if (m_cameraMappedData != nullptr)
+        {
+            CameraData vkCamera = info.Camera;
+            std::memcpy(m_cameraMappedData, &vkCamera, sizeof(CameraData));
+        }
 
         for (auto& color : rt.Colors)
         {
@@ -225,6 +255,21 @@ namespace crimson::vulkan
         }
 
         vkCmdBeginRendering(cmdBuffer, &rendering);
+
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = static_cast<float>(rt.Height);
+        viewport.width = static_cast<float>(rt.Width);
+        viewport.height = -static_cast<float>(rt.Height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = {rt.Width, rt.Height};
+
+        vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+        vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
     }
 
     void VulkanRenderer::ExecuteEndRenderPass(VkCommandBuffer cmdBuffer, VulkanRenderTarget& rt)
@@ -238,6 +283,41 @@ namespace crimson::vulkan
                 TransitionImage(cmdBuffer, color.Image, VK_IMAGE_ASPECT_COLOR_BIT, color.Layout, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
             }
         }
+    }
+
+    void VulkanRenderer::ExecuteDraw(VkCommandBuffer cmdBuffer, const DrawInfo& draw)
+    {
+        VulkanVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(draw.VertexBuffer);
+        VulkanIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(draw.IndexBuffer);
+        VulkanMaterial& material = m_resourceManager.GetMaterial(draw.Material);
+
+        if (material.DescriptorSet == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        VulkanGraphicsPipeline& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout = vertexBuffer.Layout, .Shader = material.Shader });
+
+        if (pipeline.Pipeline == VK_NULL_HANDLE)
+        {
+            return;
+        }
+
+        vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Pipeline);
+
+        VkDeviceSize offset = 0;
+        vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &vertexBuffer.Buffer, &offset);
+        vkCmdBindIndexBuffer(cmdBuffer, indexBuffer.Buffer, 0, indexBuffer.Type == IndexType::UInt32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+
+        VkDescriptorSet descriptorSets[] = {
+            m_cameraDescriptorSet,
+            material.DescriptorSet
+        };
+
+        vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Layout, 0, 2, descriptorSets, 0,  nullptr);
+
+        uint32_t indexCount = static_cast<uint32_t>(indexBuffer.Size / Index::Size(indexBuffer.Type));
+        vkCmdDrawIndexed(cmdBuffer, indexCount, 1, 0, 0, 0);
     }
 
     FrameContext VulkanRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
@@ -296,7 +376,7 @@ namespace crimson::vulkan
     void VulkanRenderer::EndFrame(const FrameContext& frameContext)
     {
         Frame& frame = m_frames[frameContext.GetIndex()];
-        VkCommandBuffer cmdBuffer = m_frameSyncs[m_currentFrameIndex].CommandBuffer;
+        VkCommandBuffer cmdBuffer = m_frameSyncs[frameContext.GetIndex()].CommandBuffer;
         VulkanSurface& surface = m_resourceManager.GetRenderSurface(frame.GetSurface());
         uint32_t imageIndex = surface.CurrentImageIndex;
         RenderTargetHandle target = surface.SwapchainTargetHandles[imageIndex];
@@ -308,38 +388,7 @@ namespace crimson::vulkan
 
             for (const auto& draw : renderPass.GetDraws())
             {
-                VulkanVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(draw.VertexBuffer);
-                VulkanIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(draw.IndexBuffer);
-                VulkanGraphicsPipeline& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout = vertexBuffer.Layout, .Shader = draw.Shader });
-
-                if (pipeline.Pipeline == VK_NULL_HANDLE)
-                {
-                    continue;
-                }
-
-                vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Pipeline);
-
-                VkDeviceSize offset = 0;
-                vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &vertexBuffer.Buffer, &offset);
-                vkCmdBindIndexBuffer(cmdBuffer, indexBuffer.Buffer, 0, indexBuffer.Type == IndexType::UInt32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
-
-                VkViewport viewport{};
-                viewport.x = 0.0f;
-                viewport.y = static_cast<float>(rt.Height);
-                viewport.width = static_cast<float>(rt.Width);
-                viewport.height = -static_cast<float>(rt.Height);
-                viewport.minDepth = 0.0f;
-                viewport.maxDepth = 1.0f;
-
-                VkRect2D scissor{};
-                scissor.offset = {0, 0};
-                scissor.extent = {rt.Width, rt.Height};
-
-                vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
-                vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
-
-                uint32_t indexCount = static_cast<uint32_t>(indexBuffer.Size / Index::Size(indexBuffer.Type));
-                vkCmdDrawIndexed(cmdBuffer, indexCount, 1, 0, 0, 0);
+                ExecuteDraw(cmdBuffer, draw);
             }
 
             ExecuteEndRenderPass(cmdBuffer, rt);
@@ -350,9 +399,9 @@ namespace crimson::vulkan
             LOG_ERROR("[Renderer] Failed to end command buffer");
         }
 
-        VkSemaphore waitSemaphore = m_frameSyncs[m_currentFrameIndex].ImageAvailableSemaphore;
+        VkSemaphore waitSemaphore = m_frameSyncs[frameContext.GetIndex()].ImageAvailableSemaphore;
         VkSemaphore signalSemaphore = surface.RenderFinishedSemaphores[imageIndex];
-        VkFence fence = m_frameSyncs[m_currentFrameIndex].InFlightFence;
+        VkFence fence = m_frameSyncs[frameContext.GetIndex()].InFlightFence;
 
         VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
@@ -386,5 +435,62 @@ namespace crimson::vulkan
         }
 
         m_currentFrameIndex = (m_currentFrameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
+    }
+
+    void VulkanRenderer::InitCamera()
+    {
+        VkDeviceSize bufferSize = sizeof(CameraData);
+
+        if (m_resourceManager.GetDescriptorPool() == VK_NULL_HANDLE || m_resourceManager.GetCameraSetLayout() == VK_NULL_HANDLE)
+        {
+            LOG_ERROR("[Vulkan] Cannot initialize camera resources without descriptor pool or layout");
+            return;
+        }
+
+        // 1. ELŐSZÖR LÉTREHOZZUK A BUFFERT ÉS A MEMÓRIÁJÁT!
+        m_resourceManager.CreateBuffer(
+            bufferSize,
+            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+            m_cameraUBOBuffer,
+            m_cameraUBOBufferMemory
+        );
+
+        if (vkMapMemory(m_device.GetDevice(), m_cameraUBOBufferMemory, 0, bufferSize, 0, &m_cameraMappedData) != VK_SUCCESS)
+        {
+            LOG_ERROR("[Vulkan] Failed to map camera uniform buffer");
+            return;
+        }
+
+        // 2. Lefoglalás a Descriptor Pool-ból
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = m_resourceManager.GetDescriptorPool();
+        allocInfo.descriptorSetCount = 1;
+        VkDescriptorSetLayout cameraLayout = m_resourceManager.GetCameraSetLayout();
+        allocInfo.pSetLayouts = &cameraLayout;
+
+        if (vkAllocateDescriptorSets(m_device.GetDevice(), &allocInfo, &m_cameraDescriptorSet) != VK_SUCCESS)
+        {
+            LOG_ERROR("[Vulkan] Failed to allocate camera descriptor set!");
+            return;
+        }
+
+        // 3. Összekötés a kamera UBO bufferrel (most már érvényes bufferre mutat!)
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = m_cameraUBOBuffer;
+        bufferInfo.offset = 0;
+        bufferInfo.range = bufferSize;
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = m_cameraDescriptorSet;
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+
+        vkUpdateDescriptorSets(m_device.GetDevice(), 1, &descriptorWrite, 0, nullptr);
     }
 }

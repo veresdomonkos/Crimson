@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstddef>
 #include <span>
+#include <string_view>
 
 #include "vulkan_device.hpp"
 #include "crimson/renderer/resource_manager.hpp"
@@ -31,7 +33,10 @@ namespace crimson::vulkan
     class VulkanResourceManager: public ResourceManagerBase<VulkanResourceTraits>
     {
     public:
-        explicit VulkanResourceManager(VulkanDevice& device) : m_device(device) {}
+        explicit VulkanResourceManager(VulkanDevice& device);
+
+        void Init();
+
         void Clear();
         RenderSurfaceHandle CreateRenderSurface(const Window& window) override;
         [[nodiscard]] RenderTargetHandle GetCurrentBackBuffer(RenderSurfaceHandle renderSurface) const override;
@@ -46,19 +51,30 @@ namespace crimson::vulkan
 
         ShaderHandle CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary) override;
         void DestroyShader(ShaderHandle handle) override;
+
+        MaterialHandle CreateMaterial(ShaderHandle shaderHandle) override;
+        void DestroyMaterial(MaterialHandle handle) override;
+
+        [[nodiscard]] VkDescriptorPool GetDescriptorPool() const { return m_descriptorPool; }
+        [[nodiscard]] VkDescriptorSetLayout GetCameraSetLayout() const { return m_cameraSetLayout; }
+
+        void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory) const;
     protected:
         VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override;
+        void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
     private:
         RenderTargetHandle CreateRenderTarget(const RenderTargetDesc& desc, bool isSwapchain, std::span<const VkImage> swapchainImages);
         void DestroySwapchainResources(VulkanSurface& surface);
-        void CreateSwapchainResources(VulkanSurface& surface);
+        bool CreateSwapchainResources(VulkanSurface& surface);
         void CreateImage(VkImageCreateInfo info, VulkanImage& image) const;
         void CreateImageView(VulkanImage& image, VkImageAspectFlags aspect) const;
         void CreateDepthImage(VulkanImage& image, uint32_t width, uint32_t height, VkFormat format) const;
-        void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory) const;
         void CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const;
         VkShaderModule CreateShaderModule(std::span<const uint32_t> code);
+        void ReflectShader(VulkanShader& shader, std::span<const uint32_t> fragmentBinary);
     private:
         VulkanDevice& m_device;
+        VkDescriptorSetLayout m_cameraSetLayout = VK_NULL_HANDLE;
+        VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
     };
 }

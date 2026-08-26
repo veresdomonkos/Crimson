@@ -32,10 +32,12 @@ namespace crimson
     class VertexBufferTag {};
     class IndexBufferTag {};
     class ShaderTag {};
+    class MaterialTag {};
 
     using RenderSurfaceHandle = Handle<RenderSurfaceTag>;
     using RenderTargetHandle = Handle<RenderTargetTag>;
     using VertexBufferHandle = Handle<VertexBufferTag>;
     using IndexBufferHandle = Handle<IndexBufferTag>;
     using ShaderHandle = Handle<ShaderTag>;
+    using MaterialHandle = Handle<MaterialTag>;
 }

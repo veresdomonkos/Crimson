@@ -20,6 +20,7 @@ namespace crimson::vulkan
         }
 
         LOG_ERROR("CRIMSON_ERROR: Failed to find suitable memory type for allocation!");
+        return 0;
     }
 
     void VulkanDevice::Init()

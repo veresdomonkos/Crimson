@@ -70,12 +70,28 @@ namespace crimson::vulkan
     {
         VkShaderModule Vertex = VK_NULL_HANDLE;
         VkShaderModule Fragment = VK_NULL_HANDLE;
+
+        VkDescriptorSetLayout MaterialSetLayout = VK_NULL_HANDLE;
+        size_t MaterialUniformSize = 0;
+
+        std::unordered_map<std::string, ShaderPropertyInfo> Properties{};
     };
 
     struct VulkanGraphicsPipeline
     {
         VkPipelineLayout Layout = VK_NULL_HANDLE;
         VkPipeline Pipeline = VK_NULL_HANDLE;
+        VkDescriptorSetLayout DescriptorSetLayout = VK_NULL_HANDLE;
+    };
+
+    struct VulkanMaterial
+    {
+        ShaderHandle Shader;
+        VkBuffer UniformBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory UniformBufferMemory = VK_NULL_HANDLE;
+        void* MappedData = nullptr;
+        VkDeviceSize UniformBufferSize = 0;
+        VkDescriptorSet DescriptorSet = VK_NULL_HANDLE;
     };
 
     struct VulkanResourceTraits
@@ -85,6 +101,7 @@ namespace crimson::vulkan
         using VertexBuffer = VulkanVertexBuffer;
         using IndexBuffer = VulkanIndexBuffer;
         using Shader = VulkanShader;
+        using Material = VulkanMaterial;
         using GraphicsPipeline = VulkanGraphicsPipeline;
     };
 }

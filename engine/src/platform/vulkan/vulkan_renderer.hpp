@@ -28,10 +28,12 @@ namespace crimson::vulkan
         FrameContext BeginFrame(RenderSurfaceHandle surface) override;
         void EndFrame(const FrameContext& frame) override;
     private:
+        void InitCamera();
         void TransitionImage(VkCommandBuffer cmd, VkImage image, VkImageAspectFlagBits flagBits, VkImageLayout& currentLayout, VkImageLayout newLayout);
         void InitializeSynchronizationAndCommands();
         void ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const RenderPassInfo& info);
         void ExecuteEndRenderPass(VkCommandBuffer cmdBuffer, VulkanRenderTarget& rt);
+        void ExecuteDraw(VkCommandBuffer cmdBuffer, const DrawInfo& draw);
     private:
         VulkanDevice m_device;
         VulkanResourceManager m_resourceManager;
@@ -43,5 +45,10 @@ namespace crimson::vulkan
 
         std::array<FrameSync, MAX_FRAMES_IN_FLIGHT> m_frameSyncs;
         std::array<Frame, MAX_FRAMES_IN_FLIGHT> m_frames;
+
+        VkDescriptorSet m_cameraDescriptorSet = VK_NULL_HANDLE;
+        VkBuffer m_cameraUBOBuffer = VK_NULL_HANDLE;
+        VkDeviceMemory m_cameraUBOBufferMemory = VK_NULL_HANDLE;
+        void* m_cameraMappedData = nullptr;
     };
 }
