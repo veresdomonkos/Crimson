@@ -337,4 +337,135 @@ namespace crimson::opengl
 
         return shader;
     }
+
+    TextureHandle OpenGLResourceManager::CreateTexture(const TextureInfo& info, const void* data)
+    {
+        OpenGLTexture tex{};
+        tex.Width  = info.Width;
+        tex.Height = info.Height;
+        tex.InternalFormat = utils::GetGLInternalFormat(info.Format);
+
+        glCreateTextures(GL_TEXTURE_2D, 1, &tex.GLHandle);
+
+        const auto mipLevels = static_cast<GLsizei>(info.MipLevels > 0 ? info.MipLevels : 1);
+        glTextureStorage2D(tex.GLHandle, mipLevels, tex.InternalFormat, static_cast<GLsizei>(info.Width), static_cast<GLsizei>(info.Height));
+
+        if (data != nullptr)
+        {
+            glTextureSubImage2D(
+                tex.GLHandle, 0, 0, 0,
+                 static_cast<GLsizei>(info.Width), static_cast<GLsizei>(info.Height),
+                 utils::GetGLUploadFormat(info.Format),
+                 utils::GetGLUploadType(info.Format),
+                 data
+            );
+
+            if (mipLevels > 1)
+                glGenerateTextureMipmap(tex.GLHandle);
+        }
+
+        glTextureParameteri(tex.GLHandle, GL_TEXTURE_MIN_FILTER, mipLevels > 1 ? GL_LINEAR_MIPMAP_LINEAR : GL_LINEAR);
+        glTextureParameteri(tex.GLHandle, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTextureParameteri(tex.GLHandle, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(tex.GLHandle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        return m_textures.Register(tex);
+    }
+
+    void OpenGLResourceManager::DestroyTexture(TextureHandle handle)
+    {
+        if (!handle) return;
+
+        OpenGLTexture& tex = m_textures.Get(handle);
+        glDeleteTextures(1, &tex.GLHandle);
+        m_textures.Unregister(handle);
+    }
+
+    RenderTargetHandle OpenGLResourceManager::CreateRenderTarget(const RenderTargetInfo& info)
+    {
+        OpenGLRenderTarget rt{};
+        rt.Width  = info.Width;
+        rt.Height = info.Height;
+
+        glCreateFramebuffers(1, &rt.FrameBufferHandle);
+
+        std::vector<GLenum> drawBuffers;
+        drawBuffers.reserve(info.ColorFormats.size());
+
+        for (std::size_t i = 0; i < info.ColorFormats.size(); ++i)
+        {
+            const TextureInfo colorInfo {
+                .Width = info.Width, .Height = info.Height,
+                .Format = info.ColorFormats[i],
+                .Usage = TextureUsage::ColorAttachment | TextureUsage::Sampled,
+                .MipLevels = 1,
+            };
+
+            const TextureHandle colorHandle = CreateTexture(colorInfo, nullptr);
+            rt.ColorAttachments.push_back(colorHandle);
+
+            const GLenum attachment = GL_COLOR_ATTACHMENT0 + static_cast<GLenum>(i);
+            glNamedFramebufferTexture(rt.FrameBufferHandle, attachment, m_textures.Get(colorHandle).GLHandle, 0);
+            drawBuffers.push_back(attachment);
+        }
+
+        if (info.DepthFormat)
+        {
+            const TextureInfo depthInfo {
+                .Width = info.Width, .Height = info.Height,
+                .Format = *info.DepthFormat,
+                .Usage = TextureUsage::DepthStencilAttachment,
+                .MipLevels = 1,
+            };
+
+            const TextureHandle depthHandle = CreateTexture(depthInfo, nullptr);
+            rt.DepthAttachment = depthHandle;
+
+            const GLenum attachment = utils::HasStencil(*info.DepthFormat) ? GL_DEPTH_STENCIL_ATTACHMENT : GL_DEPTH_ATTACHMENT;
+            glNamedFramebufferTexture(rt.FrameBufferHandle, attachment, m_textures.Get(depthHandle).GLHandle, 0);
+        }
+
+        if (drawBuffers.empty())
+        {
+            glNamedFramebufferDrawBuffer(rt.FrameBufferHandle, GL_NONE);
+            glNamedFramebufferReadBuffer(rt.FrameBufferHandle, GL_NONE);
+        }
+        else
+        {
+            glNamedFramebufferDrawBuffers(rt.FrameBufferHandle, static_cast<GLsizei>(drawBuffers.size()), drawBuffers.data());
+        }
+
+        if (glCheckNamedFramebufferStatus(rt.FrameBufferHandle, GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+        {
+            LOG_ERROR("Framebuffer incomplete!");
+            for (auto h : rt.ColorAttachments) DestroyTexture(h);
+            if (rt.DepthAttachment) DestroyTexture(*rt.DepthAttachment);
+            glDeleteFramebuffers(1, &rt.FrameBufferHandle);
+            return RenderTargetHandle::Invalid();
+        }
+
+        return m_renderTargets.Register(std::move(rt));
+    }
+
+    void OpenGLResourceManager::DestroyRenderTarget(RenderTargetHandle handle)
+    {
+        if (!handle) return;
+
+        OpenGLRenderTarget& rt = m_renderTargets.Get(handle);
+        for (auto h : rt.ColorAttachments) DestroyTexture(h);
+        if (rt.DepthAttachment) DestroyTexture(*rt.DepthAttachment);
+
+        glDeleteFramebuffers(1, &rt.FrameBufferHandle);
+        m_renderTargets.Unregister(handle);
+    }
+
+    TextureHandle OpenGLResourceManager::GetColorAttachment(RenderTargetHandle handle, uint32_t index) const
+    {
+        return m_renderTargets.Get(handle).ColorAttachments.at(index);
+    }
+
+    std::optional<TextureHandle> OpenGLResourceManager::GetDepthAttachment(RenderTargetHandle handle) const
+    {
+        return m_renderTargets.Get(handle).DepthAttachment;
+    }
 }

@@ -21,19 +21,21 @@ namespace crimson::opengl
         RenderTargetHandle BackBufferHandle;
     };
 
-    struct OpenGLImage
+    struct OpenGLTexture
     {
-        GLuint Texture = 0;
-        GLenum Format = GL_RGBA8;
+        GLuint GLHandle = 0;
+        GLenum InternalFormat = GL_RGBA8;
+        uint32_t Width  = 0;
+        uint32_t Height = 0;
     };
 
     struct OpenGLRenderTarget
     {
-        std::vector<OpenGLImage> Colors;
-        std::optional<OpenGLImage> Depth;
-        uint32_t Width;
-        uint32_t Height;
-        GLuint FrameBufferHandle;
+        std::vector<TextureHandle> ColorAttachments;
+        std::optional<TextureHandle> DepthAttachment;
+        uint32_t Width  = 0;
+        uint32_t Height = 0;
+        GLuint FrameBufferHandle = 0;
     };
 
     struct OpenGLVertexBuffer
@@ -103,5 +105,6 @@ namespace crimson::opengl
         using Shader = OpenGLShader;
         using GraphicsPipeline = OpenGLGraphicsPipeline;
         using Material = OpenGLMaterial;
+        using Texture = OpenGLTexture;
     };
 }

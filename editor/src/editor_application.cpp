@@ -13,7 +13,7 @@ namespace crimson::editor
 {
 	EditorApplication::EditorApplication() : m_running(true)
 	{
-		RendererAPI::Init(RendererAPIType::Vulkan);
+		RendererAPI::Init(RendererAPIType::OpenGL);
 		m_window = Window::Create(WindowData{ "My Window", 1280, 720, BIND_FN(OnEvent) });
 	    m_renderer = Renderer::Create();
 	    m_primarySurface = m_renderer->Initialize(*m_window);
@@ -33,12 +33,6 @@ namespace crimson::editor
 
     void EditorApplication::Run()
 	{
-	    RenderPassInfo mainPassInfo {
-	        .ClearFlags = ClearFlags::Color | ClearFlags::Depth,
-	        .ClearColor = glm::vec4(1, 0, 0, 1),
-	        .Camera = m_camera
-	    };
-
 	    struct Vertex
 	    {
 	        glm::vec3 Position;
@@ -128,6 +122,12 @@ namespace crimson::editor
 	    MaterialHandle mat = m_renderer->GetResourceManager().CreateMaterial(shader);
 	    m_renderer->GetResourceManager().SetMaterialPropertyByName(mat, "u_Color", glm::vec4(0.0f, 0.0f, 1.0f, 1.0f));
 
+	    RenderPassInfo mainPassInfo {
+	        .ClearFlags = ClearFlags::Color | ClearFlags::Depth,
+            .ClearColor = glm::vec4(1, 0, 0, 1),
+            .Camera = m_camera
+        };
+
 		while (m_running)
 		{
 		    mainPassInfo.Camera = m_camera;
@@ -136,11 +136,11 @@ namespace crimson::editor
 
             auto frame = m_renderer->BeginFrame(m_primarySurface);
 
-		    if (!frame.ShouldRender())
-		        continue;
-
-		    auto& mainPass = frame.BeginRenderPass(mainPassInfo);
-            mainPass.Draw({vertexBuffer, indexBuffer, mat});
+		    if (frame.ShouldRender())
+		    {
+		        auto& mainPass = frame.BeginRenderPass(mainPassInfo);
+		        mainPass.Draw({vertexBuffer, indexBuffer, mat});
+		    }
 
 		    m_renderer->EndFrame(frame);
 		}

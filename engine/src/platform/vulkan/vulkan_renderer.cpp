@@ -111,9 +111,9 @@ namespace crimson::vulkan
         return m_resourceManager;
     }
 
-    void VulkanRenderer::TransitionImage(VkCommandBuffer cmd, VkImage image, VkImageAspectFlagBits flagBits, VkImageLayout& currentLayout, VkImageLayout newLayout)
+    void VulkanRenderer::TransitionImage(VkCommandBuffer cmd, VulkanTexture& texture, VkImageAspectFlagBits flagBits, VkImageLayout newLayout)
     {
-        if (currentLayout == newLayout)
+        if (texture.Layout == newLayout)
             return;
 
         VkPipelineStageFlags2 srcStage = VK_PIPELINE_STAGE_2_NONE;
@@ -121,17 +121,17 @@ namespace crimson::vulkan
         VkAccessFlags2 srcAccess = VK_ACCESS_2_NONE;
         VkAccessFlags2 dstAccess = VK_ACCESS_2_NONE;
 
-        if (currentLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+        if (texture.Layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
         {
             srcStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
             srcAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
         }
-        else if (currentLayout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
+        else if (texture.Layout == VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL)
         {
             srcStage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
             dstAccess = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
         }
-        else if (currentLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
+        else if (texture.Layout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
         {
             srcStage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
             srcAccess = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
@@ -158,11 +158,11 @@ namespace crimson::vulkan
 
         VkImageMemoryBarrier2 barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-        barrier.oldLayout = currentLayout;
+        barrier.oldLayout = texture.Layout;
         barrier.newLayout = newLayout;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = image;
+        barrier.image = texture.Image;
         barrier.subresourceRange.aspectMask = flagBits;
         barrier.subresourceRange.levelCount = 1;
         barrier.subresourceRange.layerCount = 1;
@@ -177,8 +177,7 @@ namespace crimson::vulkan
         dep.pImageMemoryBarriers = &barrier;
 
         vkCmdPipelineBarrier2(cmd, &dep);
-
-        currentLayout = newLayout;
+        texture.Layout = newLayout;
     }
 
     void VulkanRenderer::ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const RenderPassInfo& info)
@@ -191,82 +190,53 @@ namespace crimson::vulkan
             std::memcpy(m_cameraMappedData, &vkCamera, sizeof(CameraData));
         }
 
-        for (auto& color : rt.Colors)
-        {
-            TransitionImage(cmdBuffer, color.Image, VK_IMAGE_ASPECT_COLOR_BIT, color.Layout, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        }
-
-        if (rt.Depth)
-        {
-            TransitionImage(cmdBuffer, rt.Depth->Image, VK_IMAGE_ASPECT_DEPTH_BIT, rt.Depth->Layout, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-        }
-
         std::vector<VkRenderingAttachmentInfo> colorAttachments;
+        colorAttachments.reserve(rt.ColorAttachments.size());
 
-        for (auto& color : rt.Colors)
+        for (TextureHandle colorHandle : rt.ColorAttachments)
         {
-            VkRenderingAttachmentInfo attachment{};
+            VulkanTexture& color = m_resourceManager.GetTexture(colorHandle);
+            TransitionImage(cmdBuffer, color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
+            VkRenderingAttachmentInfo attachment{};
             attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             attachment.imageView = color.View;
             attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
             attachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
             attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-            VkClearValue clear{};
-            clear.color = {
-                info.ClearColor.r,
-                info.ClearColor.g,
-                info.ClearColor.b,
-                info.ClearColor.a
-            };
-
-            attachment.clearValue = clear;
+            attachment.clearValue.color = { info.ClearColor.r, info.ClearColor.g, info.ClearColor.b, info.ClearColor.a };
             colorAttachments.push_back(attachment);
         }
 
         VkRenderingAttachmentInfo depthAttachment{};
+        bool hasDepth = rt.DepthAttachment.has_value();
 
-        if (rt.Depth)
+        if (hasDepth)
         {
+            VulkanTexture& depth = m_resourceManager.GetTexture(*rt.DepthAttachment);
+            TransitionImage(cmdBuffer, depth, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
             depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-            depthAttachment.imageView = rt.Depth->View;
+            depthAttachment.imageView = depth.View;
             depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
             depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            depthAttachment.clearValue.depthStencil =
-            {
-                info.ClearDepth,
-                info.ClearStencil
-            };
+            depthAttachment.clearValue.depthStencil = { info.ClearDepth, info.ClearStencil };
         }
 
         VkRenderingInfo rendering{};
         rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-        rendering.renderArea.offset = {0,0};
-        rendering.renderArea.extent = {rt.Width, rt.Height};
+        rendering.renderArea = { {0, 0}, {rt.Width, rt.Height} };
         rendering.layerCount = 1;
-        rendering.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());;
+        rendering.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
         rendering.pColorAttachments = colorAttachments.data();
-        if (rt.Depth)
-        {
+        if (hasDepth)
             rendering.pDepthAttachment = &depthAttachment;
-        }
 
         vkCmdBeginRendering(cmdBuffer, &rendering);
 
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = static_cast<float>(rt.Height);
-        viewport.width = static_cast<float>(rt.Width);
-        viewport.height = -static_cast<float>(rt.Height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-
-        VkRect2D scissor{};
-        scissor.offset = {0, 0};
-        scissor.extent = {rt.Width, rt.Height};
+        VkViewport viewport{ 0.0f, static_cast<float>(rt.Height), static_cast<float>(rt.Width), -static_cast<float>(rt.Height), 0.0f, 1.0f };
+        VkRect2D scissor{ {0, 0}, {rt.Width, rt.Height} };
 
         vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
         vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
@@ -278,9 +248,10 @@ namespace crimson::vulkan
 
         if (rt.IsSwapchain)
         {
-            for (auto& color : rt.Colors)
+            for (TextureHandle colorHandle : rt.ColorAttachments)
             {
-                TransitionImage(cmdBuffer, color.Image, VK_IMAGE_ASPECT_COLOR_BIT, color.Layout, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+                VulkanTexture& color = m_resourceManager.GetTexture(colorHandle);
+                TransitionImage(cmdBuffer, color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
             }
         }
     }

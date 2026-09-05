@@ -59,19 +59,35 @@ namespace crimson::vulkan
         [[nodiscard]] VkDescriptorSetLayout GetCameraSetLayout() const { return m_cameraSetLayout; }
 
         void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory) const;
+
+        TextureHandle CreateTexture(const TextureInfo& info, const void* data) override;
+        void DestroyTexture(TextureHandle handle) override;
+
+        RenderTargetHandle CreateRenderTarget(const RenderTargetInfo& info) override;
+        void DestroyRenderTarget(RenderTargetHandle handle) override;
+
+        TextureHandle GetColorAttachment(RenderTargetHandle handle, uint32_t index) const override;
+        std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const override;
+
+        RenderTargetHandle CreateSwapchainRenderTarget(uint32_t width, uint32_t height, VkFormat colorFormat, VkImage swapchainImage);
     protected:
         VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override;
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
     private:
-        RenderTargetHandle CreateRenderTarget(const RenderTargetDesc& desc, bool isSwapchain, std::span<const VkImage> swapchainImages);
-        void DestroySwapchainResources(VulkanSurface& surface);
-        bool CreateSwapchainResources(VulkanSurface& surface);
-        void CreateImage(VkImageCreateInfo info, VulkanImage& image) const;
-        void CreateImageView(VulkanImage& image, VkImageAspectFlags aspect) const;
-        void CreateDepthImage(VulkanImage& image, uint32_t width, uint32_t height, VkFormat format) const;
         void CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const;
         VkShaderModule CreateShaderModule(std::span<const uint32_t> code);
         void ReflectShader(VulkanShader& shader, std::span<const uint32_t> fragmentBinary);
+
+        void CreateImage(const VkImageCreateInfo& info, VulkanTexture& texture) const;
+        void CreateImageView(VulkanTexture& texture, VkImageAspectFlags aspect) const;
+        TextureHandle WrapSwapchainImage(VkImage image, VkFormat format, uint32_t width, uint32_t height);
+
+        void TransitionImageLayout(VkImage image, VkImageAspectFlags aspect, VkImageLayout oldLayout, VkImageLayout newLayout) const;
+        void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) const;
+        void UploadTextureData(VulkanTexture& texture, const TextureInfo& info, const void* data) const;
+
+        void DestroySwapchainResources(VulkanSurface& surface);
+        bool CreateSwapchainResources(VulkanSurface& surface);
     private:
         VulkanDevice& m_device;
         VkDescriptorSetLayout m_cameraSetLayout = VK_NULL_HANDLE;

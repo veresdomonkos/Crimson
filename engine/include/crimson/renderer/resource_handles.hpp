@@ -33,6 +33,7 @@ namespace crimson
     class IndexBufferTag {};
     class ShaderTag {};
     class MaterialTag {};
+    class TextureTag {};
 
     using RenderSurfaceHandle = Handle<RenderSurfaceTag>;
     using RenderTargetHandle = Handle<RenderTargetTag>;
@@ -40,4 +41,5 @@ namespace crimson
     using IndexBufferHandle = Handle<IndexBufferTag>;
     using ShaderHandle = Handle<ShaderTag>;
     using MaterialHandle = Handle<MaterialTag>;
+    using TextureHandle = Handle<TextureTag>;
 }

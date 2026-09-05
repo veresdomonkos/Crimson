@@ -27,6 +27,15 @@ namespace crimson::opengl
 
         MaterialHandle CreateMaterial(ShaderHandle shaderHandle) override;
         void DestroyMaterial(MaterialHandle handle) override;
+
+        TextureHandle CreateTexture(const TextureInfo& info, const void* data) override;
+        void DestroyTexture(TextureHandle handle) override;
+
+        RenderTargetHandle CreateRenderTarget(const RenderTargetInfo& info) override;
+        void DestroyRenderTarget(RenderTargetHandle handle) override;
+
+        [[nodiscard]] TextureHandle GetColorAttachment(RenderTargetHandle handle, uint32_t index) const override;
+        [[nodiscard]] std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const override;
     protected:
         OpenGLGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo &info) override;
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;

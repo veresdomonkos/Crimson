@@ -5,7 +5,8 @@
 #include "crimson/renderer/buffers.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/core/window.hpp"
-#include "shader_property_info.hpp"
+#include "crimson/renderer/shader_property_info.hpp"
+#include "crimson/renderer/texture.hpp"
 
 namespace crimson
 {
@@ -38,6 +39,15 @@ namespace crimson
             );
             SetMaterialPropertyByNameImpl(handle, name, bytes);
         }
+
+        virtual TextureHandle CreateTexture(const TextureInfo& info, const void* data) = 0;
+        virtual void DestroyTexture(TextureHandle handle) = 0;
+
+        virtual RenderTargetHandle CreateRenderTarget(const RenderTargetInfo& info) = 0;
+        virtual void DestroyRenderTarget(RenderTargetHandle handle) = 0;
+
+        [[nodiscard]] virtual TextureHandle GetColorAttachment(RenderTargetHandle handle, uint32_t index) const = 0;
+        [[nodiscard]] virtual std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const = 0;
     protected:
         virtual void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) = 0;
     };

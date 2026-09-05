@@ -29,7 +29,7 @@ namespace crimson::vulkan
         void EndFrame(const FrameContext& frame) override;
     private:
         void InitCamera();
-        void TransitionImage(VkCommandBuffer cmd, VkImage image, VkImageAspectFlagBits flagBits, VkImageLayout& currentLayout, VkImageLayout newLayout);
+        void TransitionImage(VkCommandBuffer cmd, VulkanTexture& texture, VkImageAspectFlagBits flagBits, VkImageLayout newLayout);
         void InitializeSynchronizationAndCommands();
         void ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const RenderPassInfo& info);
         void ExecuteEndRenderPass(VkCommandBuffer cmdBuffer, VulkanRenderTarget& rt);

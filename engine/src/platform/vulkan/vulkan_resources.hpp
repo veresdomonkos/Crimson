@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <vector>
+#include <unordered_map>
 
 #include <vulkan/vulkan.h>
 
@@ -11,6 +12,22 @@
 
 namespace crimson::vulkan
 {
+    struct VulkanTexture
+    {
+        VkImage Image = VK_NULL_HANDLE;
+        VkImageView View = VK_NULL_HANDLE;
+        VkDeviceMemory Memory = VK_NULL_HANDLE;
+
+        VkFormat Format = VK_FORMAT_UNDEFINED;
+        VkImageLayout Layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        VkImageAspectFlags Aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+
+        bool IsSwapchainImage = false;
+    };
+
     struct VulkanSurface
     {
         VkSurfaceKHR Surface = VK_NULL_HANDLE;
@@ -27,20 +44,10 @@ namespace crimson::vulkan
         std::vector<VkSemaphore> RenderFinishedSemaphores;
     };
 
-    struct VulkanImage
-    {
-        VkImage Image = VK_NULL_HANDLE;
-        VkImageView View = VK_NULL_HANDLE;
-        VkDeviceMemory Memory = VK_NULL_HANDLE;
-
-        VkFormat Format = VK_FORMAT_UNDEFINED;
-        VkImageLayout Layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    };
-
     struct VulkanRenderTarget
     {
-        std::vector<VulkanImage> Colors;
-        std::optional<VulkanImage> Depth;
+        std::vector<TextureHandle> ColorAttachments;
+        std::optional<TextureHandle> DepthAttachment;
 
         uint32_t Width = 0;
         uint32_t Height = 0;
@@ -96,12 +103,13 @@ namespace crimson::vulkan
 
     struct VulkanResourceTraits
     {
-        using RenderSurface = VulkanSurface;
-        using RenderTarget = VulkanRenderTarget;
-        using VertexBuffer = VulkanVertexBuffer;
-        using IndexBuffer = VulkanIndexBuffer;
-        using Shader = VulkanShader;
-        using Material = VulkanMaterial;
+        using RenderSurface   = VulkanSurface;
+        using RenderTarget    = VulkanRenderTarget;
+        using Texture         = VulkanTexture;
+        using VertexBuffer    = VulkanVertexBuffer;
+        using IndexBuffer     = VulkanIndexBuffer;
+        using Shader          = VulkanShader;
+        using Material        = VulkanMaterial;
         using GraphicsPipeline = VulkanGraphicsPipeline;
     };
 }

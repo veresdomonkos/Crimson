@@ -7,6 +7,7 @@
 #include <cstring>
 #include <string>
 #include <spirv_reflect.h>
+#include "utils.hpp"
 
 namespace crimson::vulkan
 {
@@ -151,32 +152,14 @@ namespace crimson::vulkan
 
         for (const VulkanRenderTarget& target : m_renderTargets)
         {
-            for (auto& image : target.Colors)
+            for (auto& textureHandle : target.ColorAttachments)
             {
-                if (image.View != VK_NULL_HANDLE)
-                {
-                    vkDestroyImageView(m_device.GetDevice(), image.View, nullptr);
-                }
-
-                if (image.Image != VK_NULL_HANDLE && image.Memory != VK_NULL_HANDLE)
-                {
-                    vkDestroyImage(m_device.GetDevice(), image.Image, nullptr);
-                    vkFreeMemory(m_device.GetDevice(), image.Memory, nullptr);
-                }
+                DestroyTexture(textureHandle);
             }
 
-            if (target.Depth)
+            if (target.DepthAttachment)
             {
-                if (target.Depth->View != VK_NULL_HANDLE)
-                {
-                    vkDestroyImageView(m_device.GetDevice(), target.Depth->View, nullptr);
-                }
-
-                if (target.Depth->Image != VK_NULL_HANDLE && target.Depth->Memory != VK_NULL_HANDLE)
-                {
-                    vkDestroyImage(m_device.GetDevice(), target.Depth->Image, nullptr);
-                    vkFreeMemory(m_device.GetDevice(),target.Depth->Memory, nullptr);
-                }
+                DestroyTexture(*target.DepthAttachment);
             }
         }
 
@@ -258,60 +241,71 @@ namespace crimson::vulkan
         }
     }
 
-    RenderTargetHandle VulkanResourceManager::CreateRenderTarget(const RenderTargetDesc &desc, bool isSwapchain, std::span<const VkImage> swapchainImages)
+    RenderTargetHandle VulkanResourceManager::CreateRenderTarget(const RenderTargetInfo& info)
     {
         VulkanRenderTarget target{};
+        target.Width = info.Width;
+        target.Height = info.Height;
+        target.IsSwapchain = false;
 
-        target.Width = desc.Width;
-        target.Height = desc.Height;
-        target.IsSwapchain = isSwapchain;
-
-        for (uint32_t i = 0; i < desc.ColorCount; i++)
+        for (TextureFormat colorFormat : info.ColorFormats)
         {
-            VulkanImage color{};
+            const TextureInfo colorInfo {
+                .Width = info.Width, .Height = info.Height,
+                .Format = colorFormat,
+                .Usage = TextureUsage::ColorAttachment | TextureUsage::Sampled,
+                .MipLevels = 1,
+            };
 
-            if (isSwapchain)
+            TextureHandle handle = CreateTexture(colorInfo, nullptr);
+            if (!handle)
             {
-                color.Image = swapchainImages[i];
-                color.Format = desc.ColorFormat;
-            }
-            else
-            {
-                color.Format = desc.ColorFormat;
-
-                VkImageCreateInfo info{};
-                info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-                info.imageType = VK_IMAGE_TYPE_2D;
-                info.extent = {.width = desc.Width, .height = desc.Height, .depth = 1};
-                info.mipLevels = 1;
-                info.arrayLayers = 1;
-                info.format = color.Format;
-                info.tiling = VK_IMAGE_TILING_OPTIMAL;
-                info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-                info.samples = VK_SAMPLE_COUNT_1_BIT;
-                info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-                CreateImage(info,color);
+                for (auto h : target.ColorAttachments) DestroyTexture(h);
+                return RenderTargetHandle::Invalid();
             }
 
-            CreateImageView(color, VK_IMAGE_ASPECT_COLOR_BIT);
-            target.Colors.push_back(color);
+            target.ColorAttachments.push_back(handle);
         }
 
-        switch (desc.DepthAttachment)
+        if (info.DepthFormat)
         {
-            case DepthAttachmentType::Depth:
-            {
-                VulkanImage depth{};
-                CreateDepthImage(depth, desc.Width, desc.Height, desc.DepthFormat);
-                target.Depth = depth;
-                break;
-            }
-            default:
-                break;
+            const TextureInfo depthInfo {
+                .Width = info.Width, .Height = info.Height,
+                .Format = *info.DepthFormat,
+                .Usage = TextureUsage::DepthStencilAttachment,
+                .MipLevels = 1,
+            };
+
+            target.DepthAttachment = CreateTexture(depthInfo, nullptr);
         }
 
-        return m_renderTargets.Register(target);
+        return m_renderTargets.Register(std::move(target));
+    }
+
+    void VulkanResourceManager::DestroyRenderTarget(RenderTargetHandle handle)
+    {
+        if (!handle)
+            return;
+
+        VulkanRenderTarget& target = m_renderTargets.Get(handle);
+
+        for (TextureHandle h : target.ColorAttachments)
+            DestroyTexture(h);
+
+        if (target.DepthAttachment)
+            DestroyTexture(*target.DepthAttachment);
+
+        m_renderTargets.Unregister(handle);
+    }
+
+    TextureHandle VulkanResourceManager::GetColorAttachment(RenderTargetHandle handle, uint32_t index) const
+    {
+        return m_renderTargets.Get(handle).ColorAttachments.at(index);
+    }
+
+    std::optional<TextureHandle> VulkanResourceManager::GetDepthAttachment(RenderTargetHandle handle) const
+    {
+        return m_renderTargets.Get(handle).DepthAttachment;
     }
 
     VertexBufferHandle VulkanResourceManager::CreateVertexBuffer(const VertexBufferInfo& info, const void* data)
@@ -924,49 +918,21 @@ namespace crimson::vulkan
 
     void VulkanResourceManager::DestroySwapchainResources(VulkanSurface& surface)
     {
-        VkDevice device = m_device.GetDevice();
-
         for (RenderTargetHandle handle : surface.SwapchainTargetHandles)
         {
-            VulkanRenderTarget& target = GetRenderTarget(handle);
-
-            for (const auto& image : target.Colors)
-            {
-                vkDestroyImageView(device, image.View, nullptr);
-
-                if (image.Memory != VK_NULL_HANDLE)
-                {
-                    vkDestroyImage(device, image.Image, nullptr);
-                    vkFreeMemory(device, image.Memory, nullptr);
-                }
-            }
-
-            if (target.Depth)
-            {
-                vkDestroyImageView(device, target.Depth->View, nullptr);
-
-                if (target.Depth->Memory != VK_NULL_HANDLE)
-                {
-                    vkDestroyImage(device, target.Depth->Image, nullptr);
-                    vkFreeMemory(device, target.Depth->Memory, nullptr);
-                }
-            }
-
-            m_renderTargets.Unregister(handle);
+            DestroyRenderTarget(handle);
         }
+
+        VkDevice device = m_device.GetDevice();
 
         for (VkSemaphore sem : surface.RenderFinishedSemaphores)
         {
-            if (sem)
-            {
-                vkDestroySemaphore(device, sem,nullptr);
-            }
+            if (sem != VK_NULL_HANDLE)
+                vkDestroySemaphore(device, sem, nullptr);
         }
 
-        if (surface.Swapchain)
-        {
+        if (surface.Swapchain != VK_NULL_HANDLE)
             vkDestroySwapchainKHR(device, surface.Swapchain, nullptr);
-        }
 
         surface.SwapchainTargetHandles.clear();
         surface.ImagesInFlight.clear();
@@ -1010,7 +976,7 @@ namespace crimson::vulkan
         createInfo.presentMode = VK_PRESENT_MODE_FIFO_KHR;
         createInfo.clipped = VK_TRUE;
 
-        VkSwapchainKHR swapchain;
+        VkSwapchainKHR swapchain = VK_NULL_HANDLE;
         if (vkCreateSwapchainKHR(m_device.GetDevice(), &createInfo, nullptr, &swapchain) != VK_SUCCESS)
         {
             LOG_ERROR("Swapchain create failed");
@@ -1027,6 +993,7 @@ namespace crimson::vulkan
         {
             LOG_ERROR("Failed to query swapchain images");
             vkDestroySwapchainKHR(m_device.GetDevice(), swapchain, nullptr);
+            surface.Swapchain = VK_NULL_HANDLE;
             return false;
         }
 
@@ -1036,30 +1003,33 @@ namespace crimson::vulkan
         {
             LOG_ERROR("Failed to fetch swapchain images");
             vkDestroySwapchainKHR(m_device.GetDevice(), swapchain, nullptr);
+            surface.Swapchain = VK_NULL_HANDLE;
             return false;
         }
 
         surface.SwapchainTargetHandles.resize(count);
-        surface.ImagesInFlight.resize(count,VK_NULL_HANDLE);
+        surface.ImagesInFlight.resize(count, VK_NULL_HANDLE);
         surface.RenderFinishedSemaphores.resize(count);
 
         for (uint32_t i = 0; i < count; i++)
         {
-            RenderTargetDesc desc{};
-            desc.Width = extent.width;
-            desc.Height = extent.height;
-            desc.ColorCount = 1;
-            desc.ColorFormat = surface.Format;
-            desc.DepthAttachment = DepthAttachmentType::Depth;
-            desc.DepthFormat = VK_FORMAT_D32_SFLOAT;
+            surface.SwapchainTargetHandles[i] = CreateSwapchainRenderTarget(
+                extent.width,
+                extent.height,
+                surface.Format,
+                images[i]
+            );
 
-            std::array<VkImage, 1> swapchainImage = { images[i] };
-            surface.SwapchainTargetHandles[i] = CreateRenderTarget(desc,true, swapchainImage);
+            if (!surface.SwapchainTargetHandles[i])
+            {
+                LOG_ERROR("Failed to wrap swapchain image {} as render target", i);
+                return false;
+            }
 
             VkSemaphoreCreateInfo sem{};
             sem.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
-            if (vkCreateSemaphore(m_device.GetDevice(),&sem, nullptr, &surface.RenderFinishedSemaphores[i]) != VK_SUCCESS)
+            if (vkCreateSemaphore(m_device.GetDevice(), &sem, nullptr, &surface.RenderFinishedSemaphores[i]) != VK_SUCCESS)
             {
                 LOG_ERROR("Render finished semaphore failed");
             }
@@ -1068,68 +1038,54 @@ namespace crimson::vulkan
         return true;
     }
 
-    void VulkanResourceManager::CreateImage(VkImageCreateInfo info, VulkanImage &image) const
+    void VulkanResourceManager::CreateImage(const VkImageCreateInfo& info, VulkanTexture& texture) const
     {
-        if (vkCreateImage(m_device.GetDevice(), &info, nullptr, &image.Image) != VK_SUCCESS)
+        if (vkCreateImage(m_device.GetDevice(), &info, nullptr, &texture.Image) != VK_SUCCESS)
         {
-            LOG_ERROR("Create image failed");
+            LOG_ERROR("[Resource Manager] Create image failed");
+            return;
         }
 
         VkMemoryRequirements memReq{};
-        vkGetImageMemoryRequirements(m_device.GetDevice(), image.Image, &memReq);
+        vkGetImageMemoryRequirements(m_device.GetDevice(), texture.Image, &memReq);
 
         VkMemoryAllocateInfo alloc{};
         alloc.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
         alloc.allocationSize = memReq.size;
         alloc.memoryTypeIndex = m_device.FindMemoryType(memReq.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-        if (vkAllocateMemory(m_device.GetDevice(), &alloc, nullptr, &image.Memory) != VK_SUCCESS)
+        if (vkAllocateMemory(m_device.GetDevice(), &alloc, nullptr, &texture.Memory) != VK_SUCCESS)
         {
             LOG_ERROR("[Resource Manager] Allocate image memory failed");
+            return;
         }
 
-        vkBindImageMemory(m_device.GetDevice(), image.Image, image.Memory, 0);
-
-        image.Layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        vkBindImageMemory(m_device.GetDevice(), texture.Image, texture.Memory, 0);
+        texture.Layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        texture.Format = info.format;
+        texture.Width  = info.extent.width;
+        texture.Height = info.extent.height;
     }
 
-    void VulkanResourceManager::CreateImageView(VulkanImage &image, VkImageAspectFlags aspect) const
+    void VulkanResourceManager::CreateImageView(VulkanTexture& texture, VkImageAspectFlags aspect) const
     {
+        texture.Aspect = aspect;
+
         VkImageViewCreateInfo view{};
         view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        view.image = image.Image;
+        view.image = texture.Image;
         view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        view.format = image.Format;
+        view.format = texture.Format;
         view.subresourceRange.aspectMask = aspect;
         view.subresourceRange.baseMipLevel = 0;
         view.subresourceRange.levelCount = 1;
         view.subresourceRange.baseArrayLayer = 0;
         view.subresourceRange.layerCount = 1;
 
-        if (vkCreateImageView(m_device.GetDevice(), &view, nullptr, &image.View) != VK_SUCCESS)
+        if (vkCreateImageView(m_device.GetDevice(), &view, nullptr, &texture.View) != VK_SUCCESS)
         {
             LOG_ERROR("Create image view failed");
         }
-    }
-
-    void VulkanResourceManager::CreateDepthImage(VulkanImage& image, uint32_t width, uint32_t height, VkFormat format) const
-    {
-        image.Format = format;
-
-        VkImageCreateInfo info{};
-        info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        info.imageType = VK_IMAGE_TYPE_2D;
-        info.extent = { .width = width, .height = height, .depth = 1 };
-        info.mipLevels = 1;
-        info.arrayLayers = 1;
-        info.format = format;
-        info.tiling = VK_IMAGE_TILING_OPTIMAL;
-        info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        info.samples = VK_SAMPLE_COUNT_1_BIT;
-        info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        CreateImage(info, image);
-        CreateImageView(image, VK_IMAGE_ASPECT_DEPTH_BIT);
     }
 
     void VulkanResourceManager::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory) const
@@ -1210,5 +1166,267 @@ namespace crimson::vulkan
         vkQueueWaitIdle(m_device.GetGraphicsQueue());
 
         vkDestroyCommandPool(m_device.GetDevice(), commandPool, nullptr);
+    }
+
+    TextureHandle VulkanResourceManager::CreateTexture(const TextureInfo& info, const void* data)
+    {
+        VulkanTexture texture{};
+        VkFormat format = utils::GetVkFormat(info.Format);
+
+        VkImageUsageFlags usage = 0;
+        VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+
+        if (utils::HasUsage(info.Usage, TextureUsage::Sampled))
+            usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+
+        if (utils::HasUsage(info.Usage, TextureUsage::ColorAttachment))
+            usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        if (utils::HasUsage(info.Usage, TextureUsage::DepthStencilAttachment))
+        {
+            usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            aspect = utils::HasStencilComponent(format)
+                ? (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
+                : VK_IMAGE_ASPECT_DEPTH_BIT;
+        }
+
+        if (data != nullptr)
+            usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent = { info.Width, info.Height, 1 };
+        imageInfo.mipLevels = info.MipLevels > 0 ? info.MipLevels : 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = format;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.usage = usage;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        CreateImage(imageInfo, texture);
+
+        if (texture.Image == VK_NULL_HANDLE)
+        {
+            return TextureHandle::Invalid();
+        }
+
+        CreateImageView(texture, aspect);
+
+        if (data != nullptr)
+        {
+            UploadTextureData(texture, info, data);
+        }
+        else if (aspect == VK_IMAGE_ASPECT_COLOR_BIT && utils::HasUsage(info.Usage, TextureUsage::Sampled))
+        {
+            // Sampler-ként használt, de üresen létrehozott textúrát is olvasható layout-ba tesszük
+            TransitionImageLayout(texture.Image, aspect, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            texture.Layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        }
+
+        return m_textures.Register(texture);
+    }
+
+    void VulkanResourceManager::DestroyTexture(TextureHandle handle)
+    {
+        if (!handle)
+            return;
+
+        VulkanTexture& texture = m_textures.Get(handle);
+        VkDevice device = m_device.GetDevice();
+
+        if (texture.View != VK_NULL_HANDLE)
+        {
+            vkDestroyImageView(device, texture.View, nullptr);
+        }
+
+        // Swapchain image-et nem mi allokáltuk, nem is mi szabadítjuk fel
+        if (!texture.IsSwapchainImage)
+        {
+            if (texture.Image != VK_NULL_HANDLE)
+                vkDestroyImage(device, texture.Image, nullptr);
+
+            if (texture.Memory != VK_NULL_HANDLE)
+                vkFreeMemory(device, texture.Memory, nullptr);
+        }
+
+        m_textures.Unregister(handle);
+    }
+
+    void VulkanResourceManager::TransitionImageLayout(VkImage image, VkImageAspectFlags aspect, VkImageLayout oldLayout, VkImageLayout newLayout) const
+    {
+        VkCommandPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        poolInfo.queueFamilyIndex = m_device.GetGraphicsQueueFamilyIdx();
+
+        VkCommandPool pool = VK_NULL_HANDLE;
+        vkCreateCommandPool(m_device.GetDevice(), &poolInfo, nullptr, &pool);
+
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = pool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer cmd = VK_NULL_HANDLE;
+        vkAllocateCommandBuffers(m_device.GetDevice(), &allocInfo, &cmd);
+
+        VkCommandBufferBeginInfo begin{};
+        begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(cmd, &begin);
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = oldLayout;
+        barrier.newLayout = newLayout;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+        barrier.subresourceRange = { aspect, 0, 1, 0, 1 };
+
+        VkPipelineStageFlags srcStage, dstStage;
+
+        if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+        {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+        {
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else // pl. UNDEFINED -> SHADER_READ_ONLY (üres, csak allokált textúránál)
+        {
+            barrier.srcAccessMask = 0;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+
+        vkCmdPipelineBarrier(cmd, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        vkEndCommandBuffer(cmd);
+
+        VkSubmitInfo submit{};
+        submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submit.commandBufferCount = 1;
+        submit.pCommandBuffers = &cmd;
+
+        vkQueueSubmit(m_device.GetGraphicsQueue(), 1, &submit, VK_NULL_HANDLE);
+        vkQueueWaitIdle(m_device.GetGraphicsQueue());
+
+        vkDestroyCommandPool(m_device.GetDevice(), pool, nullptr);
+    }
+
+    void VulkanResourceManager::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) const
+    {
+        VkCommandPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+        poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        poolInfo.queueFamilyIndex = m_device.GetGraphicsQueueFamilyIdx();
+
+        VkCommandPool pool = VK_NULL_HANDLE;
+        vkCreateCommandPool(m_device.GetDevice(), &poolInfo, nullptr, &pool);
+
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandPool = pool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer cmd = VK_NULL_HANDLE;
+        vkAllocateCommandBuffers(m_device.GetDevice(), &allocInfo, &cmd);
+
+        VkCommandBufferBeginInfo begin{};
+        begin.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        vkBeginCommandBuffer(cmd, &begin);
+
+        VkBufferImageCopy region{};
+        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        region.imageSubresource.layerCount = 1;
+        region.imageExtent = { width, height, 1 };
+
+        vkCmdCopyBufferToImage(cmd, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        vkEndCommandBuffer(cmd);
+
+        VkSubmitInfo submit{};
+        submit.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submit.commandBufferCount = 1;
+        submit.pCommandBuffers = &cmd;
+
+        vkQueueSubmit(m_device.GetGraphicsQueue(), 1, &submit, VK_NULL_HANDLE);
+        vkQueueWaitIdle(m_device.GetGraphicsQueue());
+
+        vkDestroyCommandPool(m_device.GetDevice(), pool, nullptr);
+    }
+
+    void VulkanResourceManager::UploadTextureData(VulkanTexture& texture, const TextureInfo& info, const void* data) const
+    {
+        const VkDeviceSize size = static_cast<VkDeviceSize>(info.Width) * info.Height * utils::GetBytesPerPixel(info.Format);
+
+        VkBuffer staging = VK_NULL_HANDLE;
+        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+
+        CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     staging, stagingMemory);
+
+        void* mapped = nullptr;
+        vkMapMemory(m_device.GetDevice(), stagingMemory, 0, size, 0, &mapped);
+        std::memcpy(mapped, data, size);
+        vkUnmapMemory(m_device.GetDevice(), stagingMemory);
+
+        TransitionImageLayout(texture.Image, texture.Aspect, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        CopyBufferToImage(staging, texture.Image, info.Width, info.Height);
+        TransitionImageLayout(texture.Image, texture.Aspect, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        texture.Layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        vkDestroyBuffer(m_device.GetDevice(), staging, nullptr);
+        vkFreeMemory(m_device.GetDevice(), stagingMemory, nullptr);
+    }
+
+    TextureHandle VulkanResourceManager::WrapSwapchainImage(VkImage image, VkFormat format, uint32_t width, uint32_t height)
+    {
+        VulkanTexture texture{};
+        texture.Image = image;
+        texture.Format = format;
+        texture.Width = width;
+        texture.Height = height;
+        texture.Layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        texture.IsSwapchainImage = true;
+
+        CreateImageView(texture, VK_IMAGE_ASPECT_COLOR_BIT);
+
+        return m_textures.Register(texture);
+    }
+
+    RenderTargetHandle VulkanResourceManager::CreateSwapchainRenderTarget(uint32_t width, uint32_t height, VkFormat colorFormat, VkImage swapchainImage)
+    {
+        VulkanRenderTarget target{};
+        target.Width = width;
+        target.Height = height;
+        target.IsSwapchain = true;
+
+        target.ColorAttachments.push_back(WrapSwapchainImage(swapchainImage, colorFormat, width, height));
+
+        const TextureInfo depthInfo {
+            .Width = width, .Height = height,
+            .Format = TextureFormat::Depth32F,
+            .Usage = TextureUsage::DepthStencilAttachment,
+            .MipLevels = 1,
+        };
+        target.DepthAttachment = CreateTexture(depthInfo, nullptr);
+
+        return m_renderTargets.Register(std::move(target));
     }
 }

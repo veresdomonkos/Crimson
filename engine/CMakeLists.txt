@@ -41,6 +41,8 @@ set(ENGINE_IMPLEMENTATION
         src/platform/vulkan/vulkan_resources.hpp
         src/platform/opengl/utils.hpp
         src/platform/opengl/vertex_array_cache.hpp
+        include/crimson/renderer/texture.hpp
+        src/platform/vulkan/utils.hpp
 )
 
 add_library(Engine STATIC
