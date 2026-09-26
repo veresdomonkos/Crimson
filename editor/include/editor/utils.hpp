@@ -13,7 +13,16 @@ namespace crimson::editor::utils
     {
         if (source.empty()) return {};
 
-        std::string command = "glslc -fshader-stage=" + stage + " -o - -";
+        std::string command = "glslc -fshader-stage=" + stage;
+
+        //command += RendererAPI::GetType() == RendererAPIType::OpenGL ? " --target-env=opengl" : " --target-env=vulkan1.3";
+
+        if (RendererAPI::GetType() == RendererAPIType::OpenGL)
+        {
+            command += " -DCRIMSON_FLIP_SHADOW_Y=0";
+        }
+
+        command += " -o - -";
 
         std::vector<char> spirvRawBytes;
         std::string compilerErrors;
@@ -36,7 +45,8 @@ namespace crimson::editor::utils
         int exitCode = process.get_exit_status();
 
         if (exitCode != 0) {
-            std::cerr << "[Crimson Shader Compiler] COMPILE ERROR (" << stage << " shader):\n";
+            std::cerr << "[Crimson Shader Compiler] COMPILE ERROR (" << stage << " shader, "
+                       << (RendererAPI::GetType() == RendererAPIType::OpenGL ? "OpenGL" : "Vulkan") << "):\n";
             std::cerr << compilerErrors << "\n";
             return {};
         }

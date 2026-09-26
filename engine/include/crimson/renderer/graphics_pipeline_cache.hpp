@@ -9,8 +9,12 @@ namespace crimson
     {
         BufferLayout Layout;
         ShaderHandle Shader;
+        RenderTargetHandle Target;
 
-        bool operator==(const GraphicsPipelineInfo &) const = default;
+        bool operator==(const GraphicsPipelineInfo& other) const
+        {
+            return Layout == other.Layout && Shader == other.Shader && Target == other.Target;
+        }
     };
 
     struct GraphicsPipelineInfoHash
@@ -30,6 +34,7 @@ namespace crimson
             }
 
             HashCombine(hash, key.Shader.GetRaw());
+            HashCombine(hash, key.Target.GetRaw());
 
             return hash;
         }

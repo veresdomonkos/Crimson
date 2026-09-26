@@ -54,9 +54,10 @@ namespace crimson::vulkan
 
         MaterialHandle CreateMaterial(ShaderHandle shaderHandle) override;
         void DestroyMaterial(MaterialHandle handle) override;
+        void SetMaterialTexture(MaterialHandle handle, std::string_view name, TextureHandle texture);
 
         [[nodiscard]] VkDescriptorPool GetDescriptorPool() const { return m_descriptorPool; }
-        [[nodiscard]] VkDescriptorSetLayout GetCameraSetLayout() const { return m_cameraSetLayout; }
+        [[nodiscard]] VkDescriptorSetLayout GetCameraSetLayout() const { return m_globalSetLayout; }
 
         void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory) const;
 
@@ -70,13 +71,16 @@ namespace crimson::vulkan
         std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const override;
 
         RenderTargetHandle CreateSwapchainRenderTarget(uint32_t width, uint32_t height, VkFormat colorFormat, VkImage swapchainImage);
+
+        VkDescriptorSetLayout GetGlobalSetLayout() const { return m_globalSetLayout; }
+        VkSampler GetDefaultSampler() const { return m_defaultSampler; }
     protected:
         VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override;
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
     private:
         void CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const;
         VkShaderModule CreateShaderModule(std::span<const uint32_t> code);
-        void ReflectShader(VulkanShader& shader, std::span<const uint32_t> fragmentBinary);
+        void ReflectShader(VulkanShader& shader, std::span<const uint32_t> fragmentBinary, VkShaderStageFlagBits stage);
 
         void CreateImage(const VkImageCreateInfo& info, VulkanTexture& texture) const;
         void CreateImageView(VulkanTexture& texture, VkImageAspectFlags aspect) const;
@@ -90,7 +94,8 @@ namespace crimson::vulkan
         bool CreateSwapchainResources(VulkanSurface& surface);
     private:
         VulkanDevice& m_device;
-        VkDescriptorSetLayout m_cameraSetLayout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_globalSetLayout = VK_NULL_HANDLE;
         VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
+        VkSampler m_defaultSampler;
     };
 }

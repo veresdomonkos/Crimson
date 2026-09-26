@@ -39,6 +39,7 @@ namespace crimson
             );
             SetMaterialPropertyByNameImpl(handle, name, bytes);
         }
+        virtual void SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture) = 0;
 
         virtual TextureHandle CreateTexture(const TextureInfo& info, const void* data) = 0;
         virtual void DestroyTexture(TextureHandle handle) = 0;

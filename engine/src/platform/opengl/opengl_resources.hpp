@@ -66,9 +66,12 @@ namespace crimson::opengl
 
     struct OpenGLShader
     {
-        GLuint GLHandle{};
-        size_t UBOSize;
+        GLuint GLHandle = 0;
+        std::size_t UBOSize = 0;
+        uint32_t MaterialUboBinding = 0;
+
         std::unordered_map<std::string, ShaderPropertyInfo> Properties{};
+        std::unordered_map<std::string, ShaderTextureBinding> TextureBindings{};
     };
 
     struct OpenGLMaterial
@@ -78,8 +81,7 @@ namespace crimson::opengl
         std::unique_ptr<std::byte[]> UniformData = nullptr;
         std::size_t UniformDataSize = 0;
         GLuint GLBufferHandle = 0;
-
-        //std::vector<TextureHandle> Textures;
+        std::unordered_map<uint32_t, GLuint> BoundTextures;
         bool IsDirty = true;
 
         template<MaterialProperty T>

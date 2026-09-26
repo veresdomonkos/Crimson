@@ -14,9 +14,7 @@ namespace crimson::opengl
         const RenderSurfaceHandle surfaceHandle = m_resourceManager.CreateRenderSurface(primaryWindow);
 
         static bool s_gladInitialized = false;
-
-        if (s_gladInitialized)
-            return surfaceHandle;
+        if (s_gladInitialized) return surfaceHandle;
 
         if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
         {
@@ -24,31 +22,47 @@ namespace crimson::opengl
             return surfaceHandle;
         }
 
-        LOG_WARN("[Renderer] GLAD Initialized successfully!");
-        LOG_INFO("[Renderer] OpenGL Version: {}", reinterpret_cast<const char*>(glGetString(GL_VERSION)));
-        LOG_INFO("[Renderer] GPU Vendor:     {}", reinterpret_cast<const char*>(glGetString(GL_VENDOR)));
-        LOG_INFO("[Renderer] Renderer:       {}", reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
-
         s_gladInitialized = true;
 
-        // Uniform Buffers
-
         glCreateBuffers(1, &m_cameraUBO);
-        glNamedBufferData(m_cameraUBO, sizeof(CameraData), nullptr, GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_cameraUBO);
+        glNamedBufferData(m_cameraUBO, sizeof(CameraBlock), nullptr, GL_DYNAMIC_DRAW);
+        glBindBufferBase(GL_UNIFORM_BUFFER, kCameraBlockBinding, m_cameraUBO);
+
+        glCreateBuffers(1, &m_lightingUBO);
+        glNamedBufferData(m_lightingUBO, sizeof(LightingBlock), nullptr, GL_DYNAMIC_DRAW);
+        glBindBufferBase(GL_UNIFORM_BUFFER, kLightingBlockBinding, m_lightingUBO);
 
         return surfaceHandle;
     }
 
     void OpenGLRenderer::Shutdown()
     {
-
+        if (m_cameraUBO != 0) { glDeleteBuffers(1, &m_cameraUBO); m_cameraUBO = 0; }
+        if (m_lightingUBO != 0) { glDeleteBuffers(1, &m_lightingUBO); m_lightingUBO = 0; }
     }
 
-    FrameContext OpenGLRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle)
+    void OpenGLRenderer::SetShadowMap(TextureHandle shadowMap)
+    {
+        auto& glResMgr = static_cast<OpenGLResourceManager&>(m_resourceManager);
+        const OpenGLTexture& tex = glResMgr.GetTexture(shadowMap);
+        glBindTextureUnit(kShadowMapBinding, tex.GLHandle);
+    }
+
+    FrameContext OpenGLRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle, const FrameLightingData& lighting)
     {
         auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(surfaceHandle).WindowHandle);
         glfwMakeContextCurrent(window);
+
+        LightingBlock block{};
+        block.AmbientColor = glm::vec4(lighting.AmbientColor, 0.0f);
+        block.ShadowViewProj = lighting.ShadowViewProj;
+        block.ShadowLightIndex = lighting.ShadowLightIndex;
+        block.LightCount = std::min<uint32_t>(static_cast<uint32_t>(lighting.Lights.size()), kMaxLights);
+
+        for (uint32_t i = 0; i < block.LightCount; ++i)
+            block.Lights[i] = lighting.Lights[i].ToGPULight();
+
+        glNamedBufferSubData(m_lightingUBO, 0, sizeof(LightingBlock), &block);
 
         m_frames[0].Reset();
         m_frames[0].Init(surfaceHandle, m_resourceManager.GetCurrentBackBuffer(surfaceHandle), true);
@@ -65,9 +79,7 @@ namespace crimson::opengl
         {
             ExecuteBeginRenderPass(renderPass.Info());
             for (const auto& draw : renderPass.GetDraws())
-            {
                 ExecuteDraw(draw);
-            }
         }
 
         glfwSwapBuffers(window);
@@ -75,58 +87,48 @@ namespace crimson::opengl
 
     void OpenGLRenderer::ExecuteBeginRenderPass(const RenderPassInfo& info)
     {
-        glNamedBufferSubData(m_cameraUBO, 0, sizeof(CameraData), &info.Camera);
-        glBindBufferBase(GL_UNIFORM_BUFFER, 0, m_cameraUBO);
+        CameraBlock block{};
+        block.ViewProj = info.ViewProj;
+        block.Position = glm::vec4(info.CameraPosition, 0.0f);
+        glNamedBufferSubData(m_cameraUBO, 0, sizeof(CameraBlock), &block);
 
         const auto& target = m_resourceManager.GetRenderTarget(info.Target);
-
         glBindFramebuffer(GL_FRAMEBUFFER, target.FrameBufferHandle);
         glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
 
         GLbitfield clearMask = 0;
-
         if (HasClearFlag(info.ClearFlags, ClearFlags::Color))
         {
             glClearColor(info.ClearColor.r, info.ClearColor.g, info.ClearColor.b, info.ClearColor.a);
             clearMask |= GL_COLOR_BUFFER_BIT;
         }
-
         if (HasClearFlag(info.ClearFlags, ClearFlags::Depth))
         {
             glClearDepth(info.ClearDepth);
             clearMask |= GL_DEPTH_BUFFER_BIT;
         }
-
         if (HasClearFlag(info.ClearFlags, ClearFlags::Stencil))
         {
             glClearStencil(static_cast<GLint>(info.ClearStencil));
             clearMask |= GL_STENCIL_BUFFER_BIT;
         }
-
-        if (clearMask != 0)
-            glClear(clearMask);
+        if (clearMask != 0) glClear(clearMask);
     }
 
-    void OpenGLRenderer::ExecuteDraw(const DrawInfo &info)
+    void OpenGLRenderer::ExecuteDraw(const DrawInfo& info)
     {
         OpenGLVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(info.VertexBuffer);
         OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(info.IndexBuffer);
         OpenGLMaterial& material = m_resourceManager.GetMaterial(info.Material);
         OpenGLShader& shader = m_resourceManager.GetShader(material.Shader);
 
-        auto& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout =  vertexBuffer.Layout});
+        auto& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout = vertexBuffer.Layout});
 
         VertexArrayHandle vertexArrayHandle;
-
-        VertexArrayInfo vertexArrayInfo {
-            .VertexBuffer = info.VertexBuffer,
-            .IndexBuffer = info.IndexBuffer
-        };
+        VertexArrayInfo vertexArrayInfo{ .VertexBuffer = info.VertexBuffer, .IndexBuffer = info.IndexBuffer };
 
         if (auto it = pipeline.VAOCache.find(vertexArrayInfo); it != pipeline.VAOCache.end())
-        {
             vertexArrayHandle = it->second;
-        }
         else
         {
             vertexArrayHandle = m_resourceManager.CreateVertexArray(vertexArrayInfo);
@@ -135,17 +137,27 @@ namespace crimson::opengl
 
         VertexArray& vertexArray = m_resourceManager.GetVertexArray(vertexArrayHandle);
 
-        if (material.IsDirty)
+        if (material.GLBufferHandle != 0 && shader.UBOSize > 0)
         {
-            glNamedBufferSubData(material.GLBufferHandle, 0, static_cast<GLsizeiptr>(material.UniformDataSize), material.UniformData.get());
-            material.IsDirty = false;
+            if (material.IsDirty)
+            {
+                glNamedBufferSubData(material.GLBufferHandle, 0, static_cast<GLsizeiptr>(material.UniformDataSize), material.UniformData.get());
+                material.IsDirty = false;
+            }
+            glBindBufferBase(GL_UNIFORM_BUFFER, shader.MaterialUboBinding, material.GLBufferHandle);
         }
 
-        glBindBufferBase(GL_UNIFORM_BUFFER, 1, material.GLBufferHandle);
+        glEnable(GL_DEPTH_TEST);
+        glDepthFunc(GL_LESS);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_BACK);
+
+        for (const auto& [bindingUnit, glTexture] : material.BoundTextures)
+            glBindTextureUnit(bindingUnit, glTexture);
 
         glUseProgram(shader.GLHandle);
         glBindVertexArray(vertexArray.GLHandle);
 
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexBuffer.Size / Index::Size(indexBuffer.Type)),  utils::GetGLIndexType(indexBuffer.Type), nullptr);
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexBuffer.Size / Index::Size(indexBuffer.Type)), utils::GetGLIndexType(indexBuffer.Type), nullptr);
     }
 }

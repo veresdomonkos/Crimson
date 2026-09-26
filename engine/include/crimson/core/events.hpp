@@ -9,7 +9,8 @@ namespace crimson
 	{
 		None,
 		WindowClose,
-	    KeyPress
+	    KeyPress,
+	    WindowResize
 	};
 
 	class Event
@@ -70,5 +71,20 @@ virtual EventType GetType() const override { return GetStaticType(); }
     private:
         KeyCode m_keyCode;
         bool m_isRepeat = false;
+    };
+
+    class WindowResizeEvent : public Event
+    {
+    public:
+        REGISTER_EVENT(WindowResize)
+
+        explicit WindowResizeEvent(uint32_t width, uint32_t height)
+            : m_width(width), m_height(height) {}
+
+        [[nodiscard]] uint32_t GetWidth() const { return m_width; }
+        [[nodiscard]] uint32_t GetHeight() const { return m_height; }
+    private:
+        uint32_t m_width;
+        uint32_t m_height;
     };
 }

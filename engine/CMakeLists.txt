@@ -20,6 +20,9 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/graphics_pipeline_cache.hpp
         include/crimson/renderer/camera_data.hpp
         include/crimson/renderer/shader_property_info.hpp
+        include/crimson/renderer/binding_conventions.hpp
+        include/crimson/renderer/light.hpp
+        include/crimson/renderer/frame_data.hpp
 )
 
 set(ENGINE_IMPLEMENTATION

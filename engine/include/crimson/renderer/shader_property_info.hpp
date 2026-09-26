@@ -1,5 +1,5 @@
 #pragma once
-#include <cstddef>
+#include <cstdint>
 #include <type_traits>
 
 namespace crimson
@@ -8,6 +8,11 @@ namespace crimson
     {
         std::size_t Offset;
         std::size_t Size;
+    };
+
+    struct ShaderTextureBinding
+    {
+        uint32_t Binding = 0;
     };
 
     template<typename T>

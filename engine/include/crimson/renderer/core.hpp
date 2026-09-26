@@ -45,6 +45,8 @@ namespace crimson
         glm::vec4 ClearColor{0, 0, 0, 1};
         float ClearDepth = 1.0f;
         uint32_t ClearStencil = 0;
-        CameraData Camera{};
+
+        glm::mat4 ViewProj{1.0f};
+        glm::vec3 CameraPosition{0.0f};
     };
 }

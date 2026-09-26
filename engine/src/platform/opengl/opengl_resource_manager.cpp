@@ -1,7 +1,9 @@
 #include "opengl_resource_manager.hpp"
 
+#include "spirv_reflect.h"
 #include "utils.hpp"
 #include "crimson/core/log.hpp"
+#include "crimson/renderer/binding_conventions.hpp"
 
 namespace crimson::opengl
 {
@@ -102,10 +104,7 @@ namespace crimson::opengl
     ShaderHandle OpenGLResourceManager::CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary)
     {
         GLuint vertex = CompileSPIRVShader(GL_VERTEX_SHADER, vertexBinary, "Vertex");
-        if (vertex == 0)
-        {
-            return ShaderHandle::Invalid();
-        }
+        if (vertex == 0) return ShaderHandle::Invalid();
 
         GLuint fragment = CompileSPIRVShader(GL_FRAGMENT_SHADER, fragmentBinary, "Fragment");
         if (fragment == 0)
@@ -137,7 +136,10 @@ namespace crimson::opengl
         glDeleteShader(fragment);
 
         OpenGLShader shader {.GLHandle = program};
-        ReflectShader(shader);
+
+        ReflectShader(shader, vertexBinary);
+        ReflectShader(shader, fragmentBinary);
+
         return m_shaders.Register(shader);
     }
 
@@ -162,11 +164,10 @@ namespace crimson::opengl
         mat.Shader = shaderHandle;
         mat.UniformDataSize = shader.UBOSize;
 
-        glCreateBuffers(1, &mat.GLBufferHandle);
-        glNamedBufferData(mat.GLBufferHandle, static_cast<GLsizeiptr>(shader.UBOSize), nullptr, GL_DYNAMIC_DRAW);
-
         if (shader.UBOSize > 0)
         {
+            glCreateBuffers(1, &mat.GLBufferHandle);
+            glNamedBufferData(mat.GLBufferHandle, static_cast<GLsizeiptr>(shader.UBOSize), nullptr, GL_DYNAMIC_DRAW);
             mat.UniformData = std::make_unique<std::byte[]>(shader.UBOSize);
         }
 
@@ -189,6 +190,32 @@ namespace crimson::opengl
         }
 
         m_materials.Unregister(handle);
+    }
+
+    void OpenGLResourceManager::SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture)
+    {
+        OpenGLMaterial& mat = m_materials.Get(material);
+        if (mat.Shader == ShaderHandle::Invalid())
+        {
+            LOG_WARN("Invalid MaterialHandle in SetMaterialTexture!");
+            return;
+        }
+
+        const OpenGLShader& shader = m_shaders.Get(mat.Shader);
+        auto it = shader.TextureBindings.find(std::string(name));
+        if (it == shader.TextureBindings.end())
+        {
+            LOG_WARN("Texture property '{}' not found in Shader!", name);
+            return;
+        }
+
+        if (!texture)
+        {
+            LOG_WARN("Invalid TextureHandle passed for '{}'!", name);
+            return;
+        }
+
+        mat.BoundTextures[it->second.Binding] = m_textures.Get(texture).GLHandle;
     }
 
     OpenGLGraphicsPipeline OpenGLResourceManager::CreateGraphicsPipeline(const GraphicsPipelineInfo &info)
@@ -232,61 +259,65 @@ namespace crimson::opengl
         mat.IsDirty = true;
     }
 
-    void OpenGLResourceManager::ReflectShader(Shader &shader)
+    void OpenGLResourceManager::ReflectShader(Shader& shader, std::span<const uint32_t> spirvCode)
     {
-        GLuint blockIndex = glGetUniformBlockIndex(shader.GLHandle, "MaterialBlock");
-        if (blockIndex != GL_INVALID_INDEX)
+        SpvReflectShaderModule reflModule;
+        if (spvReflectCreateShaderModule(spirvCode.size() * sizeof(uint32_t), spirvCode.data(), &reflModule) != SPV_REFLECT_RESULT_SUCCESS)
         {
-            // 1. A MaterialBlock teljes méretének lekérése bájtban
-            GLint blockSize = 0;
-            glGetActiveUniformBlockiv(shader.GLHandle, blockIndex, GL_UNIFORM_BLOCK_DATA_SIZE, &blockSize);
-            shader.UBOSize = static_cast<std::size_t>(blockSize);
+            LOG_ERROR("Failed to create SPIRV-Reflect module!");
+            return;
+        }
 
-            // 2. A blokkban lévő aktív uniformok számának lekérése
-            GLint numUniforms = 0;
-            glGetActiveUniformBlockiv(shader.GLHandle, blockIndex, GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS, &numUniforms);
+        uint32_t count = 0;
+        spvReflectEnumerateDescriptorSets(&reflModule, &count, nullptr);
+        std::vector<SpvReflectDescriptorSet*> sets(count);
+        spvReflectEnumerateDescriptorSets(&reflModule, &count, sets.data());
 
-            if (numUniforms > 0)
+        for (auto* set : sets)
+        {
+            if (set->set != 1) continue;
+
+            for (uint32_t i = 0; i < set->binding_count; ++i)
             {
-                // 3. A blokkhoz tartozó uniformok indexeinek lekérése
-                std::vector<GLint> uniformIndices(numUniforms);
-                glGetActiveUniformBlockiv(shader.GLHandle, blockIndex, GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES, uniformIndices.data());
+                const SpvReflectDescriptorBinding* binding = set->bindings[i];
 
-                // 4. Az egyes uniformok offsetjeinek és típusainak lekérése
-                std::vector<GLint> uniformOffsets(numUniforms);
-                std::vector<GLint> uniformTypes(numUniforms);
-                std::vector<GLint> uniformSizes(numUniforms); // tömbök elemszáma
-
-                glGetActiveUniformsiv(shader.GLHandle, numUniforms, reinterpret_cast<const GLuint*>(uniformIndices.data()), GL_UNIFORM_OFFSET, uniformOffsets.data());
-                glGetActiveUniformsiv(shader.GLHandle, numUniforms, reinterpret_cast<const GLuint*>(uniformIndices.data()), GL_UNIFORM_TYPE, uniformTypes.data());
-                glGetActiveUniformsiv(shader.GLHandle, numUniforms, reinterpret_cast<const GLuint*>(uniformIndices.data()), GL_UNIFORM_SIZE, uniformSizes.data());
-
-                // 5. Változónevek és metaadatok kinyerése
-                for (int i = 0; i < numUniforms; ++i)
+                if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
                 {
-                    char nameBuffer[256];
-                    GLsizei length = 0;
-                    glGetActiveUniformName(shader.GLHandle, uniformIndices[i], sizeof(nameBuffer), &length, nameBuffer);
-
-                    std::string name(nameBuffer);
-
-                    // Ha az OpenGL "MaterialBlock.u_Color" néven adná vissza, levágjuk a blokk nevét:
-                    std::size_t dotPos = name.find_last_of('.');
-                    if (dotPos != std::string::npos)
+                    if (binding->binding < kMaterialBindingStart)
                     {
-                        name = name.substr(dotPos + 1);
+                        LOG_WARN("MaterialBlock binding ({}) collides with globals (>= {} needed)!",
+                                  binding->binding, kMaterialBindingStart);
                     }
 
-                    // Típus alapján méret becslése/meghatározása (bájtban)
-                    std::size_t elementSize = utils::GetGLTypeSize(uniformTypes[i]);
+                    if (shader.UBOSize == 0)
+                    {
+                        shader.UBOSize = binding->block.size;
+                        shader.MaterialUboBinding = binding->binding;
+                    }
 
-                    shader.Properties[name] = ShaderPropertyInfo{
-                        .Offset = static_cast<std::size_t>(uniformOffsets[i]),
-                        .Size   = elementSize * uniformSizes[i]
-                    };
+                    for (uint32_t m = 0; m < binding->block.member_count; ++m)
+                    {
+                        const SpvReflectBlockVariable& member = binding->block.members[m];
+                        shader.Properties[member.name] = ShaderPropertyInfo{
+                            .Offset = member.offset,
+                            .Size   = member.size
+                        };
+                    }
+                }
+                else if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                {
+                    if (binding->binding < kMaterialBindingStart)
+                    {
+                        LOG_WARN("Material samplers '{}' binding ({}) collides with globals (>= {} needed)!",
+                                  binding->name, binding->binding, kMaterialBindingStart);
+                    }
+
+                    shader.TextureBindings[binding->name] = ShaderTextureBinding{ binding->binding };
                 }
             }
         }
+
+        spvReflectDestroyShaderModule(&reflModule);
     }
 
     GLuint OpenGLResourceManager::CompileShader(GLenum type, std::string_view source)

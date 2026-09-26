@@ -80,8 +80,10 @@ namespace crimson::vulkan
 
         VkDescriptorSetLayout MaterialSetLayout = VK_NULL_HANDLE;
         size_t MaterialUniformSize = 0;
+        uint32_t MaterialUboBinding = 0;
 
         std::unordered_map<std::string, ShaderPropertyInfo> Properties{};
+        std::unordered_map<std::string, ShaderTextureBinding> TextureBindings{};
     };
 
     struct VulkanGraphicsPipeline

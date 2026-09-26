@@ -81,6 +81,12 @@ namespace crimson::glfw
                 }
             }
         });
+
+	    glfwSetWindowSizeCallback(m_handle, [](GLFWwindow* window, int width, int height) {
+	        auto* windowsWindow = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
+	        WindowResizeEvent event(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+	        windowsWindow->m_data.EventCallbackFn(event);
+	    });
 	}
 
     GLFWWindow::~GLFWWindow()

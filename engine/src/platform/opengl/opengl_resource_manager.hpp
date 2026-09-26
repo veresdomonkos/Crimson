@@ -27,6 +27,7 @@ namespace crimson::opengl
 
         MaterialHandle CreateMaterial(ShaderHandle shaderHandle) override;
         void DestroyMaterial(MaterialHandle handle) override;
+        void SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture) override;
 
         TextureHandle CreateTexture(const TextureInfo& info, const void* data) override;
         void DestroyTexture(TextureHandle handle) override;
@@ -40,7 +41,7 @@ namespace crimson::opengl
         OpenGLGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo &info) override;
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
     private:
-        static void ReflectShader(Shader& shader);
+        static void ReflectShader(Shader &shader, std::span<const uint32_t> spirvCode);
         static GLuint CompileShader(GLenum type, std::string_view source);
         static GLuint CompileSPIRVShader(GLenum type, std::span<const uint32_t> binary, std::string_view stageName);
     private:

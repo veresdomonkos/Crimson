@@ -180,6 +180,8 @@ namespace crimson::vulkan
         queueInfo.queueCount = 1;
         queueInfo.pQueuePriorities = &priority;
 
+        VkPhysicalDeviceFeatures deviceFeatures{};
+        deviceFeatures.depthClamp = VK_TRUE;
 
         // Vulkan 1.3 features
         VkPhysicalDeviceVulkan13Features vulkan13{};
@@ -199,6 +201,7 @@ namespace crimson::vulkan
         deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
 
         deviceInfo.pNext = &vulkan13;
+        deviceInfo.pEnabledFeatures = &deviceFeatures;
 
         deviceInfo.queueCreateInfoCount = 1;
         deviceInfo.pQueueCreateInfos = &queueInfo;
