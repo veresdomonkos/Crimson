@@ -46,6 +46,11 @@ set(ENGINE_IMPLEMENTATION
         src/platform/opengl/vertex_array_cache.hpp
         include/crimson/renderer/texture.hpp
         src/platform/vulkan/utils.hpp
+        src/ui/imgui_backend.cpp
+        src/platform/opengl/opengl_imgui_backend.hpp
+        src/platform/opengl/opengl_imgui_backend.cpp
+        src/platform/vulkan/vulkan_imgui_backend.hpp
+        src/platform/vulkan/vulkan_imgui_backend.cpp
 )
 
 add_library(Engine STATIC

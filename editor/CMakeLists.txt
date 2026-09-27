@@ -4,6 +4,7 @@ add_executable(Editor
         src/main.cpp
         src/editor_application.cpp
         include/editor/utils.hpp
+        include/editor/editor_ui.hpp
 )
 
 target_include_directories(Editor PUBLIC include)

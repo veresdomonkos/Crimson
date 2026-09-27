@@ -27,6 +27,14 @@ namespace crimson
         Material& GetMaterial(MaterialHandle handle) { return  m_materials.Get(handle); }
         Texture& GetTexture(TextureHandle handle) { return m_textures.Get(handle); }
 
+        const RenderSurface& GetRenderSurface(RenderSurfaceHandle handle) const { return m_renderSurfaces.Get(handle); }
+        const RenderTarget& GetRenderTarget(RenderTargetHandle handle) const { return m_renderTargets.Get(handle); }
+        const VertexBuffer& GetVertexBuffer(VertexBufferHandle handle) const { return m_vertexBuffers.Get(handle); }
+        const IndexBuffer& GetIndexBuffer(IndexBufferHandle handle) const { return m_indexBuffers.Get(handle); }
+        const Shader& GetShader(ShaderHandle handle) const { return m_shaders.Get(handle); }
+        const Material& GetMaterial(MaterialHandle handle) const { return  m_materials.Get(handle); }
+        const Texture& GetTexture(TextureHandle handle) const { return m_textures.Get(handle); }
+
         GraphicsPipeline& GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info)
         {
             auto it = m_graphicsPipelines.find(info);

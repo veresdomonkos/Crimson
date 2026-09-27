@@ -2,10 +2,13 @@
 
 #include "crimson/renderer/render_commands.hpp"
 
-#include <vector>
+#include <array>
 #include <cassert>
 #include <iostream>
 #include <span>
+#include <variant>
+
+#include "native_handles.hpp"
 
 namespace crimson
 {
@@ -22,16 +25,10 @@ namespace crimson
     {
     public:
         RenderPass() = default;
+        explicit RenderPass(const RenderPassInfo& info) : m_info(info) {}
 
-        const RenderPassInfo& Info() const
-        {
-            return m_info;
-        }
-
-        [[nodiscard]] std::span<const DrawInfo> GetDraws() const
-        {
-            return m_drawInfos;
-        }
+        [[nodiscard]] const RenderPassInfo& Info() const { return m_info; }
+        [[nodiscard]] std::span<const DrawInfo> GetDraws() const { return m_drawInfos;}
 
         void Draw(const DrawInfo& drawInfo)
         {
@@ -40,25 +37,42 @@ namespace crimson
 
         RenderPass(const RenderPass&) = delete;
         RenderPass& operator=(const RenderPass&) = delete;
-    private:
-        void Reset()
-        {
-            m_drawInfos.clear();
-            m_info = {};
-        }
-    private:
-        friend class Frame;
-        friend class FrameContext;
 
+        RenderPass(RenderPass&&) = default;
+        RenderPass& operator=(RenderPass&&) = default;
+
+    private:
         RenderPassInfo m_info;
         std::vector<DrawInfo> m_drawInfos;
     };
 
+    class RawPass
+    {
+    public:
+        RawPass() = default;
+        RawPass(RenderTargetHandle target, RawPassCallback callback)
+            : m_target(target), m_callback(std::move(callback)) {}
+
+        [[nodiscard]] RenderTargetHandle Target() const { return m_target; }
+        [[nodiscard]] const RawPassCallback& Callback() const { return m_callback; }
+
+        RawPass(const RawPass&) = delete;
+        RawPass& operator=(const RawPass&) = delete;
+        RawPass(RawPass&&) = default;
+        RawPass& operator=(RawPass&&) = default;
+
+    private:
+        RenderTargetHandle m_target;
+        RawPassCallback m_callback;
+    };
+
+    using PassEntry = std::variant<RenderPass, RawPass>;
+
     struct FrameData
     {
         uint32_t FrameIndex = 0;
-        RenderPass RenderPasses[MaxRenderPasses];
-        uint32_t RenderPassCount = 0;
+        std::array<PassEntry, MaxRenderPasses> Passes;
+        uint32_t PassCount = 0;
         RenderTargetHandle DefaultTarget = RenderTargetHandle::Invalid();
         RenderSurfaceHandle Surface = RenderSurfaceHandle::Invalid();
         bool ShouldRender = false;
@@ -67,23 +81,30 @@ namespace crimson
     class FrameContext
     {
     public:
-        FrameContext(FrameData& data) : m_data(&data) {}
+        explicit FrameContext(FrameData& data) : m_data(&data) {}
 
-        RenderPass& BeginRenderPass(const RenderPassInfo& info)
+        RenderPass& BeginRenderPass(RenderPassInfo info)
         {
-            assert(m_data->RenderPassCount < MaxRenderPasses);
+            assert(m_data->PassCount < MaxRenderPasses);
 
-            auto& pass = m_data->RenderPasses[m_data->RenderPassCount++];
-            pass.m_info = info;
+            if (!info.Target)
+                info.Target = m_data->DefaultTarget;
 
-            if (!pass.m_info.Target)
-                pass.m_info.Target = m_data->DefaultTarget;
-
-            return pass;
+            const uint32_t index = m_data->PassCount++;
+            m_data->Passes[index] = RenderPass{info};
+            return std::get<RenderPass>(m_data->Passes[index]);
         }
 
-        uint32_t GetIndex() const { return m_data->FrameIndex; }
-        bool ShouldRender() const { return m_data->ShouldRender; }
+        void AddRawPass(RenderTargetHandle target, RawPassCallback callback)
+        {
+            assert(m_data->PassCount < MaxRenderPasses);
+
+            const uint32_t index = m_data->PassCount++;
+            m_data->Passes[index] = RawPass{target, std::move(callback)};
+        }
+
+        [[nodiscard]] uint32_t GetIndex() const { return m_data->FrameIndex; }
+        [[nodiscard]] bool ShouldRender() const { return m_data->ShouldRender; }
     private:
         FrameData* m_data;
     };
@@ -91,9 +112,9 @@ namespace crimson
     class Frame
     {
     public:
-        [[nodiscard]] std::span<const RenderPass> GetRenderPasses() const
+        [[nodiscard]] std::span<const PassEntry> GetPasses() const
         {
-            return std::span(m_data.RenderPasses, m_data.RenderPasses + m_data.RenderPassCount);
+            return std::span(m_data.Passes.data(), m_data.PassCount);
         }
 
         void Init(RenderSurfaceHandle surface, RenderTargetHandle defaultTarget, bool shouldRender)
@@ -105,12 +126,12 @@ namespace crimson
 
         void Reset()
         {
-            for (auto it = m_data.RenderPasses; it != m_data.RenderPasses + m_data.RenderPassCount; ++it)
+            for (uint32_t i = 0; i < m_data.PassCount; ++i)
             {
-                it->Reset();
+                m_data.Passes[i] = RenderPass{};
             }
 
-            m_data.RenderPassCount = 0;
+            m_data.PassCount = 0;
             m_data.DefaultTarget = RenderTargetHandle::Invalid();
             m_data.Surface = RenderSurfaceHandle::Invalid();
             m_data.ShouldRender = false;
@@ -121,6 +142,6 @@ namespace crimson
 
         FrameContext CreateContext() { return FrameContext(m_data); }
     private:
-       FrameData m_data;
+        FrameData m_data;
     };
 }

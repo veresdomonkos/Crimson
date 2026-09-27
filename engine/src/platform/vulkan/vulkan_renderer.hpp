@@ -27,18 +27,20 @@ namespace crimson::vulkan
         ResourceManager& GetResourceManager() override;
         FrameContext BeginFrame(RenderSurfaceHandle surfaceHandle, const FrameLightingData& lighting) override;
         void EndFrame(const FrameContext& frame) override;
-
         void SetShadowMap(TextureHandle shadowMap) override;
+        const ResourceManager& GetResourceManager() const override { return m_resourceManager; }
+
+        const VulkanDevice& GetDevice() const { return m_device; }
+        constexpr static int MAX_FRAMES_IN_FLIGHT = 2;
     private:
         void InitGlobals();
         void TransitionImage(VkCommandBuffer cmd, VulkanTexture& texture, VkImageAspectFlagBits flagBits, VkImageLayout newLayout);
         void InitializeSynchronizationAndCommands();
         void ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const RenderPassInfo& info, uint32_t passIndex);
         void ExecuteEndRenderPass(VkCommandBuffer cmdBuffer, VulkanRenderTarget& rt);
+        void ExecuteRawPass(VkCommandBuffer cmdBuffer, const RawPass& pass);
         void ExecuteDraw(VkCommandBuffer cmdBuffer, const DrawInfo& draw, RenderTargetHandle target, uint32_t passIndex);
     private:
-        constexpr static int MAX_FRAMES_IN_FLIGHT = 2;
-
         VulkanDevice m_device;
         VulkanResourceManager m_resourceManager{m_device};
 

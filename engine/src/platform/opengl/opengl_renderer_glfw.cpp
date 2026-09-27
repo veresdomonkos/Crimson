@@ -24,6 +24,9 @@ namespace crimson::opengl
 
         s_gladInitialized = true;
 
+        // Important!
+        glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+
         glCreateBuffers(1, &m_cameraUBO);
         glNamedBufferData(m_cameraUBO, sizeof(CameraBlock), nullptr, GL_DYNAMIC_DRAW);
         glBindBufferBase(GL_UNIFORM_BUFFER, kCameraBlockBinding, m_cameraUBO);
@@ -75,11 +78,23 @@ namespace crimson::opengl
         auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(frame.GetSurface()).WindowHandle);
         glfwMakeContextCurrent(window);
 
-        for (const auto& renderPass : frame.GetRenderPasses())
+        for (const auto& entry : frame.GetPasses())
         {
-            ExecuteBeginRenderPass(renderPass.Info());
-            for (const auto& draw : renderPass.GetDraws())
-                ExecuteDraw(draw);
+            if (const auto* materialPass = std::get_if<RenderPass>(&entry))
+            {
+                ExecuteBeginRenderPass(materialPass->Info());
+                for (const auto& draw : materialPass->GetDraws())
+                    ExecuteDraw(draw);
+            }
+            else if (const auto* rawPass = std::get_if<RawPass>(&entry))
+            {
+                const auto& target = m_resourceManager.GetRenderTarget(rawPass->Target());
+                glBindFramebuffer(GL_FRAMEBUFFER, target.FrameBufferHandle);
+                glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
+
+                NativeFrameHandles handles{};
+                rawPass->Callback()(handles);
+            }
         }
 
         glfwSwapBuffers(window);

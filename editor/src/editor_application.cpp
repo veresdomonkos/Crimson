@@ -9,6 +9,9 @@
 
 #include <glfw/glfw3.h>
 
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/quaternion.hpp"
+
 namespace crimson::editor
 {
 	EditorApplication::EditorApplication() : m_running(true)
@@ -17,10 +20,20 @@ namespace crimson::editor
 		m_window = Window::Create(WindowData{ "My Window", 1280, 720, BIND_FN(OnEvent) });
 	    m_renderer = Renderer::Create();
 	    m_primarySurface = m_renderer->Initialize(*m_window);
+
+	    m_imguiBackend = ImGuiBackend::Create();
+
+	    IMGUI_CHECKVERSION();
+	    ImGui::CreateContext();
+	    ImGuiIO& io = ImGui::GetIO();
+	    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	    m_imguiBackend->Init(*m_renderer, *m_window);
 	}
 
     EditorApplication::~EditorApplication()
     {
+	    m_imguiBackend->Shutdown();
         m_renderer->Shutdown();
     }
 
@@ -131,19 +144,12 @@ namespace crimson::editor
 
             layout(location = 0) out vec4 outColor;
 
-            #ifndef CRIMSON_FLIP_SHADOW_Y
-                #define CRIMSON_FLIP_SHADOW_Y 1  // Vulkan default
-            #endif
-
             float ComputeShadow(vec3 worldPos)
             {
                 vec4 lightSpacePos = u_Lighting.ShadowViewProj * vec4(worldPos, 1.0);
                 vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
 
                 projCoords.xy = projCoords.xy * 0.5 + vec2(0.5);
-                #if CRIMSON_FLIP_SHADOW_Y
-                    projCoords.y = 1.0 - projCoords.y;
-                #endif
 
                 if (projCoords.z > 1.0 || any(lessThan(projCoords.xy, vec2(0.0))) || any(greaterThan(projCoords.xy, vec2(1.0))))
                     return 1.0;
@@ -242,6 +248,18 @@ namespace crimson::editor
         RenderTargetHandle shadowTarget = m_renderer->GetResourceManager().CreateRenderTarget(shadowTargetInfo);
         TextureHandle shadowDepth = m_renderer->GetResourceManager().GetDepthAttachment(shadowTarget).value();
 
+	    RenderTargetInfo mainTargetInfo{
+	        .Width = 1920,
+            .Height = 1080,
+	        .ColorFormats = {TextureFormat::RGBA8},
+            .DepthFormat = TextureFormat::Depth32F
+        };
+
+	    RenderTargetHandle mainTarget =
+            m_renderer->GetResourceManager().CreateRenderTarget(mainTargetInfo);
+
+	    TextureHandle mainColor = m_renderer->GetResourceManager().GetColorAttachment(mainTarget, 0);
+
         m_renderer->SetShadowMap(shadowDepth);
 
         m_renderer->GetResourceManager().SetMaterialPropertyByName(floorMat, "u_Color", glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
@@ -249,9 +267,7 @@ namespace crimson::editor
 
         glm::vec3 lightDir = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f));
         glm::mat4 lightView = glm::lookAt(-lightDir * 30.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 lightProj = RendererAPI::GetType() == RendererAPIType::OpenGL
-	        ? glm::orthoRH_NO(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 60.0f)
-	        : glm::orthoRH_ZO(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 60.0f);
+        glm::mat4 lightProj = glm::orthoRH_ZO(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 60.0f);
         glm::mat4 lightViewProj = lightProj * lightView;
 
 	    FrameLightingData lighting{};
@@ -278,16 +294,22 @@ namespace crimson::editor
 	    lighting.Lights.push_back(Light{
            .Type = LightType::Point,
            .Position = glm::vec3(-2.0f, 3.0f, 0.0f),
-           .Color = glm::vec3(1.0f, 0.0f, 0.0f),
-           .Intensity = 450000000.0f,
-           .Range = 5.0f
+           .Color = glm::vec3(0.8f, 0.1f, 0.2f),
+           .Intensity = 5.0f,
+           .Range = 8.0f
        });
 
         while (m_running)
         {
+            const double currentTime = glfwGetTime();
+            const auto deltaTime = static_cast<float>(currentTime - m_lastTime);
+            m_lastTime = currentTime;
+
             m_window->PollEvents();
 
             auto frame = m_renderer->BeginFrame(m_primarySurface, lighting);
+            m_imguiBackend->NewFrame();
+            ImGui::NewFrame();
             if (frame.ShouldRender())
             {
                 RenderPassInfo shadowPassInfo{
@@ -300,7 +322,7 @@ namespace crimson::editor
                 shadowPass.Draw({pyramidVB, pyramidIB, shadowMat});
 
                 RenderPassInfo mainPassInfo{
-                    .Target = m_renderer->GetResourceManager().GetCurrentBackBuffer(m_primarySurface),
+                    .Target = mainTarget,
                     .ClearFlags = ClearFlags::Color | ClearFlags::Depth,
                     .ClearColor = glm::vec4(0.1f, 0.1f, 0.15f, 1.0f),
                     .ViewProj = m_camera.GetViewProj(),
@@ -309,9 +331,151 @@ namespace crimson::editor
                 auto& mainPass = frame.BeginRenderPass(mainPassInfo);
                 mainPass.Draw({floorVB, floorIB, floorMat});
                 mainPass.Draw({pyramidVB, pyramidIB, pyramidMat});
+
+                // TEMP FIX
+                RenderPassInfo clear {
+                    .ClearFlags =  ClearFlags::Color | ClearFlags::Depth,
+                    .ClearColor = glm::vec4(0.0f)
+                };
+                frame.BeginRenderPass(clear);
+
+                auto backBuffer = m_renderer->GetResourceManager().GetCurrentBackBuffer(m_primarySurface);
+                frame.AddRawPass(backBuffer, [this](const NativeFrameHandles& handles) {
+                    ImGui::Render();
+                    m_imguiBackend->RenderDrawData(ImGui::GetDrawData(), handles);
+                });
+
+                ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+                ImGui::SetNextWindowPos(viewport->WorkPos);
+                ImGui::SetNextWindowSize(viewport->WorkSize);
+                ImGui::SetNextWindowViewport(viewport->ID);
+
+                ImGuiWindowFlags dockFlags =
+                    ImGuiWindowFlags_NoTitleBar |
+                    ImGuiWindowFlags_NoCollapse |
+                    ImGuiWindowFlags_NoResize |
+                    ImGuiWindowFlags_NoMove |
+                    ImGuiWindowFlags_NoBringToFrontOnFocus |
+                    ImGuiWindowFlags_NoNavFocus |
+                    ImGuiWindowFlags_NoBackground;
+
+                ImGui::Begin("DockSpaceHost", nullptr, dockFlags);
+
+                ImGuiID dockspaceId = ImGui::GetID("MyDockSpace");
+
+                ImGui::DockSpace(dockspaceId, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
+
+                ImGui::End();
+
+                ImTextureID mainTextureId =
+                m_imguiBackend->GetOrCreateTextureId(
+                    m_renderer->GetResourceManager(),
+                    mainColor
+                );
+
+                utils::DrawTextureViewport(
+                    "Scene",
+                    mainTextureId,
+                    16.0f / 9.0f
+                );
+
+                ImTextureID shadowMapId =
+                m_imguiBackend->GetOrCreateTextureId(
+                    m_renderer->GetResourceManager(),
+                    shadowDepth
+                );
+
+                utils::DrawTextureViewport(
+                    "Shadow Map",
+                    shadowMapId,
+                    1.0
+                );
             }
             m_renderer->EndFrame(frame);
+
+            HandleMove(deltaTime);
         }
+    }
+
+    void EditorApplication::HandleMove(float deltaTime)
+    {
+        auto window = static_cast<GLFWwindow*>(m_window->GetNativeHandle());
+
+        constexpr float moveSpeed = 5.0f;
+        constexpr float fastMoveSpeed = 15.0f;
+        constexpr float mouseSensitivity = 0.1f;
+
+        static bool rotating = false;
+        static bool ignoreMouseDelta = false;
+
+        const bool rightMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+        ImGuiIO& io = ImGui::GetIO();
+
+        if (rightMouseDown && !rotating)
+        {
+            rotating = true;
+            ignoreMouseDelta = true;
+
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+            if (glfwRawMouseMotionSupported())
+                glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+        }
+
+        if (!rightMouseDown && rotating)
+        {
+            rotating = false;
+            ignoreMouseDelta = false;
+
+            if (glfwRawMouseMotionSupported())
+                glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
+
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+        }
+
+        if (rotating)
+        {
+            if (ignoreMouseDelta)
+            {
+                ignoreMouseDelta = false;
+            }
+            else
+            {
+                m_camera.Rotate(
+                    io.MouseDelta.x * mouseSensitivity,
+                    -io.MouseDelta.y * mouseSensitivity
+                );
+            }
+        }
+
+        const float speed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ? fastMoveSpeed : moveSpeed;
+
+        glm::vec3 forward = m_camera.GetForward();
+        forward.y = 0.0f;
+
+        if (glm::length2(forward) > 0.0001f)
+            forward = glm::normalize(forward);
+
+        const glm::vec3 right = m_camera.GetRight();
+
+        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+            m_camera.Move(forward * speed * deltaTime);
+
+        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+            m_camera.Move(-forward * speed * deltaTime);
+
+        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
+            m_camera.Move(right * speed * deltaTime);
+
+        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+            m_camera.Move(-right * speed * deltaTime);
+
+        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+            m_camera.Move(glm::vec3(0.0f, speed * deltaTime, 0.0f));
+
+        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
+            m_camera.Move(glm::vec3(0.0f, -speed * deltaTime, 0.0f));
     }
 
 	void EditorApplication::OnEvent(Event& event)
@@ -323,30 +487,9 @@ namespace crimson::editor
 			return true;
 		});
 
-	    dispatcher.Dispatch<KeyPressEvent>([this](KeyPressEvent& event) {
-	        glm::vec3 direction(0.0f);
-
-	        if (event.GetKeyCode() == GLFW_KEY_A)
-	            direction.x -= 0.1f;
-	        if (event.GetKeyCode() == GLFW_KEY_D)
-                direction.x += 0.1f;
-	        if (event.GetKeyCode() == GLFW_KEY_W)
-                direction.z -= 0.1f;
-	        if (event.GetKeyCode() == GLFW_KEY_S)
-                direction.z += 0.1f;
-	        if (event.GetKeyCode() == GLFW_KEY_Q)
-	            direction.y += 0.1f;
-	        if (event.GetKeyCode() == GLFW_KEY_E)
-	            direction.y -= 0.1f;
-
-	        m_camera.Move(direction);
-
-	        return true;
-        });
-
 	    dispatcher.Dispatch<WindowResizeEvent>([this](WindowResizeEvent& event)
 	    {
-	        m_camera.SetAspect(static_cast<float>(event.GetWidth()) / static_cast<float>(event.GetHeight()));
+	        //m_camera.SetAspect(static_cast<float>(event.GetWidth()) / static_cast<float>(event.GetHeight()));
 	        return false;
 	    });
 	}

@@ -57,4 +57,62 @@ namespace crimson::editor::utils
         return spirv;
     }
 
+    static void DrawTextureViewport(
+    const char* windowName,
+    ImTextureID texture,
+    float aspect)
+    {
+        ImGui::Begin(
+            windowName,
+            nullptr,
+            ImGuiWindowFlags_NoScrollbar |
+            ImGuiWindowFlags_NoScrollWithMouse
+        );
+
+        const ImVec2 avail = ImGui::GetContentRegionAvail();
+
+        if (avail.x > 0.0f && avail.y > 0.0f)
+        {
+            const float windowAspect = avail.x / avail.y;
+
+            float visibleU = 1.0f;
+            float visibleV = 1.0f;
+
+            if (windowAspect < aspect)
+            {
+                // Keskenyebb ablak:
+                // oldalakat cropolunk.
+                visibleU = windowAspect / aspect;
+            }
+            else if (windowAspect > aspect)
+            {
+                // Szélesebb ablak:
+                // tetejét/alját cropoljuk.
+                visibleV = aspect / windowAspect;
+            }
+
+            const float uCrop = (1.0f - visibleU) * 0.5f;
+            const float vCrop = (1.0f - visibleV) * 0.5f;
+
+            // Y-flip
+            const ImVec2 uv0(
+                uCrop,
+                1.0f - vCrop
+            );
+
+            const ImVec2 uv1(
+                1.0f - uCrop,
+                vCrop
+            );
+
+            ImGui::Image(
+                texture,
+                avail,
+                uv0,
+                uv1
+            );
+        }
+
+        ImGui::End();
+    }
 }

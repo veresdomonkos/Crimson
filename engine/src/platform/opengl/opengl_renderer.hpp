@@ -12,6 +12,7 @@ namespace crimson::opengl
         RenderSurfaceHandle Initialize(const Window& primaryWindow) override;
         void Shutdown() override;
         ResourceManager& GetResourceManager() override { return  m_resourceManager; }
+        const ResourceManager& GetResourceManager() const override { return m_resourceManager; }
         FrameContext BeginFrame(RenderSurfaceHandle surfaceHandle, const FrameLightingData& lighting) override;
         void EndFrame(const FrameContext& frameContext) override;
         void SetShadowMap(TextureHandle shadowMap) override;

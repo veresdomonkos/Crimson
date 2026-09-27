@@ -27,6 +27,21 @@ namespace crimson
         std::uint64_t m_packed = 0;
     };
 
+    template <typename Tag>
+    struct HandleHash
+    {
+        std::size_t operator()(const Handle<Tag>& handle) const noexcept
+        {
+            std::uint64_t x = handle.GetRaw();
+            x ^= x >> 30;
+            x *= 0xbf58476d1ce4e5b9ULL;
+            x ^= x >> 27;
+            x *= 0x94d049bb133111ebULL;
+            x ^= x >> 31;
+            return static_cast<std::size_t>(x);
+        }
+    };
+
     class RenderSurfaceTag {};
     class RenderTargetTag {};
     class VertexBufferTag {};

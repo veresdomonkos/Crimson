@@ -302,7 +302,7 @@ namespace crimson::vulkan
 
         vkCmdBeginRendering(cmdBuffer, &rendering);
 
-        VkViewport viewport{ 0.0f, static_cast<float>(rt.Height), static_cast<float>(rt.Width), -static_cast<float>(rt.Height), 0.0f, 1.0f };
+        VkViewport viewport{ 0.0f, 0.0f, static_cast<float>(rt.Width), static_cast<float>(rt.Height), 0.0f, 1.0f };
         VkRect2D scissor{ {0, 0}, {rt.Width, rt.Height} };
         vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
         vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
@@ -323,6 +323,50 @@ namespace crimson::vulkan
         {
             VulkanTexture& depth = m_resourceManager.GetTexture(*rt.DepthAttachment);
             TransitionImage(cmdBuffer, depth, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        }
+    }
+
+    void VulkanRenderer::ExecuteRawPass(VkCommandBuffer cmdBuffer, const RawPass& pass)
+    {
+        VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(pass.Target());
+
+        for (TextureHandle colorHandle : rt.ColorAttachments)
+        {
+            VulkanTexture& color = m_resourceManager.GetTexture(colorHandle);
+            TransitionImage(cmdBuffer, color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+        }
+
+        VkRenderingAttachmentInfo colorAttachment{};
+        colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        colorAttachment.imageView = m_resourceManager.GetTexture(rt.ColorAttachments[0]).View;
+        colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+
+        VkRenderingInfo renderingInfo{};
+        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        renderingInfo.renderArea = { {0, 0}, {rt.Width, rt.Height} };
+        renderingInfo.layerCount = 1;
+        renderingInfo.colorAttachmentCount = 1;
+        renderingInfo.pColorAttachments = &colorAttachment;
+
+        vkCmdBeginRendering(cmdBuffer, &renderingInfo);
+
+        NativeFrameHandles handles{};
+        handles.Device = m_device.GetDevice();
+        handles.CommandBuffer = cmdBuffer;
+        handles.ColorFormat = static_cast<uint32_t>(m_resourceManager.GetTexture(rt.ColorAttachments[0]).Format);
+        pass.Callback()(handles);
+
+        vkCmdEndRendering(cmdBuffer);
+
+        if (rt.IsSwapchain)
+        {
+            for (TextureHandle colorHandle : rt.ColorAttachments)
+            {
+                VulkanTexture& color = m_resourceManager.GetTexture(colorHandle);
+                TransitionImage(cmdBuffer, color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+            }
         }
     }
 
@@ -426,16 +470,23 @@ namespace crimson::vulkan
         VkCommandBuffer cmdBuffer = m_frameSyncs[frameContext.GetIndex()].CommandBuffer;
 
         uint32_t passIndex = 0;
-        for (const auto& renderPass : frame.GetRenderPasses())
+        for (const auto& entry : frame.GetPasses())
         {
-            const RenderPassInfo& passInfo = renderPass.Info();
-            VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(passInfo.Target);
+            if (const auto* materialPass = std::get_if<RenderPass>(&entry))
+            {
+                const RenderPassInfo& passInfo = materialPass->Info();
+                VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(passInfo.Target);
 
-            ExecuteBeginRenderPass(cmdBuffer, passInfo, passIndex);
-            for (const auto& draw : renderPass.GetDraws())
-                ExecuteDraw(cmdBuffer, draw, passInfo.Target, passIndex);
-            ExecuteEndRenderPass(cmdBuffer, rt);
-            ++passIndex;
+                ExecuteBeginRenderPass(cmdBuffer, passInfo, passIndex);
+                for (const auto& draw : materialPass->GetDraws())
+                    ExecuteDraw(cmdBuffer, draw, passInfo.Target, passIndex);
+                ExecuteEndRenderPass(cmdBuffer, rt);
+                ++passIndex;
+            }
+            else if (const auto* rawPass = std::get_if<RawPass>(&entry))
+            {
+                ExecuteRawPass(cmdBuffer, *rawPass);
+            }
         }
 
         if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
