@@ -23,7 +23,7 @@ namespace crimson::editor
 	class EditorApplication
 	{
 	public:
-		EditorApplication();
+		explicit EditorApplication(RendererAPIType rendererType = RendererAPIType::OpenGL);
         ~EditorApplication() = default;
 		void Run();
 	    void OnEvent(Event& event);

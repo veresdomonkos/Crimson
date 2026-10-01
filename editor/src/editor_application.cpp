@@ -14,7 +14,7 @@
 
 namespace crimson::editor
 {
-	EditorApplication::EditorApplication()
+	EditorApplication::EditorApplication(RendererAPIType rendererType)
         : m_running(true)
     {
 	    IMGUI_CHECKVERSION();
@@ -25,7 +25,6 @@ namespace crimson::editor
 	    io.Fonts->AddFontFromFileTTF("assets/fonts/Inter_18pt-Regular.ttf", 18.0f);
 	    utils::ApplyEditorStyle();
 
-	    RendererAPIType rendererType = RendererAPIType::OpenGL;
 		m_window = Window::Create(rendererType, WindowData{ "Crimson Editor", 1280, 720, BIND_FN(OnEvent) });
 	    m_graphicsBackend = GraphicsBackend::Create(rendererType, *m_window);
 	}
