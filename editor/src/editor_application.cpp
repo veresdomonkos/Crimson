@@ -290,7 +290,9 @@ namespace crimson::editor
 
             m_window->PollEvents();
 
+            const auto frameStart = std::chrono::steady_clock::now();
             auto frame = m_graphicsBackend->Renderer->BeginFrame(lighting);
+            const auto afterBeginFrame = std::chrono::steady_clock::now();
             m_graphicsBackend->Imgui->NewFrame();
 
             if (frame.ShouldRender())
@@ -327,6 +329,8 @@ namespace crimson::editor
                     m_graphicsBackend->Imgui->RenderDrawData(ImGui::GetDrawData(), handles);
                 });
 
+                const auto afterRender = std::chrono::steady_clock::now();
+
                 ImGuiViewport* viewport = ImGui::GetMainViewport();
 
                 ImGui::SetNextWindowPos(viewport->WorkPos);
@@ -343,11 +347,8 @@ namespace crimson::editor
                     ImGuiWindowFlags_NoBackground;
 
                 ImGui::Begin("DockSpaceHost", nullptr, dockFlags);
-
                 ImGuiID dockspaceId = ImGui::GetID("MyDockSpace");
-
                 ImGui::DockSpace(dockspaceId, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
-
                 ImGui::End();
 
                 ImTextureID mainTextureId =
@@ -366,8 +367,33 @@ namespace crimson::editor
                     shadowMapId,
                     1.0
                 );
+
+                ImGui::Begin("Performance");
+                ImGui::Text("FPS: %.1f", m_frameStats.FPS);
+                ImGui::Text("Frame Time: %.3f ms", m_frameStats.FrameTimeMs);
+                ImGui::Separator();
+                ImGui::Text("Render: %.3f ms", m_frameStats.RenderMs);
+                ImGui::End();
+
+                m_graphicsBackend->Renderer->EndFrame(frame);
+                const auto afterEndFrame = std::chrono::steady_clock::now();
+
+                const float frameTimeMs = std::chrono::duration<float, std::milli>(afterEndFrame - frameStart).count();
+
+                m_frameStats.FrameTimeMs = frameTimeMs;
+                m_frameStats.FpsAccumulator += 1000.0f / frameTimeMs;
+                ++m_frameStats.FrameCount;
+                m_frameStats.UpdateTimer += frameTimeMs / 1000.0f;
+                m_frameStats.RenderMs = std::chrono::duration<float, std::milli>(afterEndFrame - afterBeginFrame).count();
+
+                if (m_frameStats.UpdateTimer >= 1.0f)
+                {
+                    m_frameStats.FPS = m_frameStats.FpsAccumulator / m_frameStats.FrameCount;
+                    m_frameStats.FpsAccumulator = 0.0f;
+                    m_frameStats.FrameCount = 0;
+                    m_frameStats.UpdateTimer = 0.0f;
+                }
             }
-            m_graphicsBackend->Renderer->EndFrame(frame);
 
             HandleMove(deltaTime);
         }

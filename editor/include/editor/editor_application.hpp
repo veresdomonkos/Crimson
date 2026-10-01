@@ -9,6 +9,17 @@
 
 namespace crimson::editor
 {
+	struct FrameStats
+	{
+		float FPS = 0.0f;
+		float FrameTimeMs = 0.0f;
+		float RenderMs = 0.0f;
+
+		float FpsAccumulator = 0.0f;
+		uint32_t FrameCount = 0;
+		float UpdateTimer = 0.0f;
+	};
+
 	class EditorApplication
 	{
 	public:
@@ -26,5 +37,7 @@ namespace crimson::editor
 	    EditorUI m_ui;
 		bool m_running;
 	    double m_lastTime;
+
+		FrameStats m_frameStats;
 	};
 }

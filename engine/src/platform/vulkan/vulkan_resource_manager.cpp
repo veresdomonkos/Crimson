@@ -1126,7 +1126,7 @@ namespace crimson::vulkan
         std::vector<VkPresentModeKHR> presentModes(presentModeCount);
         vkGetPhysicalDeviceSurfacePresentModesKHR(m_device.GetPhysicalDevice(), m_device.GetSurface(), &presentModeCount, presentModes.data());
 
-        VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+        VkPresentModeKHR presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 
         for (VkPresentModeKHR mode : presentModes)
         {
@@ -1142,7 +1142,7 @@ namespace crimson::vulkan
         if (extent.width == 0 || extent.height == 0 || extent.width == UINT32_MAX)
             return false;
 
-        uint32_t imageCount = capabilities.minImageCount + 1;
+        uint32_t imageCount = std::max(capabilities.minImageCount + 1, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
 
         if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount)
             imageCount = capabilities.maxImageCount;
