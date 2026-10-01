@@ -42,4 +42,19 @@ namespace crimson::vulkan::utils
             default:                     return 4;
         }
     }
+
+    static constexpr VkImageAspectFlags GetImageAspect(TextureFormat format)
+    {
+        switch (format)
+        {
+            case TextureFormat::Depth24Stencil8:
+                return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+
+            case TextureFormat::Depth32F:
+                return VK_IMAGE_ASPECT_DEPTH_BIT;
+
+            default:
+                return VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+    }
 }

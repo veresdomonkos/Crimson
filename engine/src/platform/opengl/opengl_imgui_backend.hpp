@@ -1,15 +1,19 @@
 #pragma once
+#include "opengl_device.hpp"
 #include "crimson/ui/imgui_backend.hpp"
+#include "opengl_resource_manager.hpp"
 
 namespace crimson::opengl
 {
     class OpenGLImGuiBackend : public ImGuiBackend
     {
     public:
-        void Init(const Renderer& handles, const Window& window) override;
+        OpenGLImGuiBackend(OpenGLDevice& device, OpenGLResourceManager& resourceManager);
+        ~OpenGLImGuiBackend() override;
         void NewFrame() override;
         void RenderDrawData(ImDrawData* drawData, const NativeFrameHandles& handles) override;
-        void Shutdown() override;
-        ImTextureID GetOrCreateTextureId(ResourceManager& resourceManager, TextureHandle texture) override;
+        ImTextureID GetOrCreateTextureId(TextureHandle texture) override;
+    private:
+        OpenGLResourceManager& m_resourceManager;
     };
 }

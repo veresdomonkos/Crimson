@@ -1,32 +1,12 @@
 #include "opengl_renderer.hpp"
 #include "utils.hpp"
 #include "crimson/core/log.hpp"
-#include "glad/glad.h"
-#include "GLFW/glfw3.h"
 
 namespace crimson::opengl
 {
-    RenderSurfaceHandle OpenGLRenderer::Initialize(const Window& primaryWindow)
+    OpenGLRenderer::OpenGLRenderer(OpenGLDevice &device, OpenGLResourceManager &resourceManager)
+        :m_device(device), m_resourceManager(resourceManager)
     {
-        auto* window = static_cast<GLFWwindow*>(primaryWindow.GetNativeHandle());
-        glfwMakeContextCurrent(window);
-
-        const RenderSurfaceHandle surfaceHandle = m_resourceManager.CreateRenderSurface(primaryWindow);
-
-        static bool s_gladInitialized = false;
-        if (s_gladInitialized) return surfaceHandle;
-
-        if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
-        {
-            LOG_ERROR("[Renderer] Failed to initialize GLAD!");
-            return surfaceHandle;
-        }
-
-        s_gladInitialized = true;
-
-        // Important!
-        glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
-
         glCreateBuffers(1, &m_cameraUBO);
         glNamedBufferData(m_cameraUBO, sizeof(CameraBlock), nullptr, GL_DYNAMIC_DRAW);
         glBindBufferBase(GL_UNIFORM_BUFFER, kCameraBlockBinding, m_cameraUBO);
@@ -34,11 +14,9 @@ namespace crimson::opengl
         glCreateBuffers(1, &m_lightingUBO);
         glNamedBufferData(m_lightingUBO, sizeof(LightingBlock), nullptr, GL_DYNAMIC_DRAW);
         glBindBufferBase(GL_UNIFORM_BUFFER, kLightingBlockBinding, m_lightingUBO);
-
-        return surfaceHandle;
     }
 
-    void OpenGLRenderer::Shutdown()
+    OpenGLRenderer::~OpenGLRenderer()
     {
         if (m_cameraUBO != 0) { glDeleteBuffers(1, &m_cameraUBO); m_cameraUBO = 0; }
         if (m_lightingUBO != 0) { glDeleteBuffers(1, &m_lightingUBO); m_lightingUBO = 0; }
@@ -46,14 +24,13 @@ namespace crimson::opengl
 
     void OpenGLRenderer::SetShadowMap(TextureHandle shadowMap)
     {
-        auto& glResMgr = static_cast<OpenGLResourceManager&>(m_resourceManager);
-        const OpenGLTexture& tex = glResMgr.GetTexture(shadowMap);
+        const OpenGLTexture& tex = m_resourceManager.GetTexture(shadowMap);
         glBindTextureUnit(kShadowMapBinding, tex.GLHandle);
     }
 
-    FrameContext OpenGLRenderer::BeginFrame(RenderSurfaceHandle surfaceHandle, const FrameLightingData& lighting)
+    FrameContext OpenGLRenderer::BeginFrame(const FrameLightingData& lighting)
     {
-        auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(surfaceHandle).WindowHandle);
+        auto* window = m_device.GetPrimaryWindow();
         glfwMakeContextCurrent(window);
 
         LightingBlock block{};
@@ -68,14 +45,14 @@ namespace crimson::opengl
         glNamedBufferSubData(m_lightingUBO, 0, sizeof(LightingBlock), &block);
 
         m_frames[0].Reset();
-        m_frames[0].Init(surfaceHandle, m_resourceManager.GetCurrentBackBuffer(surfaceHandle), true);
+        m_frames[0].Init(m_resourceManager.GetBackBufferHandle(), true);
         return m_frames[0].CreateContext();
     }
 
     void OpenGLRenderer::EndFrame(const FrameContext& frameContext)
     {
         Frame& frame = m_frames[frameContext.GetIndex()];
-        auto* window = static_cast<GLFWwindow*>(m_resourceManager.GetRenderSurface(frame.GetSurface()).WindowHandle);
+        auto* window = m_device.GetPrimaryWindow();
         glfwMakeContextCurrent(window);
 
         for (const auto& entry : frame.GetPasses())

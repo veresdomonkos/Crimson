@@ -32,7 +32,7 @@ namespace crimson::opengl
     struct OpenGLRenderTarget
     {
         std::vector<TextureHandle> ColorAttachments;
-        std::optional<TextureHandle> DepthAttachment;
+        TextureHandle DepthAttachment;
         uint32_t Width  = 0;
         uint32_t Height = 0;
         GLuint FrameBufferHandle = 0;

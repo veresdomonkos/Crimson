@@ -74,7 +74,6 @@ namespace crimson
         std::array<PassEntry, MaxRenderPasses> Passes;
         uint32_t PassCount = 0;
         RenderTargetHandle DefaultTarget = RenderTargetHandle::Invalid();
-        RenderSurfaceHandle Surface = RenderSurfaceHandle::Invalid();
         bool ShouldRender = false;
     };
 
@@ -100,6 +99,10 @@ namespace crimson
             assert(m_data->PassCount < MaxRenderPasses);
 
             const uint32_t index = m_data->PassCount++;
+
+            if (!target)
+                target = m_data->DefaultTarget;
+
             m_data->Passes[index] = RawPass{target, std::move(callback)};
         }
 
@@ -117,10 +120,9 @@ namespace crimson
             return std::span(m_data.Passes.data(), m_data.PassCount);
         }
 
-        void Init(RenderSurfaceHandle surface, RenderTargetHandle defaultTarget, bool shouldRender)
+        void Init(RenderTargetHandle defaultTarget, bool shouldRender)
         {
             m_data.DefaultTarget = defaultTarget;
-            m_data.Surface = surface;
             m_data.ShouldRender = shouldRender;
         }
 
@@ -133,12 +135,10 @@ namespace crimson
 
             m_data.PassCount = 0;
             m_data.DefaultTarget = RenderTargetHandle::Invalid();
-            m_data.Surface = RenderSurfaceHandle::Invalid();
             m_data.ShouldRender = false;
         }
 
         void SetIndex(uint32_t index) { m_data.FrameIndex = index; }
-        [[nodiscard]] RenderSurfaceHandle GetSurface() const { return m_data.Surface; }
 
         FrameContext CreateContext() { return FrameContext(m_data); }
     private:

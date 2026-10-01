@@ -14,28 +14,12 @@
 
 namespace crimson::editor
 {
-	EditorApplication::EditorApplication() : m_running(true)
-	{
-		RendererAPI::Init(RendererAPIType::Vulkan);
-		m_window = Window::Create(WindowData{ "My Window", 1280, 720, BIND_FN(OnEvent) });
-	    m_renderer = Renderer::Create();
-	    m_primarySurface = m_renderer->Initialize(*m_window);
-
-	    m_imguiBackend = ImGuiBackend::Create();
-
-	    IMGUI_CHECKVERSION();
-	    ImGui::CreateContext();
-	    ImGuiIO& io = ImGui::GetIO();
-	    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-	    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-	    m_imguiBackend->Init(*m_renderer, *m_window);
-	}
-
-    EditorApplication::~EditorApplication()
+	EditorApplication::EditorApplication()
+        : m_running(true)
     {
-	    m_imguiBackend->Shutdown();
-        m_renderer->Shutdown();
-    }
+		m_window = Window::Create(RendererAPIType::Vulkan, WindowData{ "My Window", 1280, 720, BIND_FN(OnEvent) });
+	    m_graphicsBackend = GraphicsBackend::Create(RendererAPIType::Vulkan, *m_window);
+	}
 
     void EditorApplication::Run()
     {
@@ -54,10 +38,10 @@ namespace crimson::editor
         uint32_t floorIndices[] = { 0, 2, 1, 0, 3, 2 };
 
         VertexBufferInfo floorVInfo{ .Layout = { ShaderDataType::Float3, ShaderDataType::Float3 }, .Size = sizeof(floorVertices), .Usage = BufferUsage::Static };
-        VertexBufferHandle floorVB = m_renderer->GetResourceManager().CreateVertexBuffer(floorVInfo, floorVertices);
+        VertexBufferHandle floorVB = m_graphicsBackend->GPUResources->CreateVertexBuffer(floorVInfo, floorVertices);
 
         IndexBufferInfo floorIInfo{ .Size = sizeof(floorIndices), .Usage = BufferUsage::Static, .Type = IndexType::UInt32 };
-        IndexBufferHandle floorIB = m_renderer->GetResourceManager().CreateIndexBuffer(floorIInfo, floorIndices);
+        IndexBufferHandle floorIB = m_graphicsBackend->GPUResources->CreateIndexBuffer(floorIInfo, floorIndices);
 
         Vertex pyramidVertices[] = {
             {{ 0.0f,  1.5f,  0.0f}, {0.0f, 1.0f, 0.0f}},
@@ -74,10 +58,10 @@ namespace crimson::editor
         };
 
         VertexBufferInfo pyrVInfo{ .Layout = { ShaderDataType::Float3, ShaderDataType::Float3 }, .Size = sizeof(pyramidVertices), .Usage = BufferUsage::Static };
-        VertexBufferHandle pyramidVB = m_renderer->GetResourceManager().CreateVertexBuffer(pyrVInfo, pyramidVertices);
+        VertexBufferHandle pyramidVB = m_graphicsBackend->GPUResources->CreateVertexBuffer(pyrVInfo, pyramidVertices);
 
         IndexBufferInfo pyrIInfo{ .Size = sizeof(pyramidIndices), .Usage = BufferUsage::Static, .Type = IndexType::UInt32 };
-        IndexBufferHandle pyramidIB = m_renderer->GetResourceManager().CreateIndexBuffer(pyrIInfo, pyramidIndices);
+        IndexBufferHandle pyramidIB = m_graphicsBackend->GPUResources->CreateIndexBuffer(pyrIInfo, pyramidIndices);
 
         const char* mainVert = R"(
             // mainVert
@@ -230,23 +214,23 @@ namespace crimson::editor
             void main() {}
         )";
 
-        ShaderHandle mainShader = m_renderer->GetResourceManager().CreateShader(
+        ShaderHandle mainShader = m_graphicsBackend->GPUResources->CreateShader(
             utils::CompileGLSLToSPIRV(mainVert, "vertex"),
             utils::CompileGLSLToSPIRV(mainFrag, "fragment")
         );
 
-        ShaderHandle shadowShader = m_renderer->GetResourceManager().CreateShader(
+        ShaderHandle shadowShader = m_graphicsBackend->GPUResources->CreateShader(
             utils::CompileGLSLToSPIRV(shadowVert, "vertex"),
             utils::CompileGLSLToSPIRV(shadowFrag, "fragment")
         );
 
-        MaterialHandle floorMat = m_renderer->GetResourceManager().CreateMaterial(mainShader);
-        MaterialHandle pyramidMat = m_renderer->GetResourceManager().CreateMaterial(mainShader);
-        MaterialHandle shadowMat = m_renderer->GetResourceManager().CreateMaterial(shadowShader);
+        MaterialHandle floorMat = m_graphicsBackend->GPUResources->CreateMaterial(mainShader);
+        MaterialHandle pyramidMat = m_graphicsBackend->GPUResources->CreateMaterial(mainShader);
+        MaterialHandle shadowMat = m_graphicsBackend->GPUResources->CreateMaterial(shadowShader);
 
         RenderTargetInfo shadowTargetInfo = { .Width = 2048, .Height = 2048, .DepthFormat = TextureFormat::Depth32F };
-        RenderTargetHandle shadowTarget = m_renderer->GetResourceManager().CreateRenderTarget(shadowTargetInfo);
-        TextureHandle shadowDepth = m_renderer->GetResourceManager().GetDepthAttachment(shadowTarget).value();
+        RenderTargetHandle shadowTarget = m_graphicsBackend->GPUResources->CreateRenderTarget(shadowTargetInfo);
+        TextureHandle shadowDepth = m_graphicsBackend->GPUResources->GetDepthAttachment(shadowTarget).value();
 
 	    RenderTargetInfo mainTargetInfo{
 	        .Width = 1920,
@@ -255,15 +239,14 @@ namespace crimson::editor
             .DepthFormat = TextureFormat::Depth32F
         };
 
-	    RenderTargetHandle mainTarget =
-            m_renderer->GetResourceManager().CreateRenderTarget(mainTargetInfo);
+	    RenderTargetHandle mainTarget = m_graphicsBackend->GPUResources->CreateRenderTarget(mainTargetInfo);
 
-	    TextureHandle mainColor = m_renderer->GetResourceManager().GetColorAttachment(mainTarget, 0);
+	    TextureHandle mainColor = m_graphicsBackend->GPUResources->GetColorAttachment(mainTarget, 0);
 
-        m_renderer->SetShadowMap(shadowDepth);
+        m_graphicsBackend->Renderer->SetShadowMap(shadowDepth);
 
-        m_renderer->GetResourceManager().SetMaterialPropertyByName(floorMat, "u_Color", glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
-        m_renderer->GetResourceManager().SetMaterialPropertyByName(pyramidMat, "u_Color", glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
+        m_graphicsBackend->GPUResources->SetMaterialPropertyByName(floorMat, "u_Color", glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
+        m_graphicsBackend->GPUResources->SetMaterialPropertyByName(pyramidMat, "u_Color", glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
 
         glm::vec3 lightDir = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f));
         glm::mat4 lightView = glm::lookAt(-lightDir * 30.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -307,9 +290,9 @@ namespace crimson::editor
 
             m_window->PollEvents();
 
-            auto frame = m_renderer->BeginFrame(m_primarySurface, lighting);
-            m_imguiBackend->NewFrame();
-            ImGui::NewFrame();
+            auto frame = m_graphicsBackend->Renderer->BeginFrame(lighting);
+            m_graphicsBackend->Imgui->NewFrame();
+
             if (frame.ShouldRender())
             {
                 RenderPassInfo shadowPassInfo{
@@ -339,10 +322,9 @@ namespace crimson::editor
                 };
                 frame.BeginRenderPass(clear);
 
-                auto backBuffer = m_renderer->GetResourceManager().GetCurrentBackBuffer(m_primarySurface);
-                frame.AddRawPass(backBuffer, [this](const NativeFrameHandles& handles) {
+                frame.AddRawPass(RenderTargetHandle::Invalid(), [this](const NativeFrameHandles& handles) {
                     ImGui::Render();
-                    m_imguiBackend->RenderDrawData(ImGui::GetDrawData(), handles);
+                    m_graphicsBackend->Imgui->RenderDrawData(ImGui::GetDrawData(), handles);
                 });
 
                 ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -369,10 +351,7 @@ namespace crimson::editor
                 ImGui::End();
 
                 ImTextureID mainTextureId =
-                m_imguiBackend->GetOrCreateTextureId(
-                    m_renderer->GetResourceManager(),
-                    mainColor
-                );
+                m_graphicsBackend->Imgui->GetOrCreateTextureId(mainColor);
 
                 utils::DrawTextureViewport(
                     "Scene",
@@ -380,11 +359,7 @@ namespace crimson::editor
                     16.0f / 9.0f
                 );
 
-                ImTextureID shadowMapId =
-                m_imguiBackend->GetOrCreateTextureId(
-                    m_renderer->GetResourceManager(),
-                    shadowDepth
-                );
+                ImTextureID shadowMapId = m_graphicsBackend->Imgui->GetOrCreateTextureId(shadowDepth);
 
                 utils::DrawTextureViewport(
                     "Shadow Map",
@@ -392,7 +367,7 @@ namespace crimson::editor
                     1.0
                 );
             }
-            m_renderer->EndFrame(frame);
+            m_graphicsBackend->Renderer->EndFrame(frame);
 
             HandleMove(deltaTime);
         }

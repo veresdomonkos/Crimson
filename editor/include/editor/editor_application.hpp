@@ -5,6 +5,7 @@
 #include <crimson/ui/imgui_backend.hpp>
 
 #include "editor_ui.hpp"
+#include "crimson/graphics/graphincs_backend.hpp"
 
 namespace crimson::editor
 {
@@ -12,15 +13,14 @@ namespace crimson::editor
 	{
 	public:
 		EditorApplication();
-        ~EditorApplication();
+        ~EditorApplication() = default;
 		void Run();
 	    void OnEvent(Event& event);
 	    void HandleMove(float deltaTime);
 	private:
 		std::unique_ptr<Window> m_window;
-	    RenderSurfaceHandle m_primarySurface;
-	    std::unique_ptr<Renderer> m_renderer;
-	    std::unique_ptr<ImGuiBackend> m_imguiBackend;
+	    std::unique_ptr<GraphicsBackend> m_graphicsBackend;
+
 	    glm::vec3 m_cameraPosition{};
 	    PerspectiveCamera m_camera{};
 	    EditorUI m_ui;

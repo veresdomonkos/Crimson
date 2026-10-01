@@ -4,7 +4,7 @@
 
 namespace crimson
 {
-	Unique<Window> Window::Create(WindowData data)
+	Unique<Window> Window::Create(RendererAPIType rendererAPI, WindowData data)
 	{
 		static bool s_glfwInitialized = false;
 
@@ -16,7 +16,7 @@ namespace crimson
 				return nullptr;
 			}
 
-			switch (RendererAPI::GetType())
+			switch (rendererAPI)
 			{
 				case RendererAPIType::OpenGL:
 					glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);

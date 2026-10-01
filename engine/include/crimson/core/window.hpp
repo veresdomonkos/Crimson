@@ -6,6 +6,7 @@
 
 #include "crimson/core/events.hpp"
 #include "core.hpp"
+#include "crimson/renderer/renderer_api.hpp"
 
 namespace crimson
 {
@@ -28,6 +29,6 @@ namespace crimson
 
 	    virtual void* GetNativeHandle() const = 0;
 
-	    static Unique<Window> Create(WindowData data);
+	    static Unique<Window> Create(RendererAPIType rendererAPI, WindowData data);
 	};
 }

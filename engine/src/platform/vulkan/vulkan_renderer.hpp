@@ -1,58 +1,57 @@
 #pragma once
 
-#include "vulkan_resource_manager.hpp"
-#include "crimson/core/window.hpp"
-#include "crimson/renderer/frame_context.hpp"
 #include "crimson/renderer/renderer.hpp"
-#include "crimson/renderer/resource_handles.hpp"
-#include "crimson/renderer/resource_manager.hpp"
+#include "vulkan_device.hpp"
+#include "vulkan_resource_manager.hpp"
+
 #include <array>
 
 namespace crimson::vulkan
 {
+    constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+
     struct FrameSync
     {
-        VkCommandBuffer CommandBuffer{};
-        VkSemaphore ImageAvailableSemaphore{};
-        VkFence InFlightFence{};
+        VkCommandBuffer CommandBuffer = VK_NULL_HANDLE;
+        VkSemaphore ImageAvailableSemaphore = VK_NULL_HANDLE;
+        VkFence InFlightFence = VK_NULL_HANDLE;
     };
 
     class VulkanRenderer : public Renderer
     {
     public:
-        VulkanRenderer() : m_resourceManager(m_device) {}
+        VulkanRenderer(VulkanDevice& device, VulkanResourceManager& resourceManager);
+        ~VulkanRenderer() override;
 
-        RenderSurfaceHandle Initialize(const Window& primaryWindow) override;
-        void Shutdown() override;
-        ResourceManager& GetResourceManager() override;
-        FrameContext BeginFrame(RenderSurfaceHandle surfaceHandle, const FrameLightingData& lighting) override;
-        void EndFrame(const FrameContext& frame) override;
+        VulkanRenderer(const VulkanRenderer&) = delete;
+        VulkanRenderer& operator=(const VulkanRenderer&) = delete;
+        VulkanRenderer(VulkanRenderer&&) = delete;
+        VulkanRenderer& operator=(VulkanRenderer&&) = delete;
+
+        FrameContext BeginFrame(const FrameLightingData& lighting) override;
+        void EndFrame(const FrameContext& frameContext) override;
+
         void SetShadowMap(TextureHandle shadowMap) override;
-        const ResourceManager& GetResourceManager() const override { return m_resourceManager; }
-
-        const VulkanDevice& GetDevice() const { return m_device; }
-        constexpr static int MAX_FRAMES_IN_FLIGHT = 2;
     private:
-        void InitGlobals();
-        void TransitionImage(VkCommandBuffer cmd, VulkanTexture& texture, VkImageAspectFlagBits flagBits, VkImageLayout newLayout);
         void InitializeSynchronizationAndCommands();
+        void InitGlobals();
+
+        void TransitionImage(VkCommandBuffer cmd, VulkanTexture& texture, VkImageAspectFlagBits flagBits, VkImageLayout newLayout);
         void ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const RenderPassInfo& info, uint32_t passIndex);
         void ExecuteEndRenderPass(VkCommandBuffer cmdBuffer, VulkanRenderTarget& rt);
-        void ExecuteRawPass(VkCommandBuffer cmdBuffer, const RawPass& pass);
         void ExecuteDraw(VkCommandBuffer cmdBuffer, const DrawInfo& draw, RenderTargetHandle target, uint32_t passIndex);
-    private:
-        VulkanDevice m_device;
-        VulkanResourceManager m_resourceManager{m_device};
+        void ExecuteRawPass(VkCommandBuffer cmdBuffer, const RawPass& pass);
+
+        VulkanDevice& m_device;
+        VulkanResourceManager& m_resourceManager;
 
         VkDescriptorSet m_globalDescriptorSet = VK_NULL_HANDLE;
 
-        // CameraBlock
         VkBuffer m_cameraUBOBuffer = VK_NULL_HANDLE;
         VkDeviceMemory m_cameraUBOBufferMemory = VK_NULL_HANDLE;
         void* m_cameraMappedData = nullptr;
         VkDeviceSize m_cameraUboAlignment = 0;
 
-        // LightingBlock
         VkBuffer m_lightingUBOBuffer = VK_NULL_HANDLE;
         VkDeviceMemory m_lightingUBOBufferMemory = VK_NULL_HANDLE;
         void* m_lightingMappedData = nullptr;

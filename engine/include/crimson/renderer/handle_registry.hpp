@@ -161,6 +161,24 @@ namespace crimson
 
         iterator begin() { return iterator(m_slots.begin(), m_slots.end()); }
         iterator end() { return iterator(m_slots.end(), m_slots.end()); }
+
+        std::vector<Handle> GetHandles() const
+        {
+            std::vector<Handle> handles;
+            handles.reserve(m_slots.size());
+
+            for (std::uint32_t id = 0; id < m_slots.size(); ++id)
+            {
+                const auto& slot = m_slots[id];
+
+                if (!slot.Occupied)
+                    continue;
+
+                handles.emplace_back(id, slot.Generation);
+            }
+
+            return handles;
+        }
     private:
         std::vector<Slot> m_slots;
         std::vector<std::uint32_t> m_freeSlots;

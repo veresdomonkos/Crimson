@@ -7,16 +7,30 @@
 
 namespace crimson::opengl
 {
-    void OpenGLImGuiBackend::Init(const Renderer& handles, const Window& window)
+    OpenGLImGuiBackend::OpenGLImGuiBackend(OpenGLDevice& device, OpenGLResourceManager& resourceManager)
+        : m_resourceManager(resourceManager)
     {
-        ImGui_ImplGlfw_InitForOpenGL(static_cast<GLFWwindow*>(window.GetNativeHandle()), true);
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+        ImGui_ImplGlfw_InitForOpenGL(device.GetPrimaryWindow(), true);
         ImGui_ImplOpenGL3_Init("#version 450");
+    }
+
+    OpenGLImGuiBackend::~OpenGLImGuiBackend()
+    {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
     }
 
     void OpenGLImGuiBackend::NewFrame()
     {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
     }
 
     void OpenGLImGuiBackend::RenderDrawData(ImDrawData* drawData, const NativeFrameHandles& handles)
@@ -24,16 +38,10 @@ namespace crimson::opengl
         ImGui_ImplOpenGL3_RenderDrawData(drawData);
     }
 
-    void OpenGLImGuiBackend::Shutdown()
-    {
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplGlfw_Shutdown();
-    }
 
-    ImTextureID OpenGLImGuiBackend::GetOrCreateTextureId(ResourceManager &resourceManager, TextureHandle texture)
+    ImTextureID OpenGLImGuiBackend::GetOrCreateTextureId(TextureHandle texture)
     {
-        auto& glResMgr = static_cast<OpenGLResourceManager&>(resourceManager);
-        const OpenGLTexture& tex = glResMgr.GetTexture(texture);
+        const OpenGLTexture& tex = m_resourceManager.GetTexture(texture);
         return static_cast<ImTextureID>(tex.GLHandle);
     }
 }

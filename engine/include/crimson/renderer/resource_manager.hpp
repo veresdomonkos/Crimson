@@ -10,13 +10,10 @@
 
 namespace crimson
 {
-    class ResourceManager
+    class GpuResourceManager
     {
     public:
-        virtual ~ResourceManager() = default;
-
-        virtual RenderSurfaceHandle CreateRenderSurface(const Window& window) = 0;
-        [[nodiscard]] virtual RenderTargetHandle GetCurrentBackBuffer(RenderSurfaceHandle renderSurface) const = 0;
+        virtual ~GpuResourceManager() = default;
 
         virtual VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) = 0;
         virtual void DestroyVertexBuffer(VertexBufferHandle handle) = 0;

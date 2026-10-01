@@ -7,7 +7,7 @@
 namespace crimson
 {
     template <typename PlatformResourceTraits>
-    class ResourceManagerBase : public ResourceManager
+    class ResourceManagerBase : public GpuResourceManager
     {
     public:
         using RenderSurface = PlatformResourceTraits::RenderSurface;
@@ -19,7 +19,6 @@ namespace crimson
         using Material = PlatformResourceTraits::Material;
         using Texture = PlatformResourceTraits::Texture;
     public:
-        RenderSurface& GetRenderSurface(RenderSurfaceHandle handle) { return m_renderSurfaces.Get(handle); }
         RenderTarget& GetRenderTarget(RenderTargetHandle handle) { return m_renderTargets.Get(handle); }
         VertexBuffer& GetVertexBuffer(VertexBufferHandle handle) { return m_vertexBuffers.Get(handle); }
         IndexBuffer& GetIndexBuffer(IndexBufferHandle handle) { return m_indexBuffers.Get(handle); }
@@ -27,7 +26,6 @@ namespace crimson
         Material& GetMaterial(MaterialHandle handle) { return  m_materials.Get(handle); }
         Texture& GetTexture(TextureHandle handle) { return m_textures.Get(handle); }
 
-        const RenderSurface& GetRenderSurface(RenderSurfaceHandle handle) const { return m_renderSurfaces.Get(handle); }
         const RenderTarget& GetRenderTarget(RenderTargetHandle handle) const { return m_renderTargets.Get(handle); }
         const VertexBuffer& GetVertexBuffer(VertexBufferHandle handle) const { return m_vertexBuffers.Get(handle); }
         const IndexBuffer& GetIndexBuffer(IndexBufferHandle handle) const { return m_indexBuffers.Get(handle); }
@@ -47,7 +45,6 @@ namespace crimson
     protected:
         virtual GraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) = 0;
     protected:
-        HandleRegistry<RenderSurfaceHandle, RenderSurface> m_renderSurfaces;
         HandleRegistry<RenderTargetHandle, RenderTarget> m_renderTargets;
         HandleRegistry<VertexBufferHandle, VertexBuffer> m_vertexBuffers;
         HandleRegistry<IndexBufferHandle, IndexBuffer> m_indexBuffers;

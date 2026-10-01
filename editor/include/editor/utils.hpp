@@ -17,11 +17,6 @@ namespace crimson::editor::utils
 
         //command += RendererAPI::GetType() == RendererAPIType::OpenGL ? " --target-env=opengl" : " --target-env=vulkan1.3";
 
-        if (RendererAPI::GetType() == RendererAPIType::OpenGL)
-        {
-            command += " -DCRIMSON_FLIP_SHADOW_Y=0";
-        }
-
         command += " -o - -";
 
         std::vector<char> spirvRawBytes;
@@ -45,8 +40,7 @@ namespace crimson::editor::utils
         int exitCode = process.get_exit_status();
 
         if (exitCode != 0) {
-            std::cerr << "[Crimson Shader Compiler] COMPILE ERROR (" << stage << " shader, "
-                       << (RendererAPI::GetType() == RendererAPIType::OpenGL ? "OpenGL" : "Vulkan") << "):\n";
+            std::cerr << "[Crimson Shader Compiler] COMPILE ERROR (" << stage << " shader, " << "):\n";
             std::cerr << compilerErrors << "\n";
             return {};
         }
@@ -57,60 +51,41 @@ namespace crimson::editor::utils
         return spirv;
     }
 
-    static void DrawTextureViewport(
-    const char* windowName,
-    ImTextureID texture,
-    float aspect)
+    static void DrawTextureViewport(const char* windowName, ImTextureID texture, float aspect)
     {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
         ImGui::Begin(
             windowName,
             nullptr,
             ImGuiWindowFlags_NoScrollbar |
             ImGuiWindowFlags_NoScrollWithMouse
         );
+        ImGui::PopStyleVar();
 
-        const ImVec2 avail = ImGui::GetContentRegionAvail();
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        const ImVec2 avail  = ImGui::GetContentRegionAvail();
 
-        if (avail.x > 0.0f && avail.y > 0.0f)
+        if (avail.x > 1.0f && avail.y > 1.0f)
         {
-            const float windowAspect = avail.x / avail.y;
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawList->AddRectFilled(
+                origin,
+                ImVec2(origin.x + avail.x, origin.y + avail.y),
+                IM_COL32(0, 0, 0, 255));
 
-            float visibleU = 1.0f;
-            float visibleV = 1.0f;
+            ImVec2 size;
+            if (avail.x / avail.y > aspect)
+                size = ImVec2(avail.y * aspect, avail.y);
+            else
+                size = ImVec2(avail.x, avail.x / aspect);
 
-            if (windowAspect < aspect)
-            {
-                // Keskenyebb ablak:
-                // oldalakat cropolunk.
-                visibleU = windowAspect / aspect;
-            }
-            else if (windowAspect > aspect)
-            {
-                // Szélesebb ablak:
-                // tetejét/alját cropoljuk.
-                visibleV = aspect / windowAspect;
-            }
+            const ImVec2 pos(
+                origin.x + (avail.x - size.x) * 0.5f,
+                origin.y + (avail.y - size.y) * 0.5f);
 
-            const float uCrop = (1.0f - visibleU) * 0.5f;
-            const float vCrop = (1.0f - visibleV) * 0.5f;
+            ImGui::SetCursorScreenPos(pos);
 
-            // Y-flip
-            const ImVec2 uv0(
-                uCrop,
-                1.0f - vCrop
-            );
-
-            const ImVec2 uv1(
-                1.0f - uCrop,
-                vCrop
-            );
-
-            ImGui::Image(
-                texture,
-                avail,
-                uv0,
-                uv1
-            );
+            ImGui::Image(texture, size, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
         }
 
         ImGui::End();

@@ -1,4 +1,6 @@
 #include <vulkan/vulkan.h>
+
+#include "vulkan_renderer.hpp"
 #include "crimson/ui/imgui_backend.hpp"
 
 namespace crimson::vulkan
@@ -6,13 +8,14 @@ namespace crimson::vulkan
     class VulkanImGuiBackend : public ImGuiBackend
     {
     public:
-        void Init(const Renderer& handles, const Window& window) override;
+        VulkanImGuiBackend(VulkanDevice& device, VulkanResourceManager& resourceManager, const Window& window);
+        ~VulkanImGuiBackend() override;
         void NewFrame() override;
         void RenderDrawData(ImDrawData* drawData, const NativeFrameHandles& handles) override;
-        void Shutdown() override;
-        ImTextureID GetOrCreateTextureId(ResourceManager& resourceManager, TextureHandle texture) override;
+        ImTextureID GetOrCreateTextureId(TextureHandle texture) override;
     private:
-        VkDevice m_device;
+        VulkanDevice& m_device;
+        VulkanResourceManager& m_resourceManager;
         VkSampler m_sampler = VK_NULL_HANDLE;
         std::unordered_map<TextureHandle, VkDescriptorSet, HandleHash<TextureTag>> m_textureIdCache;
     };

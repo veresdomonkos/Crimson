@@ -30,7 +30,6 @@ namespace crimson::vulkan
 
     struct VulkanSurface
     {
-        VkSurfaceKHR Surface = VK_NULL_HANDLE;
         VkSwapchainKHR Swapchain = VK_NULL_HANDLE;
 
         uint32_t CurrentImageIndex = 0;
@@ -47,7 +46,7 @@ namespace crimson::vulkan
     struct VulkanRenderTarget
     {
         std::vector<TextureHandle> ColorAttachments;
-        std::optional<TextureHandle> DepthAttachment;
+        TextureHandle DepthAttachment;
 
         uint32_t Width = 0;
         uint32_t Height = 0;

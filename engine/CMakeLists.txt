@@ -23,6 +23,8 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/binding_conventions.hpp
         include/crimson/renderer/light.hpp
         include/crimson/renderer/frame_data.hpp
+		include/crimson/graphics/graphincs_backend.hpp
+		include/crimson/graphics/graphics_device.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -33,24 +35,25 @@ set(ENGINE_IMPLEMENTATION
         src/platform/opengl/opengl_resource_manager.cpp
         src/platform/opengl/opengl_renderer.hpp
         src/platform/opengl/opengl_renderer_glfw.cpp
-        src/renderer/renderer.cpp
-		src/platform/vulkan/vulkan_renderer.cpp
-		src/platform/vulkan/vulkan_renderer.hpp
-		src/platform/vulkan/vulkan_resource_manager.cpp
-		src/platform/vulkan/vulkan_resource_manager.hpp
-		src/platform/vulkan/vulkan_device.cpp
-		src/platform/vulkan/vulkan_device.hpp
-        src/platform/opengl/opengl_resources.hpp
+		src/platform/opengl/opengl_resources.hpp
         src/platform/vulkan/vulkan_resources.hpp
         src/platform/opengl/utils.hpp
         src/platform/opengl/vertex_array_cache.hpp
         include/crimson/renderer/texture.hpp
         src/platform/vulkan/utils.hpp
-        src/ui/imgui_backend.cpp
         src/platform/opengl/opengl_imgui_backend.hpp
         src/platform/opengl/opengl_imgui_backend.cpp
         src/platform/vulkan/vulkan_imgui_backend.hpp
         src/platform/vulkan/vulkan_imgui_backend.cpp
+		src/platform/vulkan/vulkan_device.hpp
+		src/platform/vulkan/vulkan_device.cpp
+		src/platform/vulkan/vulkan_resource_manager.hpp
+		src/platform/vulkan/vulkan_resource_manager.cpp
+		src/platform/vulkan/vulkan_renderer.hpp
+		src/platform/vulkan/vulkan_renderer.cpp
+		src/graphics/graphics_backend.cpp
+		src/platform/opengl/opengl_device.hpp
+		src/platform/opengl/opengl_device.cpp
 )
 
 add_library(Engine STATIC

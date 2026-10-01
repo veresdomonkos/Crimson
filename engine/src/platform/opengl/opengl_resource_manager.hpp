@@ -1,4 +1,5 @@
 #pragma once
+#include "opengl_device.hpp"
 #include "opengl_resources.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/handle_registry.hpp"
@@ -10,8 +11,7 @@ namespace crimson::opengl
     class OpenGLResourceManager : public ResourceManagerBase<OpenglResourceTraits>
     {
     public:
-        RenderSurfaceHandle CreateRenderSurface(const Window& window) override;
-        RenderTargetHandle GetCurrentBackBuffer(RenderSurfaceHandle handle) const override { return m_renderSurfaces.Get(handle).BackBufferHandle; }
+        OpenGLResourceManager(Window& window);
 
         VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) override;
         void DestroyVertexBuffer(VertexBufferHandle handle) override;
@@ -37,6 +37,8 @@ namespace crimson::opengl
 
         [[nodiscard]] TextureHandle GetColorAttachment(RenderTargetHandle handle, uint32_t index) const override;
         [[nodiscard]] std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const override;
+
+        [[nodiscard]] RenderTargetHandle GetBackBufferHandle() const { return m_backBufferHandle; }
     protected:
         OpenGLGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo &info) override;
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
@@ -46,5 +48,6 @@ namespace crimson::opengl
         static GLuint CompileSPIRVShader(GLenum type, std::span<const uint32_t> binary, std::string_view stageName);
     private:
         HandleRegistry<VertexArrayHandle, VertexArray> m_vertexArrays;
+        RenderTargetHandle m_backBufferHandle;
     };
 }

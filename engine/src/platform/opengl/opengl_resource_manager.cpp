@@ -1,5 +1,7 @@
 #include "opengl_resource_manager.hpp"
 
+#include <algorithm>
+
 #include "spirv_reflect.h"
 #include "utils.hpp"
 #include "crimson/core/log.hpp"
@@ -7,10 +9,17 @@
 
 namespace crimson::opengl
 {
-    RenderSurfaceHandle OpenGLResourceManager::CreateRenderSurface(const Window &window)
+    OpenGLResourceManager::OpenGLResourceManager(Window& window)
     {
-        RenderTargetHandle backBuffer = m_renderTargets.Register(OpenGLRenderTarget{.Width = window.Width(), .Height = window.Height(), .FrameBufferHandle = 0});
-        return  m_renderSurfaces.Register(OpenGLSurface{.WindowHandle = window.GetNativeHandle(), .BackBufferHandle = backBuffer});
+        OpenGLRenderTarget rt {
+            .ColorAttachments = {},
+            .DepthAttachment = TextureHandle::Invalid(),
+            .Width = window.Width(),
+            .Height = window.Height(),
+            .FrameBufferHandle = 0
+        };
+
+        m_backBufferHandle = m_renderTargets.Register(rt);
     }
 
     VertexBufferHandle OpenGLResourceManager::CreateVertexBuffer(const VertexBufferInfo &info, const void* data)
@@ -470,7 +479,7 @@ namespace crimson::opengl
         {
             LOG_ERROR("Framebuffer incomplete!");
             for (auto h : rt.ColorAttachments) DestroyTexture(h);
-            if (rt.DepthAttachment) DestroyTexture(*rt.DepthAttachment);
+            if (rt.DepthAttachment) DestroyTexture(rt.DepthAttachment);
             glDeleteFramebuffers(1, &rt.FrameBufferHandle);
             return RenderTargetHandle::Invalid();
         }
@@ -484,7 +493,7 @@ namespace crimson::opengl
 
         OpenGLRenderTarget& rt = m_renderTargets.Get(handle);
         for (auto h : rt.ColorAttachments) DestroyTexture(h);
-        if (rt.DepthAttachment) DestroyTexture(*rt.DepthAttachment);
+        if (rt.DepthAttachment) DestroyTexture(rt.DepthAttachment);
 
         glDeleteFramebuffers(1, &rt.FrameBufferHandle);
         m_renderTargets.Unregister(handle);

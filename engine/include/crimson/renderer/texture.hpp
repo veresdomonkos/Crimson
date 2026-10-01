@@ -29,6 +29,16 @@ namespace crimson
         return static_cast<TextureUsage>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
     }
 
+    inline TextureUsage operator&(TextureUsage a, TextureUsage b)
+    {
+        return static_cast<TextureUsage>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+    }
+
+    inline bool HasTextureUsage(TextureUsage usage, TextureUsage flag)
+    {
+        return (usage & flag) != TextureUsage{};
+    }
+
     struct TextureInfo
     {
         uint32_t Width  = 0;
