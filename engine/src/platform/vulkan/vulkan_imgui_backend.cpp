@@ -7,12 +7,6 @@ namespace crimson::vulkan
     VulkanImGuiBackend::VulkanImGuiBackend(VulkanDevice& device, VulkanResourceManager& resourceManager, const Window& window)
         : m_device(device), m_resourceManager(resourceManager)
     {
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-
         auto* glfwWindow = static_cast<GLFWwindow*>(window.GetNativeHandle());
         ImGui_ImplGlfw_InitForVulkan(glfwWindow, true);
 

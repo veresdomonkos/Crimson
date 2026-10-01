@@ -17,8 +17,17 @@ namespace crimson::editor
 	EditorApplication::EditorApplication()
         : m_running(true)
     {
-		m_window = Window::Create(RendererAPIType::Vulkan, WindowData{ "My Window", 1280, 720, BIND_FN(OnEvent) });
-	    m_graphicsBackend = GraphicsBackend::Create(RendererAPIType::Vulkan, *m_window);
+	    IMGUI_CHECKVERSION();
+	    ImGui::CreateContext();
+	    ImGuiIO& io = ImGui::GetIO();
+	    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+	    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+	    io.Fonts->AddFontFromFileTTF("assets/fonts/Inter_18pt-Regular.ttf", 18.0f);
+	    utils::ApplyEditorStyle();
+
+	    RendererAPIType rendererType = RendererAPIType::OpenGL;
+		m_window = Window::Create(rendererType, WindowData{ "Crimson Editor", 1280, 720, BIND_FN(OnEvent) });
+	    m_graphicsBackend = GraphicsBackend::Create(rendererType, *m_window);
 	}
 
     void EditorApplication::Run()
