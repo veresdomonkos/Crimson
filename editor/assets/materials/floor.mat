@@ -1,0 +1,6 @@
+{
+  "shader": "shaders/main.glsl",
+  "properties": {
+    "u_Color": [0.7, 0.7, 0.7, 1.0]
+  }
+}

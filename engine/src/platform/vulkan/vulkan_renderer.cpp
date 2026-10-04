@@ -53,7 +53,7 @@ namespace crimson::vulkan
         poolInfo.queueFamilyIndex = m_device.GetGraphicsQueueFamily();
 
         if (vkCreateCommandPool(m_device.GetDevice(), &poolInfo, nullptr, &m_commandPool) != VK_SUCCESS)
-            LOG_ERROR("[Renderer] Failed to create VkCommandPool!");
+            LOG_ERROR("[Vulkan Renderer] Failed to create VkCommandPool!");
 
         std::array<VkCommandBuffer, MAX_FRAMES_IN_FLIGHT> buffers{};
 
@@ -64,7 +64,7 @@ namespace crimson::vulkan
         allocInfo.commandBufferCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
 
         if (vkAllocateCommandBuffers(m_device.GetDevice(), &allocInfo, buffers.data()) != VK_SUCCESS)
-            LOG_ERROR("[Renderer] Failed to allocate VkCommandBuffers!");
+            LOG_ERROR("[Vulkan Renderer] Failed to allocate VkCommandBuffers!");
 
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
@@ -79,10 +79,10 @@ namespace crimson::vulkan
             m_frameSyncs[i].CommandBuffer = buffers[i];
 
             if (vkCreateSemaphore(m_device.GetDevice(), &semaphoreInfo, nullptr, &m_frameSyncs[i].ImageAvailableSemaphore) != VK_SUCCESS)
-                LOG_ERROR("[Renderer] Failed to create Vulkan Semaphores!");
+                LOG_ERROR("[Vulkan Renderer] Failed to create Vulkan Semaphores!");
 
             if (vkCreateFence(m_device.GetDevice(), &fenceInfo, nullptr, &m_frameSyncs[i].InFlightFence) != VK_SUCCESS)
-                LOG_ERROR("[Renderer] Failed to create Vulkan Fences!");
+                LOG_ERROR("[Vulkan Renderer] Failed to create Vulkan Fences!");
         }
     }
 
@@ -91,7 +91,7 @@ namespace crimson::vulkan
         if (m_resourceManager.GetDescriptorPool() == VK_NULL_HANDLE ||
             m_resourceManager.GetGlobalSetLayout() == VK_NULL_HANDLE)
         {
-            LOG_ERROR("[Vulkan] Cannot initialize global resources without descriptor pool or layout");
+            LOG_ERROR("[Vulkan Renderer] Cannot initialize global resources without descriptor pool or layout");
             return;
         }
 
@@ -113,7 +113,7 @@ namespace crimson::vulkan
                 m_cameraUBOBuffer,
                 m_cameraUBOBufferMemory))
         {
-            LOG_ERROR("[Vulkan] Failed to create camera UBO");
+            LOG_ERROR("[Vulkan Renderer] Failed to create camera UBO");
             return;
         }
 
@@ -125,7 +125,7 @@ namespace crimson::vulkan
                 0,
                 &m_cameraMappedData) != VK_SUCCESS)
         {
-            LOG_ERROR("[Vulkan] Failed to map camera UBO");
+            LOG_ERROR("[Vulkan Renderer] Failed to map camera UBO");
             return;
         }
 
@@ -142,7 +142,7 @@ namespace crimson::vulkan
                 m_lightingUBOBuffer,
                 m_lightingUBOBufferMemory))
         {
-            LOG_ERROR("[Vulkan] Failed to create lighting UBO");
+            LOG_ERROR("[Vulkan Renderer] Failed to create lighting UBO");
             vkUnmapMemory(m_device.GetDevice(), m_cameraUBOBufferMemory);
             m_cameraMappedData = nullptr;
             return;
@@ -156,7 +156,7 @@ namespace crimson::vulkan
                 0,
                 &m_lightingMappedData) != VK_SUCCESS)
         {
-            LOG_ERROR("[Vulkan] Failed to map lighting UBO");
+            LOG_ERROR("[Vulkan Renderer] Failed to map lighting UBO");
             vkUnmapMemory(m_device.GetDevice(), m_cameraUBOBufferMemory);
             m_cameraMappedData = nullptr;
             return;
@@ -177,7 +177,7 @@ namespace crimson::vulkan
                 &allocInfo,
                 &m_globalDescriptorSet) != VK_SUCCESS)
         {
-            LOG_ERROR("[Vulkan] Failed to allocate global descriptor set");
+            LOG_ERROR("[Vulkan Renderer] Failed to allocate global descriptor set");
 
             vkUnmapMemory(m_device.GetDevice(), m_lightingUBOBufferMemory);
             m_lightingMappedData = nullptr;
@@ -504,7 +504,7 @@ namespace crimson::vulkan
 
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         {
-            LOG_ERROR("[Renderer] AcquireNextImage failed");
+            LOG_ERROR("[Vulkan Renderer] AcquireNextImage failed");
             return m_frames[m_currentFrameIndex].CreateContext();
         }
 
@@ -554,7 +554,7 @@ namespace crimson::vulkan
         }
 
         if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
-            LOG_ERROR("[Renderer] Failed to end command buffer");
+            LOG_ERROR("[Vulkan Renderer] Failed to end command buffer");
 
         VulkanSurface& surface = m_resourceManager.GetRenderSurface();
         uint32_t imageIndex = surface.CurrentImageIndex;
@@ -575,7 +575,7 @@ namespace crimson::vulkan
         submit.pSignalSemaphores = &signalSemaphore;
 
         if (vkQueueSubmit(m_device.GetGraphicsQueue(), 1, &submit, fence) != VK_SUCCESS)
-            LOG_ERROR("Queue submit failed");
+            LOG_ERROR("[Vulkan Renderer] Queue submit failed");
 
         VkPresentInfoKHR present{};
         present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;

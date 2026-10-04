@@ -1,5 +1,5 @@
 // viewport_panel.cpp
-#include "editor/ui/viewport_panel.hpp"
+#include "crimson_editor/ui/viewport_panel.hpp"
 
 namespace crimson::editor::ui
 {

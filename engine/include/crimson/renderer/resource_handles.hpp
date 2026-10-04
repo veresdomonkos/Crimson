@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "crimson/renderer/resource_tags.hpp"
 
 namespace crimson
 {
@@ -41,14 +42,6 @@ namespace crimson
             return static_cast<std::size_t>(x);
         }
     };
-
-    class RenderSurfaceTag {};
-    class RenderTargetTag {};
-    class VertexBufferTag {};
-    class IndexBufferTag {};
-    class ShaderTag {};
-    class MaterialTag {};
-    class TextureTag {};
 
     using RenderSurfaceHandle = Handle<RenderSurfaceTag>;
     using RenderTargetHandle = Handle<RenderTargetTag>;

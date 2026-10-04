@@ -1,4 +1,4 @@
-#include "editor/ui/performance_panel.hpp"
+#include "crimson_editor/ui/performance_panel.hpp"
 #include <imgui.h>
 
 namespace crimson::editor::ui

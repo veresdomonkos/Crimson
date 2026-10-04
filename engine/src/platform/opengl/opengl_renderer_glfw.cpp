@@ -173,6 +173,10 @@ namespace crimson::opengl
         glUseProgram(shader.GLHandle);
         glBindVertexArray(vertexArray.GLHandle);
 
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexBuffer.Size / Index::Size(indexBuffer.Type)), utils::GetGLIndexType(indexBuffer.Type), nullptr);
+        const GLsizei total = static_cast<GLsizei>(indexBuffer.Size / Index::Size(indexBuffer.Type));
+        const GLsizei count = info.IndexCount ? info.IndexCount : total;
+        const auto offset = reinterpret_cast<const void*>(static_cast<uintptr_t>(info.FirstIndex) * Index::Size(indexBuffer.Type));
+
+        glDrawElements(GL_TRIANGLES, count, utils::GetGLIndexType(indexBuffer.Type), offset);
     }
 }

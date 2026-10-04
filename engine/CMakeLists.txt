@@ -25,6 +25,15 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/frame_data.hpp
 		include/crimson/graphics/graphincs_backend.hpp
 		include/crimson/graphics/graphics_device.hpp
+        include/crimson/renderer/resource_tags.hpp
+        include/crimson/asset_manager/asset_id.hpp
+        include/crimson/asset_manager/asset_types.hpp
+        include/crimson/asset_manager/meta_file.hpp
+        include/crimson/asset_manager/asset_manager.hpp
+        include/crimson/asset_manager/importers/texture_importer.hpp
+        include/crimson/asset_manager/importers/material_importer.hpp
+        include/crimson/renderer/mesh.hpp
+        include/crimson/asset_manager/importers/mesh_importer.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -54,6 +63,14 @@ set(ENGINE_IMPLEMENTATION
 		src/graphics/graphics_backend.cpp
 		src/platform/opengl/opengl_device.hpp
 		src/platform/opengl/opengl_device.cpp
+        src/asset_manager/asset_id.cpp
+        src/asset_manager/meta_file.cpp
+        include/crimson/asset_manager/asset_importer.hpp
+        src/asset_manager/asset_manager.cpp
+        include/crimson/asset_manager/importers/texture_importer.hpp
+        src/asset_manager/importers/texture_importer.cpp
+        src/asset_manager/importers/material_importer.cpp
+        src/asset_manager/importers/mesh_importer.cpp
 )
 
 add_library(Engine STATIC
@@ -74,9 +91,12 @@ target_link_libraries(Engine
         glm::glm-header-only
         imgui
         fmt::fmt
+        nlohmann_json::nlohmann_json
     PRIVATE
         glfw
         glad
 		Vulkan::Vulkan
         spirv-reflect-static
+        stb_image
+        tinyobjloader
 )

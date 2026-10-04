@@ -2,7 +2,7 @@
 #include <string>
 #include <imgui.h>
 
-#include "editor/ui/panel.hpp"
+#include "crimson_editor/ui/panel.hpp"
 
 namespace crimson::editor::ui
 {

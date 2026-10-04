@@ -11,6 +11,7 @@ namespace crimson::opengl
     {
     public:
         explicit OpenGLDevice(const Window &window);
+        void WaitIdle() const override {}
 
         [[nodiscard]] GLFWwindow* GetPrimaryWindow() const { return m_primaryWindow; }
     private:

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <functional>
 #include <mutex>
 #include <fmt/format.h>
@@ -42,6 +43,15 @@ namespace crimson
     private:
         static void Write(LogLevel level, const std::string& msg);
 
+        struct Entry
+        {
+            LogLevel Level;
+            std::string Message;
+        };
+
+        static constexpr size_t kMaxHistory = 2000;
+
+        static inline std::deque<Entry> s_History;
         static inline std::vector<LogCallback> s_Callbacks;
         static inline std::mutex s_Mutex;
     };

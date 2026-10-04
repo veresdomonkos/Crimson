@@ -1,4 +1,4 @@
-#include "editor/editor_application.hpp"
+#include "crimson_editor/editor_application.hpp"
 #include <crimson/renderer/renderer_api.hpp>
 #include <iostream>
 #include <string_view>

@@ -4,18 +4,13 @@
 #include <crimson/renderer/renderer.hpp>
 #include <crimson/ui/imgui_backend.hpp>
 #include <crimson/graphics/graphincs_backend.hpp>
+#include <crimson/asset_manager/asset_manager.hpp>
 
-#include "editor/frame_stats.hpp"
-#include "ui/editor_ui.hpp"
+#include "crimson_editor/frame_stats.hpp"
+#include "crimson_editor/ui/editor_ui.hpp"
 
 namespace crimson::editor
 {
-    struct Mesh
-    {
-        VertexBufferHandle VB;
-        IndexBufferHandle IB;
-    };
-
 	class EditorApplication
 	{
 	public:
@@ -29,6 +24,7 @@ namespace crimson::editor
 	    void CreateRenderTargets();
 	    void SetupLighting();
 	    void SetupUI();
+	    void CreateTextures();
 
 	    // --- Frame ---
 	    void RenderFrame();
@@ -51,6 +47,7 @@ namespace crimson::editor
 	    std::unique_ptr<Window>          m_window;
 	    std::unique_ptr<GraphicsBackend> m_graphicsBackend;
 	    std::unique_ptr<ui::EditorUI>    m_ui;
+	    std::unique_ptr<AssetManager>    m_assetManager;
 
 	    PerspectiveCamera m_camera;
 	    FrameStats m_frameStats;
@@ -75,9 +72,12 @@ namespace crimson::editor
 	    // Textures
 	    TextureHandle m_shadowDepth;
 	    TextureHandle m_mainColor;
+	    TextureHandle m_testTexture;
 
 	    // Light
 	    glm::mat4 m_lightViewProj{1.0f};
 	    FrameLightingData m_lighting;
+
+	    Mesh m_mesh;
 	};
 }

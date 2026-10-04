@@ -1,23 +1,26 @@
-#include "editor/editor_application.hpp"
+#include "crimson_editor/editor_application.hpp"
 
 #include <crimson/core/core.hpp>
 #include <crimson/core/log.hpp>
 #include <crimson/renderer/renderer_api.hpp>
-
-#include "editor/utils.hpp"
+#include "crimson_editor/utils.hpp"
 #include <glm/gtc/matrix_transform.hpp>
-
 #include <glfw/glfw3.h>
 
 #define GLM_ENABLE_EXPERIMENTAL
-#include "editor/editor_resources.hpp"
-#include "editor/ui/asset_browser_panel.hpp"
-#include "editor/ui/console_panel.hpp"
-#include "editor/ui/hierarchy_panel.hpp"
-#include "editor/ui/inspector_panel.hpp"
-#include "editor/ui/performance_panel.hpp"
-#include "editor/ui/viewport_panel.hpp"
+#include "crimson/asset_manager/importers/material_importer.hpp"
+#include "crimson/asset_manager/importers/mesh_importer.hpp"
+#include "crimson/asset_manager/importers/texture_importer.hpp"
+#include "crimson_editor/editor_resources.hpp"
+#include "crimson_editor/importers/shader_importer.hpp"
+#include "crimson_editor/ui/asset_browser_panel.hpp"
+#include "crimson_editor/ui/console_panel.hpp"
+#include "crimson_editor/ui/hierarchy_panel.hpp"
+#include "crimson_editor/ui/inspector_panel.hpp"
+#include "crimson_editor/ui/performance_panel.hpp"
+#include "crimson_editor/ui/viewport_panel.hpp"
 #include "glm/gtx/quaternion.hpp"
+
 
 namespace crimson::editor
 {
@@ -27,12 +30,22 @@ namespace crimson::editor
         m_window          = Window::Create(rendererType, WindowData{ "Crimson Editor", 1280, 720, BIND_FN(OnEvent) });
         m_graphicsBackend = GraphicsBackend::Create(rendererType, *m_window);
         m_ui              = std::make_unique<ui::EditorUI>(*m_graphicsBackend->Imgui);
+	    m_assetManager    = std::make_unique<AssetManager>(*m_graphicsBackend->GPUResources, "assets");
+	    m_assetManager->RegisterImporter<TextureImporter>();
+	    m_assetManager->RegisterImporter<ShaderImporter>();
+	    m_assetManager->RegisterImporter<MaterialImporter>();
+	    m_assetManager->RegisterImporter<MeshImporter>();
+	    m_assetManager->ScanDirectory();
 
         CreateMeshes();
         CreateShadersAndMaterials();
         CreateRenderTargets();
+	    CreateTextures();
         SetupLighting();
         SetupUI();
+
+	    m_mesh = m_assetManager->GetAsset<Mesh>(m_assetManager->FindByPath("meshes/stanford-bunny.obj")).value();
+	    m_mesh.Materials[0] = m_pyramidMat;
     }
 
     Mesh EditorApplication::CreateMesh(std::span<const std::byte> vertices, std::span<const uint32_t> indices)
@@ -70,22 +83,29 @@ namespace crimson::editor
     }
 
     void EditorApplication::CreateShadersAndMaterials()
-    {
-        m_mainShader = GpuResources().CreateShader(
-            utils::CompileGLSLToSPIRV(kMainVert, "vertex"),
-            utils::CompileGLSLToSPIRV(kMainFrag, "fragment"));
+	{
+	    auto loadMaterial = [this](const char* path) -> MaterialHandle
+	    {
+	        const AssetID id = m_assetManager->FindByPath(path);
+	        if (!id)
+	        {
+	            LOG_ERROR("[Editor] Material asset not found: {}", path);
+	            return MaterialHandle::Invalid();
+	        }
 
-        m_shadowShader = GpuResources().CreateShader(
-            utils::CompileGLSLToSPIRV(kShadowVert, "vertex"),
-            utils::CompileGLSLToSPIRV(kShadowFrag, "fragment"));
+	        const auto material = m_assetManager->GetAsset<MaterialHandle>(id);
+	        if (!material)
+	        {
+	            LOG_ERROR("[Editor] Material failed to load: {}", path);
+	            return MaterialHandle::Invalid();
+	        }
+	        return material.value();
+	    };
 
-        m_floorMat   = GpuResources().CreateMaterial(m_mainShader);
-        m_pyramidMat = GpuResources().CreateMaterial(m_mainShader);
-        m_shadowMat  = GpuResources().CreateMaterial(m_shadowShader);
-
-        GpuResources().SetMaterialPropertyByName(m_floorMat,   "u_Color", glm::vec4(0.7f, 0.7f, 0.7f, 1.0f));
-        GpuResources().SetMaterialPropertyByName(m_pyramidMat, "u_Color", glm::vec4(0.8f, 0.2f, 0.2f, 1.0f));
-    }
+	    m_floorMat   = loadMaterial("materials/floor.mat");
+	    m_pyramidMat = loadMaterial("materials/pyramid.mat");
+	    m_shadowMat  = loadMaterial("materials/shadow.mat");
+	}
 
     void EditorApplication::CreateRenderTargets()
     {
@@ -145,11 +165,18 @@ namespace crimson::editor
 
         m_ui->AddPanel<ui::ViewportPanel>("Scene",      imgui.GetOrCreateTextureId(m_mainColor),   16.0f / 9.0f);
         m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_shadowDepth), 1.0f);
+	    m_ui->AddPanel<ui::ViewportPanel>("Test Texture", imgui.GetOrCreateTextureId(m_testTexture), 875.0f / 350.0f);
         m_ui->AddPanel<ui::PerformancePanel>(m_frameStats);
 	    m_ui->AddPanel<ui::ConsolePanel>();
 	    m_ui->AddPanel<ui::HierarchyPanel>();
 	    m_ui->AddPanel<ui::InspectorPanel>();
 	    m_ui->AddPanel<ui::AssetBrowserPanel>();
+    }
+
+    void EditorApplication::CreateTextures()
+    {
+	    AssetID id = m_assetManager->FindByPath("textures/test.jpg");
+	    m_testTexture = m_assetManager->GetAsset<TextureHandle>(id).value();
     }
 
     void EditorApplication::Run()
@@ -218,7 +245,8 @@ namespace crimson::editor
 
         auto& pass = frame.BeginRenderPass(info);
         pass.Draw({ m_floor.VB,   m_floor.IB,   m_floorMat });
-        pass.Draw({ m_pyramid.VB, m_pyramid.IB, m_pyramidMat });
+        pass.Draw({m_pyramid.VB, m_pyramid.IB, m_pyramidMat });
+	    pass.Draw(m_mesh);
     }
 
     void EditorApplication::RecordUIPass(FrameContext& frame)

@@ -205,6 +205,8 @@ namespace crimson::vulkan
 
     void VulkanResourceManager::DestroyVertexBuffer(VertexBufferHandle handle)
     {
+        m_device.WaitIdle();
+
         VulkanVertexBuffer* buffer = m_vertexBuffers.Find(handle);
         if (!buffer)
             return;
@@ -283,6 +285,8 @@ namespace crimson::vulkan
 
     void VulkanResourceManager::DestroyIndexBuffer(IndexBufferHandle handle)
     {
+        m_device.WaitIdle();
+
         VulkanIndexBuffer* buffer = m_indexBuffers.Find(handle);
         if (!buffer)
             return;
@@ -359,6 +363,8 @@ namespace crimson::vulkan
 
     void VulkanResourceManager::DestroyShader(ShaderHandle handle)
     {
+        m_device.WaitIdle();
+
         VulkanShader* shader = m_shaders.Find(handle);
         if (!shader)
             return;
@@ -432,6 +438,8 @@ namespace crimson::vulkan
 
     void VulkanResourceManager::DestroyMaterial(MaterialHandle handle)
     {
+        m_device.WaitIdle();
+
         VulkanMaterial* material = m_materials.Find(handle);
         if (!material)
             return;
@@ -509,6 +517,9 @@ namespace crimson::vulkan
         texture.Layout = VK_IMAGE_LAYOUT_UNDEFINED;
         texture.Aspect = utils::GetImageAspect(info.Format);
 
+        if (data)
+            usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+
         VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
         imageInfo.format = format;
@@ -519,9 +530,6 @@ namespace crimson::vulkan
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.usage = usage;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-        if (data)
-            usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
         if (vkCreateImage(m_device.GetDevice(), &imageInfo, nullptr, &texture.Image) != VK_SUCCESS)
             return TextureHandle::Invalid();
@@ -568,6 +576,8 @@ namespace crimson::vulkan
 
     void VulkanResourceManager::DestroyTexture(TextureHandle handle)
     {
+        m_device.WaitIdle();
+
         VulkanTexture* texture = m_textures.Find(handle);
 
         if (!texture)
@@ -642,6 +652,8 @@ namespace crimson::vulkan
 
     void VulkanResourceManager::DestroyRenderTarget(RenderTargetHandle handle)
     {
+        m_device.WaitIdle();
+
         VulkanRenderTarget* target = m_renderTargets.Find(handle);
 
         if (!target)
@@ -978,6 +990,7 @@ namespace crimson::vulkan
             {
                 barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
                 barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                sourceStage      = VK_PIPELINE_STAGE_TRANSFER_BIT;
                 destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             }
             else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)

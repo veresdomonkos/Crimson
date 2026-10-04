@@ -1,23 +1,25 @@
 add_executable(Editor
-        include/editor/editor_application.hpp
+        include/crimson_editor/editor_application.hpp
 
         src/main.cpp
         src/editor_application.cpp
-        include/editor/utils.hpp
-        include/editor/ui/Panel.hpp
-        include/editor/ui/viewport_panel.hpp
+        include/crimson_editor/utils.hpp
+        include/crimson_editor/ui/Panel.hpp
+        include/crimson_editor/ui/viewport_panel.hpp
         src/ui/viewport_panel.cpp
-        include/editor/ui/performance_panel.hpp
-        include/editor/frame_stats.hpp
+        include/crimson_editor/ui/performance_panel.hpp
+        include/crimson_editor/frame_stats.hpp
         src/ui/performance_panel.cpp
-        include/editor/ui/editor_ui.hpp
+        include/crimson_editor/ui/editor_ui.hpp
         src/ui/editor_ui.cpp
-        include/editor/editor_resources.hpp
-        include/editor/ui/console_panel.hpp
-        include/editor/ui/hierarchy_panel.hpp
-        include/editor/ui/inspector_panel.hpp
-        include/editor/ui/asset_browser_panel.hpp
+        include/crimson_editor/editor_resources.hpp
+        include/crimson_editor/ui/console_panel.hpp
+        include/crimson_editor/ui/hierarchy_panel.hpp
+        include/crimson_editor/ui/inspector_panel.hpp
+        include/crimson_editor/ui/asset_browser_panel.hpp
         src/ui/console_panel.cpp
+        include/crimson_editor/importers/shader_importer.hpp
+        src/importers/shader_importer.cpp
 )
 
 target_include_directories(Editor PUBLIC include)

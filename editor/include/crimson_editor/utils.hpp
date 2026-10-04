@@ -50,46 +50,4 @@ namespace crimson::editor::utils
 
         return spirv;
     }
-
-    static void DrawTextureViewport(const char* windowName, ImTextureID texture, float aspect)
-    {
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGui::Begin(
-            windowName,
-            nullptr,
-            ImGuiWindowFlags_NoScrollbar |
-            ImGuiWindowFlags_NoScrollWithMouse
-        );
-        ImGui::PopStyleVar();
-
-        const ImVec2 origin = ImGui::GetCursorScreenPos();
-        const ImVec2 avail  = ImGui::GetContentRegionAvail();
-
-        if (avail.x > 1.0f && avail.y > 1.0f)
-        {
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            drawList->AddRectFilled(
-                origin,
-                ImVec2(origin.x + avail.x, origin.y + avail.y),
-                IM_COL32(0, 0, 0, 255));
-
-            ImVec2 size;
-            if (avail.x / avail.y > aspect)
-                size = ImVec2(avail.y * aspect, avail.y);
-            else
-                size = ImVec2(avail.x, avail.x / aspect);
-
-            const ImVec2 pos(
-                origin.x + (avail.x - size.x) * 0.5f,
-                origin.y + (avail.y - size.y) * 0.5f);
-
-            ImGui::SetCursorScreenPos(pos);
-
-            ImGui::Image(texture, size, ImVec2(0.0f, 1.0f), ImVec2(1.0f, 0.0f));
-        }
-
-        ImGui::End();
-    }
-
-
 }

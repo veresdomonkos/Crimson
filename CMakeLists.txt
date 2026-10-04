@@ -26,5 +26,13 @@ set(SPIRV_REFLECT_STATIC_LIB ON CACHE BOOL "Build static library" FORCE)
 set(SPIRV_REFLECT_EXECUTABLE OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/spirv-reflect)
 
+#json
+add_subdirectory(external/json)
+
+#stb-image
+add_subdirectory(external/stb_image)
+
+add_subdirectory(external/tinyobjloader)
+
 add_subdirectory(engine)
 add_subdirectory(editor)

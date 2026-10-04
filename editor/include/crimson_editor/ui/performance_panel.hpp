@@ -1,6 +1,6 @@
 #pragma once
-#include "editor/ui/panel.hpp"
-#include "editor/frame_stats.hpp"
+#include "crimson_editor/ui/panel.hpp"
+#include "crimson_editor/frame_stats.hpp"
 
 namespace crimson::editor::ui
 {

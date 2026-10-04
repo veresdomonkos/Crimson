@@ -1,4 +1,4 @@
-#include "editor/ui/console_panel.hpp"
+#include "crimson_editor/ui/console_panel.hpp"
 
 #include <iomanip>
 

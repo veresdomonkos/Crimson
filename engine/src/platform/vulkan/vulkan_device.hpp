@@ -10,7 +10,7 @@ namespace crimson::vulkan
     {
     public:
         explicit VulkanDevice(const Window& window);
-        ~VulkanDevice();
+        ~VulkanDevice() override;
 
         VulkanDevice(const VulkanDevice&) = delete;
         VulkanDevice& operator=(const VulkanDevice&) = delete;
@@ -37,7 +37,7 @@ namespace crimson::vulkan
         [[nodiscard]] uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
 
         void ImmediateSubmit(const std::function<void(VkCommandBuffer)>& function);
-        void WaitIdle() const;
+        void WaitIdle() const override;
         inline static constexpr const char* s_validationLayer = "VK_LAYER_KHRONOS_validation";
     private:
         void CreateInstance();

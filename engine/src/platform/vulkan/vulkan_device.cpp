@@ -216,7 +216,7 @@ namespace crimson::vulkan
         vkGetPhysicalDeviceFeatures(m_physicalDevice, &m_features);
         vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &m_memoryProperties);
 
-        LOG_INFO("Selected GPU: {}", m_properties.deviceName);
+        LOG_INFO("[Vulkan Device] Selected GPU: {}", m_properties.deviceName);
     }
 
     void VulkanDevice::CreateLogicalDevice()
@@ -426,9 +426,9 @@ namespace crimson::vulkan
     VKAPI_ATTR VkBool32 VKAPI_CALL VulkanDevice::DebugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT* callbackData, void* userData)
     {
         if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-            LOG_ERROR("[Vulkan] {}", callbackData->pMessage);
+            LOG_ERROR("[Vulkan Device] {}", callbackData->pMessage);
         else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-            LOG_WARN("[Vulkan] {}", callbackData->pMessage);
+            LOG_WARN("[Vulkan Device] {}", callbackData->pMessage);
 
         return VK_FALSE;
     }

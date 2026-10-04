@@ -3,7 +3,7 @@
 #include <vector>
 
 #include <crimson/ui/imgui_backend.hpp>
-#include "editor/ui/panel.hpp"
+#include "crimson_editor/ui/panel.hpp"
 
 namespace crimson::editor::ui
 {

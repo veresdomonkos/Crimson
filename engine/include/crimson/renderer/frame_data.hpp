@@ -22,6 +22,12 @@ namespace crimson
         GPULight Lights[kMaxLights]{};
     };
 
+    struct ObjectBlock
+    {
+        glm::mat4 Transform;
+        glm::mat4 NormalMatrix;
+    };
+
     struct FrameLightingData
     {
         glm::vec3 CameraPosition{0.0f};

@@ -8,6 +8,7 @@
 #include <span>
 #include <variant>
 
+#include "mesh.hpp"
 #include "native_handles.hpp"
 
 namespace crimson
@@ -19,6 +20,8 @@ namespace crimson
         VertexBufferHandle VertexBuffer;
         IndexBufferHandle IndexBuffer;
         MaterialHandle Material;
+        uint32_t FirstIndex = 0;
+        uint32_t IndexCount = 0;
     };
 
     class RenderPass
@@ -33,6 +36,14 @@ namespace crimson
         void Draw(const DrawInfo& drawInfo)
         {
             m_drawInfos.emplace_back(drawInfo);
+        }
+
+        void Draw(const Mesh& mesh)
+        {
+            for (auto subMesh : mesh.SubMeshes)
+            {
+                m_drawInfos.emplace_back(mesh.VB, mesh.IB, mesh.Materials[subMesh.MaterialSlot], subMesh.FirstIndex, subMesh.IndexCount);
+            }
         }
 
         RenderPass(const RenderPass&) = delete;
