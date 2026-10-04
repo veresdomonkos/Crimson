@@ -17,6 +17,7 @@ namespace crimson::opengl
     private:
         void ExecuteDraw(const DrawInfo &info);
         void ExecuteBeginRenderPass(const RenderPassInfo& info);
+        void ExecuteBeginRawPass(const RawPassInfo& info);
     private:
         GLuint m_cameraUBO = 0;
         GLuint m_lightingUBO = 0;

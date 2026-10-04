@@ -9,6 +9,7 @@ namespace crimson::opengl
         : m_primaryWindow(static_cast<GLFWwindow*>(window.GetNativeHandle()))
     {
         glfwMakeContextCurrent(m_primaryWindow);
+        glfwSwapInterval(0);
 
         if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
         {

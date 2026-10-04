@@ -4,7 +4,15 @@ add_executable(Editor
         src/main.cpp
         src/editor_application.cpp
         include/editor/utils.hpp
-        include/editor/editor_ui.hpp
+        include/editor/ui/Panel.hpp
+        include/editor/ui/viewport_panel.hpp
+        src/ui/viewport_panel.cpp
+        include/editor/ui/performance_panel.hpp
+        include/editor/frame_stats.hpp
+        src/ui/performance_panel.cpp
+        include/editor/ui/editor_ui.hpp
+        src/ui/editor_ui.cpp
+        include/editor/editor_resources.hpp
 )
 
 target_include_directories(Editor PUBLIC include)

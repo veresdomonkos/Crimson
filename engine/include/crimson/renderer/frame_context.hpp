@@ -46,15 +46,26 @@ namespace crimson
         std::vector<DrawInfo> m_drawInfos;
     };
 
+    struct RawPassInfo
+    {
+        RenderTargetHandle Target;
+        ClearFlags ClearFlags = ClearFlags::None;
+        glm::vec4 ClearColor{0, 0, 0, 1};
+        float ClearDepth = 1.0f;
+        uint32_t ClearStencil = 0;
+        RawPassCallback Callback;
+    };
+
     class RawPass
     {
     public:
-        RawPass() = default;
-        RawPass(RenderTargetHandle target, RawPassCallback callback)
-            : m_target(target), m_callback(std::move(callback)) {}
+        RawPass(RawPassInfo info)
+            : m_info(std::move(info))
+        {
 
-        [[nodiscard]] RenderTargetHandle Target() const { return m_target; }
-        [[nodiscard]] const RawPassCallback& Callback() const { return m_callback; }
+        }
+
+        [[nodiscard]] const RawPassInfo& Info() const { return m_info; }
 
         RawPass(const RawPass&) = delete;
         RawPass& operator=(const RawPass&) = delete;
@@ -62,8 +73,7 @@ namespace crimson
         RawPass& operator=(RawPass&&) = default;
 
     private:
-        RenderTargetHandle m_target;
-        RawPassCallback m_callback;
+        RawPassInfo m_info;
     };
 
     using PassEntry = std::variant<RenderPass, RawPass>;
@@ -94,16 +104,16 @@ namespace crimson
             return std::get<RenderPass>(m_data->Passes[index]);
         }
 
-        void AddRawPass(RenderTargetHandle target, RawPassCallback callback)
+        void AddRawPass(RawPassInfo info)
         {
             assert(m_data->PassCount < MaxRenderPasses);
 
             const uint32_t index = m_data->PassCount++;
 
-            if (!target)
-                target = m_data->DefaultTarget;
+            if (!info.Target)
+                info.Target = m_data->DefaultTarget;
 
-            m_data->Passes[index] = RawPass{target, std::move(callback)};
+            m_data->Passes[index] = RawPass{info};
         }
 
         [[nodiscard]] uint32_t GetIndex() const { return m_data->FrameIndex; }

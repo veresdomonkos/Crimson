@@ -65,12 +65,7 @@ namespace crimson::opengl
             }
             else if (const auto* rawPass = std::get_if<RawPass>(&entry))
             {
-                const auto& target = m_resourceManager.GetRenderTarget(rawPass->Target());
-                glBindFramebuffer(GL_FRAMEBUFFER, target.FrameBufferHandle);
-                glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
-
-                NativeFrameHandles handles{};
-                rawPass->Callback()(handles);
+                ExecuteBeginRawPass(rawPass->Info());
             }
         }
 
@@ -105,6 +100,34 @@ namespace crimson::opengl
             clearMask |= GL_STENCIL_BUFFER_BIT;
         }
         if (clearMask != 0) glClear(clearMask);
+    }
+
+    void OpenGLRenderer::ExecuteBeginRawPass(const RawPassInfo &info)
+    {
+        const auto& target = m_resourceManager.GetRenderTarget(info.Target);
+        glBindFramebuffer(GL_FRAMEBUFFER, target.FrameBufferHandle);
+        glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
+
+        GLbitfield clearMask = 0;
+        if (HasClearFlag(info.ClearFlags, ClearFlags::Color))
+        {
+            glClearColor(info.ClearColor.r, info.ClearColor.g, info.ClearColor.b, info.ClearColor.a);
+            clearMask |= GL_COLOR_BUFFER_BIT;
+        }
+        if (HasClearFlag(info.ClearFlags, ClearFlags::Depth))
+        {
+            glClearDepth(info.ClearDepth);
+            clearMask |= GL_DEPTH_BUFFER_BIT;
+        }
+        if (HasClearFlag(info.ClearFlags, ClearFlags::Stencil))
+        {
+            glClearStencil(static_cast<GLint>(info.ClearStencil));
+            clearMask |= GL_STENCIL_BUFFER_BIT;
+        }
+        if (clearMask != 0) glClear(clearMask);
+
+        NativeFrameHandles handles{};
+        info.Callback(handles);
     }
 
     void OpenGLRenderer::ExecuteDraw(const DrawInfo& info)

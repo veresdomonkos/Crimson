@@ -42,6 +42,8 @@ namespace crimson::vulkan
         void ExecuteDraw(VkCommandBuffer cmdBuffer, const DrawInfo& draw, RenderTargetHandle target, uint32_t passIndex);
         void ExecuteRawPass(VkCommandBuffer cmdBuffer, const RawPass& pass);
 
+        void BeginRenderingOnTarget(VkCommandBuffer cmd, VulkanRenderTarget& rt, ClearFlags flags, const glm::vec4& clearColor, float clearDepth, uint32_t clearStencil);
+
         VulkanDevice& m_device;
         VulkanResourceManager& m_resourceManager;
 

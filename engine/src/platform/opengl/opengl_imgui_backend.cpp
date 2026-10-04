@@ -10,6 +10,9 @@ namespace crimson::opengl
     OpenGLImGuiBackend::OpenGLImGuiBackend(OpenGLDevice& device, OpenGLResourceManager& resourceManager)
         : m_resourceManager(resourceManager)
     {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+
         ImGui_ImplGlfw_InitForOpenGL(device.GetPrimaryWindow(), true);
         ImGui_ImplOpenGL3_Init("#version 450");
     }

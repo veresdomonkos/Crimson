@@ -332,56 +332,7 @@ namespace crimson::vulkan
             std::memcpy(static_cast<char*>(m_cameraMappedData) + offset, &block, sizeof(CameraBlock));
         }
 
-        std::vector<VkRenderingAttachmentInfo> colorAttachments;
-        colorAttachments.reserve(rt.ColorAttachments.size());
-        const bool clearColor = HasClearFlag(info.ClearFlags, ClearFlags::Color);
-        const bool clearDepth = HasClearFlag(info.ClearFlags, ClearFlags::Depth);
-
-        for (TextureHandle colorHandle : rt.ColorAttachments)
-        {
-            VulkanTexture& color = m_resourceManager.GetTexture(colorHandle);
-            TransitionImage(cmdBuffer, color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-
-            VkRenderingAttachmentInfo attachment{};
-            attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-            attachment.imageView = color.View;
-            attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-            attachment.loadOp = clearColor ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-            attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            attachment.clearValue.color = { info.ClearColor.r, info.ClearColor.g, info.ClearColor.b, info.ClearColor.a };
-            colorAttachments.push_back(attachment);
-        }
-
-        VkRenderingAttachmentInfo depthAttachment{};
-        bool hasDepth = static_cast<bool>(rt.DepthAttachment);
-
-        if (hasDepth)
-        {
-            VulkanTexture& depth = m_resourceManager.GetTexture(rt.DepthAttachment);
-            TransitionImage(cmdBuffer, depth, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
-
-            depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-            depthAttachment.imageView = depth.View;
-            depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-            depthAttachment.loadOp = clearDepth ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
-            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-            depthAttachment.clearValue.depthStencil = { info.ClearDepth, info.ClearStencil };
-        }
-
-        VkRenderingInfo rendering{};
-        rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-        rendering.renderArea = { {0, 0}, {rt.Width, rt.Height} };
-        rendering.layerCount = 1;
-        rendering.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
-        rendering.pColorAttachments = colorAttachments.data();
-        if (hasDepth) rendering.pDepthAttachment = &depthAttachment;
-
-        vkCmdBeginRendering(cmdBuffer, &rendering);
-
-        VkViewport viewport{ 0.0f, 0.0f, static_cast<float>(rt.Width), static_cast<float>(rt.Height), 0.0f, 1.0f };
-        VkRect2D scissor{ {0, 0}, {rt.Width, rt.Height} };
-        vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
-        vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
+        BeginRenderingOnTarget(cmdBuffer, rt, info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
     }
 
     void VulkanRenderer::ExecuteEndRenderPass(VkCommandBuffer cmdBuffer, VulkanRenderTarget& rt)
@@ -404,46 +355,74 @@ namespace crimson::vulkan
 
     void VulkanRenderer::ExecuteRawPass(VkCommandBuffer cmdBuffer, const RawPass& pass)
     {
-        VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(pass.Target());
+        const RawPassInfo& info = pass.Info();
+        VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(info.Target);
 
-        for (TextureHandle colorHandle : rt.ColorAttachments)
-        {
-            VulkanTexture& color = m_resourceManager.GetTexture(colorHandle);
-            TransitionImage(cmdBuffer, color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-        }
-
-        VkRenderingAttachmentInfo colorAttachment{};
-        colorAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-        colorAttachment.imageView = m_resourceManager.GetTexture(rt.ColorAttachments[0]).View;
-        colorAttachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-
-        VkRenderingInfo renderingInfo{};
-        renderingInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
-        renderingInfo.renderArea = { {0, 0}, {rt.Width, rt.Height} };
-        renderingInfo.layerCount = 1;
-        renderingInfo.colorAttachmentCount = 1;
-        renderingInfo.pColorAttachments = &colorAttachment;
-
-        vkCmdBeginRendering(cmdBuffer, &renderingInfo);
+        BeginRenderingOnTarget(cmdBuffer, rt, info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
 
         NativeFrameHandles handles{};
         handles.Device = m_device.GetDevice();
         handles.CommandBuffer = cmdBuffer;
         handles.ColorFormat = static_cast<uint32_t>(m_resourceManager.GetTexture(rt.ColorAttachments[0]).Format);
-        pass.Callback()(handles);
+        info.Callback(handles);
 
-        vkCmdEndRendering(cmdBuffer);
+        ExecuteEndRenderPass(cmdBuffer, rt);
+    }
 
-        if (rt.IsSwapchain)
+    void VulkanRenderer::BeginRenderingOnTarget(VkCommandBuffer cmdBuffer, VulkanRenderTarget &rt, ClearFlags flags,
+        const glm::vec4 &clearColorValue, float clearDepthValue, uint32_t clearStencilValue)
+    {
+        const bool clearColor = HasClearFlag(flags, ClearFlags::Color);
+        const bool clearDepth = HasClearFlag(flags, ClearFlags::Depth);
+
+        std::vector<VkRenderingAttachmentInfo> colorAttachments;
+        colorAttachments.reserve(rt.ColorAttachments.size());
+
+        for (TextureHandle colorHandle : rt.ColorAttachments)
         {
-            for (TextureHandle colorHandle : rt.ColorAttachments)
-            {
-                VulkanTexture& color = m_resourceManager.GetTexture(colorHandle);
-                TransitionImage(cmdBuffer, color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-            }
+            VulkanTexture& color = m_resourceManager.GetTexture(colorHandle);
+            TransitionImage(cmdBuffer, color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+
+            VkRenderingAttachmentInfo attachment{};
+            attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            attachment.imageView = color.View;
+            attachment.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            attachment.loadOp = clearColor ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+            attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            attachment.clearValue.color = { clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a };
+            colorAttachments.push_back(attachment);
         }
+
+        VkRenderingAttachmentInfo depthAttachment{};
+        const bool hasDepth = static_cast<bool>(rt.DepthAttachment);
+
+        if (hasDepth)
+        {
+            VulkanTexture& depth = m_resourceManager.GetTexture(rt.DepthAttachment);
+            TransitionImage(cmdBuffer, depth, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+            depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            depthAttachment.imageView = depth.View;
+            depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            depthAttachment.loadOp = clearDepth ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
+            depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+            depthAttachment.clearValue.depthStencil = { clearDepthValue, clearStencilValue };
+        }
+
+        VkRenderingInfo rendering{};
+        rendering.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        rendering.renderArea = { {0, 0}, {rt.Width, rt.Height} };
+        rendering.layerCount = 1;
+        rendering.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
+        rendering.pColorAttachments = colorAttachments.data();
+        if (hasDepth) rendering.pDepthAttachment = &depthAttachment;
+
+        vkCmdBeginRendering(cmdBuffer, &rendering);
+
+        VkViewport viewport{ 0.0f, 0.0f, static_cast<float>(rt.Width), static_cast<float>(rt.Height), 0.0f, 1.0f };
+        VkRect2D scissor{ {0, 0}, {rt.Width, rt.Height} };
+        vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+        vkCmdSetScissor(cmdBuffer, 0, 1, &scissor);
     }
 
     void VulkanRenderer::ExecuteDraw(VkCommandBuffer cmdBuffer, const DrawInfo& draw, RenderTargetHandle target, uint32_t passIndex)

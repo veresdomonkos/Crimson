@@ -7,6 +7,9 @@ namespace crimson::vulkan
     VulkanImGuiBackend::VulkanImGuiBackend(VulkanDevice& device, VulkanResourceManager& resourceManager, const Window& window)
         : m_device(device), m_resourceManager(resourceManager)
     {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+
         auto* glfwWindow = static_cast<GLFWwindow*>(window.GetNativeHandle());
         ImGui_ImplGlfw_InitForVulkan(glfwWindow, true);
 
