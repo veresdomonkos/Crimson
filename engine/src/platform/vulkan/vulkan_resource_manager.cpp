@@ -133,11 +133,11 @@ namespace crimson::vulkan
         return m_primarySurface.SwapchainTargetHandles[m_primarySurface.CurrentImageIndex];
     }
 
-    void VulkanResourceManager::RecreateSwapchain(VulkanSurface& surface)
+    bool VulkanResourceManager::RecreateSwapchain(VulkanSurface& surface)
     {
         m_device.WaitIdle();
         DestroySwapchainResources(surface);
-        CreateSwapchainResources(surface);
+        return CreateSwapchainResources(surface);
     }
 
     VertexBufferHandle VulkanResourceManager::CreateVertexBuffer(const VertexBufferInfo& info, const void* data)
@@ -801,13 +801,12 @@ namespace crimson::vulkan
             return {};
         }
 
-        // --- ITT A LÉNYEGI JAVÍTÁS: a render target tényleges attachment-jeiből épül fel ---
         VkPipelineRenderingCreateInfo renderingInfo{};
         renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
         renderingInfo.viewMask = 0;
         renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorFormats.size());
         renderingInfo.pColorAttachmentFormats = colorFormats.empty() ? nullptr : colorFormats.data();
-        renderingInfo.depthAttachmentFormat = depthFormat; // VK_FORMAT_UNDEFINED, ha nincs depth
+        renderingInfo.depthAttachmentFormat = depthFormat;
 
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -1206,7 +1205,7 @@ namespace crimson::vulkan
         }
 
         surface.CurrentImageIndex = 0;
-
+        surface.IsDirty = false;
         return true;
     }
 

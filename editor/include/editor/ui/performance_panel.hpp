@@ -1,4 +1,3 @@
-// performance_panel.hpp
 #pragma once
 #include "editor/ui/panel.hpp"
 #include "editor/frame_stats.hpp"

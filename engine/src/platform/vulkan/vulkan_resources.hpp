@@ -41,6 +41,8 @@ namespace crimson::vulkan
 
         std::vector<VkFence> ImagesInFlight;
         std::vector<VkSemaphore> RenderFinishedSemaphores;
+
+        bool IsDirty = false;
     };
 
     struct VulkanRenderTarget

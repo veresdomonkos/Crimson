@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+#include <mutex>
 #include <fmt/format.h>
 #include <fmt/color.h>
 
@@ -12,9 +14,13 @@ namespace crimson
         Error
     };
 
+    using LogCallback = std::function<void(LogLevel level, const std::string& message)>;
+
     class Logger
     {
     public:
+        static void Subscribe(LogCallback callback);
+
         template<typename... Args>
         static void Info(fmt::format_string<Args...> format, Args&&... args)
         {
@@ -35,6 +41,9 @@ namespace crimson
 
     private:
         static void Write(LogLevel level, const std::string& msg);
+
+        static inline std::vector<LogCallback> s_Callbacks;
+        static inline std::mutex s_Mutex;
     };
 }
 

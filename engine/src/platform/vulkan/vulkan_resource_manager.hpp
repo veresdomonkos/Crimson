@@ -25,7 +25,7 @@ namespace crimson::vulkan
         [[nodiscard]] VulkanSurface& GetRenderSurface() { return m_primarySurface; }
 
         [[nodiscard]] RenderTargetHandle GetCurrentBackBuffer() const;
-        void RecreateSwapchain(VulkanSurface& surface);
+        bool RecreateSwapchain(VulkanSurface& surface);
 
         VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) override;
         void DestroyVertexBuffer(VertexBufferHandle handle) override;

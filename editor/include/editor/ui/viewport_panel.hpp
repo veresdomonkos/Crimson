@@ -1,9 +1,6 @@
-// viewport_panel.hpp
 #pragma once
 #include <string>
 #include <imgui.h>
-#include <crimson/renderer/resource_handles.hpp>
-#include <crimson/ui/imgui_backend.hpp>
 
 #include "editor/ui/panel.hpp"
 

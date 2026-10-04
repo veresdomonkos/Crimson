@@ -11,6 +11,10 @@
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include "editor/editor_resources.hpp"
+#include "editor/ui/asset_browser_panel.hpp"
+#include "editor/ui/console_panel.hpp"
+#include "editor/ui/hierarchy_panel.hpp"
+#include "editor/ui/inspector_panel.hpp"
 #include "editor/ui/performance_panel.hpp"
 #include "editor/ui/viewport_panel.hpp"
 #include "glm/gtx/quaternion.hpp"
@@ -142,6 +146,10 @@ namespace crimson::editor
         m_ui->AddPanel<ui::ViewportPanel>("Scene",      imgui.GetOrCreateTextureId(m_mainColor),   16.0f / 9.0f);
         m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_shadowDepth), 1.0f);
         m_ui->AddPanel<ui::PerformancePanel>(m_frameStats);
+	    m_ui->AddPanel<ui::ConsolePanel>();
+	    m_ui->AddPanel<ui::HierarchyPanel>();
+	    m_ui->AddPanel<ui::InspectorPanel>();
+	    m_ui->AddPanel<ui::AssetBrowserPanel>();
     }
 
     void EditorApplication::Run()
@@ -168,10 +176,10 @@ namespace crimson::editor
         auto frame = renderer.BeginFrame(m_lighting);
         const auto afterBeginFrame = Clock::now();
 
-        m_graphicsBackend->Imgui->NewFrame();
-
         if (!frame.ShouldRender())
             return;
+
+	    m_graphicsBackend->Imgui->NewFrame();
 
         RecordShadowPass(frame);
         RecordMainPass(frame);

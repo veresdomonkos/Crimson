@@ -461,9 +461,21 @@ namespace crimson::vulkan
     {
         m_frames[m_currentFrameIndex].Reset();
 
-        VulkanSurface& surface = m_resourceManager.GetRenderSurface();
-        VkFence frameFence = m_frameSyncs[m_currentFrameIndex].InFlightFence;
+        uint32_t windowWidth = m_device.GetPrimaryWindow().Width();
+        uint32_t windowHeight = m_device.GetPrimaryWindow().Height();
 
+        if (windowWidth == 0 || windowHeight == 0)
+            return m_frames[m_currentFrameIndex].CreateContext();
+
+        VulkanSurface& surface = m_resourceManager.GetRenderSurface();
+
+        if (surface.IsDirty)
+        {
+            if (!m_resourceManager.RecreateSwapchain(surface))
+                return m_frames[m_currentFrameIndex].CreateContext();
+        }
+
+        VkFence frameFence = m_frameSyncs[m_currentFrameIndex].InFlightFence;
         vkWaitForFences(m_device.GetDevice(), 1, &frameFence, VK_TRUE, UINT64_MAX);
 
         if (m_lightingMappedData != nullptr)
@@ -482,17 +494,19 @@ namespace crimson::vulkan
         }
 
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(m_device.GetDevice(), surface.Swapchain, UINT64_MAX,
-            m_frameSyncs[m_currentFrameIndex].ImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(m_device.GetDevice(), surface.Swapchain, UINT64_MAX, m_frameSyncs[m_currentFrameIndex].ImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
-            m_resourceManager.RecreateSwapchain(surface);
+            surface.IsDirty = true;
             return m_frames[m_currentFrameIndex].CreateContext();
         }
 
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        {
             LOG_ERROR("[Renderer] AcquireNextImage failed");
+            return m_frames[m_currentFrameIndex].CreateContext();
+        }
 
         surface.CurrentImageIndex = imageIndex;
         if (surface.ImagesInFlight[imageIndex] != VK_NULL_HANDLE)
@@ -573,7 +587,9 @@ namespace crimson::vulkan
 
         VkResult result = vkQueuePresentKHR(m_device.GetGraphicsQueue(), &present);
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
-            m_resourceManager.RecreateSwapchain(surface);
+        {
+            surface.IsDirty = true;
+        }
 
         m_currentFrameIndex = (m_currentFrameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
     }

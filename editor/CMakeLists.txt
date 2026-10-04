@@ -13,6 +13,11 @@ add_executable(Editor
         include/editor/ui/editor_ui.hpp
         src/ui/editor_ui.cpp
         include/editor/editor_resources.hpp
+        include/editor/ui/console_panel.hpp
+        include/editor/ui/hierarchy_panel.hpp
+        include/editor/ui/inspector_panel.hpp
+        include/editor/ui/asset_browser_panel.hpp
+        src/ui/console_panel.cpp
 )
 
 target_include_directories(Editor PUBLIC include)

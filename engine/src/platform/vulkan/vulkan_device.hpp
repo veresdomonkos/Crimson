@@ -17,6 +17,8 @@ namespace crimson::vulkan
         VulkanDevice(VulkanDevice&&) = delete;
         VulkanDevice& operator=(VulkanDevice&&) = delete;
 
+        [[nodiscard]] const Window& GetPrimaryWindow() const { return m_primaryWindow; }
+
         [[nodiscard]] VkInstance GetInstance() const { return m_instance; }
         [[nodiscard]] VkSurfaceKHR GetSurface() const { return m_surface; }
         [[nodiscard]] VkPhysicalDevice GetPhysicalDevice() const { return m_physicalDevice; }
@@ -59,6 +61,8 @@ namespace crimson::vulkan
             void* userData);
 
     private:
+        const Window& m_primaryWindow;
+
         VkInstance m_instance{};
         VkDebugUtilsMessengerEXT m_debugMessenger{};
         VkSurfaceKHR m_surface{};

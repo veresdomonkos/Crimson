@@ -64,6 +64,7 @@ namespace crimson::vulkan
     }
 
     VulkanDevice::VulkanDevice(const Window& window)
+        : m_primaryWindow(window)
     {
         m_validationEnabled = EnableValidation && CheckValidationLayerSupport();
 
