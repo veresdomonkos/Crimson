@@ -4,6 +4,8 @@
 #include "vulkan_device.hpp"
 #include "vulkan_resource_manager.hpp"
 
+#include <tracy/TracyVulkan.hpp>
+
 #include <array>
 
 namespace crimson::vulkan
@@ -63,5 +65,7 @@ namespace crimson::vulkan
         std::array<FrameSync, MAX_FRAMES_IN_FLIGHT> m_frameSyncs;
         VkCommandPool m_commandPool = VK_NULL_HANDLE;
         uint32_t m_currentFrameIndex = 0;
+
+        TracyVkCtx m_tracyContext = nullptr;
     };
 }

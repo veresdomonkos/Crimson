@@ -34,6 +34,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/asset_manager/importers/material_importer.hpp
         include/crimson/renderer/mesh.hpp
         include/crimson/asset_manager/importers/mesh_importer.hpp
+        include/crimson/core/profiler.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -92,6 +93,7 @@ target_link_libraries(Engine
         imgui
         fmt::fmt
         nlohmann_json::nlohmann_json
+        Tracy::TracyClient
     PRIVATE
         glfw
         glad

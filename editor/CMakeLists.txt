@@ -7,9 +7,6 @@ add_executable(Editor
         include/crimson_editor/ui/Panel.hpp
         include/crimson_editor/ui/viewport_panel.hpp
         src/ui/viewport_panel.cpp
-        include/crimson_editor/ui/performance_panel.hpp
-        include/crimson_editor/frame_stats.hpp
-        src/ui/performance_panel.cpp
         include/crimson_editor/ui/editor_ui.hpp
         src/ui/editor_ui.cpp
         include/crimson_editor/editor_resources.hpp

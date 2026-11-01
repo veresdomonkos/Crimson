@@ -1,6 +1,9 @@
 #include "opengl_renderer.hpp"
 #include "utils.hpp"
 #include "crimson/core/log.hpp"
+#include "crimson/core/profiler.hpp"
+
+#include <tracy/TracyOpenGL.hpp>
 
 namespace crimson::opengl
 {
@@ -14,6 +17,8 @@ namespace crimson::opengl
         glCreateBuffers(1, &m_lightingUBO);
         glNamedBufferData(m_lightingUBO, sizeof(LightingBlock), nullptr, GL_DYNAMIC_DRAW);
         glBindBufferBase(GL_UNIFORM_BUFFER, kLightingBlockBinding, m_lightingUBO);
+
+        TracyGpuContext;
     }
 
     OpenGLRenderer::~OpenGLRenderer()
@@ -30,6 +35,8 @@ namespace crimson::opengl
 
     FrameContext OpenGLRenderer::BeginFrame(const FrameLightingData& lighting)
     {
+        CRIMSON_PROFILE_FUNCTION();
+
         auto* window = m_device.GetPrimaryWindow();
         glfwMakeContextCurrent(window);
 
@@ -51,25 +58,43 @@ namespace crimson::opengl
 
     void OpenGLRenderer::EndFrame(const FrameContext& frameContext)
     {
+        CRIMSON_PROFILE_FUNCTION();
+
         Frame& frame = m_frames[frameContext.GetIndex()];
         auto* window = m_device.GetPrimaryWindow();
         glfwMakeContextCurrent(window);
 
+        size_t drawCalls = 0;
         for (const auto& entry : frame.GetPasses())
         {
             if (const auto* materialPass = std::get_if<RenderPass>(&entry))
             {
+                CRIMSON_PROFILE_SCOPE("Render Pass");
+                TracyGpuZone("Render Pass");
+
+                drawCalls += materialPass->GetDraws().size();
+
                 ExecuteBeginRenderPass(materialPass->Info());
                 for (const auto& draw : materialPass->GetDraws())
                     ExecuteDraw(draw);
             }
             else if (const auto* rawPass = std::get_if<RawPass>(&entry))
             {
+                CRIMSON_PROFILE_SCOPE("Raw Pass");
+                TracyGpuZone("Raw Pass");
+
                 ExecuteBeginRawPass(rawPass->Info());
             }
         }
 
-        glfwSwapBuffers(window);
+        CRIMSON_PROFILE_PLOT("Draw Calls", drawCalls);
+
+        {
+            CRIMSON_PROFILE_SCOPE("Swap Buffers");
+            glfwSwapBuffers(window);
+        }
+
+        TracyGpuCollect;
     }
 
     void OpenGLRenderer::ExecuteBeginRenderPass(const RenderPassInfo& info)
@@ -132,6 +157,8 @@ namespace crimson::opengl
 
     void OpenGLRenderer::ExecuteDraw(const DrawInfo& info)
     {
+        CRIMSON_PROFILE_FUNCTION();
+
         OpenGLVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(info.VertexBuffer);
         OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(info.IndexBuffer);
         OpenGLMaterial& material = m_resourceManager.GetMaterial(info.Material);

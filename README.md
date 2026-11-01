@@ -14,7 +14,7 @@ Crimson is a small, data-driven real-time rendering engine written in modern C++
 - **Shader reflection** - material properties and texture bindings are discovered from SPIR-V with SPIRV-Reflect; shaders only declare what they use.
 - **Lighting** - directional, point and spot lights in a single GPU light array (glTF `KHR_lights_punctual`-style), plus a shadow-mapped directional light.
 - **Asset manager** - importer-based pipeline for textures, shaders, materials and meshes, with metadata and a scanned `assets/` directory.
-- **ImGui docking editor** - viewport panels that display engine render targets, console, hierarchy, inspector, asset browser and performance panels, with a custom crimson-accented theme.
+- **ImGui docking editor** - viewport panels that display engine render targets, console, hierarchy, inspector and asset browser panels, with a custom crimson-accented theme.
 
 ## Architecture
 
@@ -101,7 +101,6 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 
 - **Viewport** - displays a render target texture (scene, shadow map, ...).
 - **Hierarchy / Inspector / Asset Browser / Console**
-- **Performance** - FPS and frame time.
 
 ## Project layout
 
@@ -109,7 +108,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 Crimson/
   engine/            core, renderer, backends (vulkan/, opengl/), asset manager
   editor/            Crimson Editor (application, panels, importers, assets/)
-  external/          glfw, glad, glm, fmt, imgui, spirv-reflect, tiny-process-library
+  external/          glfw, glad, glm, fmt, imgui, spirv-reflect, tiny-process-library, tracy
 ```
 
 ## Building
@@ -134,6 +133,12 @@ The `assets/` directory is copied next to the executable after every build. The 
 
 > Use **Release** (or RelWithDebInfo) when measuring performance. Debug builds, especially with validation layers enabled, are many times slower and give misleading numbers.
 
+## Profiling
+
+Crimson is instrumented with [Tracy](https://github.com/wolfpld/tracy): CPU zones, per-pass GPU zones on both backends, and a `Draw Calls` plot. To profile, run the editor and connect the [Tracy v0.14.1 viewer](https://github.com/wolfpld/tracy/releases/tag/v0.14.1) to `127.0.0.1`. The viewer version must match the `external/tracy` submodule.
+
+Data is only collected while a viewer is connected, and the client only listens on localhost. Configure with `-DCRIMSON_ENABLE_PROFILER=OFF` to compile the instrumentation out. Add zones with the macros in `crimson/core/profiler.hpp`.
+
 ## Editor controls
 
 | Input | Action |
@@ -145,7 +150,7 @@ The `assets/` directory is copied next to the executable after every build. The 
 
 ## Roadmap
 
-- [ ] Built-in profiler: CPU scopes, GPU timestamp queries per pass, draw/bind statistics
+- [ ] Profiler: bind statistics
 - [ ] Per-pass material override (dedicated depth-only shadow material)
 - [ ] State caching and draw sorting to reduce redundant pipeline/descriptor binds
 - [ ] Viewport-driven render target resizing

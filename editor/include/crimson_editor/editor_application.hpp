@@ -6,7 +6,6 @@
 #include <crimson/graphics/graphincs_backend.hpp>
 #include <crimson/asset_manager/asset_manager.hpp>
 
-#include "crimson_editor/frame_stats.hpp"
 #include "crimson_editor/ui/editor_ui.hpp"
 
 namespace crimson::editor
@@ -31,7 +30,6 @@ namespace crimson::editor
 	    void RecordShadowPass(FrameContext& frame);
 	    void RecordMainPass(FrameContext& frame);
 	    void RecordUIPass(FrameContext& frame);
-	    void UpdateFrameStats(float frameTimeMs, float renderMs);
 
 	    // --- Input / events ---
 	    void HandleMove(float deltaTime);
@@ -50,7 +48,6 @@ namespace crimson::editor
 	    std::unique_ptr<AssetManager>    m_assetManager;
 
 	    PerspectiveCamera m_camera;
-	    FrameStats m_frameStats;
 
 	    // Geometry
 	    Mesh m_floor;

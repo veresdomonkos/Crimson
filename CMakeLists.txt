@@ -34,5 +34,12 @@ add_subdirectory(external/stb_image)
 
 add_subdirectory(external/tinyobjloader)
 
+#tracy
+option(CRIMSON_ENABLE_PROFILER "Enable Tracy profiling instrumentation" ON)
+set(TRACY_ENABLE ${CRIMSON_ENABLE_PROFILER} CACHE BOOL "" FORCE)
+set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
+set(TRACY_ONLY_LOCALHOST ON CACHE BOOL "" FORCE)
+add_subdirectory(external/tracy)
+
 add_subdirectory(engine)
 add_subdirectory(editor)

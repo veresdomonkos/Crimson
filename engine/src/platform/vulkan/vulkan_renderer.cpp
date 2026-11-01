@@ -1,5 +1,6 @@
 #include "vulkan_renderer.hpp"
 #include "crimson/core/log.hpp"
+#include "crimson/core/profiler.hpp"
 #include <cstring>
 
 namespace crimson::vulkan
@@ -14,6 +15,8 @@ namespace crimson::vulkan
     VulkanRenderer::~VulkanRenderer()
     {
         m_device.WaitIdle();
+
+        TracyVkDestroy(m_tracyContext);
 
         if (m_globalDescriptorSet != VK_NULL_HANDLE)
         {
@@ -84,6 +87,8 @@ namespace crimson::vulkan
             if (vkCreateFence(m_device.GetDevice(), &fenceInfo, nullptr, &m_frameSyncs[i].InFlightFence) != VK_SUCCESS)
                 LOG_ERROR("[Vulkan Renderer] Failed to create Vulkan Fences!");
         }
+
+        m_tracyContext = TracyVkContext(m_device.GetPhysicalDevice(), m_device.GetDevice(), m_device.GetGraphicsQueue(), buffers[0]);
     }
 
     void VulkanRenderer::InitGlobals()
@@ -427,6 +432,8 @@ namespace crimson::vulkan
 
     void VulkanRenderer::ExecuteDraw(VkCommandBuffer cmdBuffer, const DrawInfo& draw, RenderTargetHandle target, uint32_t passIndex)
     {
+        CRIMSON_PROFILE_FUNCTION();
+
         VulkanVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(draw.VertexBuffer);
         VulkanIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(draw.IndexBuffer);
         VulkanMaterial& material = m_resourceManager.GetMaterial(draw.Material);
@@ -460,6 +467,8 @@ namespace crimson::vulkan
 
     FrameContext VulkanRenderer::BeginFrame(const FrameLightingData& lighting)
     {
+        CRIMSON_PROFILE_FUNCTION();
+
         m_frames[m_currentFrameIndex].Reset();
 
         uint32_t windowWidth = m_device.GetPrimaryWindow().Width();
@@ -477,7 +486,10 @@ namespace crimson::vulkan
         }
 
         VkFence frameFence = m_frameSyncs[m_currentFrameIndex].InFlightFence;
-        vkWaitForFences(m_device.GetDevice(), 1, &frameFence, VK_TRUE, UINT64_MAX);
+        {
+            CRIMSON_PROFILE_SCOPE("Wait For Frame Fence");
+            vkWaitForFences(m_device.GetDevice(), 1, &frameFence, VK_TRUE, UINT64_MAX);
+        }
 
         if (m_lightingMappedData != nullptr)
         {
@@ -495,7 +507,11 @@ namespace crimson::vulkan
         }
 
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(m_device.GetDevice(), surface.Swapchain, UINT64_MAX, m_frameSyncs[m_currentFrameIndex].ImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+        VkResult result;
+        {
+            CRIMSON_PROFILE_SCOPE("Acquire Swapchain Image");
+            result = vkAcquireNextImageKHR(m_device.GetDevice(), surface.Swapchain, UINT64_MAX, m_frameSyncs[m_currentFrameIndex].ImageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+        }
 
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
@@ -511,7 +527,10 @@ namespace crimson::vulkan
 
         surface.CurrentImageIndex = imageIndex;
         if (surface.ImagesInFlight[imageIndex] != VK_NULL_HANDLE)
+        {
+            CRIMSON_PROFILE_SCOPE("Wait For Image Fence");
             vkWaitForFences(m_device.GetDevice(), 1, &surface.ImagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
+        }
 
         surface.ImagesInFlight[imageIndex] = frameFence;
         vkResetFences(m_device.GetDevice(), 1, &frameFence);
@@ -524,6 +543,8 @@ namespace crimson::vulkan
         begin.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         vkBeginCommandBuffer(cmd, &begin);
 
+        TracyVkCollect(m_tracyContext, cmd);
+
         m_frames[m_currentFrameIndex].Init(m_resourceManager.GetCurrentBackBuffer(), true);
 
         return m_frames[m_currentFrameIndex].CreateContext();
@@ -531,14 +552,22 @@ namespace crimson::vulkan
 
     void VulkanRenderer::EndFrame(const FrameContext& frameContext)
     {
+        CRIMSON_PROFILE_FUNCTION();
+
         Frame& frame = m_frames[frameContext.GetIndex()];
         VkCommandBuffer cmdBuffer = m_frameSyncs[frameContext.GetIndex()].CommandBuffer;
 
         uint32_t passIndex = 0;
+        size_t drawCalls = 0;
         for (const auto& entry : frame.GetPasses())
         {
             if (const auto* materialPass = std::get_if<RenderPass>(&entry))
             {
+                CRIMSON_PROFILE_SCOPE("Render Pass");
+                TracyVkZone(m_tracyContext, cmdBuffer, "Render Pass");
+
+                drawCalls += materialPass->GetDraws().size();
+
                 const RenderPassInfo& passInfo = materialPass->Info();
                 VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(passInfo.Target);
 
@@ -550,9 +579,14 @@ namespace crimson::vulkan
             }
             else if (const auto* rawPass = std::get_if<RawPass>(&entry))
             {
+                CRIMSON_PROFILE_SCOPE("Raw Pass");
+                TracyVkZone(m_tracyContext, cmdBuffer, "Raw Pass");
+
                 ExecuteRawPass(cmdBuffer, *rawPass);
             }
         }
+
+        CRIMSON_PROFILE_PLOT("Draw Calls", drawCalls);
 
         if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
             LOG_ERROR("[Vulkan Renderer] Failed to end command buffer");
@@ -575,8 +609,11 @@ namespace crimson::vulkan
         submit.signalSemaphoreCount = 1;
         submit.pSignalSemaphores = &signalSemaphore;
 
-        if (vkQueueSubmit(m_device.GetGraphicsQueue(), 1, &submit, fence) != VK_SUCCESS)
-            LOG_ERROR("[Vulkan Renderer] Queue submit failed");
+        {
+            CRIMSON_PROFILE_SCOPE("Queue Submit");
+            if (vkQueueSubmit(m_device.GetGraphicsQueue(), 1, &submit, fence) != VK_SUCCESS)
+                LOG_ERROR("[Vulkan Renderer] Queue submit failed");
+        }
 
         VkPresentInfoKHR present{};
         present.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -586,7 +623,11 @@ namespace crimson::vulkan
         present.pSwapchains = &surface.Swapchain;
         present.pImageIndices = &imageIndex;
 
-        VkResult result = vkQueuePresentKHR(m_device.GetGraphicsQueue(), &present);
+        VkResult result;
+        {
+            CRIMSON_PROFILE_SCOPE("Queue Present");
+            result = vkQueuePresentKHR(m_device.GetGraphicsQueue(), &present);
+        }
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR)
         {
             surface.IsDirty = true;

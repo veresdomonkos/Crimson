@@ -2,6 +2,7 @@
 
 #include <crimson/core/core.hpp>
 #include <crimson/core/log.hpp>
+#include <crimson/core/profiler.hpp>
 #include <crimson/renderer/renderer_api.hpp>
 #include "crimson_editor/utils.hpp"
 #include <glm/gtc/matrix_transform.hpp>
@@ -17,7 +18,6 @@
 #include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 #include "crimson_editor/ui/inspector_panel.hpp"
-#include "crimson_editor/ui/performance_panel.hpp"
 #include "crimson_editor/ui/viewport_panel.hpp"
 #include "glm/gtx/quaternion.hpp"
 
@@ -166,7 +166,6 @@ namespace crimson::editor
         m_ui->AddPanel<ui::ViewportPanel>("Scene",      imgui.GetOrCreateTextureId(m_mainColor),   16.0f / 9.0f);
         m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_shadowDepth), 1.0f);
 	    m_ui->AddPanel<ui::ViewportPanel>("Test Texture", imgui.GetOrCreateTextureId(m_testTexture), 875.0f / 350.0f);
-        m_ui->AddPanel<ui::PerformancePanel>(m_frameStats);
 	    m_ui->AddPanel<ui::ConsolePanel>();
 	    m_ui->AddPanel<ui::HierarchyPanel>();
 	    m_ui->AddPanel<ui::InspectorPanel>();
@@ -187,21 +186,24 @@ namespace crimson::editor
             const auto deltaTime = static_cast<float>(currentTime - m_lastTime);
             m_lastTime = currentTime;
 
-            m_window->PollEvents();
+            {
+                CRIMSON_PROFILE_SCOPE("Poll Events");
+                m_window->PollEvents();
+            }
             RenderFrame();
             HandleMove(deltaTime);
+
+            CRIMSON_PROFILE_FRAME();
         }
     }
 
     void EditorApplication::RenderFrame()
     {
-        using Clock = std::chrono::steady_clock;
-        const auto frameStart = Clock::now();
+        CRIMSON_PROFILE_FUNCTION();
 
         auto& renderer = *m_graphicsBackend->Renderer;
 
         auto frame = renderer.BeginFrame(m_lighting);
-        const auto afterBeginFrame = Clock::now();
 
         if (!frame.ShouldRender())
             return;
@@ -213,11 +215,6 @@ namespace crimson::editor
         RecordUIPass(frame);
 
         renderer.EndFrame(frame);
-
-        const auto afterEndFrame = Clock::now();
-        UpdateFrameStats(
-            std::chrono::duration<float, std::milli>(afterEndFrame - frameStart).count(),
-            std::chrono::duration<float, std::milli>(afterEndFrame - afterBeginFrame).count());
     }
 
     void EditorApplication::RecordShadowPass(FrameContext& frame)
@@ -257,23 +254,6 @@ namespace crimson::editor
             .Callback = [this](const NativeFrameHandles& handles) { m_ui->Draw(handles); }
         };
         frame.AddRawPass(info);
-    }
-
-    void EditorApplication::UpdateFrameStats(float frameTimeMs, float renderMs)
-    {
-        m_frameStats.FrameTimeMs = frameTimeMs;
-        m_frameStats.RenderMs    = renderMs;
-        m_frameStats.FpsAccumulator += 1000.0f / frameTimeMs;
-        ++m_frameStats.FrameCount;
-        m_frameStats.UpdateTimer += frameTimeMs / 1000.0f;
-
-        if (m_frameStats.UpdateTimer >= 1.0f)
-        {
-            m_frameStats.FPS = m_frameStats.FpsAccumulator / static_cast<float>(m_frameStats.FrameCount);
-            m_frameStats.FpsAccumulator = 0.0f;
-            m_frameStats.FrameCount = 0;
-            m_frameStats.UpdateTimer = 0.0f;
-        }
     }
 
     void EditorApplication::HandleMove(float deltaTime)
