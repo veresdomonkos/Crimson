@@ -246,11 +246,11 @@ namespace crimson::vulkan
         vkUpdateDescriptorSets(m_device.GetDevice(), 1, &write, 0, nullptr);
     }
 
-    void VulkanRenderer::TransitionImage(VkCommandBuffer cmd, VulkanTexture& texture, VkImageAspectFlagBits flagBits, VkImageLayout newLayout)
+    void VulkanRenderer::TransitionImage(VkCommandBuffer cmd, VulkanTexture& texture, VkImageLayout newLayout)
     {
         if (texture.Layout == newLayout) return;
 
-        const bool isDepth = (flagBits & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
+        const bool isDepth = (texture.Aspect & VK_IMAGE_ASPECT_DEPTH_BIT) != 0;
 
         VkPipelineStageFlags2 srcStage = VK_PIPELINE_STAGE_2_NONE;
         VkAccessFlags2        srcAccess = VK_ACCESS_2_NONE;
@@ -311,7 +311,7 @@ namespace crimson::vulkan
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.image = texture.Image;
-        barrier.subresourceRange = { static_cast<VkImageAspectFlags>(flagBits), 0, VK_REMAINING_MIP_LEVELS, 0, 1 };
+        barrier.subresourceRange = { texture.Aspect, 0, VK_REMAINING_MIP_LEVELS, 0, 1 };
 
         VkDependencyInfo dep{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
         dep.imageMemoryBarrierCount = 1;
@@ -347,13 +347,13 @@ namespace crimson::vulkan
         {
             VulkanTexture& color = m_resourceManager.GetTexture(colorHandle);
             const VkImageLayout targetLayout = rt.IsSwapchain ? VK_IMAGE_LAYOUT_PRESENT_SRC_KHR : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            TransitionImage(cmdBuffer, color, VK_IMAGE_ASPECT_COLOR_BIT, targetLayout);
+            TransitionImage(cmdBuffer, color, targetLayout);
         }
 
         if (rt.DepthAttachment && !rt.IsSwapchain)
         {
             VulkanTexture& depth = m_resourceManager.GetTexture(rt.DepthAttachment);
-            TransitionImage(cmdBuffer, depth, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+            TransitionImage(cmdBuffer, depth, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
     }
 
@@ -378,6 +378,7 @@ namespace crimson::vulkan
     {
         const bool clearColor = HasClearFlag(flags, ClearFlags::Color);
         const bool clearDepth = HasClearFlag(flags, ClearFlags::Depth);
+        const bool clearStencil = HasClearFlag(flags, ClearFlags::Stencil);
 
         std::vector<VkRenderingAttachmentInfo> colorAttachments;
         colorAttachments.reserve(rt.ColorAttachments.size());
@@ -385,7 +386,7 @@ namespace crimson::vulkan
         for (TextureHandle colorHandle : rt.ColorAttachments)
         {
             VulkanTexture& color = m_resourceManager.GetTexture(colorHandle);
-            TransitionImage(cmdBuffer, color, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+            TransitionImage(cmdBuffer, color, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
 
             VkRenderingAttachmentInfo attachment{};
             attachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
@@ -398,19 +399,26 @@ namespace crimson::vulkan
         }
 
         VkRenderingAttachmentInfo depthAttachment{};
+        VkRenderingAttachmentInfo stencilAttachment{};
         const bool hasDepth = static_cast<bool>(rt.DepthAttachment);
+        bool hasStencil = false;
 
         if (hasDepth)
         {
             VulkanTexture& depth = m_resourceManager.GetTexture(rt.DepthAttachment);
-            TransitionImage(cmdBuffer, depth, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+            TransitionImage(cmdBuffer, depth, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+            hasStencil = (depth.Aspect & VK_IMAGE_ASPECT_STENCIL_BIT) != 0;
 
             depthAttachment.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
-            depthAttachment.imageView = depth.View;
+            depthAttachment.imageView = hasStencil ? depth.AttachmentView : depth.View;
             depthAttachment.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
             depthAttachment.loadOp = clearDepth ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
             depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
             depthAttachment.clearValue.depthStencil = { clearDepthValue, clearStencilValue };
+
+            stencilAttachment = depthAttachment;
+            stencilAttachment.loadOp = clearStencil ? VK_ATTACHMENT_LOAD_OP_CLEAR : VK_ATTACHMENT_LOAD_OP_LOAD;
         }
 
         VkRenderingInfo rendering{};
@@ -420,6 +428,7 @@ namespace crimson::vulkan
         rendering.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
         rendering.pColorAttachments = colorAttachments.data();
         if (hasDepth) rendering.pDepthAttachment = &depthAttachment;
+        if (hasStencil) rendering.pStencilAttachment = &stencilAttachment;
 
         vkCmdBeginRendering(cmdBuffer, &rendering);
 

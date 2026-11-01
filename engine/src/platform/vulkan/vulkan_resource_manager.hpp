@@ -75,12 +75,9 @@ namespace crimson::vulkan
         VkShaderModule CreateShaderModule(std::span<const uint32_t> code);
         void ReflectShader(VulkanShader& shader, std::span<const uint32_t> binary, VkShaderStageFlagBits stage);
 
-        bool CreateImage(const VkImageCreateInfo& info, VulkanTexture& texture) const;
         bool CreateImageView(VulkanTexture& texture, VkImageAspectFlags aspect) const;
 
         void CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const;
-        void TransitionImageLayout(VkImage image, VkImageAspectFlags aspect, VkImageLayout oldLayout, VkImageLayout newLayout) const;
-        void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) const;
         void UploadTextureData(VulkanTexture& texture, const TextureInfo& info, const void* data) const;
 
     private:

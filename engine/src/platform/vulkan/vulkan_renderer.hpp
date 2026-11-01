@@ -38,7 +38,7 @@ namespace crimson::vulkan
         void InitializeSynchronizationAndCommands();
         void InitGlobals();
 
-        void TransitionImage(VkCommandBuffer cmd, VulkanTexture& texture, VkImageAspectFlagBits flagBits, VkImageLayout newLayout);
+        void TransitionImage(VkCommandBuffer cmd, VulkanTexture& texture, VkImageLayout newLayout);
         void ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const RenderPassInfo& info, uint32_t passIndex);
         void ExecuteEndRenderPass(VkCommandBuffer cmdBuffer, VulkanRenderTarget& rt);
         void ExecuteDraw(VkCommandBuffer cmdBuffer, const DrawInfo& draw, RenderTargetHandle target, uint32_t passIndex);

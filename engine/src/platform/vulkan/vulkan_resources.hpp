@@ -16,6 +16,7 @@ namespace crimson::vulkan
     {
         VkImage Image = VK_NULL_HANDLE;
         VkImageView View = VK_NULL_HANDLE;
+        VkImageView AttachmentView = VK_NULL_HANDLE; // only for depth-stencil formats, View is depth-only there
         VkDeviceMemory Memory = VK_NULL_HANDLE;
 
         VkFormat Format = VK_FORMAT_UNDEFINED;
@@ -90,7 +91,6 @@ namespace crimson::vulkan
     {
         VkPipelineLayout Layout = VK_NULL_HANDLE;
         VkPipeline Pipeline = VK_NULL_HANDLE;
-        VkDescriptorSetLayout DescriptorSetLayout = VK_NULL_HANDLE;
     };
 
     struct VulkanMaterial

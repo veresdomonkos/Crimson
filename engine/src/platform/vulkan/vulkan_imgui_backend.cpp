@@ -14,7 +14,6 @@ namespace crimson::vulkan
         ImGui_ImplGlfw_InitForVulkan(glfwWindow, true);
 
         RenderTargetHandle rtHandle = resourceManager.GetCurrentBackBuffer();
-        VulkanRenderTarget rt = resourceManager.GetRenderTarget(rtHandle);
         VkFormat colorFormat = resourceManager.GetTexture(resourceManager.GetColorAttachment(rtHandle, 0)).Format;
 
         VkPipelineRenderingCreateInfo renderingInfo{};
@@ -68,7 +67,6 @@ namespace crimson::vulkan
         const VulkanTexture& tex = m_resourceManager.GetTexture(texture);
 
         VkDescriptorSet descriptorSet = ImGui_ImplVulkan_AddTexture(
-            m_sampler,
             tex.View,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         );

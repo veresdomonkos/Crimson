@@ -16,7 +16,6 @@ namespace crimson::vulkan
     private:
         VulkanDevice& m_device;
         VulkanResourceManager& m_resourceManager;
-        VkSampler m_sampler = VK_NULL_HANDLE;
         std::unordered_map<TextureHandle, VkDescriptorSet, HandleHash<TextureTag>> m_textureIdCache;
     };
 }

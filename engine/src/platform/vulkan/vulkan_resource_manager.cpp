@@ -553,7 +553,8 @@ namespace crimson::vulkan
         viewInfo.image = texture.Image;
         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = format;
-        viewInfo.subresourceRange.aspectMask = texture.Aspect;
+        // Descriptors can only read one aspect, so sampling goes through a depth-only view
+        viewInfo.subresourceRange.aspectMask = (texture.Aspect & VK_IMAGE_ASPECT_DEPTH_BIT) ? VK_IMAGE_ASPECT_DEPTH_BIT : texture.Aspect;
         viewInfo.subresourceRange.baseMipLevel = 0;
         viewInfo.subresourceRange.levelCount = info.MipLevels;
         viewInfo.subresourceRange.baseArrayLayer = 0;
@@ -564,6 +565,19 @@ namespace crimson::vulkan
             vkFreeMemory(m_device.GetDevice(), texture.Memory, nullptr);
             vkDestroyImage(m_device.GetDevice(), texture.Image, nullptr);
             return TextureHandle::Invalid();
+        }
+
+        if (utils::HasStencilComponent(format))
+        {
+            viewInfo.subresourceRange.aspectMask = texture.Aspect;
+
+            if (vkCreateImageView(m_device.GetDevice(), &viewInfo, nullptr, &texture.AttachmentView) != VK_SUCCESS)
+            {
+                vkDestroyImageView(m_device.GetDevice(), texture.View, nullptr);
+                vkFreeMemory(m_device.GetDevice(), texture.Memory, nullptr);
+                vkDestroyImage(m_device.GetDevice(), texture.Image, nullptr);
+                return TextureHandle::Invalid();
+            }
         }
 
         TextureHandle handle = m_textures.Register(texture);
@@ -585,6 +599,9 @@ namespace crimson::vulkan
 
         if (texture->View != VK_NULL_HANDLE)
             vkDestroyImageView(m_device.GetDevice(), texture->View, nullptr);
+
+        if (texture->AttachmentView != VK_NULL_HANDLE)
+            vkDestroyImageView(m_device.GetDevice(), texture->AttachmentView, nullptr);
 
         if (!texture->IsSwapchainImage)
         {
@@ -819,6 +836,7 @@ namespace crimson::vulkan
         renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorFormats.size());
         renderingInfo.pColorAttachmentFormats = colorFormats.empty() ? nullptr : colorFormats.data();
         renderingInfo.depthAttachmentFormat = depthFormat;
+        renderingInfo.stencilAttachmentFormat = utils::HasStencilComponent(depthFormat) ? depthFormat : VK_FORMAT_UNDEFINED;
 
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
@@ -903,38 +921,6 @@ namespace crimson::vulkan
         return true;
     }
 
-    bool VulkanResourceManager::CreateImage(const VkImageCreateInfo& info, VulkanTexture& texture) const
-    {
-        if (vkCreateImage(m_device.GetDevice(), &info, nullptr, &texture.Image) != VK_SUCCESS)
-            return false;
-
-        VkMemoryRequirements requirements{};
-        vkGetImageMemoryRequirements(m_device.GetDevice(), texture.Image, &requirements);
-
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = requirements.size;
-        allocInfo.memoryTypeIndex = m_device.FindMemoryType(requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-        if (vkAllocateMemory(m_device.GetDevice(), &allocInfo, nullptr, &texture.Memory) != VK_SUCCESS)
-        {
-            vkDestroyImage(m_device.GetDevice(), texture.Image, nullptr);
-            texture.Image = VK_NULL_HANDLE;
-            return false;
-        }
-
-        if (vkBindImageMemory(m_device.GetDevice(), texture.Image, texture.Memory, 0) != VK_SUCCESS)
-        {
-            vkDestroyImage(m_device.GetDevice(), texture.Image, nullptr);
-            vkFreeMemory(m_device.GetDevice(), texture.Memory, nullptr);
-            texture.Image = VK_NULL_HANDLE;
-            texture.Memory = VK_NULL_HANDLE;
-            return false;
-        }
-
-        return true;
-    }
-
     bool VulkanResourceManager::CreateImageView(VulkanTexture& texture, VkImageAspectFlags aspect) const
     {
         VkImageViewCreateInfo viewInfo{};
@@ -961,78 +947,9 @@ namespace crimson::vulkan
         });
     }
 
-    void VulkanResourceManager::TransitionImageLayout(VkImage image, VkImageAspectFlags aspect, VkImageLayout oldLayout, VkImageLayout newLayout) const
-    {
-        m_device.ImmediateSubmit([&](VkCommandBuffer commandBuffer)
-        {
-            VkImageMemoryBarrier barrier{};
-            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-            barrier.oldLayout = oldLayout;
-            barrier.newLayout = newLayout;
-            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-            barrier.image = image;
-            barrier.subresourceRange.aspectMask = aspect;
-            barrier.subresourceRange.baseMipLevel = 0;
-            barrier.subresourceRange.levelCount = 1;
-            barrier.subresourceRange.baseArrayLayer = 0;
-            barrier.subresourceRange.layerCount = 1;
-
-            VkPipelineStageFlags sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
-            VkPipelineStageFlags destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
-
-            if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
-            {
-                barrier.srcAccessMask = 0;
-                barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            }
-            else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
-            {
-                barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-                sourceStage      = VK_PIPELINE_STAGE_TRANSFER_BIT;
-                destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-            }
-            else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL)
-            {
-                barrier.srcAccessMask = 0;
-                barrier.dstAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-                destinationStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-            }
-            else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
-            {
-                barrier.srcAccessMask = 0;
-                barrier.dstAccessMask = 0;
-                destinationStage = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
-            }
-            else
-            {
-                assert(false && "Unsupported image layout transition");
-                return;
-            }
-
-            vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-        });
-    }
-
-    void VulkanResourceManager::CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) const
-    {
-        m_device.ImmediateSubmit([&](VkCommandBuffer commandBuffer)
-        {
-            VkBufferImageCopy region{};
-            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            region.imageSubresource.mipLevel = 0;
-            region.imageSubresource.baseArrayLayer = 0;
-            region.imageSubresource.layerCount = 1;
-            region.imageExtent = { width, height, 1 };
-
-            vkCmdCopyBufferToImage(commandBuffer, buffer, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-        });
-    }
-
     void VulkanResourceManager::UploadTextureData(VulkanTexture& texture, const TextureInfo& info, const void* data) const
     {
-        const VkDeviceSize size = static_cast<VkDeviceSize>(info.Width) * info.Height * 4;
+        const VkDeviceSize size = static_cast<VkDeviceSize>(info.Width) * info.Height * utils::GetBytesPerPixel(info.Format);
 
         VkBuffer stagingBuffer = VK_NULL_HANDLE;
         VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
@@ -1052,9 +969,41 @@ namespace crimson::vulkan
         std::memcpy(mapped, data, static_cast<size_t>(size));
         vkUnmapMemory(m_device.GetDevice(), stagingMemory);
 
-        TransitionImageLayout(texture.Image, texture.Aspect, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-        CopyBufferToImage(stagingBuffer, texture.Image, info.Width, info.Height);
-        TransitionImageLayout(texture.Image, texture.Aspect, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        m_device.ImmediateSubmit([&](VkCommandBuffer commandBuffer)
+        {
+            VkImageMemoryBarrier2 barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
+            barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
+            barrier.srcAccessMask = VK_ACCESS_2_NONE;
+            barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+            barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = texture.Image;
+            barrier.subresourceRange = { texture.Aspect, 0, VK_REMAINING_MIP_LEVELS, 0, 1 };
+
+            VkDependencyInfo dependency{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+            dependency.imageMemoryBarrierCount = 1;
+            dependency.pImageMemoryBarriers = &barrier;
+            vkCmdPipelineBarrier2(commandBuffer, &dependency);
+
+            VkBufferImageCopy region{};
+            region.imageSubresource.aspectMask = texture.Aspect;
+            region.imageSubresource.mipLevel = 0;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount = 1;
+            region.imageExtent = { info.Width, info.Height, 1 };
+            vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, texture.Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+            barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
+            barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+            barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+            barrier.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            vkCmdPipelineBarrier2(commandBuffer, &dependency);
+        });
 
         texture.Layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
