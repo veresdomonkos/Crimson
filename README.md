@@ -133,6 +133,8 @@ The `assets/` directory is copied next to the executable after every build. The 
 
 > Use **Release** (or RelWithDebInfo) when measuring performance. Debug builds, especially with validation layers enabled, are many times slower and give misleading numbers.
 
+Debug builds enable the Vulkan validation layers when they are installed. Set `CRIMSON_VK_SYNC_VALIDATION=1` to add synchronization validation.
+
 ## Profiling
 
 Crimson is instrumented with [Tracy](https://github.com/wolfpld/tracy): CPU zones, per-pass GPU zones on both backends, and a `Draw Calls` plot. To profile, run the editor and connect the [Tracy v0.14.1 viewer](https://github.com/wolfpld/tracy/releases/tag/v0.14.1) to `127.0.0.1`. The viewer version must match the `external/tracy` submodule.
