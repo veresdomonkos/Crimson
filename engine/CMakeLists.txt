@@ -6,6 +6,7 @@ set(ENGINE_PUBLIC_HEADERS
 		include/crimson/core/events.hpp
         include/crimson/renderer/render_commands.hpp
         include/crimson/core/log.hpp
+        include/crimson/core/input.hpp
         include/crimson/renderer/renderer_api.hpp
         include/crimson/renderer/resource_manager.hpp
         include/crimson/renderer/renderer.hpp
@@ -50,6 +51,7 @@ set(ENGINE_IMPLEMENTATION
 		src/platform/glfw/glfw_window.hpp
 		src/platform/glfw/glfw_window.cpp
         src/core/log.cpp
+        src/core/input.cpp
         src/platform/opengl/opengl_resource_manager.hpp
         src/platform/opengl/opengl_resource_manager.cpp
         src/platform/opengl/opengl_renderer.hpp

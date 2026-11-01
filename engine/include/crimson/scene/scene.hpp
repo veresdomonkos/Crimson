@@ -29,6 +29,10 @@ namespace crimson
         // Always current, unlike TransformComponent::World. An invalid entity gives the identity.
         [[nodiscard]] glm::mat4 ComputeWorldMatrix(Entity entity);
 
+        // The nearest active mesh renderer whose bounds the ray hits, or an invalid entity.
+        // Uses the world transforms of the last UpdateWorldTransforms.
+        [[nodiscard]] Entity Raycast(const glm::vec3& origin, const glm::vec3& direction);
+
         // Call once a frame before reading TransformComponent::World or ActiveInHierarchy
         void UpdateWorldTransforms();
 

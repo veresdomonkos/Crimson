@@ -3,6 +3,8 @@ add_executable(Editor
 
         src/main.cpp
         src/editor_application.cpp
+        include/crimson_editor/scene_camera_controller.hpp
+        src/scene_camera_controller.cpp
         include/crimson_editor/ui/Panel.hpp
         include/crimson_editor/ui/viewport_panel.hpp
         src/ui/viewport_panel.cpp

@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
+#include <optional>
 #include <utility>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -114,6 +116,67 @@ namespace crimson
         const glm::mat4 local = entity.GetComponent<TransformComponent>().GetLocalMatrix();
 
         return parent == entt::null ? local : ComputeWorldMatrix({ parent, this }) * local;
+    }
+
+    // Returns how far along the ray it enters the box, or how far it leaves if it starts inside.
+    // That way something in front of the camera wins over a box the camera is standing in.
+    static std::optional<float> IntersectBounds(const glm::vec3& origin, const glm::vec3& direction, const MeshBounds& bounds)
+    {
+        float enter = 0.0f;
+        float exit = std::numeric_limits<float>::max();
+        bool startsInside = true;
+
+        for (int axis = 0; axis < 3; ++axis)
+        {
+            if (origin[axis] < bounds.Min[axis] || origin[axis] > bounds.Max[axis])
+                startsInside = false;
+
+            if (direction[axis] == 0.0f)
+            {
+                if (origin[axis] < bounds.Min[axis] || origin[axis] > bounds.Max[axis])
+                    return std::nullopt;
+
+                continue;
+            }
+
+            const float toMin = (bounds.Min[axis] - origin[axis]) / direction[axis];
+            const float toMax = (bounds.Max[axis] - origin[axis]) / direction[axis];
+
+            enter = std::max(enter, std::min(toMin, toMax));
+            exit = std::min(exit, std::max(toMin, toMax));
+
+            if (enter > exit)
+                return std::nullopt;
+        }
+
+        return startsInside ? exit : enter;
+    }
+
+    Entity Scene::Raycast(const glm::vec3& origin, const glm::vec3& direction)
+    {
+        entt::entity closest = entt::null;
+        float closestDistance = std::numeric_limits<float>::max();
+
+        for (const auto [handle, renderer, transform] : m_registry.view<MeshRendererComponent, TransformComponent>().each())
+        {
+            if (!transform.ActiveInHierarchy || renderer.Resolved.SubMeshes.empty())
+                continue;
+
+            // The direction isn't normalized afterwards, so distances stay comparable between entities
+            const glm::mat4 toLocal = glm::inverse(transform.World);
+            const glm::vec3 localOrigin(toLocal * glm::vec4(origin, 1.0f));
+            const glm::vec3 localDirection(toLocal * glm::vec4(direction, 0.0f));
+
+            const std::optional<float> distance = IntersectBounds(localOrigin, localDirection, renderer.Resolved.Bounds);
+
+            if (distance && *distance < closestDistance)
+            {
+                closest = handle;
+                closestDistance = *distance;
+            }
+        }
+
+        return closest == entt::null ? Entity{} : Entity{ closest, this };
     }
 
     void Scene::UpdateWorldTransforms()

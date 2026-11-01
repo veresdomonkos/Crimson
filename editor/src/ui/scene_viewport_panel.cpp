@@ -6,22 +6,52 @@ namespace crimson::editor::ui
 {
     void SceneViewportPanel::OnImageDrawn(const ImVec2& position, const ImVec2& size)
     {
+        // Left clicks focus a window by themselves, but flying starts with a right click
+        if (IsHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+            ImGui::SetWindowFocus();
+
         HandleShortcuts();
         DrawGizmo(position, size);
         DrawToolbar(position);
+        HandlePicking(position, size);
+    }
+
+    void SceneViewportPanel::HandlePicking(const ImVec2& position, const ImVec2& size)
+    {
+        const ImGuiIO& io = ImGui::GetIO();
+
+        if (!IsHovered() || !ImGui::IsMouseClicked(ImGuiMouseButton_Left) || io.KeyAlt)
+            return;
+
+        // These clicks belong to the toolbar and the gizmo. A viewport image doesn't count as a hovered item.
+        if (ImGui::IsAnyItemHovered() || (m_context.Selected && ImGuizmo::IsOver()))
+            return;
+
+        const glm::vec2 uv((io.MousePos.x - position.x) / size.x, (io.MousePos.y - position.y) / size.y);
+
+        // The bars around the image aren't part of the scene
+        if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f)
+            return;
+
+        const glm::mat4 clipToWorld = glm::inverse(m_camera.GetViewProj());
+
+        // The panel shows the image flipped, so the top of it is the top of clip space
+        const glm::vec4 farPoint = clipToWorld * glm::vec4(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f, 1.0f, 1.0f);
+
+        const glm::vec3 origin = m_camera.GetPosition();
+        const glm::vec3 direction = glm::normalize(glm::vec3(farPoint) / farPoint.w - origin);
+
+        m_context.Selected = m_context.ActiveScene.Raycast(origin, direction);
     }
 
     void SceneViewportPanel::HandleShortcuts()
     {
-        const ImGuiIO& io = ImGui::GetIO();
-
-        // The right mouse button flies the camera with the same keys
-        if (io.WantTextInput || ImGui::IsMouseDown(ImGuiMouseButton_Right))
+        if (ImGui::GetIO().WantTextInput)
             return;
 
-        if (ImGui::IsKeyPressed(ImGuiKey_W, false)) m_operation = ImGuizmo::TRANSLATE;
-        if (ImGui::IsKeyPressed(ImGuiKey_E, false)) m_operation = ImGuizmo::ROTATE;
-        if (ImGui::IsKeyPressed(ImGuiKey_R, false)) m_operation = ImGuizmo::SCALE;
+        if (ImGui::IsKeyPressed(ImGuiKey_1, false)) m_operation = ImGuizmo::TRANSLATE;
+        if (ImGui::IsKeyPressed(ImGuiKey_2, false)) m_operation = ImGuizmo::ROTATE;
+        if (ImGui::IsKeyPressed(ImGuiKey_3, false)) m_operation = ImGuizmo::SCALE;
     }
 
     void SceneViewportPanel::DrawToolbar(const ImVec2& position)
@@ -59,6 +89,9 @@ namespace crimson::editor::ui
         const Entity entity = m_context.Selected;
         if (!entity)
             return;
+
+        // Holding alt is for moving the camera
+        ImGuizmo::Enable(!ImGui::GetIO().KeyAlt);
 
         ImGuizmo::SetDrawlist();
         ImGuizmo::SetRect(position.x, position.y, size.x, size.y);

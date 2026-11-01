@@ -18,6 +18,7 @@ namespace crimson::editor::ui
         void SetAspect(float aspect)           { m_aspect = aspect; }
 
         [[nodiscard]] ImVec2 GetContentSize() const { return m_contentSize; }
+        [[nodiscard]] ImVec2 GetImageSize() const { return m_imageSize; }
         [[nodiscard]] bool   IsHovered() const      { return m_hovered; }
         [[nodiscard]] bool   IsFocused() const      { return m_focused; }
 
@@ -31,6 +32,7 @@ namespace crimson::editor::ui
         float         m_aspect;
 
         ImVec2 m_contentSize{0, 0};
+        ImVec2 m_imageSize{0, 0};
         bool   m_hovered = false;
         bool   m_focused = false;
     };

@@ -69,6 +69,7 @@ namespace crimson
         }
 
         [[nodiscard]] glm::vec3 GetPosition() const { return m_position; }
+        [[nodiscard]] float GetFov() const { return m_fov; }
         [[nodiscard]] glm::vec3 GetForward() const
         {
             glm::vec3 forward;

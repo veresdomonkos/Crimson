@@ -202,13 +202,22 @@ Data is only collected while a viewer is connected, and the client only listens 
 
 ## Editor controls
 
+Based on Unity's scene view. Left or right clicking the Scene panel focuses it, and the move keys only move the camera while it has focus. Mouse controls start over the panel.
+
 | Input | Action |
 |:------|:-------|
-| Right mouse (hold, starting over the Scene panel) | Fly the camera: look around |
-| `W` `A` `S` `D` while flying | Move |
-| `Space` / `Left Ctrl` while flying | Up / down |
-| `Left Shift` while flying | Move faster |
-| `W` / `E` / `R` | Gizmo: move / rotate / scale |
+| `W` `A` `S` `D` or arrow keys | Move where the camera looks |
+| `Q` / `E` | Down / up |
+| `Shift` | Move 3 times faster |
+| Right mouse (hold) | Look around |
+| Scroll while holding the right mouse button | Change the move speed |
+| Middle mouse (hold) | Pan |
+| Scroll | Zoom |
+| `Alt` + left mouse (hold) | Orbit |
+| `Alt` + right mouse (hold) | Zoom |
+| `F` | Frame the selected entity |
+| Left click | Select the nearest mesh under the mouse by its bounds, or clear the selection |
+| `1` / `2` / `3` | Gizmo: move / rotate / scale |
 | `Left Ctrl` while dragging the gizmo | Snap to 0.5 units, 15 degrees or 0.1 scale |
 
 ## Roadmap

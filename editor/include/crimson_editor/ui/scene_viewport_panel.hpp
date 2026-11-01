@@ -17,6 +17,7 @@ namespace crimson::editor::ui
     protected:
         void OnImageDrawn(const ImVec2& position, const ImVec2& size) override;
     private:
+        void HandlePicking(const ImVec2& position, const ImVec2& size);
         void HandleShortcuts();
         void DrawToolbar(const ImVec2& position);
         void DrawGizmo(const ImVec2& position, const ImVec2& size);

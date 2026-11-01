@@ -10,7 +10,6 @@
 #include <glm/gtc/quaternion.hpp>
 #include <GLFW/glfw3.h>
 
-#define GLM_ENABLE_EXPERIMENTAL
 #include "crimson/asset_manager/importers/material_importer.hpp"
 #include "crimson/asset_manager/importers/mesh_importer.hpp"
 #include "crimson/asset_manager/importers/shader_importer.hpp"
@@ -22,7 +21,6 @@
 #include "crimson_editor/ui/scene_viewport_panel.hpp"
 #include "crimson_editor/ui/stats_panel.hpp"
 #include "crimson_editor/ui/viewport_panel.hpp"
-#include "glm/gtx/quaternion.hpp"
 
 
 namespace crimson::editor
@@ -48,8 +46,11 @@ namespace crimson::editor
         CreateScene();
         SetupUI();
 
+        m_input = std::make_unique<Input>(*m_window);
+        m_cameraController = std::make_unique<SceneCameraController>(m_camera, *m_input, *m_sceneViewport);
+
         m_camera.SetPosition(glm::vec3(0.0f, 3.5f, 7.0f));
-        m_camera.LookAt(glm::vec3(0.0f, 0.0f, 0.0f));
+        m_cameraController->SetPivot(glm::vec3(0.0f));
     }
 
     void EditorApplication::CreateRenderTargets()
@@ -162,7 +163,10 @@ namespace crimson::editor
                 m_window->PollEvents();
             }
             RenderFrame();
-            HandleMove(deltaTime);
+
+            m_input->Update();
+            m_cameraController->Update(deltaTime);
+            HandleShortcuts();
 
             CRIMSON_PROFILE_FRAME();
         }
@@ -251,86 +255,13 @@ namespace crimson::editor
         frame.AddRawPass(info);
     }
 
-    void EditorApplication::HandleMove(float deltaTime)
+    void EditorApplication::HandleShortcuts()
     {
-        auto window = static_cast<GLFWwindow*>(m_window->GetNativeHandle());
-
-        constexpr float moveSpeed = 5.0f;
-        constexpr float fastMoveSpeed = 15.0f;
-        constexpr float mouseSensitivity = 0.1f;
-
-        static bool rotating = false;
-        static bool ignoreMouseDelta = false;
-
-        const bool rightMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
-        ImGuiIO& io = ImGui::GetIO();
-
-        // The camera only moves while flying, so the keys stay free for text fields and gizmo shortcuts.
-        // Flying has to start over the scene, a right-click elsewhere is for that panel.
-        if (rightMouseDown && !rotating && m_sceneViewport->IsHovered())
+        if (!ImGui::GetIO().WantTextInput && !m_input->IsMouseButtonDown(MouseButton::Right)
+            && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_context->Selected)
         {
-            rotating = true;
-            ignoreMouseDelta = true;
-
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-            if (glfwRawMouseMotionSupported())
-                glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
+            m_cameraController->Frame(m_context->Selected);
         }
-
-        if (!rightMouseDown && rotating)
-        {
-            rotating = false;
-            ignoreMouseDelta = false;
-
-            if (glfwRawMouseMotionSupported())
-                glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
-
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-        }
-
-        if (!rotating)
-            return;
-
-        if (ignoreMouseDelta)
-        {
-            ignoreMouseDelta = false;
-        }
-        else
-        {
-            m_camera.Rotate(
-                io.MouseDelta.x * mouseSensitivity,
-                -io.MouseDelta.y * mouseSensitivity
-            );
-        }
-
-        const float speed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ? fastMoveSpeed : moveSpeed;
-
-        glm::vec3 forward = m_camera.GetForward();
-        forward.y = 0.0f;
-
-        if (glm::length2(forward) > 0.0001f)
-            forward = glm::normalize(forward);
-
-        const glm::vec3 right = m_camera.GetRight();
-
-        if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-            m_camera.Move(forward * speed * deltaTime);
-
-        if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-            m_camera.Move(-forward * speed * deltaTime);
-
-        if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-            m_camera.Move(right * speed * deltaTime);
-
-        if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-            m_camera.Move(-right * speed * deltaTime);
-
-        if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
-            m_camera.Move(glm::vec3(0.0f, speed * deltaTime, 0.0f));
-
-        if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS)
-            m_camera.Move(glm::vec3(0.0f, -speed * deltaTime, 0.0f));
     }
 
 	void EditorApplication::OnEvent(Event& event)

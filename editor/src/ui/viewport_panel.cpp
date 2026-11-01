@@ -7,7 +7,7 @@ namespace crimson::editor::ui
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
         ImGui::Begin(m_name.c_str(), nullptr,
-            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoNavInputs);
         ImGui::PopStyleVar();
 
         m_hovered = ImGui::IsWindowHovered();
@@ -25,6 +25,8 @@ namespace crimson::editor::ui
             ImVec2 size = (avail.x / avail.y > m_aspect)
                 ? ImVec2(avail.y * m_aspect, avail.y)
                 : ImVec2(avail.x, avail.x / m_aspect);
+
+            m_imageSize = size;
 
             const ImVec2 position(
                 origin.x + (avail.x - size.x) * 0.5f,
