@@ -134,7 +134,7 @@ scene.SetParent(light, {}); // back to the top level, it stays where it is in th
 
 Every entity has the first three, and the others are optional. Meshes and renderers share one component because there is only one kind of renderer so far. It can be split when something else needs a mesh, such as skinned meshes.
 
-`SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLightingData`, gives every active renderer an object transform, and records the shadow passes and the main pass.
+`SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLightingData`, gives every active renderer an object transform, and records the shadow passes and the main pass. It can outline an entity and its children: their meshes are drawn into a mask, and a pass over the whole screen colors the pixels next to it. The color comes from `materials/outline.mat`.
 
 ### Asset pipeline
 
@@ -216,7 +216,7 @@ Based on Unity's scene view. Left or right clicking the Scene panel focuses it, 
 | `Alt` + left mouse (hold) | Orbit |
 | `Alt` + right mouse (hold) | Zoom |
 | `F` | Frame the selected entity |
-| Left click | Select the nearest mesh under the mouse by its bounds, or clear the selection |
+| Left click | Select the nearest mesh under the mouse by its bounds, or clear the selection. The selection gets an outline. |
 | `1` / `2` / `3` | Gizmo: move / rotate / scale |
 | `Left Ctrl` while dragging the gizmo | Snap to 0.5 units, 15 degrees or 0.1 scale |
 

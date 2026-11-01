@@ -25,6 +25,9 @@
 
 namespace crimson::editor
 {
+    static constexpr uint32_t kMainTargetWidth = 1920;
+    static constexpr uint32_t kMainTargetHeight = 1080;
+
 	EditorApplication::EditorApplication(RendererAPIType rendererType)
         : m_running(true), m_lastTime(0.0), m_rendererType(rendererType)
     {
@@ -56,8 +59,8 @@ namespace crimson::editor
     void EditorApplication::CreateRenderTargets()
     {
         RenderTargetInfo mainInfo{
-            .Width = 1920,
-            .Height = 1080,
+            .Width = kMainTargetWidth,
+            .Height = kMainTargetHeight,
             .ColorFormats = { TextureFormat::RGBA8 },
             .DepthFormat = TextureFormat::Depth32F
         };
@@ -125,8 +128,14 @@ namespace crimson::editor
 
         m_lighting.AmbientColor = glm::vec3(0.05f);
 
-        if (const AssetID shadowMaterial = m_assetManager->FindByPath("materials/shadow.mat"))
-            m_sceneRenderer->SetShadowMaterial(m_assetManager->GetAsset<MaterialHandle>(shadowMaterial).value_or(MaterialHandle::Invalid()));
+        const auto loadMaterial = [this](const char* path)
+        {
+            const AssetID id = m_assetManager->FindByPath(path);
+            return id ? m_assetManager->GetAsset<MaterialHandle>(id).value_or(MaterialHandle::Invalid()) : MaterialHandle::Invalid();
+        };
+
+        m_sceneRenderer->SetShadowMaterial(loadMaterial("materials/shadow.mat"));
+        m_sceneRenderer->SetOutlineMaterials(loadMaterial("materials/outline_mask.mat"), loadMaterial("materials/outline.mat"), kMainTargetWidth, kMainTargetHeight);
     }
 
     void EditorApplication::SetupUI()
@@ -242,7 +251,7 @@ namespace crimson::editor
             .CameraPosition = m_camera.GetPosition()
         };
 
-        m_sceneRenderer->RecordPasses(frame, m_scene, m_lighting, info);
+        m_sceneRenderer->RecordPasses(frame, m_scene, m_lighting, info, m_context->Selected);
     }
 
     void EditorApplication::RecordUIPass(FrameContext& frame)

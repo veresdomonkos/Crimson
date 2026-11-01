@@ -1,5 +1,7 @@
 #include "crimson/scene/scene_renderer.hpp"
 
+#include <array>
+
 #include "crimson/asset_manager/asset_manager.hpp"
 #include "crimson/core/log.hpp"
 #include "crimson/scene/entity.hpp"
@@ -45,6 +47,33 @@ namespace crimson
     SceneRenderer::~SceneRenderer()
     {
         m_resources.DestroyRenderTarget(m_shadowTarget);
+
+        if (m_outlineMaskTarget)
+        {
+            m_resources.DestroyRenderTarget(m_outlineMaskTarget);
+            m_resources.DestroyVertexBuffer(m_screenTriangleVertices);
+            m_resources.DestroyIndexBuffer(m_screenTriangleIndices);
+        }
+    }
+
+    void SceneRenderer::SetOutlineMaterials(MaterialHandle mask, MaterialHandle outline, uint32_t width, uint32_t height)
+    {
+        if (!mask || !outline)
+            return;
+
+        m_outlineMaskMaterial = mask;
+        m_outlineMaterial = outline;
+
+        const RenderTargetInfo info{ .Width = width, .Height = height, .ColorFormats = { TextureFormat::RGBA8 } };
+        m_outlineMaskTarget = m_resources.CreateRenderTarget(info);
+        m_resources.SetMaterialTexture(outline, "OutlineMask", m_resources.GetColorAttachment(m_outlineMaskTarget, 0));
+
+        // A triangle that covers the whole screen, the parts outside of it get clipped
+        constexpr std::array<glm::vec3, 3> vertices = { glm::vec3(-1.0f, -1.0f, 0.0f), glm::vec3(3.0f, -1.0f, 0.0f), glm::vec3(-1.0f, 3.0f, 0.0f) };
+        constexpr std::array<uint32_t, 3> indices = { 0, 1, 2 };
+
+        m_screenTriangleVertices = m_resources.CreateVertexBuffer({ .Layout = { ShaderDataType::Float3 }, .Size = sizeof(vertices), .Usage = BufferUsage::Static }, vertices.data());
+        m_screenTriangleIndices = m_resources.CreateIndexBuffer({ .Size = sizeof(indices), .Usage = BufferUsage::Static, .Type = IndexType::UInt32 }, indices.data());
     }
 
     void SceneRenderer::BuildLighting(Scene& scene, FrameLightingData& lighting)
@@ -78,14 +107,28 @@ namespace crimson
         m_atlasFullLogged = skipped > 0;
     }
 
-    void SceneRenderer::RecordPasses(FrameContext& frame, Scene& scene, const FrameLightingData& lighting, const RenderPassInfo& mainPass)
+    void SceneRenderer::RecordPasses(FrameContext& frame, Scene& scene, const FrameLightingData& lighting, const RenderPassInfo& mainPass, Entity outlined)
     {
         m_drawables.clear();
 
+        const bool outlining = outlined && m_outlineMaskTarget;
+        bool anyOutlined = false;
+
         for (const auto [handle, renderer, transform] : scene.GetRegistry().view<MeshRendererComponent, TransformComponent>().each())
         {
-            if (transform.ActiveInHierarchy && !renderer.Resolved.SubMeshes.empty())
-                m_drawables.push_back({ &renderer.Resolved, frame.AddObject(transform.World), renderer.CastsShadows });
+            if (!transform.ActiveInHierarchy || renderer.Resolved.SubMeshes.empty())
+                continue;
+
+            bool isOutlined = false;
+
+            if (outlining)
+            {
+                for (entt::entity ancestor = handle; ancestor != entt::null && !isOutlined; ancestor = scene.GetRegistry().get<RelationshipComponent>(ancestor).Parent)
+                    isOutlined = ancestor == outlined.GetHandle();
+            }
+
+            anyOutlined = anyOutlined || isOutlined;
+            m_drawables.push_back({ &renderer.Resolved, frame.AddObject(transform.World), renderer.CastsShadows, isOutlined });
         }
 
         for (const ShadowView& view : lighting.Shadows)
@@ -106,9 +149,35 @@ namespace crimson
             }
         }
 
+        if (anyOutlined)
+            RecordOutlineMask(frame, mainPass);
+
         RenderPass& pass = frame.BeginRenderPass(mainPass);
 
         for (const Drawable& drawable : m_drawables)
             pass.Draw(*drawable.Mesh, drawable.Object);
+
+        // The outline material is transparent, so this draws after everything else in the pass
+        if (anyOutlined)
+            pass.Draw(DrawInfo{ m_screenTriangleVertices, m_screenTriangleIndices, m_outlineMaterial });
+    }
+
+    void SceneRenderer::RecordOutlineMask(FrameContext& frame, const RenderPassInfo& mainPass)
+    {
+        RenderPassInfo info{
+            .Target = m_outlineMaskTarget,
+            .ClearFlags = ClearFlags::Color,
+            .ClearColor = glm::vec4(0.0f),
+            .ViewProj = mainPass.ViewProj,
+            .CameraPosition = mainPass.CameraPosition
+        };
+
+        RenderPass& pass = frame.BeginRenderPass(info);
+
+        for (const Drawable& drawable : m_drawables)
+        {
+            if (drawable.Outlined)
+                pass.Draw(*drawable.Mesh, drawable.Object, m_outlineMaskMaterial);
+        }
     }
 }
