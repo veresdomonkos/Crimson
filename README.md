@@ -15,6 +15,7 @@ Crimson is a small, data-driven real-time rendering engine written in modern C++
 - **Standard blocks and reflection** - frame, view and material resources are grouped by how often they change. Material properties and textures are discovered with SPIRV-Reflect, and the standard blocks are checked against the engine's structs.
 - **Lighting** - any number of directional, point and spot lights in a GPU buffer (glTF `KHR_lights_punctual`-style). Any light can cast shadows through a shared shadow atlas with PCF filtering.
 - **Per-object transforms** - each draw indexes a per-frame buffer of object transforms.
+- **Entity component system** - scenes are built on [EnTT](https://github.com/skypjack/entt) behind `Scene` and `Entity` wrappers, with a parent/child hierarchy.
 - **Asset manager** - importer-based pipeline for textures, shaders, materials and meshes, with metadata and a scanned `assets/` directory.
 - **ImGui docking editor** - viewport panels that display engine render targets, console, hierarchy, inspector, asset browser and stats panels, with a custom crimson-accented theme.
 
@@ -110,6 +111,31 @@ Materials share the samplers in `space0` and can't declare their own. A shader f
 
 `BuildShadowViews` assigns tiles of one depth atlas to the lights with `CastsShadow` set: one for a directional or spot light, six for a point light. Each view is rendered by its own pass with `Viewport` set to its tile, and shaders pick the tile through the light's `ShadowIndex`. The default atlas is 4096x4096 with 1024 tiles, and lights that don't fit log a warning and stay unshadowed. Directional lights cover one fixed area of the world, there are no cascades yet.
 
+### Scenes
+
+`Scene` wraps an EnTT registry and `Entity` is a small handle to one of its entities:
+
+```cpp
+Entity parent = scene.CreateEntity("Lights");
+Entity light = scene.CreateEntity("Sun", parent);
+light.AddComponent<LightComponent>().Type = LightType::Directional;
+light.GetComponent<TransformComponent>().Position = { 0.0f, 8.0f, 0.0f };
+
+scene.SetParent(light, {}); // back to the top level, it stays where it is in the world
+```
+
+| Component | Contents |
+|:----------|:---------|
+| `NameComponent` | name and an active flag, which also disables the children |
+| `TransformComponent` | position, rotation in degrees and scale, relative to the parent |
+| `RelationshipComponent` | parent and ordered children |
+| `LightComponent` | type, color, intensity, range, cone angles and whether it casts a shadow. It points along its transform's -Z axis. |
+| `MeshRendererComponent` | mesh and material assets, and whether it casts shadows |
+
+Every entity has the first three, and the others are optional. Meshes and renderers share one component because there is only one kind of renderer so far. It can be split when something else needs a mesh, such as skinned meshes.
+
+`SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLightingData`, gives every active renderer an object transform, and records the shadow passes and the main pass.
+
 ### Asset pipeline
 
 `AssetManager` scans the `assets/` directory and dispatches files to registered importers:
@@ -130,7 +156,9 @@ Assets are addressed by path or `AssetID` (`FindByPath`, `GetAsset<T>`).
 Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single raw pass. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default.
 
 - **Viewport** - displays a render target texture (scene, shadow map, ...).
-- **Hierarchy / Inspector / Asset Browser / Console**
+- **Hierarchy** - the entity tree. Click to select, drag onto an entity to reparent or onto the empty area to make a root, right-click to create or delete, `Delete` deletes the selection.
+- **Inspector** - name, active flag and components of the selected entity, with mesh and material pickers. **Add Component** adds a component, right-clicking a component's header removes it.
+- **Asset Browser / Console**
 - **Stats** - FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts.
 
 ## Project layout
@@ -139,7 +167,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 Crimson/
   engine/            core, renderer, backends (vulkan/, opengl/), asset manager
   editor/            Crimson Editor (application, panels, assets/)
-  external/          glfw, glad, glm, fmt, imgui, glslang, json, spirv-cross, spirv-reflect, stb_image, tinyobjloader, tracy, VulkanMemoryAllocator
+  external/          glfw, glad, glm, fmt, imgui, entt, glslang, json, spirv-cross, spirv-reflect, stb_image, tinyobjloader, tracy, VulkanMemoryAllocator
 ```
 
 ## Building

@@ -40,6 +40,10 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/core/profiler.hpp
         include/crimson/renderer/render_stats.hpp
         include/crimson/renderer/material_settings.hpp
+        include/crimson/scene/components.hpp
+        include/crimson/scene/entity.hpp
+        include/crimson/scene/scene.hpp
+        include/crimson/scene/scene_renderer.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -88,6 +92,8 @@ set(ENGINE_IMPLEMENTATION
         src/asset_manager/importers/material_importer.cpp
         src/asset_manager/importers/mesh_importer.cpp
         src/asset_manager/importers/shader_importer.cpp
+        src/scene/scene.cpp
+        src/scene/scene_renderer.cpp
 )
 
 add_library(Engine STATIC
@@ -125,6 +131,7 @@ target_link_libraries(Engine
         imgui
         fmt::fmt
         nlohmann_json::nlohmann_json
+        EnTT::EnTT
         Tracy::TracyClient
     PRIVATE
         glfw

@@ -5,7 +5,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "crimson/core/log.hpp"
 #include "crimson/renderer/frame_data.hpp"
 
 namespace crimson
@@ -25,14 +24,16 @@ namespace crimson
         float NormalBias = 0.05f;
     };
 
-    // Assigns atlas tiles to the lights with CastsShadow set and returns one view per tile.
+    // Assigns atlas tiles to the lights with CastsShadow set and fills views with one view per tile.
     // A directional or spot light takes one tile, a point light six, in the order +X -X +Y -Y +Z -Z.
-    inline std::vector<ShadowView> BuildShadowViews(std::vector<Light>& lights, const ShadowAtlasSettings& settings)
+    // Returns how many lights didn't fit, those don't cast shadows.
+    inline uint32_t BuildShadowViews(std::vector<Light>& lights, const ShadowAtlasSettings& settings, std::vector<ShadowView>& views)
     {
         const uint32_t tilesPerRow = settings.AtlasSize / settings.TileSize;
         const uint32_t tileCount = tilesPerRow * tilesPerRow;
 
-        std::vector<ShadowView> views;
+        uint32_t skipped = 0;
+        views.clear();
 
         const auto addView = [&](const glm::mat4& viewProj, float depthBias)
         {
@@ -66,7 +67,7 @@ namespace crimson
             const uint32_t needed = light.Type == LightType::Point ? 6 : 1;
             if (views.size() + needed > tileCount)
             {
-                LOG_WARN("[Shadows] The atlas is full, a light will not cast shadows");
+                ++skipped;
                 continue;
             }
 
@@ -108,6 +109,6 @@ namespace crimson
             }
         }
 
-        return views;
+        return skipped;
     }
 }

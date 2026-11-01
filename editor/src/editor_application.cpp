@@ -4,9 +4,10 @@
 #include <crimson/core/log.hpp>
 #include <crimson/core/profiler.hpp>
 #include <crimson/renderer/renderer_api.hpp>
-#include <crimson/renderer/shadow_atlas.hpp>
+#include <crimson/scene/scene_renderer.hpp>
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <GLFW/glfw3.h>
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -14,7 +15,6 @@
 #include "crimson/asset_manager/importers/mesh_importer.hpp"
 #include "crimson/asset_manager/importers/shader_importer.hpp"
 #include "crimson/asset_manager/importers/texture_importer.hpp"
-#include "crimson_editor/editor_resources.hpp"
 #include "crimson_editor/ui/asset_browser_panel.hpp"
 #include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
@@ -39,98 +39,20 @@ namespace crimson::editor
 	    m_assetManager->RegisterImporter<MeshImporter>();
 	    m_assetManager->ScanDirectory();
 
-        CreateMeshes();
-        CreateShadersAndMaterials();
+        m_context       = std::make_unique<EditorContext>(m_scene, *m_assetManager, m_assetManager->FindByPath("materials/default.mat"));
+        m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_graphicsBackend->Renderer);
+
         CreateRenderTargets();
-	    CreateTextures();
-        SetupLighting();
+        CreateTextures();
+        CreateScene();
         SetupUI();
 
         m_camera.SetPosition(glm::vec3(0.0f, 3.5f, 7.0f));
         m_camera.LookAt(glm::vec3(0.0f, 0.0f, 0.0f));
-
-	    // The editor has to start without its assets too, the scene is just empty then
-	    if (const AssetID id = m_assetManager->FindByPath("meshes/stanford-bunny.obj"))
-	    {
-	        if (auto mesh = m_assetManager->GetAsset<Mesh>(id))
-	        {
-	            m_mesh = std::move(*mesh);
-	            m_mesh.Materials[0] = m_pyramidMat;
-	        }
-	    }
     }
-
-    Mesh EditorApplication::CreateMesh(std::span<const std::byte> vertices, std::span<const uint32_t> indices)
-    {
-        VertexBufferInfo vInfo{ .Layout = kVertexLayout, .Size = vertices.size_bytes(), .Usage = BufferUsage::Static };
-        IndexBufferInfo  iInfo{ .Size = indices.size_bytes(), .Usage = BufferUsage::Static, .Type = IndexType::UInt32 };
-
-        Mesh mesh{
-            GpuResources().CreateVertexBuffer(vInfo, vertices.data()),
-            GpuResources().CreateIndexBuffer(iInfo, indices.data())
-        };
-        mesh.SubMeshes.push_back({ .FirstIndex = 0, .IndexCount = static_cast<uint32_t>(indices.size()), .MaterialSlot = 0 });
-        return mesh;
-    }
-
-    void EditorApplication::CreateMeshes()
-    {
-        const Vertex floorVertices[] = {
-            {{-5.0f, -0.5f, -5.0f}, {0.0f, 1.0f, 0.0f}},
-            {{ 5.0f, -0.5f, -5.0f}, {0.0f, 1.0f, 0.0f}},
-            {{ 5.0f, -0.5f,  5.0f}, {0.0f, 1.0f, 0.0f}},
-            {{-5.0f, -0.5f,  5.0f}, {0.0f, 1.0f, 0.0f}}
-        };
-        const uint32_t floorIndices[] = { 0, 2, 1, 0, 3, 2 };
-
-        const Vertex pyramidVertices[] = {
-            {{ 0.0f,  1.5f,  0.0f}, { 0.0f, 1.0f,  0.0f}},
-            {{-0.8f,  0.0f,  0.8f}, {-0.7f, 0.5f,  0.7f}},
-            {{ 0.8f,  0.0f,  0.8f}, { 0.7f, 0.5f,  0.7f}},
-            {{ 0.8f,  0.0f, -0.8f}, { 0.7f, 0.5f, -0.7f}},
-            {{-0.8f,  0.0f, -0.8f}, {-0.7f, 0.5f, -0.7f}}
-        };
-        const uint32_t pyramidIndices[] = { 0, 1, 2,  0, 2, 3,  0, 3, 4,  0, 4, 1 };
-
-        m_floor   = CreateMesh(std::as_bytes(std::span(floorVertices)),   floorIndices);
-        m_pyramid = CreateMesh(std::as_bytes(std::span(pyramidVertices)), pyramidIndices);
-    }
-
-    void EditorApplication::CreateShadersAndMaterials()
-	{
-	    auto loadMaterial = [this](const char* path) -> MaterialHandle
-	    {
-	        const AssetID id = m_assetManager->FindByPath(path);
-	        if (!id)
-	        {
-	            LOG_ERROR("[Editor] Material asset not found: {}", path);
-	            return MaterialHandle::Invalid();
-	        }
-
-	        const auto material = m_assetManager->GetAsset<MaterialHandle>(id);
-	        if (!material)
-	        {
-	            LOG_ERROR("[Editor] Material failed to load: {}", path);
-	            return MaterialHandle::Invalid();
-	        }
-	        return material.value();
-	    };
-
-	    m_floorMat   = loadMaterial("materials/floor.mat");
-	    m_pyramidMat = loadMaterial("materials/pyramid.mat");
-	    m_shadowMat  = loadMaterial("materials/shadow.mat");
-
-	    m_floor.Materials   = { m_floorMat };
-	    m_pyramid.Materials = { m_pyramidMat };
-	}
 
     void EditorApplication::CreateRenderTargets()
     {
-        const ShadowAtlasSettings atlas;
-        RenderTargetInfo shadowInfo{ .Width = atlas.AtlasSize, .Height = atlas.AtlasSize, .DepthFormat = TextureFormat::Depth32F };
-        m_shadowTarget = GpuResources().CreateRenderTarget(shadowInfo);
-        m_shadowDepth  = GpuResources().GetDepthAttachment(m_shadowTarget).value();
-
         RenderTargetInfo mainInfo{
             .Width = 1920,
             .Height = 1080,
@@ -139,49 +61,70 @@ namespace crimson::editor
         };
         m_mainTarget = GpuResources().CreateRenderTarget(mainInfo);
         m_mainColor  = GpuResources().GetColorAttachment(m_mainTarget, 0);
-
-        m_graphicsBackend->Renderer->SetShadowMap(m_shadowDepth);
     }
 
-    void EditorApplication::SetupLighting()
+    Entity EditorApplication::CreateMeshEntity(const char* name, const char* mesh, const char* material)
     {
+        const Entity entity = m_scene.CreateEntity(name);
+
+        auto& renderer = entity.AddComponent<MeshRendererComponent>();
+        renderer.MeshAsset = m_assetManager->FindByPath(mesh);
+        renderer.MaterialAssets = { m_assetManager->FindByPath(material) };
+        ResolveMeshRenderer(renderer, *m_assetManager, m_context->DefaultMaterial);
+
+        return entity;
+    }
+
+    void EditorApplication::CreateScene()
+    {
+        constexpr float kFloorHeight = -0.5f;
+        constexpr float kBunnyHeight = 1.5f;
+
+        const auto addLight = [this](const char* name, Entity parent, const LightComponent& light, const glm::vec3& position, const glm::vec3& direction)
+        {
+            const Entity entity = m_scene.CreateEntity(name, parent);
+            entity.AddComponent<LightComponent>(light);
+
+            // Points the light's -Z axis along the direction
+            auto& transform = entity.GetComponent<TransformComponent>();
+            transform.Position = position;
+            transform.RotationDegrees = glm::degrees(glm::eulerAngles(glm::quatLookAt(glm::normalize(direction), glm::vec3(0.0f, 1.0f, 0.0f))));
+        };
+
+        const Entity floor = CreateMeshEntity("Floor", "meshes/floor.obj", "materials/floor.mat");
+        floor.GetComponent<TransformComponent>().Position = glm::vec3(0.0f, kFloorHeight, 0.0f);
+
+        const Entity pyramid = CreateMeshEntity("Pyramid", "meshes/pyramid.obj", "materials/pyramid.mat");
+        pyramid.GetComponent<TransformComponent>().Position = glm::vec3(-1.5f, kFloorHeight, 0.0f);
+
+        // The bunny's file is in its own units and not centered, so fit it to the floor
+        const Entity bunny = CreateMeshEntity("Bunny", "meshes/stanford-bunny.obj", "materials/pyramid.mat");
+        const MeshBounds& bounds = bunny.GetComponent<MeshRendererComponent>().Resolved.Bounds;
+        const float bunnyScale = kBunnyHeight / std::max(bounds.Max.y - bounds.Min.y, 0.0001f);
+        const glm::vec3 bunnyOrigin((bounds.Min.x + bounds.Max.x) * 0.5f, bounds.Min.y, (bounds.Min.z + bounds.Max.z) * 0.5f);
+
+        auto& bunnyTransform = bunny.GetComponent<TransformComponent>();
+        bunnyTransform.Scale = glm::vec3(bunnyScale);
+        bunnyTransform.Position = glm::vec3(1.2f, kFloorHeight, 0.5f) - bunnyScale * bunnyOrigin;
+
+        const Entity lights = m_scene.CreateEntity("Lights");
+
+        addLight("Sun", lights, { .Type = LightType::Directional, .Color = glm::vec3(1.0f), .Intensity = 0.5f, .CastsShadow = true },
+            glm::vec3(0.0f, 8.0f, 0.0f), glm::vec3(-0.5f, -1.0f, -0.3f));
+
+        addLight("Orange Point", lights, { .Type = LightType::Point, .Color = glm::vec3(1.0f, 0.5f, 0.2f), .Intensity = 1.5f, .Range = 8.0f, .CastsShadow = true },
+            glm::vec3(2.0f, 3.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+
+        addLight("Red Point", lights, { .Type = LightType::Point, .Color = glm::vec3(0.8f, 0.1f, 0.2f), .Intensity = 1.5f, .Range = 8.0f },
+            glm::vec3(-2.0f, 3.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+
+        addLight("Blue Spot", lights, { .Type = LightType::Spot, .Color = glm::vec3(0.2f, 0.5f, 1.0f), .Intensity = 2.5f, .Range = 12.0f, .InnerConeDegrees = 20.0f, .OuterConeDegrees = 35.0f, .CastsShadow = true },
+            glm::vec3(0.0f, 4.0f, 3.0f), glm::vec3(0.0f, -1.0f, -0.8f));
+
         m_lighting.AmbientColor = glm::vec3(0.05f);
 
-        m_lighting.Lights.push_back(Light{
-            .Type = LightType::Directional,
-            .Direction = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)),
-            .Color = glm::vec3(1.0f),
-            .Intensity = 0.5f,
-            .CastsShadow = true
-        });
-        m_lighting.Lights.push_back(Light{
-            .Type = LightType::Point,
-            .Position = glm::vec3(2.0f, 3.0f, 0.0f),
-            .Color = glm::vec3(1.0f, 0.5f, 0.2f),
-            .Intensity = 1.5f,
-            .Range = 8.0f,
-            .CastsShadow = true
-        });
-        m_lighting.Lights.push_back(Light{
-            .Type = LightType::Point,
-            .Position = glm::vec3(-2.0f, 3.0f, 0.0f),
-            .Color = glm::vec3(0.8f, 0.1f, 0.2f),
-            .Intensity = 1.5f,
-            .Range = 8.0f
-        });
-        m_lighting.Lights.push_back(Light{
-            .Type = LightType::Spot,
-            .Position = glm::vec3(0.0f, 4.0f, 3.0f),
-            .Direction = glm::normalize(glm::vec3(0.0f, -1.0f, -0.8f)),
-            .Color = glm::vec3(0.2f, 0.5f, 1.0f),
-            .Intensity = 2.5f,
-            .Range = 12.0f,
-            .InnerConeAngle = glm::radians(20.0f),
-            .OuterConeAngle = glm::radians(35.0f),
-            .CastsShadow = true
-        });
-
-        m_lighting.Shadows = BuildShadowViews(m_lighting.Lights, ShadowAtlasSettings{});
+        if (const AssetID shadowMaterial = m_assetManager->FindByPath("materials/shadow.mat"))
+            m_sceneRenderer->SetShadowMaterial(m_assetManager->GetAsset<MaterialHandle>(shadowMaterial).value_or(MaterialHandle::Invalid()));
     }
 
     void EditorApplication::SetupUI()
@@ -189,12 +132,12 @@ namespace crimson::editor
         auto& imgui = *m_graphicsBackend->Imgui;
 
         m_ui->AddPanel<ui::ViewportPanel>("Scene",      imgui.GetOrCreateTextureId(m_mainColor),   16.0f / 9.0f);
-        m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_shadowDepth), 1.0f);
+        m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_sceneRenderer->GetShadowAtlas()), 1.0f);
 	    if (m_testTexture)
 	        m_ui->AddPanel<ui::ViewportPanel>("Test Texture", imgui.GetOrCreateTextureId(m_testTexture), 875.0f / 350.0f);
 	    m_ui->AddPanel<ui::ConsolePanel>();
-	    m_ui->AddPanel<ui::HierarchyPanel>();
-	    m_ui->AddPanel<ui::InspectorPanel>();
+	    m_ui->AddPanel<ui::HierarchyPanel>(*m_context);
+	    m_ui->AddPanel<ui::InspectorPanel>(*m_context);
 	    m_ui->AddPanel<ui::AssetBrowserPanel>();
 	    m_ui->AddPanel<ui::StatsPanel>(m_frameStats, m_rendererType);
     }
@@ -230,6 +173,9 @@ namespace crimson::editor
 
         auto& renderer = *m_graphicsBackend->Renderer;
 
+        m_scene.UpdateWorldTransforms();
+        m_sceneRenderer->BuildLighting(m_scene, m_lighting);
+
         auto frame = renderer.BeginFrame(m_lighting);
 
         if (!frame.ShouldRender())
@@ -237,9 +183,7 @@ namespace crimson::editor
 
 	    m_graphicsBackend->Imgui->NewFrame();
 
-        AddSceneObjects(frame);
-        RecordShadowPasses(frame);
-        RecordMainPass(frame);
+        RecordScenePasses(frame);
         RecordUIPass(frame);
 
         renderer.EndFrame(frame);
@@ -283,44 +227,7 @@ namespace crimson::editor
         stats.LastFrameTime = now;
     }
 
-    void EditorApplication::AddSceneObjects(FrameContext& frame)
-    {
-        constexpr float kFloorHeight = -0.5f;
-        constexpr float kMeshHeight = 1.5f;
-
-        const MeshBounds& bounds = m_mesh.Bounds;
-        const float meshScale = kMeshHeight / std::max(bounds.Max.y - bounds.Min.y, 0.0001f);
-        const glm::vec3 meshCenter = (bounds.Min + bounds.Max) * 0.5f;
-
-        glm::mat4 meshTransform = glm::translate(glm::mat4(1.0f), glm::vec3(1.2f, kFloorHeight, 0.5f));
-        meshTransform = glm::rotate(meshTransform, static_cast<float>(glfwGetTime()) * 0.5f, glm::vec3(0.0f, 1.0f, 0.0f));
-        meshTransform = glm::scale(meshTransform, glm::vec3(meshScale));
-        meshTransform = glm::translate(meshTransform, glm::vec3(-meshCenter.x, -bounds.Min.y, -meshCenter.z));
-
-        m_floorObject = frame.AddObject(glm::mat4(1.0f));
-        m_pyramidObject = frame.AddObject(glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, kFloorHeight, 0.0f)));
-        m_meshObject = frame.AddObject(meshTransform);
-    }
-
-    void EditorApplication::RecordShadowPasses(FrameContext& frame)
-    {
-        for (const ShadowView& view : m_lighting.Shadows)
-        {
-            RenderPassInfo info{
-                .Target = m_shadowTarget,
-                .ClearFlags = ClearFlags::Depth,
-                .ViewProj = view.Shadow.ViewProj,
-                .Viewport = view.Viewport
-            };
-
-            auto& pass = frame.BeginRenderPass(info);
-            pass.Draw(m_floor, m_floorObject, m_shadowMat);
-            pass.Draw(m_pyramid, m_pyramidObject, m_shadowMat);
-            pass.Draw(m_mesh, m_meshObject, m_shadowMat);
-        }
-    }
-
-    void EditorApplication::RecordMainPass(FrameContext& frame)
+    void EditorApplication::RecordScenePasses(FrameContext& frame)
     {
         RenderPassInfo info{
             .Target = m_mainTarget,
@@ -330,10 +237,7 @@ namespace crimson::editor
             .CameraPosition = m_camera.GetPosition()
         };
 
-        auto& pass = frame.BeginRenderPass(info);
-        pass.Draw(m_floor, m_floorObject);
-        pass.Draw(m_pyramid, m_pyramidObject);
-	    pass.Draw(m_mesh, m_meshObject);
+        m_sceneRenderer->RecordPasses(frame, m_scene, m_lighting, info);
     }
 
     void EditorApplication::RecordUIPass(FrameContext& frame)

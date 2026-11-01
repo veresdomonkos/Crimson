@@ -47,6 +47,9 @@ set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
 set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/glslang)
 
+#entt
+add_subdirectory(external/entt)
+
 #json
 add_subdirectory(external/json)
 

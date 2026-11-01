@@ -11,12 +11,14 @@ add_executable(Editor
         src/ui/stats_panel.cpp
         include/crimson_editor/ui/editor_ui.hpp
         src/ui/editor_ui.cpp
-        include/crimson_editor/editor_resources.hpp
+        include/crimson_editor/editor_context.hpp
         include/crimson_editor/ui/console_panel.hpp
         include/crimson_editor/ui/hierarchy_panel.hpp
         include/crimson_editor/ui/inspector_panel.hpp
         include/crimson_editor/ui/asset_browser_panel.hpp
         src/ui/console_panel.cpp
+        src/ui/hierarchy_panel.cpp
+        src/ui/inspector_panel.cpp
 )
 
 target_include_directories(Editor PUBLIC include)
@@ -28,6 +30,10 @@ target_link_libraries(Editor
 
 if(MINGW)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++ -static")
+
+    # In C++23 std::type_info::operator== is inline, and also defined in the static libstdc++.a.
+    # The two are the same function, so the linker can keep either.
+    target_link_options(Editor PRIVATE -Wl,--allow-multiple-definition)
 endif()
 
 # A custom target runs on every build, so editing only a shader still reaches the output directory

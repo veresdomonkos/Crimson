@@ -31,6 +31,7 @@ namespace crimson
 
         [[nodiscard]] const AssetMetadata* GetMetadata(AssetID id) const;
         [[nodiscard]] AssetID FindByPath(const std::filesystem::path& source) const;
+        [[nodiscard]] std::vector<AssetID> GetAssetsOfType(AssetType type) const; // sorted by path
 
         template <typename T>
         [[nodiscard]] std::optional<T> GetAsset(AssetID id)

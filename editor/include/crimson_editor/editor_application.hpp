@@ -5,7 +5,9 @@
 #include <crimson/ui/imgui_backend.hpp>
 #include <crimson/graphics/graphincs_backend.hpp>
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/scene/scene_renderer.hpp>
 
+#include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/frame_stats.hpp"
 #include "crimson_editor/ui/editor_ui.hpp"
 
@@ -19,18 +21,14 @@ namespace crimson::editor
 		void Run();
 	private:
 	    // --- Setup called from constructor ---
-	    void CreateMeshes();
-	    void CreateShadersAndMaterials();
 	    void CreateRenderTargets();
-	    void SetupLighting();
+	    void CreateScene();
 	    void SetupUI();
 	    void CreateTextures();
 
 	    // --- Frame ---
 	    void RenderFrame();
-	    void AddSceneObjects(FrameContext& frame);
-	    void RecordShadowPasses(FrameContext& frame);
-	    void RecordMainPass(FrameContext& frame);
+	    void RecordScenePasses(FrameContext& frame);
 	    void RecordUIPass(FrameContext& frame);
 	    void UpdateFrameStats();
 
@@ -39,7 +37,7 @@ namespace crimson::editor
 	    void OnEvent(Event& event);
 
 	    // --- Utils ---
-	    Mesh CreateMesh(std::span<const std::byte> vertices, std::span<const uint32_t> indices);
+	    Entity CreateMeshEntity(const char* name, const char* mesh, const char* material);
 	    [[nodiscard]] GpuResourceManager& GpuResources() { return *m_graphicsBackend->GPUResources; }
 	private:
 	    bool   m_running;
@@ -54,32 +52,18 @@ namespace crimson::editor
 
 	    PerspectiveCamera m_camera;
 
-	    // Geometry
-	    Mesh m_floor;
-	    Mesh m_pyramid;
-
-	    // This frame's object transforms
-	    ObjectId m_floorObject = 0;
-	    ObjectId m_pyramidObject = 0;
-	    ObjectId m_meshObject = 0;
-
-	    // Materials
-	    MaterialHandle m_floorMat;
-	    MaterialHandle m_pyramidMat;
-	    MaterialHandle m_shadowMat;
+	    Scene m_scene;
+	    std::unique_ptr<EditorContext> m_context;
+	    std::unique_ptr<SceneRenderer> m_sceneRenderer;
 
 	    // Render targets
-	    RenderTargetHandle m_shadowTarget;
 	    RenderTargetHandle m_mainTarget;
 
 	    // Textures
-	    TextureHandle m_shadowDepth;
 	    TextureHandle m_mainColor;
 	    TextureHandle m_testTexture;
 
 	    // Light
 	    FrameLightingData m_lighting;
-
-	    Mesh m_mesh;
 	};
 }

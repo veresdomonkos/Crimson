@@ -34,6 +34,7 @@ namespace crimson
 
         std::vector<SubMesh> SubMeshes;
         std::vector<MaterialHandle> Materials;
+        std::vector<std::string> MaterialSlots; // names, in the same order as Materials
         MeshBounds Bounds;
     };
 }

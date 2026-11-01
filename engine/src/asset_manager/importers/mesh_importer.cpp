@@ -43,12 +43,10 @@ namespace crimson
 
         Mesh mesh;
 
-        /*
         for (const auto& m : materials)
             mesh.MaterialSlots.push_back(m.name);
         if (mesh.MaterialSlots.empty())
             mesh.MaterialSlots.push_back("default");
-        */
 
         mesh.Materials.resize(std::max<size_t>(1, materials.size()));
 

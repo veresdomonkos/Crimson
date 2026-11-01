@@ -155,6 +155,20 @@ namespace crimson
         return m_loaded.emplace(id, std::move(asset)).first->second;
     }
 
+    std::vector<AssetID> AssetManager::GetAssetsOfType(AssetType type) const
+    {
+        std::vector<AssetID> ids;
+
+        for (const auto& [id, metadata] : m_registry)
+        {
+            if (metadata.Type == type)
+                ids.push_back(id);
+        }
+
+        std::ranges::sort(ids, {}, [this](AssetID id) { return m_registry.at(id).Source; });
+        return ids;
+    }
+
     void AssetManager::Dump() const
     {
         for (const auto& [path, id] : m_pathToId)
