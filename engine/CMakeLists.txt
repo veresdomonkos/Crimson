@@ -49,6 +49,7 @@ set(ENGINE_IMPLEMENTATION
         src/platform/vulkan/vulkan_resources.hpp
         src/platform/vulkan/vulkan_allocator.hpp
         src/platform/vulkan/vulkan_allocator.cpp
+        src/platform/vulkan/vulkan_include.hpp
         src/platform/opengl/utils.hpp
         src/platform/opengl/vertex_array_cache.hpp
         include/crimson/renderer/texture.hpp
@@ -88,6 +89,22 @@ set_target_properties(Engine PROPERTIES
 )
 
 target_include_directories(Engine PUBLIC include)
+
+# vulkan_raii.hpp is very large, so only the Vulkan backend pays for it
+set(ENGINE_VULKAN_SOURCES ${ENGINE_IMPLEMENTATION})
+list(FILTER ENGINE_VULKAN_SOURCES INCLUDE REGEX "src/platform/vulkan/.*\.cpp$")
+list(APPEND ENGINE_VULKAN_SOURCES src/graphics/graphics_backend.cpp)
+
+set(ENGINE_OTHER_SOURCES ${ENGINE_IMPLEMENTATION})
+list(FILTER ENGINE_OTHER_SOURCES INCLUDE REGEX "\.cpp$")
+list(REMOVE_ITEM ENGINE_OTHER_SOURCES ${ENGINE_VULKAN_SOURCES})
+
+target_precompile_headers(Engine PRIVATE src/platform/vulkan/vulkan_include.hpp)
+set_source_files_properties(${ENGINE_OTHER_SOURCES} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+
+if(MINGW)
+    target_compile_options(Engine PRIVATE -Wa,-mbig-obj)
+endif()
 
 target_link_libraries(Engine
     PUBLIC

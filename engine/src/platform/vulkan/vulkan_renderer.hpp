@@ -14,9 +14,9 @@ namespace crimson::vulkan
 
     struct FrameSync
     {
-        VkCommandBuffer CommandBuffer = VK_NULL_HANDLE;
-        VkSemaphore ImageAvailableSemaphore = VK_NULL_HANDLE;
-        VkFence InFlightFence = VK_NULL_HANDLE;
+        vk::raii::CommandBuffer CommandBuffer{ nullptr };
+        vk::raii::Semaphore ImageAvailableSemaphore{ nullptr };
+        vk::raii::Fence InFlightFence{ nullptr };
     };
 
     class VulkanRenderer : public Renderer
@@ -38,28 +38,30 @@ namespace crimson::vulkan
         void InitializeSynchronizationAndCommands();
         void InitGlobals();
 
-        void TransitionImage(VkCommandBuffer cmd, VulkanTexture& texture, VkImageLayout newLayout);
-        void ExecuteBeginRenderPass(VkCommandBuffer cmdBuffer, const RenderPassInfo& info, uint32_t passIndex);
-        void ExecuteEndRenderPass(VkCommandBuffer cmdBuffer, VulkanRenderTarget& rt);
-        void ExecuteDraw(VkCommandBuffer cmdBuffer, const DrawInfo& draw, RenderTargetHandle target, uint32_t passIndex);
-        void ExecuteRawPass(VkCommandBuffer cmdBuffer, const RawPass& pass);
+        void TransitionImage(const vk::raii::CommandBuffer& cmd, VulkanTexture& texture, vk::ImageLayout newLayout);
+        void ExecuteBeginRenderPass(const vk::raii::CommandBuffer& cmdBuffer, const RenderPassInfo& info, uint32_t passIndex);
+        void ExecuteEndRenderPass(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt);
+        void ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawInfo& draw, RenderTargetHandle target, uint32_t passIndex);
+        void ExecuteRawPass(const vk::raii::CommandBuffer& cmdBuffer, const RawPass& pass);
 
-        void BeginRenderingOnTarget(VkCommandBuffer cmd, VulkanRenderTarget& rt, ClearFlags flags, const glm::vec4& clearColor, float clearDepth, uint32_t clearStencil);
+        void BeginRenderingOnTarget(const vk::raii::CommandBuffer& cmd, VulkanRenderTarget& rt, ClearFlags flags, const glm::vec4& clearColor, float clearDepth, uint32_t clearStencil);
 
         VulkanDevice& m_device;
         VulkanResourceManager& m_resourceManager;
 
-        VkDescriptorSet m_globalDescriptorSet = VK_NULL_HANDLE;
+        vk::raii::DescriptorSet m_globalDescriptorSet{ nullptr };
 
         AllocatedBuffer m_cameraUBO;
-        VkDeviceSize m_cameraUboAlignment = 0;
+        vk::DeviceSize m_cameraUboAlignment = 0;
 
         AllocatedBuffer m_lightingUBO;
-        VkDeviceSize m_lightingUboAlignment = 0;
+        vk::DeviceSize m_lightingUboAlignment = 0;
 
         std::array<Frame, MAX_FRAMES_IN_FLIGHT> m_frames;
+
+        // The pool has to outlive the command buffers in m_frameSyncs
+        vk::raii::CommandPool m_commandPool{ nullptr };
         std::array<FrameSync, MAX_FRAMES_IN_FLIGHT> m_frameSyncs;
-        VkCommandPool m_commandPool = VK_NULL_HANDLE;
         uint32_t m_currentFrameIndex = 0;
 
         TracyVkCtx m_tracyContext = nullptr;

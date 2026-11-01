@@ -4,7 +4,7 @@
 #include <vector>
 #include <unordered_map>
 
-#include <vulkan/vulkan.h>
+#include "vulkan_include.hpp"
 
 #include "crimson/renderer/buffer_layout.hpp"
 #include "crimson/renderer/buffers.hpp"
@@ -15,14 +15,14 @@ namespace crimson::vulkan
 {
     struct VulkanTexture
     {
-        VkImage Image = VK_NULL_HANDLE;
-        VkImageView View = VK_NULL_HANDLE;
-        VkImageView AttachmentView = VK_NULL_HANDLE; // only for depth-stencil formats, View is depth-only there
+        vk::Image Image;
+        vk::raii::ImageView View{ nullptr };
+        vk::raii::ImageView AttachmentView{ nullptr }; // only for depth-stencil formats, View is depth-only there
         AllocatedImage Allocation; // empty for swapchain images, which the swapchain owns
 
-        VkFormat Format = VK_FORMAT_UNDEFINED;
-        VkImageLayout Layout = VK_IMAGE_LAYOUT_UNDEFINED;
-        VkImageAspectFlags Aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+        vk::Format Format = vk::Format::eUndefined;
+        vk::ImageLayout Layout = vk::ImageLayout::eUndefined;
+        vk::ImageAspectFlags Aspect = vk::ImageAspectFlagBits::eColor;
 
         uint32_t Width = 0;
         uint32_t Height = 0;
@@ -30,16 +30,16 @@ namespace crimson::vulkan
 
     struct VulkanSurface
     {
-        VkSwapchainKHR Swapchain = VK_NULL_HANDLE;
+        vk::raii::SwapchainKHR Swapchain{ nullptr };
 
         uint32_t CurrentImageIndex = 0;
 
-        VkExtent2D Extent{};
-        VkFormat Format = VK_FORMAT_UNDEFINED;
+        vk::Extent2D Extent{};
+        vk::Format Format = vk::Format::eUndefined;
 
         std::vector<RenderTargetHandle> SwapchainTargetHandles;
 
-        std::vector<VkSemaphore> RenderFinishedSemaphores;
+        std::vector<vk::raii::Semaphore> RenderFinishedSemaphores;
 
         bool IsDirty = false;
     };
@@ -58,7 +58,7 @@ namespace crimson::vulkan
     struct VulkanVertexBuffer
     {
         AllocatedBuffer Buffer;
-        VkDeviceSize Size = 0;
+        vk::DeviceSize Size = 0;
         BufferLayout Layout;
         BufferUsage Usage{};
     };
@@ -66,17 +66,17 @@ namespace crimson::vulkan
     struct VulkanIndexBuffer
     {
         AllocatedBuffer Buffer;
-        VkDeviceSize Size = 0;
+        vk::DeviceSize Size = 0;
         IndexType Type{};
         BufferUsage Usage{};
     };
 
     struct VulkanShader
     {
-        VkShaderModule Vertex = VK_NULL_HANDLE;
-        VkShaderModule Fragment = VK_NULL_HANDLE;
+        vk::raii::ShaderModule Vertex{ nullptr };
+        vk::raii::ShaderModule Fragment{ nullptr };
 
-        VkDescriptorSetLayout MaterialSetLayout = VK_NULL_HANDLE;
+        vk::raii::DescriptorSetLayout MaterialSetLayout{ nullptr };
         size_t MaterialUniformSize = 0;
         uint32_t MaterialUboBinding = 0;
 
@@ -86,16 +86,16 @@ namespace crimson::vulkan
 
     struct VulkanGraphicsPipeline
     {
-        VkPipelineLayout Layout = VK_NULL_HANDLE;
-        VkPipeline Pipeline = VK_NULL_HANDLE;
+        vk::raii::PipelineLayout Layout{ nullptr };
+        vk::raii::Pipeline Pipeline{ nullptr };
     };
 
     struct VulkanMaterial
     {
         ShaderHandle Shader;
         AllocatedBuffer UniformBuffer;
-        VkDeviceSize UniformBufferSize = 0;
-        VkDescriptorSet DescriptorSet = VK_NULL_HANDLE;
+        vk::DeviceSize UniformBufferSize = 0;
+        vk::raii::DescriptorSet DescriptorSet{ nullptr };
     };
 
     struct VulkanResourceTraits

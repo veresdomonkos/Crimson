@@ -50,9 +50,9 @@ namespace crimson::vulkan
         TextureHandle GetColorAttachment(RenderTargetHandle handle, uint32_t index) const override;
         std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const override;
 
-        [[nodiscard]] VkDescriptorPool GetDescriptorPool() const { return m_descriptorPool; }
-        [[nodiscard]] VkDescriptorSetLayout GetGlobalSetLayout() const { return m_globalSetLayout; }
-        [[nodiscard]] VkSampler GetDefaultSampler() const { return m_defaultSampler; }
+        [[nodiscard]] vk::DescriptorPool GetDescriptorPool() const { return *m_descriptorPool; }
+        [[nodiscard]] vk::DescriptorSetLayout GetGlobalSetLayout() const { return *m_globalSetLayout; }
+        [[nodiscard]] vk::Sampler GetDefaultSampler() const { return *m_defaultSampler; }
     protected:
         VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override;
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
@@ -67,23 +67,21 @@ namespace crimson::vulkan
         bool CreateSwapchainResources(VulkanSurface& surface);
         void DestroySwapchainResources(VulkanSurface& surface);
 
-        RenderTargetHandle CreateSwapchainRenderTarget(uint32_t width, uint32_t height, VkFormat colorFormat, VkImage swapchainImage);
-        TextureHandle WrapSwapchainImage(VkImage image, VkFormat format, uint32_t width, uint32_t height);
+        RenderTargetHandle CreateSwapchainRenderTarget(uint32_t width, uint32_t height, vk::Format colorFormat, vk::Image swapchainImage);
+        TextureHandle WrapSwapchainImage(vk::Image image, vk::Format format, uint32_t width, uint32_t height);
 
-        VkShaderModule CreateShaderModule(std::span<const uint32_t> code);
-        void ReflectShader(VulkanShader& shader, std::span<const uint32_t> binary, VkShaderStageFlagBits stage);
+        [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(std::span<const uint32_t> code) const;
+        void ReflectShader(VulkanShader& shader, std::span<const uint32_t> binary);
 
-        bool CreateImageView(VulkanTexture& texture, VkImageAspectFlags aspect) const;
-
-        AllocatedBuffer CreateBufferWithData(VkDeviceSize size, VkBufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const;
-        void CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const;
+        AllocatedBuffer CreateBufferWithData(vk::DeviceSize size, vk::BufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const;
+        void CopyBuffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size) const;
         void UploadTextureData(VulkanTexture& texture, const TextureInfo& info, const void* data) const;
 
     private:
         VulkanDevice& m_device;
-        VkDescriptorSetLayout m_globalSetLayout = VK_NULL_HANDLE;
-        VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
-        VkSampler m_defaultSampler = VK_NULL_HANDLE;
-        VulkanSurface m_primarySurface;;
+        vk::raii::DescriptorSetLayout m_globalSetLayout{ nullptr };
+        vk::raii::DescriptorPool m_descriptorPool{ nullptr };
+        vk::raii::Sampler m_defaultSampler{ nullptr };
+        VulkanSurface m_primarySurface;
     };
 }

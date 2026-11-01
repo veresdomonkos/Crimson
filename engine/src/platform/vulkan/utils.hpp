@@ -1,28 +1,28 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include "vulkan_include.hpp"
 #include "crimson/renderer/texture.hpp"
 
 namespace crimson::vulkan::utils
 {
-    static constexpr VkFormat GetVkFormat(TextureFormat format)
+    static constexpr vk::Format GetVkFormat(TextureFormat format)
     {
         switch (format)
         {
-            case TextureFormat::RGBA8:           return VK_FORMAT_R8G8B8A8_UNORM;
-            case TextureFormat::RGB8:            return VK_FORMAT_R8G8B8_UNORM;
-            case TextureFormat::R8:              return VK_FORMAT_R8_UNORM;
-            case TextureFormat::RGBA16F:         return VK_FORMAT_R16G16B16A16_SFLOAT;
-            case TextureFormat::RGBA32F:         return VK_FORMAT_R32G32B32A32_SFLOAT;
-            case TextureFormat::Depth24Stencil8: return VK_FORMAT_D24_UNORM_S8_UINT;
-            case TextureFormat::Depth32F:        return VK_FORMAT_D32_SFLOAT;
+            case TextureFormat::RGBA8:           return vk::Format::eR8G8B8A8Unorm;
+            case TextureFormat::RGB8:            return vk::Format::eR8G8B8Unorm;
+            case TextureFormat::R8:              return vk::Format::eR8Unorm;
+            case TextureFormat::RGBA16F:         return vk::Format::eR16G16B16A16Sfloat;
+            case TextureFormat::RGBA32F:         return vk::Format::eR32G32B32A32Sfloat;
+            case TextureFormat::Depth24Stencil8: return vk::Format::eD24UnormS8Uint;
+            case TextureFormat::Depth32F:        return vk::Format::eD32Sfloat;
         }
-        return VK_FORMAT_R8G8B8A8_UNORM;
+        return vk::Format::eR8G8B8A8Unorm;
     }
 
-    static constexpr bool HasStencilComponent(VkFormat format)
+    static constexpr bool HasStencilComponent(vk::Format format)
     {
-        return format == VK_FORMAT_D24_UNORM_S8_UINT || format == VK_FORMAT_D32_SFLOAT_S8_UINT;
+        return format == vk::Format::eD24UnormS8Uint || format == vk::Format::eD32SfloatS8Uint;
     }
 
     static constexpr bool HasUsage(TextureUsage usage, TextureUsage flag)
@@ -43,18 +43,18 @@ namespace crimson::vulkan::utils
         }
     }
 
-    static constexpr VkImageAspectFlags GetImageAspect(TextureFormat format)
+    static constexpr vk::ImageAspectFlags GetImageAspect(TextureFormat format)
     {
         switch (format)
         {
             case TextureFormat::Depth24Stencil8:
-                return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+                return vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
 
             case TextureFormat::Depth32F:
-                return VK_IMAGE_ASPECT_DEPTH_BIT;
+                return vk::ImageAspectFlagBits::eDepth;
 
             default:
-                return VK_IMAGE_ASPECT_COLOR_BIT;
+                return vk::ImageAspectFlagBits::eColor;
         }
     }
 }

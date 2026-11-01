@@ -1,6 +1,6 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include "vulkan_include.hpp"
 #include <vk_mem_alloc.h>
 
 namespace crimson::vulkan
@@ -23,7 +23,7 @@ namespace crimson::vulkan
         AllocatedBuffer(AllocatedBuffer&& other) noexcept;
         AllocatedBuffer& operator=(AllocatedBuffer&& other) noexcept;
 
-        [[nodiscard]] VkBuffer Get() const { return m_buffer; }
+        [[nodiscard]] vk::Buffer Get() const { return m_buffer; }
         [[nodiscard]] void* Mapped() const { return m_mapped; }
         explicit operator bool() const { return m_buffer != VK_NULL_HANDLE; }
 
@@ -48,7 +48,7 @@ namespace crimson::vulkan
         AllocatedImage(AllocatedImage&& other) noexcept;
         AllocatedImage& operator=(AllocatedImage&& other) noexcept;
 
-        [[nodiscard]] VkImage Get() const { return m_image; }
+        [[nodiscard]] vk::Image Get() const { return m_image; }
         explicit operator bool() const { return m_image != VK_NULL_HANDLE; }
 
     private:
@@ -60,6 +60,6 @@ namespace crimson::vulkan
     };
 
     // Both return an empty object on failure
-    [[nodiscard]] AllocatedBuffer CreateAllocatedBuffer(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, BufferMemory memory);
-    [[nodiscard]] AllocatedImage CreateAllocatedImage(VmaAllocator allocator, const VkImageCreateInfo& info, bool dedicated);
+    [[nodiscard]] AllocatedBuffer CreateAllocatedBuffer(VmaAllocator allocator, vk::DeviceSize size, vk::BufferUsageFlags usage, BufferMemory memory);
+    [[nodiscard]] AllocatedImage CreateAllocatedImage(VmaAllocator allocator, const vk::ImageCreateInfo& info, bool dedicated);
 }

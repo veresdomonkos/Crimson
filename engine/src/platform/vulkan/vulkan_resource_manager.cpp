@@ -2,10 +2,8 @@
 
 #include <algorithm>
 #include <array>
-#include <cassert>
 #include <cstring>
 #include <limits>
-#include <stdexcept>
 #include <vector>
 
 #include <spirv_reflect.h>
@@ -29,103 +27,78 @@ namespace crimson::vulkan
     VulkanResourceManager::~VulkanResourceManager()
     {
         m_device.WaitIdle();
+
+        // The registries live in the base class and would otherwise outlive the pool and layouts below
         DestroyResources();
-
-        if (m_defaultSampler != VK_NULL_HANDLE)
-            vkDestroySampler(m_device.GetDevice(), m_defaultSampler, nullptr);
-
-        if (m_descriptorPool != VK_NULL_HANDLE)
-            vkDestroyDescriptorPool(m_device.GetDevice(), m_descriptorPool, nullptr);
-
-        if (m_globalSetLayout != VK_NULL_HANDLE)
-            vkDestroyDescriptorSetLayout(m_device.GetDevice(), m_globalSetLayout, nullptr);
     }
 
     void VulkanResourceManager::CreateDescriptorPool()
     {
-        std::array<VkDescriptorPoolSize, 3> poolSizes{};
+        std::array<vk::DescriptorPoolSize, 3> poolSizes{};
 
-        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        poolSizes[0].type = vk::DescriptorType::eUniformBufferDynamic;
         poolSizes[0].descriptorCount = 2;
 
-        poolSizes[1].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
         poolSizes[1].descriptorCount = 100;
 
-        poolSizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[2].type = vk::DescriptorType::eCombinedImageSampler;
         poolSizes[2].descriptorCount = 100;
 
-        VkDescriptorPoolCreateInfo poolInfo{};
-        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
         poolInfo.maxSets = 100;
-        poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+        poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
 
-        if (vkCreateDescriptorPool(
-                m_device.GetDevice(),
-                &poolInfo,
-                nullptr,
-                &m_descriptorPool) != VK_SUCCESS)
-        {
-            throw std::runtime_error("Failed to create descriptor pool");
-        }
+        m_descriptorPool = m_device.GetDevice().createDescriptorPool(poolInfo);
     }
 
     void VulkanResourceManager::CreateGlobalSetLayout()
     {
-        std::array<VkDescriptorSetLayoutBinding, 3> bindings{};
+        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
 
         bindings[0].binding = kCameraBlockBinding;
-        bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        bindings[0].descriptorType = vk::DescriptorType::eUniformBufferDynamic;
         bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex;
 
         bindings[1].binding = kLightingBlockBinding;
-        bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        bindings[1].descriptorType = vk::DescriptorType::eUniformBufferDynamic;
         bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
         bindings[2].binding = kShadowMapBinding;
-        bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        bindings[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
         bindings[2].descriptorCount = 1;
-        bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-        VkDescriptorSetLayoutCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        vk::DescriptorSetLayoutCreateInfo createInfo{};
         createInfo.bindingCount = static_cast<uint32_t>(bindings.size());
         createInfo.pBindings = bindings.data();
 
-        if (vkCreateDescriptorSetLayout(
-                m_device.GetDevice(),
-                &createInfo,
-                nullptr,
-                &m_globalSetLayout) != VK_SUCCESS)
-        {
-            throw std::runtime_error("Failed to create global descriptor set layout");
-        }
+        m_globalSetLayout = m_device.GetDevice().createDescriptorSetLayout(createInfo);
     }
 
     void VulkanResourceManager::CreateDefaultSampler()
     {
-        VkSamplerCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        createInfo.magFilter = VK_FILTER_LINEAR;
-        createInfo.minFilter = VK_FILTER_LINEAR;
-        createInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        createInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-        createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        vk::SamplerCreateInfo createInfo{};
+        createInfo.magFilter = vk::Filter::eLinear;
+        createInfo.minFilter = vk::Filter::eLinear;
+        createInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
+        createInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
+        createInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
         createInfo.anisotropyEnable = VK_FALSE;
         createInfo.maxAnisotropy = 1.0f;
-        createInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        createInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
         createInfo.unnormalizedCoordinates = VK_FALSE;
         createInfo.compareEnable = VK_FALSE;
-        createInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        createInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        createInfo.compareOp = vk::CompareOp::eAlways;
+        createInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
         createInfo.minLod = 0.0f;
         createInfo.maxLod = VK_LOD_CLAMP_NONE;
 
-        if (vkCreateSampler(m_device.GetDevice(), &createInfo, nullptr, &m_defaultSampler) != VK_SUCCESS)
-            throw std::runtime_error("Failed to create default sampler");
+        m_defaultSampler = m_device.GetDevice().createSampler(createInfo);
     }
 
     RenderTargetHandle VulkanResourceManager::GetCurrentBackBuffer() const
@@ -140,20 +113,20 @@ namespace crimson::vulkan
         return CreateSwapchainResources(surface);
     }
 
-    AllocatedBuffer VulkanResourceManager::CreateBufferWithData(VkDeviceSize size, VkBufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const
+    AllocatedBuffer VulkanResourceManager::CreateBufferWithData(vk::DeviceSize size, vk::BufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const
     {
         const VmaAllocator allocator = m_device.GetAllocator();
 
         if (bufferUsage == BufferUsage::Static && data)
         {
-            AllocatedBuffer staging = CreateAllocatedBuffer(allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, BufferMemory::HostMapped);
+            AllocatedBuffer staging = CreateAllocatedBuffer(allocator, size, vk::BufferUsageFlagBits::eTransferSrc, BufferMemory::HostMapped);
 
             if (!staging)
                 return {};
 
             std::memcpy(staging.Mapped(), data, static_cast<size_t>(size));
 
-            AllocatedBuffer buffer = CreateAllocatedBuffer(allocator, size, usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, BufferMemory::DeviceLocal);
+            AllocatedBuffer buffer = CreateAllocatedBuffer(allocator, size, usage | vk::BufferUsageFlagBits::eTransferDst, BufferMemory::DeviceLocal);
 
             if (buffer)
                 CopyBuffer(staging.Get(), buffer.Get(), size);
@@ -175,7 +148,7 @@ namespace crimson::vulkan
         buffer.Size = info.Size;
         buffer.Layout = info.Layout;
         buffer.Usage = info.Usage;
-        buffer.Buffer = CreateBufferWithData(info.Size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, info.Usage, data);
+        buffer.Buffer = CreateBufferWithData(info.Size, vk::BufferUsageFlagBits::eVertexBuffer, info.Usage, data);
 
         if (!buffer.Buffer)
             return {};
@@ -195,7 +168,7 @@ namespace crimson::vulkan
         buffer.Size = info.Size;
         buffer.Type = info.Type;
         buffer.Usage = info.Usage;
-        buffer.Buffer = CreateBufferWithData(info.Size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, info.Usage, data);
+        buffer.Buffer = CreateBufferWithData(info.Size, vk::BufferUsageFlagBits::eIndexBuffer, info.Usage, data);
 
         if (!buffer.Buffer)
             return {};
@@ -211,82 +184,56 @@ namespace crimson::vulkan
 
     ShaderHandle VulkanResourceManager::CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary)
     {
-        VulkanShader shader{};
-
-        shader.Vertex = CreateShaderModule(vertexBinary);
-
-        if (shader.Vertex == VK_NULL_HANDLE)
-            return {};
-
-        shader.Fragment = CreateShaderModule(fragmentBinary);
-
-        if (shader.Fragment == VK_NULL_HANDLE)
+        try
         {
-            vkDestroyShaderModule(m_device.GetDevice(), shader.Vertex, nullptr);
-            return {};
+            VulkanShader shader{};
+
+            shader.Vertex = CreateShaderModule(vertexBinary);
+            shader.Fragment = CreateShaderModule(fragmentBinary);
+
+            ReflectShader(shader, vertexBinary);
+            ReflectShader(shader, fragmentBinary);
+
+            std::vector<vk::DescriptorSetLayoutBinding> bindings;
+
+            if (shader.MaterialUniformSize > 0)
+            {
+                vk::DescriptorSetLayoutBinding binding{};
+                binding.binding = shader.MaterialUboBinding;
+                binding.descriptorCount = 1;
+                binding.descriptorType = vk::DescriptorType::eUniformBuffer;
+                binding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+                bindings.push_back(binding);
+            }
+
+            for (const auto& [name, texture] : shader.TextureBindings)
+            {
+                vk::DescriptorSetLayoutBinding binding{};
+                binding.binding = texture.Binding;
+                binding.descriptorCount = 1;
+                binding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+                binding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+                bindings.push_back(binding);
+            }
+
+            vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+            layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+            layoutInfo.pBindings = bindings.empty() ? nullptr : bindings.data();
+
+            shader.MaterialSetLayout = m_device.GetDevice().createDescriptorSetLayout(layoutInfo);
+
+            return m_shaders.Register(std::move(shader));
         }
-
-        ReflectShader(shader, vertexBinary, VK_SHADER_STAGE_VERTEX_BIT);
-        ReflectShader(shader, fragmentBinary, VK_SHADER_STAGE_FRAGMENT_BIT);
-
-        std::vector<VkDescriptorSetLayoutBinding> bindings;
-
-        if (shader.MaterialUniformSize > 0)
+        catch (const vk::SystemError& error)
         {
-            VkDescriptorSetLayoutBinding binding{};
-            binding.binding = shader.MaterialUboBinding;
-            binding.descriptorCount = 1;
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-            bindings.push_back(binding);
-        }
-
-        for (const auto& [name, texture] : shader.TextureBindings)
-        {
-            VkDescriptorSetLayoutBinding binding{};
-            binding.binding = texture.Binding;
-            binding.descriptorCount = 1;
-            binding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            binding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-            bindings.push_back(binding);
-        }
-
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.empty() ? nullptr : bindings.data();
-
-        if (vkCreateDescriptorSetLayout(
-                m_device.GetDevice(),
-                &layoutInfo,
-                nullptr,
-                &shader.MaterialSetLayout) != VK_SUCCESS)
-        {
-            vkDestroyShaderModule(m_device.GetDevice(), shader.Vertex, nullptr);
-            vkDestroyShaderModule(m_device.GetDevice(), shader.Fragment, nullptr);
+            LOG_ERROR("[Vulkan] Failed to create shader: {}", error.what());
             return {};
         }
-
-        return m_shaders.Register(std::move(shader));
     }
 
     void VulkanResourceManager::DestroyShader(ShaderHandle handle)
     {
         m_device.WaitIdle();
-
-        VulkanShader* shader = m_shaders.Find(handle);
-        if (!shader)
-            return;
-
-        if (shader->MaterialSetLayout != VK_NULL_HANDLE)
-            vkDestroyDescriptorSetLayout(m_device.GetDevice(), shader->MaterialSetLayout, nullptr);
-
-        if (shader->Vertex != VK_NULL_HANDLE)
-            vkDestroyShaderModule(m_device.GetDevice(), shader->Vertex, nullptr);
-
-        if (shader->Fragment != VK_NULL_HANDLE)
-            vkDestroyShaderModule(m_device.GetDevice(), shader->Fragment, nullptr);
-
         m_shaders.Unregister(handle);
     }
 
@@ -297,59 +244,55 @@ namespace crimson::vulkan
         if (!shader)
             return {};
 
-        VulkanMaterial material{};
-        material.Shader = shaderHandle;
-        material.UniformBufferSize = shader->MaterialUniformSize;
-
-        VkDescriptorSetAllocateInfo allocateInfo{};
-        allocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocateInfo.descriptorPool = m_descriptorPool;
-        allocateInfo.descriptorSetCount = 1;
-        allocateInfo.pSetLayouts = &shader->MaterialSetLayout;
-
-        if (vkAllocateDescriptorSets(m_device.GetDevice(), &allocateInfo, &material.DescriptorSet) != VK_SUCCESS)
-            return {};
-
-        if (material.UniformBufferSize > 0)
+        try
         {
-            material.UniformBuffer = CreateAllocatedBuffer(m_device.GetAllocator(), material.UniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferMemory::HostMapped);
+            VulkanMaterial material{};
+            material.Shader = shaderHandle;
+            material.UniformBufferSize = shader->MaterialUniformSize;
 
-            if (!material.UniformBuffer)
+            const vk::DescriptorSetLayout setLayout = *shader->MaterialSetLayout;
+
+            vk::DescriptorSetAllocateInfo allocateInfo{};
+            allocateInfo.descriptorPool = *m_descriptorPool;
+            allocateInfo.descriptorSetCount = 1;
+            allocateInfo.pSetLayouts = &setLayout;
+
+            material.DescriptorSet = std::move(m_device.GetDevice().allocateDescriptorSets(allocateInfo).front());
+
+            if (material.UniformBufferSize > 0)
             {
-                vkFreeDescriptorSets(m_device.GetDevice(), m_descriptorPool, 1, &material.DescriptorSet);
-                return {};
+                material.UniformBuffer = CreateAllocatedBuffer(m_device.GetAllocator(), material.UniformBufferSize, vk::BufferUsageFlagBits::eUniformBuffer, BufferMemory::HostMapped);
+
+                if (!material.UniformBuffer)
+                    return {};
+
+                vk::DescriptorBufferInfo bufferInfo{};
+                bufferInfo.buffer = material.UniformBuffer.Get();
+                bufferInfo.offset = 0;
+                bufferInfo.range = material.UniformBufferSize;
+
+                vk::WriteDescriptorSet write{};
+                write.dstSet = *material.DescriptorSet;
+                write.dstBinding = shader->MaterialUboBinding;
+                write.descriptorCount = 1;
+                write.descriptorType = vk::DescriptorType::eUniformBuffer;
+                write.pBufferInfo = &bufferInfo;
+
+                m_device.GetDevice().updateDescriptorSets(write, nullptr);
             }
 
-            VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = material.UniformBuffer.Get();
-            bufferInfo.offset = 0;
-            bufferInfo.range = material.UniformBufferSize;
-
-            VkWriteDescriptorSet write{};
-            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            write.dstSet = material.DescriptorSet;
-            write.dstBinding = shader->MaterialUboBinding;
-            write.descriptorCount = 1;
-            write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            write.pBufferInfo = &bufferInfo;
-
-            vkUpdateDescriptorSets(m_device.GetDevice(), 1, &write, 0, nullptr);
+            return m_materials.Register(std::move(material));
         }
-
-        return m_materials.Register(std::move(material));
+        catch (const vk::SystemError& error)
+        {
+            LOG_ERROR("[Vulkan] Failed to create material: {}", error.what());
+            return {};
+        }
     }
 
     void VulkanResourceManager::DestroyMaterial(MaterialHandle handle)
     {
         m_device.WaitIdle();
-
-        VulkanMaterial* material = m_materials.Find(handle);
-        if (!material)
-            return;
-
-        if (material->DescriptorSet != VK_NULL_HANDLE)
-            vkFreeDescriptorSets(m_device.GetDevice(), m_descriptorPool, 1, &material->DescriptorSet);
-
         m_materials.Unregister(handle);
     }
 
@@ -364,65 +307,64 @@ namespace crimson::vulkan
         if (it == shader.TextureBindings.end())
             return;
 
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.sampler = m_defaultSampler;
-        imageInfo.imageView = texture.View;
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        vk::DescriptorImageInfo imageInfo{};
+        imageInfo.sampler = *m_defaultSampler;
+        imageInfo.imageView = *texture.View;
+        imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = material.DescriptorSet;
+        vk::WriteDescriptorSet write{};
+        write.dstSet = *material.DescriptorSet;
         write.dstBinding = it->second.Binding;
         write.descriptorCount = 1;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
         write.pImageInfo = &imageInfo;
 
-        vkUpdateDescriptorSets(m_device.GetDevice(), 1, &write, 0, nullptr);
+        m_device.GetDevice().updateDescriptorSets(write, nullptr);
     }
 
     TextureHandle VulkanResourceManager::CreateTexture(const TextureInfo& info, const void* data)
     {
-        const VkFormat format = utils::GetVkFormat(info.Format);
+        const vk::Format format = utils::GetVkFormat(info.Format);
 
-        if (format == VK_FORMAT_UNDEFINED)
+        if (format == vk::Format::eUndefined)
             return TextureHandle::Invalid();
 
-        VkImageUsageFlags usage = 0;
+        vk::ImageUsageFlags usage{};
 
         if (HasTextureUsage(info.Usage, TextureUsage::Sampled))
-            usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+            usage |= vk::ImageUsageFlagBits::eSampled;
 
         if (HasTextureUsage(info.Usage, TextureUsage::ColorAttachment))
-            usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            usage |= vk::ImageUsageFlagBits::eColorAttachment;
 
         if (HasTextureUsage(info.Usage, TextureUsage::DepthStencilAttachment))
-            usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
 
-        if (usage == 0)
+        if (!usage)
             return TextureHandle::Invalid();
 
         VulkanTexture texture{};
         texture.Format = format;
         texture.Width = info.Width;
         texture.Height = info.Height;
-        texture.Layout = VK_IMAGE_LAYOUT_UNDEFINED;
+        texture.Layout = vk::ImageLayout::eUndefined;
         texture.Aspect = utils::GetImageAspect(info.Format);
 
         if (data)
-            usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+            usage |= vk::ImageUsageFlagBits::eTransferDst;
 
-        VkImageCreateInfo imageInfo{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        vk::ImageCreateInfo imageInfo{};
+        imageInfo.imageType = vk::ImageType::e2D;
         imageInfo.format = format;
-        imageInfo.extent = {info.Width, info.Height, 1};
+        imageInfo.extent = vk::Extent3D{ info.Width, info.Height, 1 };
         imageInfo.mipLevels = info.MipLevels;
         imageInfo.arrayLayers = 1;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.samples = vk::SampleCountFlagBits::e1;
+        imageInfo.tiling = vk::ImageTiling::eOptimal;
         imageInfo.usage = usage;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.initialLayout = vk::ImageLayout::eUndefined;
 
-        const bool isAttachment = (usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) != 0;
+        const bool isAttachment = static_cast<bool>(usage & (vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eDepthStencilAttachment));
 
         texture.Allocation = CreateAllocatedImage(m_device.GetAllocator(), imageInfo, isAttachment);
 
@@ -431,29 +373,31 @@ namespace crimson::vulkan
 
         texture.Image = texture.Allocation.Get();
 
-        VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
-        viewInfo.image = texture.Image;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = format;
-        // Descriptors can only read one aspect, so sampling goes through a depth-only view
-        viewInfo.subresourceRange.aspectMask = (texture.Aspect & VK_IMAGE_ASPECT_DEPTH_BIT) ? VK_IMAGE_ASPECT_DEPTH_BIT : texture.Aspect;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = info.MipLevels;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(m_device.GetDevice(), &viewInfo, nullptr, &texture.View) != VK_SUCCESS)
-            return TextureHandle::Invalid();
-
-        if (utils::HasStencilComponent(format))
+        try
         {
-            viewInfo.subresourceRange.aspectMask = texture.Aspect;
+            vk::ImageViewCreateInfo viewInfo{};
+            viewInfo.image = texture.Image;
+            viewInfo.viewType = vk::ImageViewType::e2D;
+            viewInfo.format = format;
+            // Descriptors can only read one aspect, so sampling goes through a depth-only view
+            viewInfo.subresourceRange.aspectMask = (texture.Aspect & vk::ImageAspectFlagBits::eDepth) ? vk::ImageAspectFlags(vk::ImageAspectFlagBits::eDepth) : texture.Aspect;
+            viewInfo.subresourceRange.baseMipLevel = 0;
+            viewInfo.subresourceRange.levelCount = info.MipLevels;
+            viewInfo.subresourceRange.baseArrayLayer = 0;
+            viewInfo.subresourceRange.layerCount = 1;
 
-            if (vkCreateImageView(m_device.GetDevice(), &viewInfo, nullptr, &texture.AttachmentView) != VK_SUCCESS)
+            texture.View = m_device.GetDevice().createImageView(viewInfo);
+
+            if (utils::HasStencilComponent(format))
             {
-                vkDestroyImageView(m_device.GetDevice(), texture.View, nullptr);
-                return TextureHandle::Invalid();
+                viewInfo.subresourceRange.aspectMask = texture.Aspect;
+                texture.AttachmentView = m_device.GetDevice().createImageView(viewInfo);
             }
+        }
+        catch (const vk::SystemError& error)
+        {
+            LOG_ERROR("[Vulkan] Failed to create image view: {}", error.what());
+            return TextureHandle::Invalid();
         }
 
         TextureHandle handle = m_textures.Register(std::move(texture));
@@ -467,18 +411,6 @@ namespace crimson::vulkan
     void VulkanResourceManager::DestroyTexture(TextureHandle handle)
     {
         m_device.WaitIdle();
-
-        VulkanTexture* texture = m_textures.Find(handle);
-
-        if (!texture)
-            return;
-
-        if (texture->View != VK_NULL_HANDLE)
-            vkDestroyImageView(m_device.GetDevice(), texture->View, nullptr);
-
-        if (texture->AttachmentView != VK_NULL_HANDLE)
-            vkDestroyImageView(m_device.GetDevice(), texture->AttachmentView, nullptr);
-
         m_textures.Unregister(handle);
     }
 
@@ -562,11 +494,11 @@ namespace crimson::vulkan
         return m_renderTargets.Get(handle).DepthAttachment;
     }
 
-     VulkanGraphicsPipeline VulkanResourceManager::CreateGraphicsPipeline(const GraphicsPipelineInfo& info)
+    VulkanGraphicsPipeline VulkanResourceManager::CreateGraphicsPipeline(const GraphicsPipelineInfo& info)
     {
         const VulkanShader& shader = GetShader(info.Shader);
 
-        if (shader.Vertex == VK_NULL_HANDLE || shader.Fragment == VK_NULL_HANDLE)
+        if (!*shader.Vertex || !*shader.Fragment)
         {
             LOG_ERROR("[Renderer] Cannot create Vulkan pipeline without valid shader modules");
             return {};
@@ -574,7 +506,7 @@ namespace crimson::vulkan
 
         const VulkanRenderTarget& target = GetRenderTarget(info.Target);
 
-        std::vector<VkFormat> colorFormats;
+        std::vector<vk::Format> colorFormats;
         colorFormats.reserve(target.ColorAttachments.size());
         for (TextureHandle colorHandle : target.ColorAttachments)
         {
@@ -582,153 +514,137 @@ namespace crimson::vulkan
         }
 
         const bool hasDepth = static_cast<bool>(target.DepthAttachment);
-        const VkFormat depthFormat = hasDepth ? GetTexture(target.DepthAttachment).Format : VK_FORMAT_UNDEFINED;
+        const vk::Format depthFormat = hasDepth ? GetTexture(target.DepthAttachment).Format : vk::Format::eUndefined;
 
-        VkPipelineShaderStageCreateInfo shaderStages[2]{};
-        shaderStages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-        shaderStages[0].module = shader.Vertex;
+        std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages{};
+        shaderStages[0].stage = vk::ShaderStageFlagBits::eVertex;
+        shaderStages[0].module = *shader.Vertex;
         shaderStages[0].pName = "main";
 
-        shaderStages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-        shaderStages[1].module = shader.Fragment;
+        shaderStages[1].stage = vk::ShaderStageFlagBits::eFragment;
+        shaderStages[1].module = *shader.Fragment;
         shaderStages[1].pName = "main";
 
-        VkVertexInputBindingDescription binding{};
+        vk::VertexInputBindingDescription binding{};
         binding.binding = 0;
         binding.stride = info.Layout.GetStride();
-        binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+        binding.inputRate = vk::VertexInputRate::eVertex;
 
-        std::vector<VkVertexInputAttributeDescription> attributes;
+        std::vector<vk::VertexInputAttributeDescription> attributes;
         uint32_t location = 0;
         for (const auto& element : info.Layout)
         {
-            VkVertexInputAttributeDescription attribute{};
+            vk::VertexInputAttributeDescription attribute{};
             attribute.location = location++;
             attribute.binding = 0;
             switch (element.Type)
             {
-                case ShaderDataType::Float:  attribute.format = VK_FORMAT_R32_SFLOAT; break;
-                case ShaderDataType::Float2: attribute.format = VK_FORMAT_R32G32_SFLOAT; break;
-                case ShaderDataType::Float3: attribute.format = VK_FORMAT_R32G32B32_SFLOAT; break;
-                case ShaderDataType::Float4: attribute.format = VK_FORMAT_R32G32B32A32_SFLOAT; break;
-                case ShaderDataType::Int:    attribute.format = VK_FORMAT_R32_SINT; break;
-                case ShaderDataType::Int2:   attribute.format = VK_FORMAT_R32G32_SINT; break;
-                case ShaderDataType::Int3:   attribute.format = VK_FORMAT_R32G32B32_SINT; break;
-                case ShaderDataType::Int4:   attribute.format = VK_FORMAT_R32G32B32A32_SINT; break;
+                case ShaderDataType::Float:  attribute.format = vk::Format::eR32Sfloat; break;
+                case ShaderDataType::Float2: attribute.format = vk::Format::eR32G32Sfloat; break;
+                case ShaderDataType::Float3: attribute.format = vk::Format::eR32G32B32Sfloat; break;
+                case ShaderDataType::Float4: attribute.format = vk::Format::eR32G32B32A32Sfloat; break;
+                case ShaderDataType::Int:    attribute.format = vk::Format::eR32Sint; break;
+                case ShaderDataType::Int2:   attribute.format = vk::Format::eR32G32Sint; break;
+                case ShaderDataType::Int3:   attribute.format = vk::Format::eR32G32B32Sint; break;
+                case ShaderDataType::Int4:   attribute.format = vk::Format::eR32G32B32A32Sint; break;
             }
             attribute.offset = element.Offset;
             attributes.push_back(attribute);
         }
 
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
-        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
         vertexInputInfo.vertexBindingDescriptionCount = 1;
         vertexInputInfo.pVertexBindingDescriptions = &binding;
         vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributes.size());
         vertexInputInfo.pVertexAttributeDescriptions = attributes.data();
 
-        VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
-        inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        vk::PipelineInputAssemblyStateCreateInfo inputAssemblyInfo{};
+        inputAssemblyInfo.topology = vk::PrimitiveTopology::eTriangleList;
         inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
 
-        VkPipelineViewportStateCreateInfo viewportState{};
-        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        vk::PipelineViewportStateCreateInfo viewportState{};
         viewportState.viewportCount = 1;
         viewportState.scissorCount = 1;
 
-        VkPipelineRasterizationStateCreateInfo rasterInfo{};
-        rasterInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        vk::PipelineRasterizationStateCreateInfo rasterInfo{};
         rasterInfo.depthClampEnable = VK_FALSE;
         rasterInfo.rasterizerDiscardEnable = VK_FALSE;
-        rasterInfo.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterInfo.polygonMode = vk::PolygonMode::eFill;
         rasterInfo.lineWidth = 1.0f;
-        rasterInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-        rasterInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+        rasterInfo.cullMode = vk::CullModeFlagBits::eBack;
+        rasterInfo.frontFace = vk::FrontFace::eClockwise;
         rasterInfo.depthBiasEnable = VK_FALSE;
 
-        VkPipelineMultisampleStateCreateInfo multisampleState{};
-        multisampleState.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        multisampleState.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        vk::PipelineMultisampleStateCreateInfo multisampleState{};
+        multisampleState.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
-        VkPipelineDepthStencilStateCreateInfo depthState{};
-        depthState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        vk::PipelineDepthStencilStateCreateInfo depthState{};
         depthState.depthTestEnable = hasDepth ? VK_TRUE : VK_FALSE;
         depthState.depthWriteEnable = hasDepth ? VK_TRUE : VK_FALSE;
-        depthState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+        depthState.depthCompareOp = vk::CompareOp::eLessOrEqual;
         depthState.depthBoundsTestEnable = VK_FALSE;
         depthState.stencilTestEnable = VK_FALSE;
 
-        std::vector<VkPipelineColorBlendAttachmentState> colorBlendAttachments(colorFormats.size());
+        std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments(colorFormats.size());
         for (auto& attachment : colorBlendAttachments)
         {
             attachment.colorWriteMask =
-                VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-                VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+                vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
             attachment.blendEnable = VK_FALSE;
         }
 
-        VkPipelineColorBlendStateCreateInfo colorBlendInfo{};
-        colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        vk::PipelineColorBlendStateCreateInfo colorBlendInfo{};
         colorBlendInfo.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
         colorBlendInfo.pAttachments = colorBlendAttachments.empty() ? nullptr : colorBlendAttachments.data();
 
-        VkDynamicState dynamicStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+        std::array<vk::DynamicState, 2> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
 
-        VkPipelineDynamicStateCreateInfo dynamicState{};
-        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        dynamicState.dynamicStateCount = 2;
-        dynamicState.pDynamicStates = dynamicStates;
+        vk::PipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
 
-        VkDescriptorSetLayout setLayouts[2] = { m_globalSetLayout, shader.MaterialSetLayout };
+        std::array<vk::DescriptorSetLayout, 2> setLayouts = { *m_globalSetLayout, *shader.MaterialSetLayout };
 
-        VkPipelineLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        layoutInfo.setLayoutCount = 2;
-        layoutInfo.pSetLayouts = setLayouts;
+        vk::PipelineLayoutCreateInfo layoutInfo{};
+        layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+        layoutInfo.pSetLayouts = setLayouts.data();
 
         VulkanGraphicsPipeline pipeline{};
 
-        if (vkCreatePipelineLayout(m_device.GetDevice(), &layoutInfo, nullptr, &pipeline.Layout) != VK_SUCCESS)
+        try
         {
-            LOG_ERROR("[Renderer] Failed to create Vulkan pipeline layout");
-            return {};
+            pipeline.Layout = m_device.GetDevice().createPipelineLayout(layoutInfo);
+
+            vk::PipelineRenderingCreateInfo renderingInfo{};
+            renderingInfo.viewMask = 0;
+            renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorFormats.size());
+            renderingInfo.pColorAttachmentFormats = colorFormats.empty() ? nullptr : colorFormats.data();
+            renderingInfo.depthAttachmentFormat = depthFormat;
+            renderingInfo.stencilAttachmentFormat = utils::HasStencilComponent(depthFormat) ? depthFormat : vk::Format::eUndefined;
+
+            vk::GraphicsPipelineCreateInfo pipelineInfo{};
+            pipelineInfo.pNext = &renderingInfo;
+            pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+            pipelineInfo.pStages = shaderStages.data();
+            pipelineInfo.pVertexInputState = &vertexInputInfo;
+            pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
+            pipelineInfo.pViewportState = &viewportState;
+            pipelineInfo.pRasterizationState = &rasterInfo;
+            pipelineInfo.pMultisampleState = &multisampleState;
+            pipelineInfo.pDepthStencilState = &depthState;
+            pipelineInfo.pColorBlendState = &colorBlendInfo;
+            pipelineInfo.pDynamicState = &dynamicState;
+            pipelineInfo.layout = *pipeline.Layout;
+            pipelineInfo.subpass = 0;
+            pipelineInfo.basePipelineIndex = -1;
+
+            pipeline.Pipeline = m_device.GetDevice().createGraphicsPipeline(nullptr, pipelineInfo);
         }
-
-        VkPipelineRenderingCreateInfo renderingInfo{};
-        renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-        renderingInfo.viewMask = 0;
-        renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorFormats.size());
-        renderingInfo.pColorAttachmentFormats = colorFormats.empty() ? nullptr : colorFormats.data();
-        renderingInfo.depthAttachmentFormat = depthFormat;
-        renderingInfo.stencilAttachmentFormat = utils::HasStencilComponent(depthFormat) ? depthFormat : VK_FORMAT_UNDEFINED;
-
-        VkGraphicsPipelineCreateInfo pipelineInfo{};
-        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-        pipelineInfo.pNext = &renderingInfo;
-        pipelineInfo.stageCount = 2;
-        pipelineInfo.pStages = shaderStages;
-        pipelineInfo.pVertexInputState = &vertexInputInfo;
-        pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;
-        pipelineInfo.pViewportState = &viewportState;
-        pipelineInfo.pRasterizationState = &rasterInfo;
-        pipelineInfo.pMultisampleState = &multisampleState;
-        pipelineInfo.pDepthStencilState = &depthState;
-        pipelineInfo.pColorBlendState = &colorBlendInfo;
-        pipelineInfo.pDynamicState = &dynamicState;
-        pipelineInfo.layout = pipeline.Layout;
-        pipelineInfo.renderPass = VK_NULL_HANDLE;
-        pipelineInfo.subpass = 0;
-        pipelineInfo.basePipelineIndex = -1;
-
-        if (vkCreateGraphicsPipelines(m_device.GetDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline.Pipeline) != VK_SUCCESS)
+        catch (const vk::SystemError& error)
         {
-            LOG_ERROR("[Renderer] Failed to create Vulkan graphics pipeline");
-            vkDestroyPipelineLayout(m_device.GetDevice(), pipeline.Layout, nullptr);
-            pipeline.Layout = VK_NULL_HANDLE;
-            return pipeline;
+            LOG_ERROR("[Renderer] Failed to create Vulkan graphics pipeline: {}", error.what());
+            return {};
         }
 
         return pipeline;
@@ -750,235 +666,182 @@ namespace crimson::vulkan
         std::memcpy(static_cast<std::byte*>(material.UniformBuffer.Mapped()) + property->second.Offset, data.data(), data.size());
     }
 
-    bool VulkanResourceManager::CreateImageView(VulkanTexture& texture, VkImageAspectFlags aspect) const
+    void VulkanResourceManager::CopyBuffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size) const
     {
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = texture.Image;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = texture.Format;
-        viewInfo.subresourceRange.aspectMask = aspect;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        return vkCreateImageView(m_device.GetDevice(), &viewInfo, nullptr, &texture.View) == VK_SUCCESS;
-    }
-
-    void VulkanResourceManager::CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const
-    {
-        m_device.ImmediateSubmit([&](VkCommandBuffer commandBuffer)
+        m_device.ImmediateSubmit([&](vk::CommandBuffer commandBuffer)
         {
-            VkBufferCopy copy{};
+            vk::BufferCopy copy{};
             copy.size = size;
-            vkCmdCopyBuffer(commandBuffer, src, dst, 1, &copy);
+            commandBuffer.copyBuffer(src, dst, copy);
         });
     }
 
     void VulkanResourceManager::UploadTextureData(VulkanTexture& texture, const TextureInfo& info, const void* data) const
     {
-        const VkDeviceSize size = static_cast<VkDeviceSize>(info.Width) * info.Height * utils::GetBytesPerPixel(info.Format);
+        const vk::DeviceSize size = static_cast<vk::DeviceSize>(info.Width) * info.Height * utils::GetBytesPerPixel(info.Format);
 
-        AllocatedBuffer staging = CreateAllocatedBuffer(m_device.GetAllocator(), size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, BufferMemory::HostMapped);
+        AllocatedBuffer staging = CreateAllocatedBuffer(m_device.GetAllocator(), size, vk::BufferUsageFlagBits::eTransferSrc, BufferMemory::HostMapped);
 
         if (!staging)
             return;
 
         std::memcpy(staging.Mapped(), data, static_cast<size_t>(size));
 
-        m_device.ImmediateSubmit([&](VkCommandBuffer commandBuffer)
+        m_device.ImmediateSubmit([&](vk::CommandBuffer commandBuffer)
         {
-            VkImageMemoryBarrier2 barrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2 };
-            barrier.srcStageMask = VK_PIPELINE_STAGE_2_NONE;
-            barrier.srcAccessMask = VK_ACCESS_2_NONE;
-            barrier.dstStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-            barrier.dstAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            vk::ImageMemoryBarrier2 barrier{};
+            barrier.srcStageMask = vk::PipelineStageFlagBits2::eNone;
+            barrier.srcAccessMask = vk::AccessFlagBits2::eNone;
+            barrier.dstStageMask = vk::PipelineStageFlagBits2::eCopy;
+            barrier.dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            barrier.oldLayout = vk::ImageLayout::eUndefined;
+            barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.image = texture.Image;
-            barrier.subresourceRange = { texture.Aspect, 0, VK_REMAINING_MIP_LEVELS, 0, 1 };
+            barrier.subresourceRange = vk::ImageSubresourceRange{ texture.Aspect, 0, VK_REMAINING_MIP_LEVELS, 0, 1 };
 
-            VkDependencyInfo dependency{ VK_STRUCTURE_TYPE_DEPENDENCY_INFO };
+            vk::DependencyInfo dependency{};
             dependency.imageMemoryBarrierCount = 1;
             dependency.pImageMemoryBarriers = &barrier;
-            vkCmdPipelineBarrier2(commandBuffer, &dependency);
+            commandBuffer.pipelineBarrier2(dependency);
 
-            VkBufferImageCopy region{};
+            vk::BufferImageCopy region{};
             region.imageSubresource.aspectMask = texture.Aspect;
             region.imageSubresource.mipLevel = 0;
             region.imageSubresource.baseArrayLayer = 0;
             region.imageSubresource.layerCount = 1;
-            region.imageExtent = { info.Width, info.Height, 1 };
-            vkCmdCopyBufferToImage(commandBuffer, staging.Get(), texture.Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            region.imageExtent = vk::Extent3D{ info.Width, info.Height, 1 };
+            commandBuffer.copyBufferToImage(staging.Get(), texture.Image, vk::ImageLayout::eTransferDstOptimal, region);
 
-            barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
-            barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-            barrier.dstStageMask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-            barrier.dstAccessMask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT;
-            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            vkCmdPipelineBarrier2(commandBuffer, &dependency);
+            barrier.srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+            barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            barrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+            barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
+            barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
+            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            commandBuffer.pipelineBarrier2(dependency);
         });
 
-        texture.Layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        texture.Layout = vk::ImageLayout::eShaderReadOnlyOptimal;
     }
 
-    TextureHandle VulkanResourceManager::WrapSwapchainImage(VkImage image, VkFormat format, uint32_t width, uint32_t height)
+    TextureHandle VulkanResourceManager::WrapSwapchainImage(vk::Image image, vk::Format format, uint32_t width, uint32_t height)
     {
         VulkanTexture texture{};
         texture.Image = image;
         texture.Format = format;
         texture.Width = width;
         texture.Height = height;
-        texture.Aspect = VK_IMAGE_ASPECT_COLOR_BIT;
-        texture.Layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        texture.Aspect = vk::ImageAspectFlagBits::eColor;
+        texture.Layout = vk::ImageLayout::eUndefined;
 
-        if (!CreateImageView(texture, texture.Aspect))
-            return {};
+        vk::ImageViewCreateInfo viewInfo{};
+        viewInfo.image = image;
+        viewInfo.viewType = vk::ImageViewType::e2D;
+        viewInfo.format = format;
+        viewInfo.subresourceRange = vk::ImageSubresourceRange{ texture.Aspect, 0, 1, 0, 1 };
+
+        texture.View = m_device.GetDevice().createImageView(viewInfo);
 
         return m_textures.Register(std::move(texture));
     }
 
-    RenderTargetHandle VulkanResourceManager::CreateSwapchainRenderTarget(uint32_t width, uint32_t height, VkFormat colorFormat, VkImage swapchainImage)
+    RenderTargetHandle VulkanResourceManager::CreateSwapchainRenderTarget(uint32_t width, uint32_t height, vk::Format colorFormat, vk::Image swapchainImage)
     {
         VulkanRenderTarget target{};
         target.Width = width;
         target.Height = height;
         target.IsSwapchain = true;
-
-        TextureHandle texture = WrapSwapchainImage(
-            swapchainImage,
-            colorFormat,
-            width,
-            height);
-
-        if (!texture)
-            return {};
-
-        VulkanTexture& vulkanTexture = m_textures.Get(texture);
-        vulkanTexture.Layout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-        target.ColorAttachments.push_back(texture);
+        target.ColorAttachments.push_back(WrapSwapchainImage(swapchainImage, colorFormat, width, height));
 
         return m_renderTargets.Register(std::move(target));
     }
 
     bool VulkanResourceManager::CreateSwapchainResources(VulkanSurface& surface)
     {
-        VkSurfaceCapabilitiesKHR capabilities{};
+        const vk::raii::PhysicalDevice& physicalDevice = m_device.GetPhysicalDevice();
+        const vk::SurfaceKHR windowSurface = m_device.GetSurface();
 
-        if (vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_device.GetPhysicalDevice(), m_device.GetSurface(), &capabilities) != VK_SUCCESS)
-            return false;
-
-        uint32_t formatCount = 0;
-
-        vkGetPhysicalDeviceSurfaceFormatsKHR(m_device.GetPhysicalDevice(), m_device.GetSurface(), &formatCount, nullptr);
-
-        if (formatCount == 0)
-            return false;
-
-        std::vector<VkSurfaceFormatKHR> formats(formatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(m_device.GetPhysicalDevice(), m_device.GetSurface(), &formatCount, formats.data());
-
-        VkSurfaceFormatKHR surfaceFormat = formats[0];
-
-        for (const VkSurfaceFormatKHR& format : formats)
+        try
         {
-            if (format.format == VK_FORMAT_B8G8R8A8_UNORM && format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+            const vk::SurfaceCapabilitiesKHR capabilities = physicalDevice.getSurfaceCapabilitiesKHR(windowSurface);
+            const std::vector<vk::SurfaceFormatKHR> formats = physicalDevice.getSurfaceFormatsKHR(windowSurface);
+
+            if (formats.empty())
+                return false;
+
+            vk::SurfaceFormatKHR surfaceFormat = formats[0];
+
+            for (const vk::SurfaceFormatKHR& format : formats)
             {
-                surfaceFormat = format;
-                break;
+                if (format.format == vk::Format::eB8G8R8A8Unorm && format.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+                {
+                    surfaceFormat = format;
+                    break;
+                }
+            }
+
+            const std::vector<vk::PresentModeKHR> presentModes = physicalDevice.getSurfacePresentModesKHR(windowSurface);
+
+            const auto isSupported = [&](vk::PresentModeKHR mode)
+            {
+                return std::find(presentModes.begin(), presentModes.end(), mode) != presentModes.end();
+            };
+
+            // FIFO is the only mode the spec guarantees
+            vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo;
+
+            if (isSupported(vk::PresentModeKHR::eMailbox))
+                presentMode = vk::PresentModeKHR::eMailbox;
+            else if (isSupported(vk::PresentModeKHR::eImmediate))
+                presentMode = vk::PresentModeKHR::eImmediate;
+
+            const vk::Extent2D extent = capabilities.currentExtent;
+
+            if (extent.width == 0 || extent.height == 0 || extent.width == UINT32_MAX)
+                return false;
+
+            uint32_t imageCount = std::max(capabilities.minImageCount + 1, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
+
+            if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount)
+                imageCount = capabilities.maxImageCount;
+
+            vk::SwapchainCreateInfoKHR createInfo{};
+            createInfo.surface = windowSurface;
+            createInfo.minImageCount = imageCount;
+            createInfo.imageFormat = surfaceFormat.format;
+            createInfo.imageColorSpace = surfaceFormat.colorSpace;
+            createInfo.imageExtent = extent;
+            createInfo.imageArrayLayers = 1;
+            createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
+            createInfo.imageSharingMode = vk::SharingMode::eExclusive;
+            createInfo.preTransform = capabilities.currentTransform;
+            createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+            createInfo.presentMode = presentMode;
+            createInfo.clipped = VK_TRUE;
+
+            surface.Swapchain = m_device.GetDevice().createSwapchainKHR(createInfo);
+
+            surface.Extent = extent;
+            surface.Format = surfaceFormat.format;
+
+            const std::vector<vk::Image> images = surface.Swapchain.getImages();
+
+            surface.SwapchainTargetHandles.reserve(images.size());
+            surface.RenderFinishedSemaphores.reserve(images.size());
+
+            for (vk::Image image : images)
+            {
+                surface.SwapchainTargetHandles.push_back(CreateSwapchainRenderTarget(extent.width, extent.height, surface.Format, image));
+                surface.RenderFinishedSemaphores.push_back(m_device.GetDevice().createSemaphore({}));
             }
         }
-
-        uint32_t presentModeCount = 0;
-
-        vkGetPhysicalDeviceSurfacePresentModesKHR(m_device.GetPhysicalDevice(), m_device.GetSurface(), &presentModeCount, nullptr);
-
-        std::vector<VkPresentModeKHR> presentModes(presentModeCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(m_device.GetPhysicalDevice(), m_device.GetSurface(), &presentModeCount, presentModes.data());
-
-        const auto isSupported = [&](VkPresentModeKHR mode)
+        catch (const vk::SystemError& error)
         {
-            return std::find(presentModes.begin(), presentModes.end(), mode) != presentModes.end();
-        };
-
-        // FIFO is the only mode the spec guarantees
-        VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
-
-        if (isSupported(VK_PRESENT_MODE_MAILBOX_KHR))
-            presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
-        else if (isSupported(VK_PRESENT_MODE_IMMEDIATE_KHR))
-            presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
-
-        VkExtent2D extent = capabilities.currentExtent;
-
-        if (extent.width == 0 || extent.height == 0 || extent.width == UINT32_MAX)
+            LOG_ERROR("[Vulkan] Failed to create swapchain: {}", error.what());
+            DestroySwapchainResources(surface);
             return false;
-
-        uint32_t imageCount = std::max(capabilities.minImageCount + 1, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
-
-        if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount)
-            imageCount = capabilities.maxImageCount;
-
-        VkSwapchainCreateInfoKHR createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-        createInfo.surface = m_device.GetSurface();
-        createInfo.minImageCount = imageCount;
-        createInfo.imageFormat = surfaceFormat.format;
-        createInfo.imageColorSpace = surfaceFormat.colorSpace;
-        createInfo.imageExtent = extent;
-        createInfo.imageArrayLayers = 1;
-        createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        createInfo.preTransform = capabilities.currentTransform;
-        createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-        createInfo.presentMode = presentMode;
-        createInfo.clipped = VK_TRUE;
-
-        if (vkCreateSwapchainKHR(m_device.GetDevice(), &createInfo, nullptr, &surface.Swapchain) != VK_SUCCESS)
-            return false;
-
-        surface.Extent = extent;
-        surface.Format = surfaceFormat.format;
-
-        uint32_t imageCountActual = 0;
-
-        vkGetSwapchainImagesKHR(m_device.GetDevice(), surface.Swapchain, &imageCountActual, nullptr);
-
-        std::vector<VkImage> images(imageCountActual);
-        vkGetSwapchainImagesKHR(m_device.GetDevice(), surface.Swapchain, &imageCountActual, images.data());
-
-        surface.SwapchainTargetHandles.reserve(imageCountActual);
-
-        for (VkImage image : images)
-        {
-            RenderTargetHandle target = CreateSwapchainRenderTarget(extent.width, extent.height, surface.Format, image);
-
-            if (!target)
-            {
-                DestroySwapchainResources(surface);
-                return false;
-            }
-
-            surface.SwapchainTargetHandles.push_back(target);
-        }
-
-        surface.RenderFinishedSemaphores.resize(imageCountActual, VK_NULL_HANDLE);
-
-        for (VkSemaphore& semaphore : surface.RenderFinishedSemaphores)
-        {
-            VkSemaphoreCreateInfo semaphoreInfo{};
-            semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-
-            if (vkCreateSemaphore(m_device.GetDevice(), &semaphoreInfo, nullptr, &semaphore) != VK_SUCCESS)
-            {
-                DestroySwapchainResources(surface);
-                return false;
-            }
         }
 
         surface.CurrentImageIndex = 0;
@@ -992,38 +855,20 @@ namespace crimson::vulkan
             DestroyRenderTarget(handle);
 
         surface.SwapchainTargetHandles.clear();
-
-        for (VkSemaphore semaphore : surface.RenderFinishedSemaphores)
-        {
-            if (semaphore != VK_NULL_HANDLE)
-                vkDestroySemaphore(m_device.GetDevice(), semaphore, nullptr);
-        }
-
         surface.RenderFinishedSemaphores.clear();
-
-        if (surface.Swapchain != VK_NULL_HANDLE)
-        {
-            vkDestroySwapchainKHR(m_device.GetDevice(), surface.Swapchain, nullptr);
-            surface.Swapchain = VK_NULL_HANDLE;
-        }
+        surface.Swapchain.clear();
     }
 
-    VkShaderModule VulkanResourceManager::CreateShaderModule(std::span<const uint32_t> code)
+    vk::raii::ShaderModule VulkanResourceManager::CreateShaderModule(std::span<const uint32_t> code) const
     {
-        VkShaderModuleCreateInfo createInfo{};
-        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        vk::ShaderModuleCreateInfo createInfo{};
         createInfo.codeSize = code.size_bytes();
         createInfo.pCode = code.data();
 
-        VkShaderModule module = VK_NULL_HANDLE;
-
-        if (vkCreateShaderModule(m_device.GetDevice(), &createInfo, nullptr, &module) != VK_SUCCESS)
-            return VK_NULL_HANDLE;
-
-        return module;
+        return m_device.GetDevice().createShaderModule(createInfo);
     }
 
-    void VulkanResourceManager::ReflectShader(VulkanShader& shader, std::span<const uint32_t> spirvCode, VkShaderStageFlagBits stage)
+    void VulkanResourceManager::ReflectShader(VulkanShader& shader, std::span<const uint32_t> spirvCode)
     {
         SpvReflectShaderModule reflModule;
         if (spvReflectCreateShaderModule(spirvCode.size() * sizeof(uint32_t), spirvCode.data(), &reflModule) != SPV_REFLECT_RESULT_SUCCESS)
@@ -1071,13 +916,6 @@ namespace crimson::vulkan
 
     void VulkanResourceManager::DestroyResources()
     {
-        for (auto& [info, pipeline] : m_graphicsPipelines)
-        {
-            if (pipeline.Pipeline != VK_NULL_HANDLE)
-                vkDestroyPipeline(m_device.GetDevice(), pipeline.Pipeline, nullptr);
-            if (pipeline.Layout != VK_NULL_HANDLE)
-                vkDestroyPipelineLayout(m_device.GetDevice(), pipeline.Layout, nullptr);
-        }
         m_graphicsPipelines.clear();
 
         DestroySwapchainResources(m_primarySurface);

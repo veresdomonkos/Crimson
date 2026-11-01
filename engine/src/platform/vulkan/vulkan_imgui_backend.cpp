@@ -14,7 +14,7 @@ namespace crimson::vulkan
         ImGui_ImplGlfw_InitForVulkan(glfwWindow, true);
 
         RenderTargetHandle rtHandle = resourceManager.GetCurrentBackBuffer();
-        VkFormat colorFormat = resourceManager.GetTexture(resourceManager.GetColorAttachment(rtHandle, 0)).Format;
+        VkFormat colorFormat = static_cast<VkFormat>(resourceManager.GetTexture(resourceManager.GetColorAttachment(rtHandle, 0)).Format);
 
         VkPipelineRenderingCreateInfo renderingInfo{};
         renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
@@ -22,11 +22,11 @@ namespace crimson::vulkan
         renderingInfo.pColorAttachmentFormats = &colorFormat;
 
         ImGui_ImplVulkan_InitInfo initInfo{};
-        initInfo.Instance = device.GetInstance();
-        initInfo.PhysicalDevice = device.GetPhysicalDevice();
-        initInfo.Device = device.GetDevice();
+        initInfo.Instance = static_cast<VkInstance>(*device.GetInstance());
+        initInfo.PhysicalDevice = static_cast<VkPhysicalDevice>(*device.GetPhysicalDevice());
+        initInfo.Device = static_cast<VkDevice>(*device.GetDevice());
         initInfo.QueueFamily = device.GetGraphicsQueueFamily();
-        initInfo.Queue = device.GetGraphicsQueue();
+        initInfo.Queue = static_cast<VkQueue>(*device.GetGraphicsQueue());
         initInfo.DescriptorPool = VK_NULL_HANDLE;
         initInfo.DescriptorPoolSize = 1000;
         initInfo.MinImageCount = 2;
@@ -67,7 +67,7 @@ namespace crimson::vulkan
         const VulkanTexture& tex = m_resourceManager.GetTexture(texture);
 
         VkDescriptorSet descriptorSet = ImGui_ImplVulkan_AddTexture(
-            tex.View,
+            static_cast<VkImageView>(*tex.View),
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         );
 

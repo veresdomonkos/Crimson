@@ -1,6 +1,8 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include <functional>
+
+#include "vulkan_include.hpp"
 #include "vulkan_allocator.hpp"
 #include "crimson/core/window.hpp"
 #include "crimson/graphics/graphics_device.hpp"
@@ -20,20 +22,20 @@ namespace crimson::vulkan
 
         [[nodiscard]] const Window& GetPrimaryWindow() const { return m_primaryWindow; }
 
-        [[nodiscard]] VkInstance GetInstance() const { return m_instance; }
-        [[nodiscard]] VkSurfaceKHR GetSurface() const { return m_surface; }
-        [[nodiscard]] VkPhysicalDevice GetPhysicalDevice() const { return m_physicalDevice; }
-        [[nodiscard]] VkDevice GetDevice() const { return m_device; }
+        [[nodiscard]] const vk::raii::Instance& GetInstance() const { return m_instance; }
+        [[nodiscard]] vk::SurfaceKHR GetSurface() const { return *m_surface; }
+        [[nodiscard]] const vk::raii::PhysicalDevice& GetPhysicalDevice() const { return m_physicalDevice; }
+        [[nodiscard]] const vk::raii::Device& GetDevice() const { return m_device; }
 
-        [[nodiscard]] VkQueue GetGraphicsQueue() const { return m_graphicsQueue; }
+        [[nodiscard]] const vk::raii::Queue& GetGraphicsQueue() const { return m_graphicsQueue; }
         [[nodiscard]] uint32_t GetGraphicsQueueFamily() const { return m_graphicsQueueFamily; }
 
-        [[nodiscard]] const VkPhysicalDeviceProperties& GetProperties() const { return m_properties; }
-        [[nodiscard]] const VkPhysicalDeviceFeatures& GetFeatures() const { return m_features; }
+        [[nodiscard]] const vk::PhysicalDeviceProperties& GetProperties() const { return m_properties; }
+        [[nodiscard]] const vk::PhysicalDeviceFeatures& GetFeatures() const { return m_features; }
 
         [[nodiscard]] VmaAllocator GetAllocator() const { return m_allocator; }
 
-        void ImmediateSubmit(const std::function<void(VkCommandBuffer)>& function);
+        void ImmediateSubmit(const std::function<void(vk::CommandBuffer)>& function);
         void WaitIdle() const override;
         inline static constexpr const char* s_validationLayer = "VK_LAYER_KHRONOS_validation";
     private:
@@ -45,39 +47,41 @@ namespace crimson::vulkan
         void CreateImmediateCommandPool();
         void CreateAllocator();
 
-        [[nodiscard]] bool IsDeviceSuitable(VkPhysicalDevice device) const;
-        [[nodiscard]] uint32_t FindGraphicsQueueFamily(VkPhysicalDevice device) const;
-        [[nodiscard]] bool CheckDeviceExtensionSupport(VkPhysicalDevice device) const;
+        [[nodiscard]] bool IsDeviceSuitable(const vk::raii::PhysicalDevice& device) const;
+        [[nodiscard]] uint32_t FindGraphicsQueueFamily(const vk::raii::PhysicalDevice& device) const;
+        [[nodiscard]] bool CheckDeviceExtensionSupport(const vk::raii::PhysicalDevice& device) const;
 
-        static void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
+        static vk::DebugUtilsMessengerCreateInfoEXT MakeDebugMessengerCreateInfo();
 
-        static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
-            VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-            VkDebugUtilsMessageTypeFlagsEXT type,
-            const VkDebugUtilsMessengerCallbackDataEXT* callbackData,
+        static VKAPI_ATTR vk::Bool32 VKAPI_CALL DebugCallback(
+            vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
+            vk::DebugUtilsMessageTypeFlagsEXT type,
+            const vk::DebugUtilsMessengerCallbackDataEXT* callbackData,
             void* userData);
 
     private:
         const Window& m_primaryWindow;
 
-        VkInstance m_instance{};
-        VkDebugUtilsMessengerEXT m_debugMessenger{};
-        VkSurfaceKHR m_surface{};
+        // Declared in creation order, destruction runs in reverse
+        vk::raii::Context m_context;
+        vk::raii::Instance m_instance{ nullptr };
+        vk::raii::DebugUtilsMessengerEXT m_debugMessenger{ nullptr };
+        vk::raii::SurfaceKHR m_surface{ nullptr };
 
-        VkPhysicalDevice m_physicalDevice{};
-        VkDevice m_device{};
+        vk::raii::PhysicalDevice m_physicalDevice{ nullptr };
+        vk::raii::Device m_device{ nullptr };
 
-        VkQueue m_graphicsQueue{};
+        vk::raii::Queue m_graphicsQueue{ nullptr };
         uint32_t m_graphicsQueueFamily = VK_QUEUE_FAMILY_IGNORED;
 
-        VkPhysicalDeviceProperties m_properties{};
-        VkPhysicalDeviceFeatures m_features{};
+        vk::PhysicalDeviceProperties m_properties{};
+        vk::PhysicalDeviceFeatures m_features{};
 
         VmaAllocator m_allocator{};
 
-        VkCommandPool m_immediateCommandPool{};
-        VkCommandBuffer m_immediateCommandBuffer{};
-        VkFence m_immediateFence{};
+        vk::raii::CommandPool m_immediateCommandPool{ nullptr };
+        vk::raii::CommandBuffer m_immediateCommandBuffer{ nullptr };
+        vk::raii::Fence m_immediateFence{ nullptr };
 
         bool m_validationEnabled = false;
     };

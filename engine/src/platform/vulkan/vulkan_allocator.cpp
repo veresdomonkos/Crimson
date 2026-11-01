@@ -86,13 +86,14 @@ namespace crimson::vulkan
         m_allocation = VK_NULL_HANDLE;
     }
 
-    AllocatedBuffer CreateAllocatedBuffer(VmaAllocator allocator, VkDeviceSize size, VkBufferUsageFlags usage, BufferMemory memory)
+    AllocatedBuffer CreateAllocatedBuffer(VmaAllocator allocator, vk::DeviceSize size, vk::BufferUsageFlags usage, BufferMemory memory)
     {
-        VkBufferCreateInfo bufferInfo{};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = size;
-        bufferInfo.usage = usage;
-        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        vk::BufferCreateInfo createInfo{};
+        createInfo.size = size;
+        createInfo.usage = usage;
+        createInfo.sharingMode = vk::SharingMode::eExclusive;
+
+        const VkBufferCreateInfo& bufferInfo = createInfo;
 
         VmaAllocationCreateInfo allocationInfo{};
         allocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
@@ -113,8 +114,10 @@ namespace crimson::vulkan
         return { allocator, buffer, allocation, info.pMappedData };
     }
 
-    AllocatedImage CreateAllocatedImage(VmaAllocator allocator, const VkImageCreateInfo& info, bool dedicated)
+    AllocatedImage CreateAllocatedImage(VmaAllocator allocator, const vk::ImageCreateInfo& createInfo, bool dedicated)
     {
+        const VkImageCreateInfo& info = createInfo;
+
         VmaAllocationCreateInfo allocationInfo{};
         allocationInfo.usage = VMA_MEMORY_USAGE_AUTO;
 
