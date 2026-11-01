@@ -237,7 +237,7 @@ namespace crimson::vulkan
         m_shaders.Unregister(handle);
     }
 
-    MaterialHandle VulkanResourceManager::CreateMaterial(ShaderHandle shaderHandle)
+    MaterialHandle VulkanResourceManager::CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings)
     {
         VulkanShader* shader = m_shaders.Find(shaderHandle);
 
@@ -248,6 +248,7 @@ namespace crimson::vulkan
         {
             VulkanMaterial material{};
             material.Shader = shaderHandle;
+            material.Settings = settings;
             material.UniformBufferSize = shader->MaterialUniformSize;
 
             const vk::DescriptorSetLayout setLayout = *shader->MaterialSetLayout;

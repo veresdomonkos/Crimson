@@ -10,6 +10,7 @@
 #include "vertex_array_cache.hpp"
 #include "crimson/renderer/buffers.hpp"
 #include "crimson/renderer/buffer_layout.hpp"
+#include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/shader_property_info.hpp"
 
@@ -77,6 +78,7 @@ namespace crimson::opengl
     struct OpenGLMaterial
     {
         ShaderHandle Shader = ShaderHandle::Invalid();
+        MaterialSettings Settings;
 
         std::unique_ptr<std::byte[]> UniformData = nullptr;
         std::size_t UniformDataSize = 0;

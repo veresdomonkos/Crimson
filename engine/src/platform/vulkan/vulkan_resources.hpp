@@ -8,6 +8,7 @@
 
 #include "crimson/renderer/buffer_layout.hpp"
 #include "crimson/renderer/buffers.hpp"
+#include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "vulkan_allocator.hpp"
 
@@ -93,6 +94,7 @@ namespace crimson::vulkan
     struct VulkanMaterial
     {
         ShaderHandle Shader;
+        MaterialSettings Settings;
         AllocatedBuffer UniformBuffer;
         vk::DeviceSize UniformBufferSize = 0;
         vk::raii::DescriptorSet DescriptorSet{ nullptr };

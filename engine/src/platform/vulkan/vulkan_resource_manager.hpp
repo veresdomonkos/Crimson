@@ -36,7 +36,7 @@ namespace crimson::vulkan
         ShaderHandle CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary) override;
         void DestroyShader(ShaderHandle handle) override;
 
-        MaterialHandle CreateMaterial(ShaderHandle shaderHandle) override;
+        MaterialHandle CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings) override;
         void DestroyMaterial(MaterialHandle handle) override;
 
         void SetMaterialTexture(MaterialHandle handle, std::string_view name, TextureHandle texture);

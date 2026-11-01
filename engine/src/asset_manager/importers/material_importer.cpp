@@ -74,6 +74,39 @@ namespace crimson
                 LOG_WARN("[MaterialImporter] Property '{}': {}", name, e.what());
             }
         }
+
+        MaterialSettings ParseSettings(const nlohmann::json& j, const std::string& file)
+        {
+            MaterialSettings settings;
+
+            if (const auto it = j.find("renderMode"); it != j.end())
+            {
+                const std::string value = it->is_string() ? it->get<std::string>() : std::string{};
+
+                if (value == "opaque")
+                    settings.RenderMode = MaterialRenderMode::Opaque;
+                else if (value == "transparent")
+                    settings.RenderMode = MaterialRenderMode::Transparent;
+                else
+                    LOG_WARN("[MaterialImporter] '{}': unknown renderMode, using opaque", file);
+            }
+
+            if (const auto it = j.find("cull"); it != j.end())
+            {
+                const std::string value = it->is_string() ? it->get<std::string>() : std::string{};
+
+                if (value == "back")
+                    settings.Cull = CullMode::Back;
+                else if (value == "front")
+                    settings.Cull = CullMode::Front;
+                else if (value == "none")
+                    settings.Cull = CullMode::None;
+                else
+                    LOG_WARN("[MaterialImporter] '{}': unknown cull mode, using back", file);
+            }
+
+            return settings;
+        }
     }
 
     std::span<const std::string_view> MaterialImporter::Extensions() const
@@ -118,7 +151,7 @@ namespace crimson
             return {};
         }
 
-        const auto material = ctx.Gpu.CreateMaterial(shader.value());
+        const auto material = ctx.Gpu.CreateMaterial(shader.value(), ParseSettings(j, path.filename().string()));
         if (!material)
         {
             LOG_ERROR("[MaterialImporter] CreateMaterial failed for '{}'", path.string());

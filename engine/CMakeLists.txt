@@ -36,6 +36,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/asset_manager/importers/mesh_importer.hpp
         include/crimson/core/profiler.hpp
         include/crimson/renderer/render_stats.hpp
+        include/crimson/renderer/material_settings.hpp
 )
 
 set(ENGINE_IMPLEMENTATION

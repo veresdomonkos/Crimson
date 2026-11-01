@@ -95,6 +95,8 @@ Set 0 is fixed and identical for every shader. Set 1 is built from reflection, s
 
 Assets are addressed by path or `AssetID` (`FindByPath`, `GetAsset<T>`).
 
+`.mat` files can also set `"renderMode"` (`"opaque"` or `"transparent"`) and `"cull"` (`"back"`, `"front"` or `"none"`), which default to opaque and back. Transparent materials are alpha blended using the alpha of `u_Color`, don't write depth, and draw after opaque ones in the order they were submitted.
+
 ### Editor
 
 Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single raw pass:

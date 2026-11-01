@@ -160,7 +160,7 @@ namespace crimson::opengl
         }
     }
 
-    MaterialHandle OpenGLResourceManager::CreateMaterial(ShaderHandle shaderHandle)
+    MaterialHandle OpenGLResourceManager::CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings)
     {
         const OpenGLShader& shader = m_shaders.Get(shaderHandle);
         if (!shader.GLHandle)
@@ -171,6 +171,7 @@ namespace crimson::opengl
 
         OpenGLMaterial mat;
         mat.Shader = shaderHandle;
+        mat.Settings = settings;
         mat.UniformDataSize = shader.UBOSize;
 
         if (shader.UBOSize > 0)

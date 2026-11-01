@@ -120,5 +120,5 @@ void main()
         result += light.ColorAndIntensity.rgb * light.ColorAndIntensity.a * diff * attenuation * shadow;
     }
 
-    outColor = vec4(u_Material.u_Color.rgb * result, 1.0);
+    outColor = vec4(u_Material.u_Color.rgb * result, u_Material.u_Color.a);
 }
