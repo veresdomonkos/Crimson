@@ -38,6 +38,15 @@ namespace crimson::opengl
 
     void OpenGLResourceManager::DestroyVertexBuffer(VertexBufferHandle handle)
     {
+        std::erase_if(m_vertexArrays, [&](const auto& entry)
+        {
+            if (entry.first.VertexBuffer != handle)
+                return false;
+
+            glDeleteVertexArrays(1, &entry.second);
+            return true;
+        });
+
         OpenGLVertexBuffer& vbo = m_vertexBuffers.Get(handle);
         glDeleteBuffers(1, &vbo.GLHandle);
         m_vertexBuffers.Unregister(handle);
@@ -59,30 +68,44 @@ namespace crimson::opengl
 
     void OpenGLResourceManager::DestroyIndexBuffer(IndexBufferHandle handle)
     {
+        std::erase_if(m_vertexArrays, [&](const auto& entry)
+        {
+            if (entry.first.IndexBuffer != handle)
+                return false;
+
+            glDeleteVertexArrays(1, &entry.second);
+            return true;
+        });
+
         OpenGLIndexBuffer& ibo = m_indexBuffers.Get(handle);
         glDeleteBuffers(1, &ibo.GLHandle);
         m_indexBuffers.Unregister(handle);
     }
 
-    VertexArrayHandle OpenGLResourceManager::CreateVertexArray(const VertexArrayInfo &info)
+    GLuint OpenGLResourceManager::GetOrCreateVertexArray(VertexBufferHandle vertexBufferHandle, IndexBufferHandle indexBufferHandle)
     {
-        VertexArray vao;
+        auto [it, inserted] = m_vertexArrays.try_emplace(VertexArrayKey{ vertexBufferHandle, indexBufferHandle }, 0);
 
-        glCreateVertexArrays(1, &vao.GLHandle);
+        if (!inserted)
+            return it->second;
 
-        auto& vertexBuffer = m_vertexBuffers.Get(info.VertexBuffer);
-        auto& indexBuffer = m_indexBuffers.Get(info.IndexBuffer);
+        GLuint vao = 0;
+        glCreateVertexArrays(1, &vao);
+        it->second = vao;
 
-        glVertexArrayElementBuffer(vao.GLHandle,indexBuffer.GLHandle);
+        auto& vertexBuffer = m_vertexBuffers.Get(vertexBufferHandle);
+        auto& indexBuffer = m_indexBuffers.Get(indexBufferHandle);
+
+        glVertexArrayElementBuffer(vao,indexBuffer.GLHandle);
 
         uint32_t location = 0;
 
         for (const auto& element : vertexBuffer.Layout)
         {
-            glEnableVertexArrayAttrib(vao.GLHandle,location);
+            glEnableVertexArrayAttrib(vao,location);
 
             glVertexArrayAttribFormat(
-                vao.GLHandle,
+                vao,
                 location,
                 static_cast<GLint>(element.ComponentCount()),
                 GL_FLOAT,
@@ -91,7 +114,7 @@ namespace crimson::opengl
             );
 
             glVertexArrayVertexBuffer(
-                vao.GLHandle,
+                vao,
                 0,
                 vertexBuffer.GLHandle,
                 0,
@@ -99,7 +122,7 @@ namespace crimson::opengl
             );
 
             glVertexArrayAttribBinding(
-                vao.GLHandle,
+                vao,
                 location,
                 0
             );
@@ -107,7 +130,7 @@ namespace crimson::opengl
             location++;
         }
 
-        return m_vertexArrays.Register(vao);
+        return vao;
     }
 
     ShaderHandle OpenGLResourceManager::CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary)
@@ -226,11 +249,6 @@ namespace crimson::opengl
         }
 
         mat.BoundTextures[it->second.Binding] = m_textures.Get(texture).GLHandle;
-    }
-
-    OpenGLGraphicsPipeline OpenGLResourceManager::CreateGraphicsPipeline(const GraphicsPipelineInfo &info)
-    {
-        return OpenGLGraphicsPipeline{};
     }
 
     void OpenGLResourceManager::SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data)

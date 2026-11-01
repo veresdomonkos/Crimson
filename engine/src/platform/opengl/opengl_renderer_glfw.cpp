@@ -163,25 +163,9 @@ namespace crimson::opengl
     {
         CRIMSON_PROFILE_FUNCTION();
 
-        OpenGLVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(info.VertexBuffer);
         OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(info.IndexBuffer);
         OpenGLMaterial& material = m_resourceManager.GetMaterial(info.Material);
         OpenGLShader& shader = m_resourceManager.GetShader(material.Shader);
-
-        auto& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({.Layout = vertexBuffer.Layout});
-
-        VertexArrayHandle vertexArrayHandle;
-        VertexArrayInfo vertexArrayInfo{ .VertexBuffer = info.VertexBuffer, .IndexBuffer = info.IndexBuffer };
-
-        if (auto it = pipeline.VAOCache.find(vertexArrayInfo); it != pipeline.VAOCache.end())
-            vertexArrayHandle = it->second;
-        else
-        {
-            vertexArrayHandle = m_resourceManager.CreateVertexArray(vertexArrayInfo);
-            pipeline.VAOCache.emplace(vertexArrayInfo, vertexArrayHandle);
-        }
-
-        VertexArray& vertexArray = m_resourceManager.GetVertexArray(vertexArrayHandle);
 
         if (material.GLBufferHandle != 0 && shader.UBOSize > 0)
         {
@@ -202,7 +186,7 @@ namespace crimson::opengl
             glBindTextureUnit(bindingUnit, glTexture);
 
         glUseProgram(shader.GLHandle);
-        glBindVertexArray(vertexArray.GLHandle);
+        glBindVertexArray(m_resourceManager.GetOrCreateVertexArray(info.VertexBuffer, info.IndexBuffer));
 
         const GLsizei total = static_cast<GLsizei>(indexBuffer.Size / Index::Size(indexBuffer.Type));
         const GLsizei count = info.IndexCount ? info.IndexCount : total;

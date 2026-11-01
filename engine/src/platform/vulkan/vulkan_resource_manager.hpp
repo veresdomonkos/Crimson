@@ -7,6 +7,7 @@
 
 #include "vulkan_device.hpp"
 #include "crimson/renderer/resource_manager_base.hpp"
+#include "vulkan_pipeline_cache.hpp"
 #include "vulkan_resources.hpp"
 
 namespace crimson::vulkan
@@ -53,8 +54,9 @@ namespace crimson::vulkan
         [[nodiscard]] vk::DescriptorPool GetDescriptorPool() const { return *m_descriptorPool; }
         [[nodiscard]] vk::DescriptorSetLayout GetGlobalSetLayout() const { return *m_globalSetLayout; }
         [[nodiscard]] vk::Sampler GetDefaultSampler() const { return *m_defaultSampler; }
+
+        VulkanGraphicsPipeline& GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info);
     protected:
-        VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override;
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
 
     private:
@@ -63,6 +65,8 @@ namespace crimson::vulkan
         void CreateDefaultSampler();
 
         void DestroyResources();
+
+        VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info);
 
         bool CreateSwapchainResources(VulkanSurface& surface);
         void DestroySwapchainResources(VulkanSurface& surface);
@@ -83,5 +87,6 @@ namespace crimson::vulkan
         vk::raii::DescriptorPool m_descriptorPool{ nullptr };
         vk::raii::Sampler m_defaultSampler{ nullptr };
         VulkanSurface m_primarySurface;
+        GraphicsPipelineCache<VulkanGraphicsPipeline> m_graphicsPipelines;
     };
 }

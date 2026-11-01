@@ -1,26 +1,27 @@
 #pragma once
 #include <unordered_map>
+#include <glad/glad.h>
 
 #include "crimson/renderer/resource_handles.hpp"
 
 namespace crimson::opengl
 {
-    struct VertexArrayInfo
+    struct VertexArrayKey
     {
         VertexBufferHandle VertexBuffer;
         IndexBufferHandle IndexBuffer;
 
-        bool operator==(const VertexArrayInfo&) const = default;
+        bool operator==(const VertexArrayKey&) const = default;
     };
 
-    struct VertexArrayInfoHash
+    struct VertexArrayKeyHash
     {
-        size_t operator()(const VertexArrayInfo& info) const
+        size_t operator()(const VertexArrayKey& key) const
         {
             size_t hash = 0;
 
-            HashCombine(hash, info.VertexBuffer.GetRaw());
-            HashCombine(hash, info.IndexBuffer.GetRaw());
+            HashCombine(hash, key.VertexBuffer.GetRaw());
+            HashCombine(hash, key.IndexBuffer.GetRaw());
 
             return hash;
         }
@@ -34,8 +35,5 @@ namespace crimson::opengl
         }
     };
 
-    class VertexArrayTag {};
-    using VertexArrayHandle = Handle<VertexArrayTag>;
-
-    using VertexArrayCache = std::unordered_map<VertexArrayInfo, VertexArrayHandle, VertexArrayInfoHash>;
+    using VertexArrayCache = std::unordered_map<VertexArrayKey, GLuint, VertexArrayKeyHash>;
 }

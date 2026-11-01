@@ -341,7 +341,7 @@ namespace crimson::vulkan
         if (!*material.DescriptorSet) return;
 
         VulkanGraphicsPipeline& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({
-            .Layout = vertexBuffer.Layout, .Shader = material.Shader, .Target = target
+            .Layout = vertexBuffer.Layout, .Shader = material.Shader, .Target = target, .Settings = material.Settings
         });
         if (!*pipeline.Pipeline) return;
 

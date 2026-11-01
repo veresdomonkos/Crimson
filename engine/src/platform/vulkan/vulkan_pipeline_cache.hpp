@@ -1,19 +1,23 @@
 #pragma once
-#include "crimson/renderer/buffer_layout.hpp"
-#include "resource_handles.hpp"
+
 #include <unordered_map>
 
-namespace crimson
+#include "crimson/renderer/buffer_layout.hpp"
+#include "crimson/renderer/material_settings.hpp"
+#include "crimson/renderer/resource_handles.hpp"
+
+namespace crimson::vulkan
 {
     struct GraphicsPipelineInfo
     {
         BufferLayout Layout;
         ShaderHandle Shader;
         RenderTargetHandle Target;
+        MaterialSettings Settings;
 
         bool operator==(const GraphicsPipelineInfo& other) const
         {
-            return Layout == other.Layout && Shader == other.Shader && Target == other.Target;
+            return Layout == other.Layout && Shader == other.Shader && Target == other.Target && Settings == other.Settings;
         }
     };
 
@@ -35,6 +39,8 @@ namespace crimson
 
             HashCombine(hash, key.Shader.GetRaw());
             HashCombine(hash, key.Target.GetRaw());
+            HashCombine(hash, static_cast<size_t>(key.Settings.RenderMode));
+            HashCombine(hash, static_cast<size_t>(key.Settings.Cull));
 
             return hash;
         }

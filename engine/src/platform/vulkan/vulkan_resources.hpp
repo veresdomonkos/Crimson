@@ -109,6 +109,5 @@ namespace crimson::vulkan
         using IndexBuffer     = VulkanIndexBuffer;
         using Shader          = VulkanShader;
         using Material        = VulkanMaterial;
-        using GraphicsPipeline = VulkanGraphicsPipeline;
     };
 }

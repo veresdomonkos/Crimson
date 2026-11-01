@@ -1,6 +1,7 @@
 #pragma once
 #include "opengl_device.hpp"
 #include "opengl_resources.hpp"
+#include "vertex_array_cache.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/handle_registry.hpp"
 #include "crimson/renderer/resource_manager.hpp"
@@ -19,8 +20,7 @@ namespace crimson::opengl
         IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) override;
         void DestroyIndexBuffer(IndexBufferHandle handle) override;
 
-        VertexArrayHandle CreateVertexArray(const VertexArrayInfo& info);
-        VertexArray& GetVertexArray(VertexArrayHandle handle) { return m_vertexArrays.Get(handle); }
+        GLuint GetOrCreateVertexArray(VertexBufferHandle vertexBuffer, IndexBufferHandle indexBuffer);
 
         ShaderHandle CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary) override;
         void DestroyShader(ShaderHandle handle) override;
@@ -40,14 +40,13 @@ namespace crimson::opengl
 
         [[nodiscard]] RenderTargetHandle GetBackBufferHandle() const { return m_backBufferHandle; }
     protected:
-        OpenGLGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo &info) override;
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
     private:
         static void ReflectShader(Shader &shader, std::span<const uint32_t> spirvCode);
         static GLuint CompileShader(GLenum type, std::string_view source);
         static GLuint CompileSPIRVShader(GLenum type, std::span<const uint32_t> binary, std::string_view stageName);
     private:
-        HandleRegistry<VertexArrayHandle, VertexArray> m_vertexArrays;
+        VertexArrayCache m_vertexArrays;
         RenderTargetHandle m_backBufferHandle;
     };
 }

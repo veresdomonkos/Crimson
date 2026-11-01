@@ -495,6 +495,16 @@ namespace crimson::vulkan
         return m_renderTargets.Get(handle).DepthAttachment;
     }
 
+    VulkanGraphicsPipeline& VulkanResourceManager::GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info)
+    {
+        auto [it, inserted] = m_graphicsPipelines.try_emplace(info);
+
+        if (inserted)
+            it->second = CreateGraphicsPipeline(info);
+
+        return it->second;
+    }
+
     VulkanGraphicsPipeline VulkanResourceManager::CreateGraphicsPipeline(const GraphicsPipelineInfo& info)
     {
         const VulkanShader& shader = GetShader(info.Shader);
@@ -572,7 +582,12 @@ namespace crimson::vulkan
         rasterInfo.rasterizerDiscardEnable = VK_FALSE;
         rasterInfo.polygonMode = vk::PolygonMode::eFill;
         rasterInfo.lineWidth = 1.0f;
-        rasterInfo.cullMode = vk::CullModeFlagBits::eBack;
+        switch (info.Settings.Cull)
+        {
+            case CullMode::None:  rasterInfo.cullMode = vk::CullModeFlagBits::eNone; break;
+            case CullMode::Back:  rasterInfo.cullMode = vk::CullModeFlagBits::eBack; break;
+            case CullMode::Front: rasterInfo.cullMode = vk::CullModeFlagBits::eFront; break;
+        }
         rasterInfo.frontFace = vk::FrontFace::eClockwise;
         rasterInfo.depthBiasEnable = VK_FALSE;
 
@@ -581,7 +596,9 @@ namespace crimson::vulkan
 
         vk::PipelineDepthStencilStateCreateInfo depthState{};
         depthState.depthTestEnable = hasDepth ? VK_TRUE : VK_FALSE;
-        depthState.depthWriteEnable = hasDepth ? VK_TRUE : VK_FALSE;
+        const bool isTransparent = info.Settings.RenderMode == MaterialRenderMode::Transparent;
+
+        depthState.depthWriteEnable = hasDepth && !isTransparent ? VK_TRUE : VK_FALSE;
         depthState.depthCompareOp = vk::CompareOp::eLessOrEqual;
         depthState.depthBoundsTestEnable = VK_FALSE;
         depthState.stencilTestEnable = VK_FALSE;
@@ -592,7 +609,18 @@ namespace crimson::vulkan
             attachment.colorWriteMask =
                 vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
                 vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-            attachment.blendEnable = VK_FALSE;
+            attachment.blendEnable = isTransparent ? VK_TRUE : VK_FALSE;
+
+            if (isTransparent)
+            {
+                // The alpha factors keep an opaque target's alpha at 1, so the viewport doesn't show through
+                attachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+                attachment.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+                attachment.colorBlendOp = vk::BlendOp::eAdd;
+                attachment.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+                attachment.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+                attachment.alphaBlendOp = vk::BlendOp::eAdd;
+            }
         }
 
         vk::PipelineColorBlendStateCreateInfo colorBlendInfo{};

@@ -7,7 +7,6 @@
 #include <vector>
 #include <glad/glad.h>
 
-#include "vertex_array_cache.hpp"
 #include "crimson/renderer/buffers.hpp"
 #include "crimson/renderer/buffer_layout.hpp"
 #include "crimson/renderer/material_settings.hpp"
@@ -55,16 +54,6 @@ namespace crimson::opengl
         IndexType Type{};
     };
 
-    struct VertexArray
-    {
-        GLuint GLHandle{};
-    };
-    
-    struct OpenGLGraphicsPipeline
-    {
-        VertexArrayCache VAOCache;
-    };
-
     struct OpenGLShader
     {
         GLuint GLHandle = 0;
@@ -107,7 +96,6 @@ namespace crimson::opengl
         using VertexBuffer = OpenGLVertexBuffer;
         using IndexBuffer = OpenGLIndexBuffer;
         using Shader = OpenGLShader;
-        using GraphicsPipeline = OpenGLGraphicsPipeline;
         using Material = OpenGLMaterial;
         using Texture = OpenGLTexture;
     };

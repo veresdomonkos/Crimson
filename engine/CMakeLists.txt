@@ -17,7 +17,6 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/resource_manager_base.hpp
         include/crimson/renderer/buffer_layout.hpp
         include/crimson/renderer/buffers.hpp
-        include/crimson/renderer/graphics_pipeline_cache.hpp
         include/crimson/renderer/camera_data.hpp
         include/crimson/renderer/shader_property_info.hpp
         include/crimson/renderer/binding_conventions.hpp
@@ -52,6 +51,7 @@ set(ENGINE_IMPLEMENTATION
         src/platform/vulkan/vulkan_allocator.hpp
         src/platform/vulkan/vulkan_allocator.cpp
         src/platform/vulkan/vulkan_include.hpp
+        src/platform/vulkan/vulkan_pipeline_cache.hpp
         src/platform/opengl/utils.hpp
         src/platform/opengl/vertex_array_cache.hpp
         include/crimson/renderer/texture.hpp
