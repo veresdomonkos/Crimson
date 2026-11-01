@@ -194,6 +194,8 @@ The editor links everything statically, including the shader compiler, so it nee
 
 Debug builds enable the Vulkan validation layers when they are installed. Set `CRIMSON_VK_SYNC_VALIDATION=1` to add synchronization validation.
 
+The editor renders as fast as it can by default. Set `CRIMSON_VSYNC=1` to limit it to the display's refresh rate.
+
 ## Profiling
 
 Crimson is instrumented with [Tracy](https://github.com/wolfpld/tracy): CPU zones, per-pass GPU zones on both backends, and a `Draw Calls` plot. To profile, run the editor and connect the [Tracy v0.14.1 viewer](https://github.com/wolfpld/tracy/releases/tag/v0.14.1) to `127.0.0.1`. The viewer version must match the `external/tracy` submodule.

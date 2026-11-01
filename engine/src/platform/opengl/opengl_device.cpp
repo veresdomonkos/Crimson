@@ -1,5 +1,7 @@
 #include "opengl_device.hpp"
 
+#include <cstdlib>
+
 #include "crimson/core/log.hpp"
 #include <glad/glad.h>
 
@@ -9,7 +11,7 @@ namespace crimson::opengl
         : m_primaryWindow(static_cast<GLFWwindow*>(window.GetNativeHandle()))
     {
         glfwMakeContextCurrent(m_primaryWindow);
-        glfwSwapInterval(0);
+        glfwSwapInterval(std::getenv("CRIMSON_VSYNC") ? 1 : 0);
 
         if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
         {

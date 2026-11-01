@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <vector>
@@ -902,10 +903,13 @@ namespace crimson::vulkan
             // FIFO is the only mode the spec guarantees
             vk::PresentModeKHR presentMode = vk::PresentModeKHR::eFifo;
 
-            if (isSupported(vk::PresentModeKHR::eMailbox))
-                presentMode = vk::PresentModeKHR::eMailbox;
-            else if (isSupported(vk::PresentModeKHR::eImmediate))
-                presentMode = vk::PresentModeKHR::eImmediate;
+            if (!std::getenv("CRIMSON_VSYNC"))
+            {
+                if (isSupported(vk::PresentModeKHR::eMailbox))
+                    presentMode = vk::PresentModeKHR::eMailbox;
+                else if (isSupported(vk::PresentModeKHR::eImmediate))
+                    presentMode = vk::PresentModeKHR::eImmediate;
+            }
 
             const vk::Extent2D extent = capabilities.currentExtent;
 
@@ -932,6 +936,8 @@ namespace crimson::vulkan
             createInfo.clipped = VK_TRUE;
 
             surface.Swapchain = m_device.GetDevice().createSwapchainKHR(createInfo);
+
+            LOG_INFO("[Vulkan] Swapchain: {} present mode, {} images requested, {}x{}", vk::to_string(presentMode), imageCount, extent.width, extent.height);
 
             surface.Extent = extent;
             surface.Format = surfaceFormat.format;
