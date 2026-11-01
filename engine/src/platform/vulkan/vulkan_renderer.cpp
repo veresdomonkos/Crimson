@@ -2,6 +2,7 @@
 #include "crimson/core/log.hpp"
 #include "crimson/core/profiler.hpp"
 #include <cstring>
+#include <stdexcept>
 
 namespace crimson::vulkan
 {
@@ -106,10 +107,8 @@ namespace crimson::vulkan
         m_cameraUboAlignment =
             (sizeof(CameraBlock) + minUboAlignment - 1) & ~(minUboAlignment - 1);
 
-        constexpr uint32_t MAX_PASSES_PER_FRAME = 16;
-
         VkDeviceSize cameraBufferSize =
-            m_cameraUboAlignment * MAX_PASSES_PER_FRAME * MAX_FRAMES_IN_FLIGHT;
+            m_cameraUboAlignment * MaxRenderPasses * MAX_FRAMES_IN_FLIGHT;
 
         if (!m_resourceManager.CreateBuffer(
                 cameraBufferSize,
@@ -332,7 +331,7 @@ namespace crimson::vulkan
             block.ViewProj = info.ViewProj;
             block.Position = glm::vec4(info.CameraPosition, 0.0f);
 
-            uint32_t globalPassIndex = (m_currentFrameIndex * 16) + passIndex;
+            uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
             VkDeviceSize offset = globalPassIndex * m_cameraUboAlignment;
             std::memcpy(static_cast<char*>(m_cameraMappedData) + offset, &block, sizeof(CameraBlock));
         }
@@ -451,7 +450,7 @@ namespace crimson::vulkan
         vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &vertexBuffer.Buffer, &vbOffset);
         vkCmdBindIndexBuffer(cmdBuffer, indexBuffer.Buffer, 0, indexBuffer.Type == IndexType::UInt32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
 
-        uint32_t globalPassIndex = (m_currentFrameIndex * 16) + passIndex;
+        uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
         uint32_t dynamicOffsets[2] = {
             static_cast<uint32_t>(globalPassIndex * m_cameraUboAlignment),
             static_cast<uint32_t>(m_currentFrameIndex * m_lightingUboAlignment)
@@ -526,13 +525,6 @@ namespace crimson::vulkan
         }
 
         surface.CurrentImageIndex = imageIndex;
-        if (surface.ImagesInFlight[imageIndex] != VK_NULL_HANDLE)
-        {
-            CRIMSON_PROFILE_SCOPE("Wait For Image Fence");
-            vkWaitForFences(m_device.GetDevice(), 1, &surface.ImagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
-        }
-
-        surface.ImagesInFlight[imageIndex] = frameFence;
         vkResetFences(m_device.GetDevice(), 1, &frameFence);
 
         VkCommandBuffer cmd = m_frameSyncs[m_currentFrameIndex].CommandBuffer;
@@ -612,7 +604,7 @@ namespace crimson::vulkan
         {
             CRIMSON_PROFILE_SCOPE("Queue Submit");
             if (vkQueueSubmit(m_device.GetGraphicsQueue(), 1, &submit, fence) != VK_SUCCESS)
-                LOG_ERROR("[Vulkan Renderer] Queue submit failed");
+                throw std::runtime_error("Failed to submit frame command buffer.");
         }
 
         VkPresentInfoKHR present{};

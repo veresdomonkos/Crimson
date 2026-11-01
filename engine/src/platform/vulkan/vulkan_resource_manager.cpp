@@ -1138,16 +1138,18 @@ namespace crimson::vulkan
         std::vector<VkPresentModeKHR> presentModes(presentModeCount);
         vkGetPhysicalDeviceSurfacePresentModesKHR(m_device.GetPhysicalDevice(), m_device.GetSurface(), &presentModeCount, presentModes.data());
 
-        VkPresentModeKHR presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
-
-        for (VkPresentModeKHR mode : presentModes)
+        const auto isSupported = [&](VkPresentModeKHR mode)
         {
-            if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
-            {
-                presentMode = mode;
-                break;
-            }
-        }
+            return std::find(presentModes.begin(), presentModes.end(), mode) != presentModes.end();
+        };
+
+        // FIFO is the only mode the spec guarantees
+        VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
+        if (isSupported(VK_PRESENT_MODE_MAILBOX_KHR))
+            presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
+        else if (isSupported(VK_PRESENT_MODE_IMMEDIATE_KHR))
+            presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 
         VkExtent2D extent = capabilities.currentExtent;
 
@@ -1202,7 +1204,6 @@ namespace crimson::vulkan
             surface.SwapchainTargetHandles.push_back(target);
         }
 
-        surface.ImagesInFlight.resize(imageCountActual, VK_NULL_HANDLE);
         surface.RenderFinishedSemaphores.resize(imageCountActual, VK_NULL_HANDLE);
 
         for (VkSemaphore& semaphore : surface.RenderFinishedSemaphores)
@@ -1236,7 +1237,6 @@ namespace crimson::vulkan
         }
 
         surface.RenderFinishedSemaphores.clear();
-        surface.ImagesInFlight.clear();
 
         if (surface.Swapchain != VK_NULL_HANDLE)
         {

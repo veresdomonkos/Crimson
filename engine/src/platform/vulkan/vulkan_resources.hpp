@@ -39,7 +39,6 @@ namespace crimson::vulkan
 
         std::vector<RenderTargetHandle> SwapchainTargetHandles;
 
-        std::vector<VkFence> ImagesInFlight;
         std::vector<VkSemaphore> RenderFinishedSemaphores;
 
         bool IsDirty = false;

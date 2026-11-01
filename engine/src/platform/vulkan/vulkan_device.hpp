@@ -25,10 +25,7 @@ namespace crimson::vulkan
         [[nodiscard]] VkDevice GetDevice() const { return m_device; }
 
         [[nodiscard]] VkQueue GetGraphicsQueue() const { return m_graphicsQueue; }
-        [[nodiscard]] VkQueue GetPresentQueue() const { return m_presentQueue; }
-
         [[nodiscard]] uint32_t GetGraphicsQueueFamily() const { return m_graphicsQueueFamily; }
-        [[nodiscard]] uint32_t GetPresentQueueFamily() const { return m_presentQueueFamily; }
 
         [[nodiscard]] const VkPhysicalDeviceProperties& GetProperties() const { return m_properties; }
         [[nodiscard]] const VkPhysicalDeviceFeatures& GetFeatures() const { return m_features; }
@@ -49,7 +46,6 @@ namespace crimson::vulkan
 
         [[nodiscard]] bool IsDeviceSuitable(VkPhysicalDevice device) const;
         [[nodiscard]] uint32_t FindGraphicsQueueFamily(VkPhysicalDevice device) const;
-        [[nodiscard]] uint32_t FindPresentQueueFamily(VkPhysicalDevice device) const;
         [[nodiscard]] bool CheckDeviceExtensionSupport(VkPhysicalDevice device) const;
 
         static void PopulateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
@@ -71,10 +67,7 @@ namespace crimson::vulkan
         VkDevice m_device{};
 
         VkQueue m_graphicsQueue{};
-        VkQueue m_presentQueue{};
-
         uint32_t m_graphicsQueueFamily = VK_QUEUE_FAMILY_IGNORED;
-        uint32_t m_presentQueueFamily = VK_QUEUE_FAMILY_IGNORED;
 
         VkPhysicalDeviceProperties m_properties{};
         VkPhysicalDeviceFeatures m_features{};

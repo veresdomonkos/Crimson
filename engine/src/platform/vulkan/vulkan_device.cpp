@@ -4,7 +4,6 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <set>
 #include <stdexcept>
 #include <vector>
 
@@ -219,13 +218,6 @@ namespace crimson::vulkan
             throw std::runtime_error("Failed to find a suitable Vulkan GPU.");
 
         m_graphicsQueueFamily = FindGraphicsQueueFamily(m_physicalDevice);
-        m_presentQueueFamily = FindPresentQueueFamily(m_physicalDevice);
-
-        if (m_graphicsQueueFamily == VK_QUEUE_FAMILY_IGNORED)
-            throw std::runtime_error("Failed to find graphics queue family.");
-
-        if (m_presentQueueFamily == VK_QUEUE_FAMILY_IGNORED)
-            throw std::runtime_error("Failed to find present queue family.");
 
         vkGetPhysicalDeviceProperties(m_physicalDevice, &m_properties);
         vkGetPhysicalDeviceFeatures(m_physicalDevice, &m_features);
@@ -236,29 +228,13 @@ namespace crimson::vulkan
 
     void VulkanDevice::CreateLogicalDevice()
     {
-        std::set<uint32_t> uniqueQueueFamilies =
-        {
-            m_graphicsQueueFamily,
-            m_presentQueueFamily
-        };
-
         float queuePriority = 1.0f;
-        std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-        queueCreateInfos.reserve(uniqueQueueFamilies.size());
 
-        for (uint32_t queueFamily : uniqueQueueFamilies)
-        {
-            if (queueFamily == VK_QUEUE_FAMILY_IGNORED)
-                throw std::runtime_error("Invalid queue family index.");
-
-            VkDeviceQueueCreateInfo queueCreateInfo{};
-            queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-            queueCreateInfo.queueFamilyIndex = queueFamily;
-            queueCreateInfo.queueCount = 1;
-            queueCreateInfo.pQueuePriorities = &queuePriority;
-
-            queueCreateInfos.push_back(queueCreateInfo);
-        }
+        VkDeviceQueueCreateInfo queueCreateInfo{};
+        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        queueCreateInfo.queueFamilyIndex = m_graphicsQueueFamily;
+        queueCreateInfo.queueCount = 1;
+        queueCreateInfo.pQueuePriorities = &queuePriority;
 
         VkPhysicalDeviceFeatures deviceFeatures{};
         deviceFeatures.samplerAnisotropy = m_features.samplerAnisotropy;
@@ -270,8 +246,8 @@ namespace crimson::vulkan
 
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-        createInfo.pQueueCreateInfos = queueCreateInfos.data();
+        createInfo.queueCreateInfoCount = 1;
+        createInfo.pQueueCreateInfos = &queueCreateInfo;
         createInfo.pEnabledFeatures = &deviceFeatures;
         createInfo.enabledExtensionCount = static_cast<uint32_t>(DeviceExtensions.size());
         createInfo.ppEnabledExtensionNames = DeviceExtensions.data();
@@ -281,7 +257,6 @@ namespace crimson::vulkan
             throw std::runtime_error("Failed to create Vulkan logical device.");
 
         vkGetDeviceQueue(m_device, m_graphicsQueueFamily, 0, &m_graphicsQueue);
-        vkGetDeviceQueue(m_device, m_presentQueueFamily, 0, &m_presentQueue);
     }
 
     void VulkanDevice::CreateImmediateCommandPool()
@@ -312,10 +287,7 @@ namespace crimson::vulkan
 
     bool VulkanDevice::IsDeviceSuitable(VkPhysicalDevice device) const
     {
-        const uint32_t graphicsFamily = FindGraphicsQueueFamily(device);
-        const uint32_t presentFamily = FindPresentQueueFamily(device);
-
-        if (graphicsFamily == VK_QUEUE_FAMILY_IGNORED || presentFamily == VK_QUEUE_FAMILY_IGNORED)
+        if (FindGraphicsQueueFamily(device) == VK_QUEUE_FAMILY_IGNORED)
             return false;
 
         if (!CheckDeviceExtensionSupport(device))
@@ -345,25 +317,12 @@ namespace crimson::vulkan
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
+        // One family has to do both: swapchain images are exclusive and never change queue family
         for (uint32_t i = 0; i < queueFamilyCount; ++i)
         {
-            if (queueFamilies[i].queueCount > 0 &&
-                (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
-            {
-                return i;
-            }
-        }
+            if (queueFamilies[i].queueCount == 0 || !(queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT))
+                continue;
 
-        return VK_QUEUE_FAMILY_IGNORED;
-    }
-
-    uint32_t VulkanDevice::FindPresentQueueFamily(VkPhysicalDevice device) const
-    {
-        uint32_t queueFamilyCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-        for (uint32_t i = 0; i < queueFamilyCount; ++i)
-        {
             VkBool32 presentSupport = VK_FALSE;
 
             if (vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentSupport) != VK_SUCCESS)
