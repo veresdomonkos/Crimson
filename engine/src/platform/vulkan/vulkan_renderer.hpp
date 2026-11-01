@@ -1,5 +1,6 @@
 #pragma once
 
+#include "crimson/renderer/draw_sort.hpp"
 #include "crimson/renderer/renderer.hpp"
 #include "vulkan_device.hpp"
 #include "vulkan_resource_manager.hpp"
@@ -7,6 +8,7 @@
 #include <tracy/TracyVulkan.hpp>
 
 #include <array>
+#include <vector>
 
 namespace crimson::vulkan
 {
@@ -82,7 +84,7 @@ namespace crimson::vulkan
         std::array<FrameSync, MAX_FRAMES_IN_FLIGHT> m_frameSyncs;
         uint32_t m_currentFrameIndex = 0;
 
-        std::vector<SortedDraw> m_drawOrder;
+        std::vector<DrawSortEntry> m_drawOrder;
         BoundDrawState m_bound;
 
         TracyVkCtx m_tracyContext = nullptr;

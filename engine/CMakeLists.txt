@@ -10,6 +10,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/resource_manager.hpp
         include/crimson/renderer/renderer.hpp
         include/crimson/renderer/frame_context.hpp
+        include/crimson/renderer/draw_sort.hpp
         include/crimson/core/command_buffer.hpp
         include/crimson/renderer/handle_registry.hpp
         include/crimson/renderer/resource_handles.hpp

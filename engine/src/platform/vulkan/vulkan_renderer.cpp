@@ -530,9 +530,11 @@ namespace crimson::vulkan
 
                 ExecuteBeginRenderPass(cmdBuffer, passInfo, passIndex);
 
-                m_resourceManager.BuildDrawOrder(materialPass->GetDraws(), m_drawOrder);
-                for (const SortedDraw& sorted : m_drawOrder)
-                    ExecuteDraw(cmdBuffer, *sorted.Draw, passInfo.Target, passIndex);
+                const std::span<const DrawInfo> draws = materialPass->GetDraws();
+
+                BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
+                for (const DrawSortEntry& sorted : m_drawOrder)
+                    ExecuteDraw(cmdBuffer, draws[sorted.Index], passInfo.Target, passIndex);
 
                 ExecuteEndRenderPass(cmdBuffer, rt);
                 ++passIndex;

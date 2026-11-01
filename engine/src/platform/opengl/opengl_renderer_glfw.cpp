@@ -76,9 +76,11 @@ namespace crimson::opengl
 
                 ExecuteBeginRenderPass(materialPass->Info());
 
-                m_resourceManager.BuildDrawOrder(materialPass->GetDraws(), m_drawOrder);
-                for (const SortedDraw& sorted : m_drawOrder)
-                    ExecuteDraw(*sorted.Draw);
+                const std::span<const DrawInfo> draws = materialPass->GetDraws();
+
+                BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
+                for (const DrawSortEntry& sorted : m_drawOrder)
+                    ExecuteDraw(draws[sorted.Index]);
             }
             else if (const auto* rawPass = std::get_if<RawPass>(&entry))
             {

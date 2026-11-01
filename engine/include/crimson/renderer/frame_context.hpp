@@ -24,14 +24,6 @@ namespace crimson
         uint32_t IndexCount = 0;
     };
 
-    struct SortedDraw
-    {
-        const DrawInfo* Draw = nullptr;
-        uint64_t Shader = 0;
-        uint32_t Cull = 0;
-        bool Transparent = false;
-    };
-
     class RenderPass
     {
     public:
@@ -52,6 +44,13 @@ namespace crimson
             {
                 m_drawInfos.emplace_back(mesh.VB, mesh.IB, mesh.Materials[subMesh.MaterialSlot], subMesh.FirstIndex, subMesh.IndexCount);
             }
+        }
+
+        // Keeps the draw list's capacity so a pass doesn't reallocate it every frame
+        void Reset(const RenderPassInfo& info)
+        {
+            m_info = info;
+            m_drawInfos.clear();
         }
 
         RenderPass(const RenderPass&) = delete;
@@ -118,9 +117,15 @@ namespace crimson
             if (!info.Target)
                 info.Target = m_data->DefaultTarget;
 
-            const uint32_t index = m_data->PassCount++;
-            m_data->Passes[index] = RenderPass{info};
-            return std::get<RenderPass>(m_data->Passes[index]);
+            PassEntry& entry = m_data->Passes[m_data->PassCount++];
+
+            if (auto* pass = std::get_if<RenderPass>(&entry))
+            {
+                pass->Reset(info);
+                return *pass;
+            }
+
+            return entry.emplace<RenderPass>(info);
         }
 
         void AddRawPass(RawPassInfo info)
@@ -159,7 +164,9 @@ namespace crimson
         {
             for (uint32_t i = 0; i < m_data.PassCount; ++i)
             {
-                m_data.Passes[i] = RenderPass{};
+                // Render passes are cleared when they are reused, raw passes release their callback here
+                if (std::holds_alternative<RawPass>(m_data.Passes[i]))
+                    m_data.Passes[i] = RenderPass{};
             }
 
             m_data.PassCount = 0;

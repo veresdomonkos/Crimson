@@ -2,6 +2,7 @@
 #include "opengl_resource_manager.hpp"
 #include "opengl_device.hpp"
 #include "opengl_state_cache.hpp"
+#include "crimson/renderer/draw_sort.hpp"
 #include "crimson/renderer/renderer.hpp"
 
 #include <vector>
@@ -31,7 +32,7 @@ namespace crimson::opengl
         OpenGLResourceManager& m_resourceManager;
         Frame m_frames[1];
 
-        std::vector<SortedDraw> m_drawOrder;
+        std::vector<DrawSortEntry> m_drawOrder;
         OpenGLStateCache m_state;
         MaterialHandle m_boundMaterial;
         VertexBufferHandle m_boundVertexBuffer;
