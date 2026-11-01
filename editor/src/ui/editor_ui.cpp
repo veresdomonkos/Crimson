@@ -1,6 +1,7 @@
 #include "crimson_editor/ui/editor_ui.hpp"
 #include <imgui.h>
 #include <imgui_internal.h>
+#include <ImGuizmo.h>
 
 namespace crimson::editor::ui
 {
@@ -18,6 +19,8 @@ namespace crimson::editor::ui
 
     void EditorUI::Draw(const NativeFrameHandles& handles)
     {
+        ImGuizmo::BeginFrame();
+
         DrawMainMenu();
         DrawDockSpace();
         for (auto panel : m_panels)

@@ -6,6 +6,8 @@ add_executable(Editor
         include/crimson_editor/ui/Panel.hpp
         include/crimson_editor/ui/viewport_panel.hpp
         src/ui/viewport_panel.cpp
+        include/crimson_editor/ui/scene_viewport_panel.hpp
+        src/ui/scene_viewport_panel.cpp
         include/crimson_editor/frame_stats.hpp
         include/crimson_editor/ui/stats_panel.hpp
         src/ui/stats_panel.cpp
@@ -26,6 +28,7 @@ target_include_directories(Editor PUBLIC include)
 target_link_libraries(Editor
         PRIVATE
             Engine
+            imguizmo
 )
 
 if(MINGW)

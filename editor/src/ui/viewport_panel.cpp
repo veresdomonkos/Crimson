@@ -26,11 +26,14 @@ namespace crimson::editor::ui
                 ? ImVec2(avail.y * m_aspect, avail.y)
                 : ImVec2(avail.x, avail.x / m_aspect);
 
-            ImGui::SetCursorScreenPos(ImVec2(
+            const ImVec2 position(
                 origin.x + (avail.x - size.x) * 0.5f,
-                origin.y + (avail.y - size.y) * 0.5f));
+                origin.y + (avail.y - size.y) * 0.5f);
 
+            ImGui::SetCursorScreenPos(position);
             ImGui::Image(m_texture, size, ImVec2(0, 1), ImVec2(1, 0));
+
+            OnImageDrawn(position, size);
         }
 
         ImGui::End();

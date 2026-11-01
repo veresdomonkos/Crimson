@@ -155,7 +155,7 @@ Assets are addressed by path or `AssetID` (`FindByPath`, `GetAsset<T>`).
 
 Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single raw pass. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default.
 
-- **Viewport** - displays a render target texture (scene, shadow map, ...).
+- **Viewport** - displays a render target texture (scene, shadow map, ...). The Scene view has a [ImGuizmo](https://github.com/CedricGuillemet/ImGuizmo) gizmo on the selected entity, with a toolbar for its operation and for local or world axes.
 - **Hierarchy** - the entity tree. Click to select, drag onto an entity to reparent or onto the empty area to make a root, right-click to create or delete, `Delete` deletes the selection.
 - **Inspector** - name, active flag and components of the selected entity, with mesh and material pickers. **Add Component** adds a component, right-clicking a component's header removes it.
 - **Asset Browser / Console**
@@ -167,7 +167,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 Crimson/
   engine/            core, renderer, backends (vulkan/, opengl/), asset manager
   editor/            Crimson Editor (application, panels, assets/)
-  external/          glfw, glad, glm, fmt, imgui, entt, glslang, json, spirv-cross, spirv-reflect, stb_image, tinyobjloader, tracy, VulkanMemoryAllocator
+  external/          glfw, glad, glm, fmt, imgui, entt, glslang, ImGuizmo, json, spirv-cross, spirv-reflect, stb_image, tinyobjloader, tracy, VulkanMemoryAllocator
 ```
 
 ## Building
@@ -204,10 +204,12 @@ Data is only collected while a viewer is connected, and the client only listens 
 
 | Input | Action |
 |:------|:-------|
-| Right mouse (hold) | Look around |
-| `W` `A` `S` `D` | Move |
-| `Space` / `Left Ctrl` | Up / down |
-| `Left Shift` | Move faster |
+| Right mouse (hold, starting over the Scene panel) | Fly the camera: look around |
+| `W` `A` `S` `D` while flying | Move |
+| `Space` / `Left Ctrl` while flying | Up / down |
+| `Left Shift` while flying | Move faster |
+| `W` / `E` / `R` | Gizmo: move / rotate / scale |
+| `Left Ctrl` while dragging the gizmo | Snap to 0.5 units, 15 degrees or 0.1 scale |
 
 ## Roadmap
 

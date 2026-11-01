@@ -21,6 +21,10 @@ namespace crimson::editor::ui
         [[nodiscard]] bool   IsHovered() const      { return m_hovered; }
         [[nodiscard]] bool   IsFocused() const      { return m_focused; }
 
+    protected:
+        // Called with the image's rect on screen, which leaves out the bars around it
+        virtual void OnImageDrawn(const ImVec2& position, const ImVec2& size) {}
+
     private:
         std::string   m_name;
         ImTextureID m_texture;

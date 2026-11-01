@@ -90,6 +90,8 @@ namespace crimson
 
         [[nodiscard]] float GetYaw() const { return m_yaw; }
         [[nodiscard]] float GetPitch() const { return m_pitch; }
+        [[nodiscard]] glm::mat4 GetView() const { return m_view; }
+        [[nodiscard]] glm::mat4 GetProjection() const { return m_proj; }
         [[nodiscard]] glm::mat4 GetViewProj() const { return m_proj * m_view; }
 
     private:

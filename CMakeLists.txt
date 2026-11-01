@@ -47,6 +47,11 @@ set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
 set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
 add_subdirectory(external/glslang)
 
+#imguizmo, without the rest of its project's widgets
+add_library(imguizmo STATIC external/ImGuizmo/src/ImGuizmo.cpp)
+target_include_directories(imguizmo PUBLIC external/ImGuizmo/src)
+target_link_libraries(imguizmo PUBLIC imgui)
+
 #entt
 add_subdirectory(external/entt)
 

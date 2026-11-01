@@ -10,6 +10,7 @@
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/frame_stats.hpp"
 #include "crimson_editor/ui/editor_ui.hpp"
+#include "crimson_editor/ui/viewport_panel.hpp"
 
 namespace crimson::editor
 {
@@ -55,6 +56,7 @@ namespace crimson::editor
 	    Scene m_scene;
 	    std::unique_ptr<EditorContext> m_context;
 	    std::unique_ptr<SceneRenderer> m_sceneRenderer;
+	    ui::ViewportPanel* m_sceneViewport = nullptr;
 
 	    // Render targets
 	    RenderTargetHandle m_mainTarget;

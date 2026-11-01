@@ -19,6 +19,7 @@
 #include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 #include "crimson_editor/ui/inspector_panel.hpp"
+#include "crimson_editor/ui/scene_viewport_panel.hpp"
 #include "crimson_editor/ui/stats_panel.hpp"
 #include "crimson_editor/ui/viewport_panel.hpp"
 #include "glm/gtx/quaternion.hpp"
@@ -131,7 +132,7 @@ namespace crimson::editor
     {
         auto& imgui = *m_graphicsBackend->Imgui;
 
-        m_ui->AddPanel<ui::ViewportPanel>("Scene",      imgui.GetOrCreateTextureId(m_mainColor),   16.0f / 9.0f);
+        m_sceneViewport = &m_ui->AddPanel<ui::SceneViewportPanel>("Scene", imgui.GetOrCreateTextureId(m_mainColor), 16.0f / 9.0f, *m_context, m_camera);
         m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_sceneRenderer->GetShadowAtlas()), 1.0f);
 	    if (m_testTexture)
 	        m_ui->AddPanel<ui::ViewportPanel>("Test Texture", imgui.GetOrCreateTextureId(m_testTexture), 875.0f / 350.0f);
@@ -264,7 +265,9 @@ namespace crimson::editor
         const bool rightMouseDown = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
         ImGuiIO& io = ImGui::GetIO();
 
-        if (rightMouseDown && !rotating)
+        // The camera only moves while flying, so the keys stay free for text fields and gizmo shortcuts.
+        // Flying has to start over the scene, a right-click elsewhere is for that panel.
+        if (rightMouseDown && !rotating && m_sceneViewport->IsHovered())
         {
             rotating = true;
             ignoreMouseDelta = true;
@@ -286,19 +289,19 @@ namespace crimson::editor
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
         }
 
-        if (rotating)
+        if (!rotating)
+            return;
+
+        if (ignoreMouseDelta)
         {
-            if (ignoreMouseDelta)
-            {
-                ignoreMouseDelta = false;
-            }
-            else
-            {
-                m_camera.Rotate(
-                    io.MouseDelta.x * mouseSensitivity,
-                    -io.MouseDelta.y * mouseSensitivity
-                );
-            }
+            ignoreMouseDelta = false;
+        }
+        else
+        {
+            m_camera.Rotate(
+                io.MouseDelta.x * mouseSensitivity,
+                -io.MouseDelta.y * mouseSensitivity
+            );
         }
 
         const float speed = glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS ? fastMoveSpeed : moveSpeed;
