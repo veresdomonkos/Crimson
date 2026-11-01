@@ -2,6 +2,7 @@
 #include <memory>
 #include <vector>
 
+#include <imgui.h>
 #include <crimson/ui/imgui_backend.hpp>
 #include "crimson_editor/ui/panel.hpp"
 
@@ -25,9 +26,12 @@ namespace crimson::editor::ui
         void Draw(const NativeFrameHandles& handles);
     private:
         void ApplyEditorStyle();
+        void DrawMainMenu();
         void DrawDockSpace();
+        void BuildDefaultLayout(ImGuiID dockSpace, const ImVec2& size);
     private:
         std::vector<Panel*> m_panels;
         ImGuiBackend& m_backend;
+        bool m_resetLayout = false;
     };
 }

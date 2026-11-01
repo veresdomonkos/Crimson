@@ -127,7 +127,7 @@ Assets are addressed by path or `AssetID` (`FindByPath`, `GetAsset<T>`).
 
 ### Editor
 
-Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single raw pass:
+Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single raw pass. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default.
 
 - **Viewport** - displays a render target texture (scene, shadow map, ...).
 - **Hierarchy / Inspector / Asset Browser / Console**
