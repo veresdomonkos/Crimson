@@ -453,8 +453,9 @@ namespace crimson::vulkan
         VkDescriptorSet descriptorSets[] = { m_globalDescriptorSet, material.DescriptorSet };
         vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Layout, 0, 2, descriptorSets, 2, dynamicOffsets);
 
-        uint32_t indexCount = static_cast<uint32_t>(indexBuffer.Size / Index::Size(indexBuffer.Type));
-        vkCmdDrawIndexed(cmdBuffer, indexCount, 1, 0, 0, 0);
+        const uint32_t total = static_cast<uint32_t>(indexBuffer.Size / Index::Size(indexBuffer.Type));
+        const uint32_t indexCount = draw.IndexCount ? draw.IndexCount : total;
+        vkCmdDrawIndexed(cmdBuffer, indexCount, 1, draw.FirstIndex, 0, 0);
     }
 
     FrameContext VulkanRenderer::BeginFrame(const FrameLightingData& lighting)
