@@ -1,6 +1,6 @@
 # Crimson Engine
 
-Crimson is a small, data-driven real-time rendering engine written in modern C++ (C++23) with two interchangeable graphics backends: **Vulkan 1.3** (dynamic rendering) and **OpenGL 4.5** (SPIR-V shaders). It ships with **Crimson Editor**, a dockable ImGui-based editor used to inspect scenes, render targets and assets.
+Crimson is a small, data-driven real-time rendering engine written in modern C++ (C++23) with two interchangeable graphics backends: **Vulkan 1.3** (dynamic rendering) and **OpenGL 4.5**, both driven by the same HLSL shaders. It ships with **Crimson Editor**, a dockable ImGui-based editor used to inspect scenes, render targets and assets.
 
 <p align="center">
   <img src="docs/images/editor.png" alt="Crimson Editor" width="900">
@@ -11,8 +11,10 @@ Crimson is a small, data-driven real-time rendering engine written in modern C++
 - **Two backends, one API** - Vulkan and OpenGL implement the same `ResourceManager` / `Renderer` interfaces; application code never touches a native API type.
 - **Handle-based resources** - buffers, textures, render targets, shaders and materials are referenced through opaque, generation-checked `Handle<Tag>` values instead of raw pointers.
 - **Pass-based frame graph (lite)** - a frame is an ordered list of `RenderPass` (material draws) and `RawPass` (native interop, e.g. ImGui) entries stored in a fixed-size, allocation-free array.
-- **Shader reflection** - material properties and texture bindings are discovered from SPIR-V with SPIRV-Reflect; shaders only declare what they use.
-- **Lighting** - directional, point and spot lights in a single GPU light array (glTF `KHR_lights_punctual`-style), plus a shadow-mapped directional light.
+- **HLSL shaders** - compiled in-process by glslang, which is linked statically, to SPIR-V. Vulkan uses the SPIR-V directly and SPIRV-Cross translates it to GLSL for OpenGL.
+- **Standard blocks and reflection** - frame, view and material resources are grouped by how often they change. Material properties and textures are discovered with SPIRV-Reflect, and the standard blocks are checked against the engine's structs.
+- **Lighting** - any number of directional, point and spot lights in a GPU buffer (glTF `KHR_lights_punctual`-style). Any light can cast shadows through a shared shadow atlas with PCF filtering.
+- **Per-object transforms** - each draw indexes a per-frame buffer of object transforms.
 - **Asset manager** - importer-based pipeline for textures, shaders, materials and meshes, with metadata and a scanned `assets/` directory.
 - **ImGui docking editor** - viewport panels that display engine render targets, console, hierarchy, inspector, asset browser and stats panels, with a custom crimson-accented theme.
 
@@ -54,8 +56,13 @@ Members are declared so that destruction order is correct (ImGui, renderer, reso
 ```cpp
 auto frame = renderer.BeginFrame(lighting);
 
-auto& shadow = frame.BeginRenderPass({ .Target = shadowTarget, .ClearFlags = ClearFlags::Depth, .ViewProj = lightViewProj });
-shadow.Draw({ vb, ib, material });
+ObjectId object = frame.AddObject(transform); // usable in every pass of this frame
+
+for (const ShadowView& view : lighting.Shadows)
+{
+    auto& shadow = frame.BeginRenderPass({ .Target = atlas, .ClearFlags = ClearFlags::Depth, .ViewProj = view.Shadow.ViewProj, .Viewport = view.Viewport });
+    shadow.Draw(mesh, object, shadowMaterial);
+}
 
 frame.AddRawPass(RawPassInfo{ .ClearFlags = ClearFlags::Color,
                               .Callback = [](const NativeFrameHandles& h) { /* ImGui, debug draw, ... */ } });
@@ -63,24 +70,45 @@ frame.AddRawPass(RawPassInfo{ .ClearFlags = ClearFlags::Color,
 renderer.EndFrame(frame);
 ```
 
-- `RenderPass` - draws described by vertex buffer, index buffer and material.
+- `RenderPass` - draws described by vertex buffer, index buffer, material and object. A pass can limit itself to part of its target with `Viewport`.
 - `RawPass` - runs a callback with `NativeFrameHandles` (device, command buffer, color format) between engine-managed layout transitions. ImGui is rendered this way, so the engine itself has no UI concepts.
 - Vulkan layout transitions and barriers are handled by the renderer; OpenGL needs none.
-- Frame-in-flight synchronisation (fences, semaphores, per-frame UBO slots) is internal to the Vulkan renderer.
+- Frame-in-flight synchronisation (fences, semaphores, per-frame buffers) is internal to the Vulkan renderer.
 
 ### Shader interface
 
-Both backends share one binding convention. GLSL is compiled to SPIR-V with `glslc`; OpenGL consumes the same binaries (descriptor sets are normalised to set 0 before `glSpecializeShader`).
+Shaders are HLSL, with a `VSMain` and a `PSMain` in one `.hlsl` file:
 
-| Set | Binding | Resource | Scope |
-|:---:|:-------:|:---------|:------|
-| 0 | 0 | `CameraBlock` (dynamic UBO: `ViewProj`, camera position) | per pass |
-| 0 | 1 | `LightingBlock` (UBO: ambient, shadow matrix, light array) | per frame |
-| 0 | 2 | `u_ShadowMap` (sampler2D) | global |
-| 1 | 3 | `MaterialBlock` (UBO) | per material, **optional** |
-| 1 | 4+ | material textures | per material, **optional** |
+```
+.hlsl -> glslang -> SPIR-V -> Vulkan
+                           -> SPIRV-Cross -> GLSL 4.5 -> OpenGL
+```
 
-Set 0 is fixed and identical for every shader. Set 1 is built from reflection, so a shader without material data (for example a depth-only shadow shader) needs no dummy block.
+Resources are grouped by how often they change. `crimson/bindings.hlsli` declares the standard ones, so shaders include it instead of restating them. Includes resolve relative to the shader's folder. glslang's HLSL support is around Shader Model 5, so Shader Model 6 features such as wave ops and mesh shaders aren't available.
+
+| Space | Scope | Resources |
+|:------|:------|:----------|
+| `space0` | per frame | `FrameBlock`, `Lights`, `Shadows`, `Objects`, `ShadowAtlas` and the samplers `LinearWrap`, `LinearClamp`, `PointClamp`, `ShadowCompare` |
+| `space1` | per pass | `ViewBlock` (`ViewProj`, `CameraPosition`) |
+| `space2` | per material, **optional** | one constant buffer (`b0`) and any textures (`t0` and up), both looked up by name |
+| push constant | per draw | `DrawData` (`ObjectIndex`) |
+
+A material shader declares only its own resources:
+
+```hlsl
+#include "crimson/lighting.hlsli"
+
+cbuffer MaterialBlock : register(b0, space2) { float4 Color; };
+Texture2D Albedo : register(t0, space2);
+
+// VSMain uses GetObjectData() and ViewProj, PSMain uses ComputeLighting() and Albedo.Sample(LinearWrap, uv)
+```
+
+Materials share the samplers in `space0` and can't declare their own. A shader fails to import, with an error in the console, if it uses an unknown space or a standard resource whose type or size doesn't match the engine. Vertex inputs take their locations from their order in the input struct.
+
+### Shadows
+
+`BuildShadowViews` assigns tiles of one depth atlas to the lights with `CastsShadow` set: one for a directional or spot light, six for a point light. Each view is rendered by its own pass with `Viewport` set to its tile, and shaders pick the tile through the light's `ShadowIndex`. The default atlas is 4096x4096 with 1024 tiles, and lights that don't fit log a warning and stay unshadowed. Directional lights cover one fixed area of the world, there are no cascades yet.
 
 ### Asset pipeline
 
@@ -89,13 +117,13 @@ Set 0 is fixed and identical for every shader. Set 1 is built from reflection, s
 | Importer | Produces |
 |:---------|:---------|
 | `TextureImporter` | `TextureHandle` |
-| `ShaderImporter` | `ShaderHandle` (GLSL compiled to SPIR-V) |
+| `ShaderImporter` | `ShaderHandle` (`.hlsl`, compiled with glslang) |
 | `MaterialImporter` | `MaterialHandle` (`.mat`) |
 | `MeshImporter` | `Mesh` (vertex/index buffers + materials, e.g. `.obj`) |
 
 Assets are addressed by path or `AssetID` (`FindByPath`, `GetAsset<T>`).
 
-`.mat` files can also set `"renderMode"` (`"opaque"` or `"transparent"`) and `"cull"` (`"back"`, `"front"` or `"none"`), which default to opaque and back. Transparent materials are alpha blended using the alpha of `u_Color`, don't write depth, and draw after opaque ones in the order they were submitted.
+`.mat` files can also set `"renderMode"` (`"opaque"` or `"transparent"`) and `"cull"` (`"back"`, `"front"` or `"none"`), which default to opaque and back. Transparent materials are alpha blended using the alpha the shader outputs, don't write depth, and draw after opaque ones in the order they were submitted.
 
 ### Editor
 
@@ -110,8 +138,8 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 ```
 Crimson/
   engine/            core, renderer, backends (vulkan/, opengl/), asset manager
-  editor/            Crimson Editor (application, panels, importers, assets/)
-  external/          glfw, glad, glm, fmt, imgui, spirv-reflect, tiny-process-library, tracy, VulkanMemoryAllocator
+  editor/            Crimson Editor (application, panels, assets/)
+  external/          glfw, glad, glm, fmt, imgui, glslang, json, spirv-cross, spirv-reflect, stb_image, tinyobjloader, tracy, VulkanMemoryAllocator
 ```
 
 ## Building
@@ -119,9 +147,9 @@ Crimson/
 ### Requirements
 
 - C++23 compiler (GCC 13+, Clang 16+ or MSVC 19.35+); developed with MinGW on Windows
-- CMake 3.20+
-- [Vulkan SDK](https://vulkan.lunarg.com/) 1.3+ (headers, loader, **`glslc`** on `PATH`, validation layers)
-- A GPU/driver with Vulkan 1.3 (dynamic rendering, synchronization2) and/or OpenGL 4.5 with `ARB_gl_spirv`
+- CMake 3.22+
+- [Vulkan SDK](https://vulkan.lunarg.com/) 1.3+ (headers, loader, validation layers)
+- A GPU/driver with Vulkan 1.3 (dynamic rendering, synchronization2) and/or OpenGL 4.5
 
 ### Steps
 
@@ -132,7 +160,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target Editor
 ```
 
-The `assets/` directory is copied next to the executable after every build. The graphics API is selected when the `EditorApplication` is constructed (see `main.cpp`).
+The editor links everything statically, including the shader compiler, so it needs no DLLs of its own. It only uses the system's graphics driver and the `assets/` directory, which is copied next to the executable on every build. The graphics API is selected when the `EditorApplication` is constructed (see `main.cpp`).
 
 > Use **Release** (or RelWithDebInfo) when measuring performance. Debug builds, especially with validation layers enabled, are many times slower and give misleading numbers.
 
@@ -155,9 +183,7 @@ Data is only collected while a viewer is connected, and the client only listens 
 
 ## Roadmap
 
-- [ ] Per-pass material override (dedicated depth-only shadow material)
-- [ ] Back-to-front sorting of transparent draws (needs per-object transforms)
+- [ ] Back-to-front sorting of transparent draws
 - [ ] Viewport-driven render target resizing
-- [ ] Per-object transforms (push constants on Vulkan, UBO on OpenGL)
-- [ ] Multiple shadow-casting lights, cascaded shadow maps
+- [ ] Cascaded shadow maps
 - [ ] Shader hot-reload

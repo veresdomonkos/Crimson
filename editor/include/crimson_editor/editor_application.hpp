@@ -28,7 +28,8 @@ namespace crimson::editor
 
 	    // --- Frame ---
 	    void RenderFrame();
-	    void RecordShadowPass(FrameContext& frame);
+	    void AddSceneObjects(FrameContext& frame);
+	    void RecordShadowPasses(FrameContext& frame);
 	    void RecordMainPass(FrameContext& frame);
 	    void RecordUIPass(FrameContext& frame);
 	    void UpdateFrameStats();
@@ -57,9 +58,10 @@ namespace crimson::editor
 	    Mesh m_floor;
 	    Mesh m_pyramid;
 
-	    // Shaders
-	    ShaderHandle m_mainShader;
-	    ShaderHandle m_shadowShader;
+	    // This frame's object transforms
+	    ObjectId m_floorObject = 0;
+	    ObjectId m_pyramidObject = 0;
+	    ObjectId m_meshObject = 0;
 
 	    // Materials
 	    MaterialHandle m_floorMat;
@@ -76,7 +78,6 @@ namespace crimson::editor
 	    TextureHandle m_testTexture;
 
 	    // Light
-	    glm::mat4 m_lightViewProj{1.0f};
 	    FrameLightingData m_lighting;
 
 	    Mesh m_mesh;

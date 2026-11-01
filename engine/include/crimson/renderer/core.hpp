@@ -1,4 +1,7 @@
 #pragma once
+#include <cstdint>
+#include <optional>
+
 #include "camera_data.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "glm/vec4.hpp"
@@ -38,6 +41,14 @@ namespace crimson
         return (value & flag) != ClearFlags::None;
     }
 
+    struct RenderRect
+    {
+        int32_t X = 0;
+        int32_t Y = 0;
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+    };
+
     struct RenderPassInfo
     {
         RenderTargetHandle Target;
@@ -48,5 +59,8 @@ namespace crimson
 
         glm::mat4 ViewProj{1.0f};
         glm::vec3 CameraPosition{0.0f};
+
+        // Limits drawing and clearing to part of the target, the whole target when not set
+        std::optional<RenderRect> Viewport;
     };
 }

@@ -12,6 +12,7 @@
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/shader_property_info.hpp"
+#include "shader/shader_reflection.hpp"
 
 namespace crimson::opengl
 {
@@ -54,14 +55,22 @@ namespace crimson::opengl
         IndexType Type{};
     };
 
+    // A texture unit the shader samples from, with what has to be bound to it
+    struct OpenGLShaderTextureUnit
+    {
+        std::string Texture;
+        GLuint Sampler = 0;
+        uint32_t Unit = 0;
+        bool IsShadowAtlas = false;
+    };
+
     struct OpenGLShader
     {
         GLuint GLHandle = 0;
-        std::size_t UBOSize = 0;
-        uint32_t MaterialUboBinding = 0;
+        GLint ObjectIndexLocation = -1;
 
-        std::unordered_map<std::string, ShaderPropertyInfo> Properties{};
-        std::unordered_map<std::string, ShaderTextureBinding> TextureBindings{};
+        ShaderInterface Interface;
+        std::vector<OpenGLShaderTextureUnit> TextureUnits;
     };
 
     struct OpenGLMaterial
@@ -72,7 +81,7 @@ namespace crimson::opengl
         std::unique_ptr<std::byte[]> UniformData = nullptr;
         std::size_t UniformDataSize = 0;
         GLuint GLBufferHandle = 0;
-        std::unordered_map<uint32_t, GLuint> BoundTextures;
+        std::unordered_map<std::string, GLuint> Textures;
         bool IsDirty = true;
 
         template<MaterialProperty T>

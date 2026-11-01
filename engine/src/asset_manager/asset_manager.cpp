@@ -59,7 +59,7 @@ namespace crimson
         for (const auto& entry : fs::recursive_directory_iterator(m_root))
         {
             if (!entry.is_regular_file()) continue;
-            if (entry.path().extension() == ".meta") continue;
+            if (entry.path().extension() == ".meta" || entry.path().extension() == ".hlsli") continue;
             if (!FindImporter(entry.path()))
             {
                 LOG_WARN("[Assets] Skipped (no importer): {}", fs::relative(entry.path(), m_root).generic_string());

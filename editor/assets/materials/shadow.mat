@@ -1,3 +1,3 @@
 {
-  "shader": "shaders/shadow.glsl"
+  "shader": "shaders/shadow.hlsl"
 }

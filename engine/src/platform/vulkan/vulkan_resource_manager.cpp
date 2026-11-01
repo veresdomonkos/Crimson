@@ -6,12 +6,9 @@
 #include <limits>
 #include <vector>
 
-#include <spirv_reflect.h>
-
 #include "utils.hpp"
 #include "vulkan_renderer.hpp"
 #include "crimson/core/log.hpp"
-#include "crimson/renderer/binding_conventions.hpp"
 
 namespace crimson::vulkan
 {
@@ -19,8 +16,9 @@ namespace crimson::vulkan
         : m_device(device)
     {
         CreateDescriptorPool();
-        CreateGlobalSetLayout();
-        CreateDefaultSampler();
+        CreateSamplers();
+        CreateStandardSetLayouts();
+        CreateDefaultTexture();
         CreateSwapchainResources(m_primarySurface);
     }
 
@@ -34,16 +32,23 @@ namespace crimson::vulkan
 
     void VulkanResourceManager::CreateDescriptorPool()
     {
-        std::array<vk::DescriptorPoolSize, 3> poolSizes{};
+        // Frame sets take one UBO, three storage buffers, the atlas and four samplers per frame in flight
+        std::array<vk::DescriptorPoolSize, 5> poolSizes{};
 
         poolSizes[0].type = vk::DescriptorType::eUniformBufferDynamic;
-        poolSizes[0].descriptorCount = 2;
+        poolSizes[0].descriptorCount = 1;
 
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[1].descriptorCount = 100;
+        poolSizes[1].descriptorCount = 100 + MAX_FRAMES_IN_FLIGHT;
 
-        poolSizes[2].type = vk::DescriptorType::eCombinedImageSampler;
-        poolSizes[2].descriptorCount = 100;
+        poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
+        poolSizes[2].descriptorCount = 3 * MAX_FRAMES_IN_FLIGHT;
+
+        poolSizes[3].type = vk::DescriptorType::eSampledImage;
+        poolSizes[3].descriptorCount = 100 + MAX_FRAMES_IN_FLIGHT;
+
+        poolSizes[4].type = vk::DescriptorType::eSampler;
+        poolSizes[4].descriptorCount = 4 * MAX_FRAMES_IN_FLIGHT;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -54,51 +59,88 @@ namespace crimson::vulkan
         m_descriptorPool = m_device.GetDevice().createDescriptorPool(poolInfo);
     }
 
-    void VulkanResourceManager::CreateGlobalSetLayout()
+    void VulkanResourceManager::CreateSamplers()
     {
-        std::array<vk::DescriptorSetLayoutBinding, 3> bindings{};
+        const auto create = [this](vk::Filter filter, vk::SamplerAddressMode addressMode, bool compare)
+        {
+            vk::SamplerCreateInfo createInfo{};
+            createInfo.magFilter = filter;
+            createInfo.minFilter = filter;
+            createInfo.addressModeU = addressMode;
+            createInfo.addressModeV = addressMode;
+            createInfo.addressModeW = addressMode;
+            createInfo.anisotropyEnable = VK_FALSE;
+            createInfo.maxAnisotropy = 1.0f;
+            createInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
+            createInfo.unnormalizedCoordinates = VK_FALSE;
+            createInfo.compareEnable = compare ? VK_TRUE : VK_FALSE;
+            createInfo.compareOp = compare ? vk::CompareOp::eLessOrEqual : vk::CompareOp::eAlways;
+            createInfo.mipmapMode = filter == vk::Filter::eLinear ? vk::SamplerMipmapMode::eLinear : vk::SamplerMipmapMode::eNearest;
+            createInfo.minLod = 0.0f;
+            createInfo.maxLod = VK_LOD_CLAMP_NONE;
 
-        bindings[0].binding = kCameraBlockBinding;
-        bindings[0].descriptorType = vk::DescriptorType::eUniformBufferDynamic;
-        bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = vk::ShaderStageFlagBits::eVertex;
+            return m_device.GetDevice().createSampler(createInfo);
+        };
 
-        bindings[1].binding = kLightingBlockBinding;
-        bindings[1].descriptorType = vk::DescriptorType::eUniformBufferDynamic;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-        bindings[2].binding = kShadowMapBinding;
-        bindings[2].descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        bindings[2].descriptorCount = 1;
-        bindings[2].stageFlags = vk::ShaderStageFlagBits::eFragment;
-
-        vk::DescriptorSetLayoutCreateInfo createInfo{};
-        createInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        createInfo.pBindings = bindings.data();
-
-        m_globalSetLayout = m_device.GetDevice().createDescriptorSetLayout(createInfo);
+        m_linearWrapSampler = create(vk::Filter::eLinear, vk::SamplerAddressMode::eRepeat, false);
+        m_linearClampSampler = create(vk::Filter::eLinear, vk::SamplerAddressMode::eClampToEdge, false);
+        m_pointClampSampler = create(vk::Filter::eNearest, vk::SamplerAddressMode::eClampToEdge, false);
+        m_shadowCompareSampler = create(vk::Filter::eLinear, vk::SamplerAddressMode::eClampToEdge, true);
     }
 
-    void VulkanResourceManager::CreateDefaultSampler()
+    void VulkanResourceManager::CreateStandardSetLayouts()
     {
-        vk::SamplerCreateInfo createInfo{};
-        createInfo.magFilter = vk::Filter::eLinear;
-        createInfo.minFilter = vk::Filter::eLinear;
-        createInfo.addressModeU = vk::SamplerAddressMode::eRepeat;
-        createInfo.addressModeV = vk::SamplerAddressMode::eRepeat;
-        createInfo.addressModeW = vk::SamplerAddressMode::eRepeat;
-        createInfo.anisotropyEnable = VK_FALSE;
-        createInfo.maxAnisotropy = 1.0f;
-        createInfo.borderColor = vk::BorderColor::eIntOpaqueBlack;
-        createInfo.unnormalizedCoordinates = VK_FALSE;
-        createInfo.compareEnable = VK_FALSE;
-        createInfo.compareOp = vk::CompareOp::eAlways;
-        createInfo.mipmapMode = vk::SamplerMipmapMode::eLinear;
-        createInfo.minLod = 0.0f;
-        createInfo.maxLod = VK_LOD_CLAMP_NONE;
+        const vk::ShaderStageFlags allStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
-        m_defaultSampler = m_device.GetDevice().createSampler(createInfo);
+        const auto makeBinding = [&](uint32_t binding, vk::DescriptorType type, const vk::Sampler* immutableSampler = nullptr)
+        {
+            vk::DescriptorSetLayoutBinding result{};
+            result.binding = binding;
+            result.descriptorType = type;
+            result.descriptorCount = 1;
+            result.stageFlags = allStages;
+            result.pImmutableSamplers = immutableSampler;
+            return result;
+        };
+
+        const vk::Sampler linearWrap = *m_linearWrapSampler;
+        const vk::Sampler linearClamp = *m_linearClampSampler;
+        const vk::Sampler pointClamp = *m_pointClampSampler;
+        const vk::Sampler shadowCompare = *m_shadowCompareSampler;
+
+        const std::array frameBindings = {
+            makeBinding(kFrameBlockBinding, vk::DescriptorType::eUniformBuffer),
+            makeBinding(kLightsBinding, vk::DescriptorType::eStorageBuffer),
+            makeBinding(kShadowsBinding, vk::DescriptorType::eStorageBuffer),
+            makeBinding(kObjectsBinding, vk::DescriptorType::eStorageBuffer),
+            makeBinding(kShadowAtlasBinding, vk::DescriptorType::eSampledImage),
+            makeBinding(kLinearWrapBinding, vk::DescriptorType::eSampler, &linearWrap),
+            makeBinding(kLinearClampBinding, vk::DescriptorType::eSampler, &linearClamp),
+            makeBinding(kPointClampBinding, vk::DescriptorType::eSampler, &pointClamp),
+            makeBinding(kShadowCompareBinding, vk::DescriptorType::eSampler, &shadowCompare),
+        };
+
+        vk::DescriptorSetLayoutCreateInfo frameInfo{};
+        frameInfo.bindingCount = static_cast<uint32_t>(frameBindings.size());
+        frameInfo.pBindings = frameBindings.data();
+
+        m_frameSetLayout = m_device.GetDevice().createDescriptorSetLayout(frameInfo);
+
+        const vk::DescriptorSetLayoutBinding viewBinding = makeBinding(kViewBlockBinding, vk::DescriptorType::eUniformBufferDynamic);
+
+        vk::DescriptorSetLayoutCreateInfo viewInfo{};
+        viewInfo.bindingCount = 1;
+        viewInfo.pBindings = &viewBinding;
+
+        m_viewSetLayout = m_device.GetDevice().createDescriptorSetLayout(viewInfo);
+    }
+
+    void VulkanResourceManager::CreateDefaultTexture()
+    {
+        constexpr uint32_t white = 0xFFFFFFFF;
+
+        const TextureInfo info{ .Width = 1, .Height = 1, .Format = TextureFormat::RGBA8, .Usage = TextureUsage::Sampled };
+        m_defaultTexture = CreateTexture(info, &white);
     }
 
     RenderTargetHandle VulkanResourceManager::GetCurrentBackBuffer() const
@@ -182,37 +224,47 @@ namespace crimson::vulkan
         m_indexBuffers.Unregister(handle);
     }
 
-    ShaderHandle VulkanResourceManager::CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary)
+    ShaderHandle VulkanResourceManager::CreateShader(const ShaderBinary& binary)
     {
+        auto shaderInterface = ReflectShaderInterface(binary);
+        if (!shaderInterface)
+            return {};
+
         try
         {
             VulkanShader shader{};
 
-            shader.Vertex = CreateShaderModule(vertexBinary);
-            shader.Fragment = CreateShaderModule(fragmentBinary);
+            shader.Vertex = CreateShaderModule(binary.Vertex);
+            shader.Fragment = CreateShaderModule(binary.Pixel);
+            shader.Interface = std::move(*shaderInterface);
 
-            ReflectShader(shader, vertexBinary);
-            ReflectShader(shader, fragmentBinary);
+            const auto stageFlags = [](bool vertex, bool pixel)
+            {
+                vk::ShaderStageFlags flags{};
+                if (vertex) flags |= vk::ShaderStageFlagBits::eVertex;
+                if (pixel) flags |= vk::ShaderStageFlagBits::eFragment;
+                return flags;
+            };
 
             std::vector<vk::DescriptorSetLayoutBinding> bindings;
 
-            if (shader.MaterialUniformSize > 0)
+            if (shader.Interface.MaterialBlockSize > 0)
             {
                 vk::DescriptorSetLayoutBinding binding{};
-                binding.binding = shader.MaterialUboBinding;
+                binding.binding = shader.Interface.MaterialBlockBinding;
                 binding.descriptorCount = 1;
                 binding.descriptorType = vk::DescriptorType::eUniformBuffer;
-                binding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+                binding.stageFlags = stageFlags(shader.Interface.MaterialBlockInVertex, shader.Interface.MaterialBlockInPixel);
                 bindings.push_back(binding);
             }
 
-            for (const auto& [name, texture] : shader.TextureBindings)
+            for (const auto& [name, texture] : shader.Interface.Textures)
             {
                 vk::DescriptorSetLayoutBinding binding{};
                 binding.binding = texture.Binding;
                 binding.descriptorCount = 1;
-                binding.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-                binding.stageFlags = vk::ShaderStageFlagBits::eFragment;
+                binding.descriptorType = vk::DescriptorType::eSampledImage;
+                binding.stageFlags = stageFlags(texture.Vertex, texture.Pixel);
                 bindings.push_back(binding);
             }
 
@@ -222,12 +274,20 @@ namespace crimson::vulkan
 
             shader.MaterialSetLayout = m_device.GetDevice().createDescriptorSetLayout(layoutInfo);
 
-            // Shared by all of the shader's pipelines, so switching between them keeps its material bound
-            const std::array<vk::DescriptorSetLayout, 2> setLayouts = { *m_globalSetLayout, *shader.MaterialSetLayout };
+            // Shared by all of the shader's pipelines, so switching between them keeps its material bound.
+            // The frame and view sets and the push constant are the same in every shader, so they stay valid across shaders.
+            const std::array<vk::DescriptorSetLayout, 3> setLayouts = { *m_frameSetLayout, *m_viewSetLayout, *shader.MaterialSetLayout };
+
+            vk::PushConstantRange pushConstant{};
+            pushConstant.stageFlags = vk::ShaderStageFlagBits::eVertex;
+            pushConstant.offset = 0;
+            pushConstant.size = sizeof(DrawData);
 
             vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
             pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
             pipelineLayoutInfo.pSetLayouts = setLayouts.data();
+            pipelineLayoutInfo.pushConstantRangeCount = 1;
+            pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
 
             shader.PipelineLayout = m_device.GetDevice().createPipelineLayout(pipelineLayoutInfo);
 
@@ -258,7 +318,7 @@ namespace crimson::vulkan
             VulkanMaterial material{};
             material.Shader = shaderHandle;
             material.Settings = settings;
-            material.UniformBufferSize = shader->MaterialUniformSize;
+            material.UniformBufferSize = shader->Interface.MaterialBlockSize;
 
             const vk::DescriptorSetLayout setLayout = *shader->MaterialSetLayout;
 
@@ -283,13 +343,16 @@ namespace crimson::vulkan
 
                 vk::WriteDescriptorSet write{};
                 write.dstSet = *material.DescriptorSet;
-                write.dstBinding = shader->MaterialUboBinding;
+                write.dstBinding = shader->Interface.MaterialBlockBinding;
                 write.descriptorCount = 1;
                 write.descriptorType = vk::DescriptorType::eUniformBuffer;
                 write.pBufferInfo = &bufferInfo;
 
                 m_device.GetDevice().updateDescriptorSets(write, nullptr);
             }
+
+            for (const auto& [name, texture] : shader->Interface.Textures)
+                WriteMaterialTexture(*material.DescriptorSet, texture.Binding, m_textures.Get(m_defaultTexture));
 
             return m_materials.Register(std::move(material));
         }
@@ -312,21 +375,28 @@ namespace crimson::vulkan
         VulkanShader& shader = m_shaders.Get(material.Shader);
         VulkanTexture& texture = m_textures.Get(textureHandle);
 
-        auto it = shader.TextureBindings.find(std::string(name));
+        auto it = shader.Interface.Textures.find(std::string(name));
 
-        if (it == shader.TextureBindings.end())
+        if (it == shader.Interface.Textures.end())
+        {
+            LOG_WARN("[Vulkan] Texture property '{}' not found in shader", name);
             return;
+        }
 
+        WriteMaterialTexture(*material.DescriptorSet, it->second.Binding, texture);
+    }
+
+    void VulkanResourceManager::WriteMaterialTexture(vk::DescriptorSet set, uint32_t binding, const VulkanTexture& texture) const
+    {
         vk::DescriptorImageInfo imageInfo{};
-        imageInfo.sampler = *m_defaultSampler;
         imageInfo.imageView = *texture.View;
         imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
         vk::WriteDescriptorSet write{};
-        write.dstSet = *material.DescriptorSet;
-        write.dstBinding = it->second.Binding;
+        write.dstSet = set;
+        write.dstBinding = binding;
         write.descriptorCount = 1;
-        write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        write.descriptorType = vk::DescriptorType::eSampledImage;
         write.pImageInfo = &imageInfo;
 
         m_device.GetDevice().updateDescriptorSets(write, nullptr);
@@ -686,10 +756,19 @@ namespace crimson::vulkan
         VulkanMaterial& material = m_materials.Get(handle);
         VulkanShader& shader = m_shaders.Get(material.Shader);
 
-        auto property = shader.Properties.find(std::string(name));
+        auto property = shader.Interface.Properties.find(std::string(name));
 
-        if (property == shader.Properties.end())
+        if (property == shader.Interface.Properties.end())
+        {
+            LOG_WARN("[Vulkan] Uniform property '{}' not found in shader", name);
             return;
+        }
+
+        if (data.size() > property->second.Size)
+        {
+            LOG_WARN("[Vulkan] Data size ({}) exceeds property size ({}) for '{}'", data.size(), property->second.Size, name);
+            return;
+        }
 
         if (!material.UniformBuffer)
             return;
@@ -897,52 +976,6 @@ namespace crimson::vulkan
         createInfo.pCode = code.data();
 
         return m_device.GetDevice().createShaderModule(createInfo);
-    }
-
-    void VulkanResourceManager::ReflectShader(VulkanShader& shader, std::span<const uint32_t> spirvCode)
-    {
-        SpvReflectShaderModule reflModule;
-        if (spvReflectCreateShaderModule(spirvCode.size() * sizeof(uint32_t), spirvCode.data(), &reflModule) != SPV_REFLECT_RESULT_SUCCESS)
-            return;
-
-        uint32_t count = 0;
-        spvReflectEnumerateDescriptorSets(&reflModule, &count, nullptr);
-        std::vector<SpvReflectDescriptorSet*> sets(count);
-        spvReflectEnumerateDescriptorSets(&reflModule, &count, sets.data());
-
-        for (auto* set : sets)
-        {
-            if (set->set != 1) continue;
-
-            for (uint32_t i = 0; i < set->binding_count; ++i)
-            {
-                const SpvReflectDescriptorBinding* binding = set->bindings[i];
-
-                if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                {
-                    if (binding->binding < kMaterialBindingStart)
-                        LOG_WARN("[Vulkan] MaterialBlock binding ({}) collides with globals (>= {} needed)!", binding->binding, kMaterialBindingStart);
-
-                    shader.MaterialUniformSize = binding->block.size;
-                    shader.MaterialUboBinding  = binding->binding;
-
-                    for (uint32_t m = 0; m < binding->block.member_count; ++m)
-                    {
-                        const SpvReflectBlockVariable& member = binding->block.members[m];
-                        shader.Properties[member.name] = ShaderPropertyInfo{ .Offset = member.offset, .Size = member.size };
-                    }
-                }
-                else if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                {
-                    if (binding->binding < kMaterialBindingStart)
-                        LOG_WARN("[Vulkan] Material samplers '{}' binding ({}) collides with globals!", binding->name, binding->binding);
-
-                    shader.TextureBindings[binding->name] = ShaderTextureBinding{ binding->binding };
-                }
-            }
-        }
-
-        spvReflectDestroyShaderModule(&reflModule);
     }
 
     void VulkanResourceManager::DestroyResources()

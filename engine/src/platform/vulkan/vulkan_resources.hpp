@@ -10,6 +10,7 @@
 #include "crimson/renderer/buffers.hpp"
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
+#include "shader/shader_reflection.hpp"
 #include "vulkan_allocator.hpp"
 
 namespace crimson::vulkan
@@ -79,11 +80,8 @@ namespace crimson::vulkan
 
         vk::raii::DescriptorSetLayout MaterialSetLayout{ nullptr };
         vk::raii::PipelineLayout PipelineLayout{ nullptr };
-        size_t MaterialUniformSize = 0;
-        uint32_t MaterialUboBinding = 0;
 
-        std::unordered_map<std::string, ShaderPropertyInfo> Properties{};
-        std::unordered_map<std::string, ShaderTextureBinding> TextureBindings{};
+        ShaderInterface Interface;
     };
 
     struct VulkanGraphicsPipeline

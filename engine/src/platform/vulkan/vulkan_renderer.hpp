@@ -8,6 +8,8 @@
 #include <tracy/TracyVulkan.hpp>
 
 #include <array>
+#include <limits>
+#include <optional>
 #include <vector>
 
 namespace crimson::vulkan
@@ -36,7 +38,26 @@ namespace crimson::vulkan
         vk::Buffer VertexBuffer;
         vk::Buffer IndexBuffer;
         vk::DescriptorSet MaterialSet;
-        bool GlobalsBound = false;
+        bool FrameSetBound = false;
+        bool ViewSetBound = false;
+        ObjectId Object = std::numeric_limits<ObjectId>::max();
+    };
+
+    // A host-visible buffer of one frame in flight that grows when its contents don't fit
+    struct FrameStorageBuffer
+    {
+        AllocatedBuffer Buffer;
+        vk::DeviceSize Capacity = 0;
+    };
+
+    // What the frame descriptor set of one frame in flight points at
+    struct FrameResources
+    {
+        AllocatedBuffer FrameBlockBuffer;
+        FrameStorageBuffer Lights;
+        FrameStorageBuffer Shadows;
+        FrameStorageBuffer Objects;
+        vk::raii::DescriptorSet DescriptorSet{ nullptr };
     };
 
     class VulkanRenderer : public Renderer
@@ -57,6 +78,7 @@ namespace crimson::vulkan
     private:
         void InitializeSynchronizationAndCommands();
         void InitGlobals();
+        void UploadStorageBuffer(const FrameResources& resources, FrameStorageBuffer& storage, uint32_t binding, const void* data, std::size_t size);
 
         void TransitionImage(const vk::raii::CommandBuffer& cmd, VulkanTexture& texture, vk::ImageLayout newLayout);
         void ExecuteBeginRenderPass(const vk::raii::CommandBuffer& cmdBuffer, const RenderPassInfo& info, uint32_t passIndex);
@@ -64,18 +86,16 @@ namespace crimson::vulkan
         void ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawInfo& draw, RenderTargetHandle target, uint32_t passIndex);
         void ExecuteRawPass(const vk::raii::CommandBuffer& cmdBuffer, const RawPass& pass);
 
-        void BeginRenderingOnTarget(const vk::raii::CommandBuffer& cmd, VulkanRenderTarget& rt, ClearFlags flags, const glm::vec4& clearColor, float clearDepth, uint32_t clearStencil);
+        void BeginRenderingOnTarget(const vk::raii::CommandBuffer& cmd, VulkanRenderTarget& rt, ClearFlags flags, const glm::vec4& clearColor, float clearDepth, uint32_t clearStencil, const std::optional<RenderRect>& area);
 
         VulkanDevice& m_device;
         VulkanResourceManager& m_resourceManager;
 
-        vk::raii::DescriptorSet m_globalDescriptorSet{ nullptr };
+        std::array<FrameResources, MAX_FRAMES_IN_FLIGHT> m_frameResources;
 
-        AllocatedBuffer m_cameraUBO;
-        vk::DeviceSize m_cameraUboAlignment = 0;
-
-        AllocatedBuffer m_lightingUBO;
-        vk::DeviceSize m_lightingUboAlignment = 0;
+        vk::raii::DescriptorSet m_viewDescriptorSet{ nullptr };
+        AllocatedBuffer m_viewUBO;
+        vk::DeviceSize m_viewUboAlignment = 0;
 
         std::array<Frame, MAX_FRAMES_IN_FLIGHT> m_frames;
 

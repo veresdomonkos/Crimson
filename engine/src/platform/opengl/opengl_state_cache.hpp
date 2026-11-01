@@ -5,6 +5,7 @@
 #include <limits>
 #include <glad/glad.h>
 
+#include "crimson/renderer/core.hpp"
 #include "crimson/renderer/material_settings.hpp"
 
 namespace crimson::opengl
@@ -22,7 +23,10 @@ namespace crimson::opengl
             m_program = kUnknown;
             m_vertexArray = kUnknown;
             m_uniformBuffers.fill(kUnknown);
+            m_storageBuffers.fill(kUnknown);
             m_textures.fill(kUnknown);
+            m_samplers.fill(kUnknown);
+            m_scissor = Toggle::Unknown;
             m_depthTest = Toggle::Unknown;
             m_depthWrite = Toggle::Unknown;
             m_blend = Toggle::Unknown;
@@ -63,6 +67,17 @@ namespace crimson::opengl
             glBindBufferBase(GL_UNIFORM_BUFFER, binding, buffer);
         }
 
+        void BindStorageBuffer(uint32_t binding, GLuint buffer)
+        {
+            if (binding < m_storageBuffers.size())
+            {
+                if (m_storageBuffers[binding] == buffer) return;
+                m_storageBuffers[binding] = buffer;
+            }
+
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, binding, buffer);
+        }
+
         void BindTexture(uint32_t unit, GLuint texture)
         {
             if (unit < m_textures.size())
@@ -74,6 +89,31 @@ namespace crimson::opengl
             glBindTextureUnit(unit, texture);
         }
 
+        void BindSampler(uint32_t unit, GLuint sampler)
+        {
+            if (unit < m_samplers.size())
+            {
+                if (m_samplers[unit] == sampler) return;
+                m_samplers[unit] = sampler;
+            }
+
+            glBindSampler(unit, sampler);
+        }
+
+        // Limits drawing and clearing to the rect, or lifts the limit when it is null
+        void SetScissor(const RenderRect* rect)
+        {
+            if (rect)
+                glScissor(rect->X, rect->Y, static_cast<GLsizei>(rect->Width), static_cast<GLsizei>(rect->Height));
+
+            if (!Update(m_scissor, rect != nullptr)) return;
+
+            if (rect)
+                glEnable(GL_SCISSOR_TEST);
+            else
+                glDisable(GL_SCISSOR_TEST);
+        }
+
         void SetDepthTest(bool enabled)
         {
             if (!Update(m_depthTest, enabled)) return;
@@ -81,7 +121,7 @@ namespace crimson::opengl
             if (enabled)
             {
                 glEnable(GL_DEPTH_TEST);
-                glDepthFunc(GL_LESS);
+                glDepthFunc(GL_LEQUAL);
             }
             else
             {
@@ -146,7 +186,10 @@ namespace crimson::opengl
         GLuint m_program = kUnknown;
         GLuint m_vertexArray = kUnknown;
         std::array<GLuint, 32> m_uniformBuffers{};
+        std::array<GLuint, 8> m_storageBuffers{};
         std::array<GLuint, 32> m_textures{};
+        std::array<GLuint, 32> m_samplers{};
+        Toggle m_scissor = Toggle::Unknown;
         Toggle m_depthTest = Toggle::Unknown;
         Toggle m_depthWrite = Toggle::Unknown;
         Toggle m_blend = Toggle::Unknown;

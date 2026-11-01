@@ -2,10 +2,9 @@
 
 #include <algorithm>
 
-#include "spirv_reflect.h"
+#include "spirv_to_glsl.hpp"
 #include "utils.hpp"
 #include "crimson/core/log.hpp"
-#include "crimson/renderer/binding_conventions.hpp"
 
 namespace crimson::opengl
 {
@@ -20,6 +19,43 @@ namespace crimson::opengl
         };
 
         m_backBufferHandle = m_renderTargets.Register(rt);
+
+        const auto createSampler = [](GLint filter, GLint addressMode, bool compare)
+        {
+            GLuint sampler = 0;
+            glCreateSamplers(1, &sampler);
+            glSamplerParameteri(sampler, GL_TEXTURE_MIN_FILTER, filter == GL_LINEAR ? GL_LINEAR_MIPMAP_LINEAR : GL_NEAREST_MIPMAP_NEAREST);
+            glSamplerParameteri(sampler, GL_TEXTURE_MAG_FILTER, filter);
+            glSamplerParameteri(sampler, GL_TEXTURE_WRAP_S, addressMode);
+            glSamplerParameteri(sampler, GL_TEXTURE_WRAP_T, addressMode);
+            glSamplerParameteri(sampler, GL_TEXTURE_WRAP_R, addressMode);
+
+            if (compare)
+            {
+                glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_MODE, GL_COMPARE_REF_TO_TEXTURE);
+                glSamplerParameteri(sampler, GL_TEXTURE_COMPARE_FUNC, GL_LEQUAL);
+            }
+
+            return sampler;
+        };
+
+        m_linearWrapSampler = createSampler(GL_LINEAR, GL_REPEAT, false);
+        m_linearClampSampler = createSampler(GL_LINEAR, GL_CLAMP_TO_EDGE, false);
+        m_pointClampSampler = createSampler(GL_NEAREST, GL_CLAMP_TO_EDGE, false);
+        m_shadowCompareSampler = createSampler(GL_LINEAR, GL_CLAMP_TO_EDGE, true);
+
+        constexpr uint32_t white = 0xFFFFFFFF;
+
+        const TextureInfo defaultInfo{ .Width = 1, .Height = 1, .Format = TextureFormat::RGBA8, .Usage = TextureUsage::Sampled };
+        m_defaultTexture = CreateTexture(defaultInfo, &white);
+    }
+
+    GLuint OpenGLResourceManager::GetSharedSampler(std::string_view name) const
+    {
+        if (name == "LinearClamp") return m_linearClampSampler;
+        if (name == "PointClamp") return m_pointClampSampler;
+        if (name == "ShadowCompare") return m_shadowCompareSampler;
+        return m_linearWrapSampler;
     }
 
     VertexBufferHandle OpenGLResourceManager::CreateVertexBuffer(const VertexBufferInfo &info, const void* data)
@@ -133,12 +169,21 @@ namespace crimson::opengl
         return vao;
     }
 
-    ShaderHandle OpenGLResourceManager::CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary)
+    ShaderHandle OpenGLResourceManager::CreateShader(const ShaderBinary& binary)
     {
-        GLuint vertex = CompileSPIRVShader(GL_VERTEX_SHADER, vertexBinary, "Vertex");
+        auto shaderInterface = ReflectShaderInterface(binary);
+        if (!shaderInterface) return ShaderHandle::Invalid();
+
+        std::vector<GlslTextureUnit> textureUnits;
+
+        const auto vertexSource = TranslateSpirvToGlsl(binary.Vertex, textureUnits);
+        const auto fragmentSource = TranslateSpirvToGlsl(binary.Pixel, textureUnits);
+        if (!vertexSource || !fragmentSource) return ShaderHandle::Invalid();
+
+        GLuint vertex = CompileShader(GL_VERTEX_SHADER, *vertexSource);
         if (vertex == 0) return ShaderHandle::Invalid();
 
-        GLuint fragment = CompileSPIRVShader(GL_FRAGMENT_SHADER, fragmentBinary, "Fragment");
+        GLuint fragment = CompileShader(GL_FRAGMENT_SHADER, *fragmentSource);
         if (fragment == 0)
         {
             glDeleteShader(vertex);
@@ -168,11 +213,20 @@ namespace crimson::opengl
         glDeleteShader(fragment);
 
         OpenGLShader shader {.GLHandle = program};
+        shader.Interface = std::move(*shaderInterface);
+        shader.ObjectIndexLocation = glGetUniformLocation(program, fmt::format("{}.ObjectIndex", kDrawUniformName).c_str());
 
-        ReflectShader(shader, vertexBinary);
-        ReflectShader(shader, fragmentBinary);
+        for (const GlslTextureUnit& unit : textureUnits)
+        {
+            shader.TextureUnits.push_back({
+                .Texture = unit.Texture,
+                .Sampler = GetSharedSampler(unit.Sampler),
+                .Unit = unit.Unit,
+                .IsShadowAtlas = unit.Texture == "ShadowAtlas"
+            });
+        }
 
-        return m_shaders.Register(shader);
+        return m_shaders.Register(std::move(shader));
     }
 
     void OpenGLResourceManager::DestroyShader(ShaderHandle handle)
@@ -180,6 +234,7 @@ namespace crimson::opengl
         if (handle)
         {
             glDeleteProgram(m_shaders.Get(handle).GLHandle);
+            m_shaders.Unregister(handle);
         }
     }
 
@@ -195,13 +250,13 @@ namespace crimson::opengl
         OpenGLMaterial mat;
         mat.Shader = shaderHandle;
         mat.Settings = settings;
-        mat.UniformDataSize = shader.UBOSize;
+        mat.UniformDataSize = shader.Interface.MaterialBlockSize;
 
-        if (shader.UBOSize > 0)
+        if (mat.UniformDataSize > 0)
         {
             glCreateBuffers(1, &mat.GLBufferHandle);
-            glNamedBufferData(mat.GLBufferHandle, static_cast<GLsizeiptr>(shader.UBOSize), nullptr, GL_DYNAMIC_DRAW);
-            mat.UniformData = std::make_unique<std::byte[]>(shader.UBOSize);
+            glNamedBufferData(mat.GLBufferHandle, static_cast<GLsizeiptr>(mat.UniformDataSize), nullptr, GL_DYNAMIC_DRAW);
+            mat.UniformData = std::make_unique<std::byte[]>(mat.UniformDataSize);
         }
 
         return m_materials.Register(std::move(mat));
@@ -235,8 +290,8 @@ namespace crimson::opengl
         }
 
         const OpenGLShader& shader = m_shaders.Get(mat.Shader);
-        auto it = shader.TextureBindings.find(std::string(name));
-        if (it == shader.TextureBindings.end())
+        auto it = shader.Interface.Textures.find(std::string(name));
+        if (it == shader.Interface.Textures.end())
         {
             LOG_WARN("Texture property '{}' not found in Shader!", name);
             return;
@@ -248,7 +303,7 @@ namespace crimson::opengl
             return;
         }
 
-        mat.BoundTextures[it->second.Binding] = m_textures.Get(texture).GLHandle;
+        mat.Textures[it->first] = m_textures.Get(texture).GLHandle;
     }
 
     void OpenGLResourceManager::SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data)
@@ -262,8 +317,8 @@ namespace crimson::opengl
 
         const OpenGLShader& shader = m_shaders.Get(mat.Shader);
 
-        auto it = shader.Properties.find(std::string(name));
-        if (it == shader.Properties.end())
+        auto it = shader.Interface.Properties.find(std::string(name));
+        if (it == shader.Interface.Properties.end())
         {
             LOG_WARN("Uniform property '{}' not found in Shader!", name);
             return;
@@ -285,67 +340,6 @@ namespace crimson::opengl
 
         std::copy_n(data.data(), data.size(), mat.UniformData.get() + propInfo.Offset);
         mat.IsDirty = true;
-    }
-
-    void OpenGLResourceManager::ReflectShader(Shader& shader, std::span<const uint32_t> spirvCode)
-    {
-        SpvReflectShaderModule reflModule;
-        if (spvReflectCreateShaderModule(spirvCode.size() * sizeof(uint32_t), spirvCode.data(), &reflModule) != SPV_REFLECT_RESULT_SUCCESS)
-        {
-            LOG_ERROR("Failed to create SPIRV-Reflect module!");
-            return;
-        }
-
-        uint32_t count = 0;
-        spvReflectEnumerateDescriptorSets(&reflModule, &count, nullptr);
-        std::vector<SpvReflectDescriptorSet*> sets(count);
-        spvReflectEnumerateDescriptorSets(&reflModule, &count, sets.data());
-
-        for (auto* set : sets)
-        {
-            if (set->set != 1) continue;
-
-            for (uint32_t i = 0; i < set->binding_count; ++i)
-            {
-                const SpvReflectDescriptorBinding* binding = set->bindings[i];
-
-                if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                {
-                    if (binding->binding < kMaterialBindingStart)
-                    {
-                        LOG_WARN("MaterialBlock binding ({}) collides with globals (>= {} needed)!",
-                                  binding->binding, kMaterialBindingStart);
-                    }
-
-                    if (shader.UBOSize == 0)
-                    {
-                        shader.UBOSize = binding->block.size;
-                        shader.MaterialUboBinding = binding->binding;
-                    }
-
-                    for (uint32_t m = 0; m < binding->block.member_count; ++m)
-                    {
-                        const SpvReflectBlockVariable& member = binding->block.members[m];
-                        shader.Properties[member.name] = ShaderPropertyInfo{
-                            .Offset = member.offset,
-                            .Size   = member.size
-                        };
-                    }
-                }
-                else if (binding->descriptor_type == SPV_REFLECT_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                {
-                    if (binding->binding < kMaterialBindingStart)
-                    {
-                        LOG_WARN("Material samplers '{}' binding ({}) collides with globals (>= {} needed)!",
-                                  binding->name, binding->binding, kMaterialBindingStart);
-                    }
-
-                    shader.TextureBindings[binding->name] = ShaderTextureBinding{ binding->binding };
-                }
-            }
-        }
-
-        spvReflectDestroyShaderModule(&reflModule);
     }
 
     GLuint OpenGLResourceManager::CompileShader(GLenum type, std::string_view source)
@@ -371,26 +365,6 @@ namespace crimson::opengl
 
             glDeleteShader(shader);
             LOG_ERROR("Shader compile error: {}", log);
-        }
-
-        return shader;
-    }
-
-    GLuint OpenGLResourceManager::CompileSPIRVShader(GLenum type, std::span<const uint32_t> binary, std::string_view stageName)
-    {
-        GLuint shader = glCreateShader(type);
-
-        glShaderBinary(1, &shader, GL_SHADER_BINARY_FORMAT_SPIR_V, binary.data(), static_cast<GLsizei>(binary.size_bytes()));
-        glSpecializeShader(shader, "main", 0, nullptr, nullptr);
-
-        GLint compiled = 0;
-        glGetShaderiv(shader, GL_COMPILE_STATUS, &compiled);
-        if (!compiled)
-        {
-            char log[2048];
-            glGetShaderInfoLog(shader, sizeof(log), nullptr, log);
-            LOG_ERROR("{} Shader SPIR-V Specialization error: {}", stageName, log);
-            glDeleteShader(shader);
             return 0;
         }
 

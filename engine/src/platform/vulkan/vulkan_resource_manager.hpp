@@ -34,13 +34,13 @@ namespace crimson::vulkan
         IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) override;
         void DestroyIndexBuffer(IndexBufferHandle handle) override;
 
-        ShaderHandle CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary) override;
+        ShaderHandle CreateShader(const ShaderBinary& binary) override;
         void DestroyShader(ShaderHandle handle) override;
 
         MaterialHandle CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings) override;
         void DestroyMaterial(MaterialHandle handle) override;
 
-        void SetMaterialTexture(MaterialHandle handle, std::string_view name, TextureHandle texture);
+        void SetMaterialTexture(MaterialHandle handle, std::string_view name, TextureHandle texture) override;
 
         TextureHandle CreateTexture(const TextureInfo& info, const void* data) override;
         void DestroyTexture(TextureHandle handle) override;
@@ -52,8 +52,8 @@ namespace crimson::vulkan
         std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const override;
 
         [[nodiscard]] vk::DescriptorPool GetDescriptorPool() const { return *m_descriptorPool; }
-        [[nodiscard]] vk::DescriptorSetLayout GetGlobalSetLayout() const { return *m_globalSetLayout; }
-        [[nodiscard]] vk::Sampler GetDefaultSampler() const { return *m_defaultSampler; }
+        [[nodiscard]] vk::DescriptorSetLayout GetFrameSetLayout() const { return *m_frameSetLayout; }
+        [[nodiscard]] vk::DescriptorSetLayout GetViewSetLayout() const { return *m_viewSetLayout; }
 
         VulkanGraphicsPipeline& GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info);
     protected:
@@ -61,8 +61,9 @@ namespace crimson::vulkan
 
     private:
         void CreateDescriptorPool();
-        void CreateGlobalSetLayout();
-        void CreateDefaultSampler();
+        void CreateSamplers();
+        void CreateStandardSetLayouts();
+        void CreateDefaultTexture();
 
         void DestroyResources();
 
@@ -75,7 +76,7 @@ namespace crimson::vulkan
         TextureHandle WrapSwapchainImage(vk::Image image, vk::Format format, uint32_t width, uint32_t height);
 
         [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(std::span<const uint32_t> code) const;
-        void ReflectShader(VulkanShader& shader, std::span<const uint32_t> binary);
+        void WriteMaterialTexture(vk::DescriptorSet set, uint32_t binding, const VulkanTexture& texture) const;
 
         AllocatedBuffer CreateBufferWithData(vk::DeviceSize size, vk::BufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const;
         void CopyBuffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size) const;
@@ -83,9 +84,14 @@ namespace crimson::vulkan
 
     private:
         VulkanDevice& m_device;
-        vk::raii::DescriptorSetLayout m_globalSetLayout{ nullptr };
+        vk::raii::Sampler m_linearWrapSampler{ nullptr };
+        vk::raii::Sampler m_linearClampSampler{ nullptr };
+        vk::raii::Sampler m_pointClampSampler{ nullptr };
+        vk::raii::Sampler m_shadowCompareSampler{ nullptr };
+        vk::raii::DescriptorSetLayout m_frameSetLayout{ nullptr };
+        vk::raii::DescriptorSetLayout m_viewSetLayout{ nullptr };
         vk::raii::DescriptorPool m_descriptorPool{ nullptr };
-        vk::raii::Sampler m_defaultSampler{ nullptr };
+        TextureHandle m_defaultTexture; // what a material's textures show until they are set
         VulkanSurface m_primarySurface;
         GraphicsPipelineCache<VulkanGraphicsPipeline> m_graphicsPipelines;
     };

@@ -22,7 +22,7 @@ namespace crimson::opengl
 
         GLuint GetOrCreateVertexArray(VertexBufferHandle vertexBuffer, IndexBufferHandle indexBuffer);
 
-        ShaderHandle CreateShader(std::span<const uint32_t> vertexBinary, std::span<const uint32_t> fragmentBinary) override;
+        ShaderHandle CreateShader(const ShaderBinary& binary) override;
         void DestroyShader(ShaderHandle handle) override;
 
         MaterialHandle CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings) override;
@@ -39,14 +39,20 @@ namespace crimson::opengl
         [[nodiscard]] std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const override;
 
         [[nodiscard]] RenderTargetHandle GetBackBufferHandle() const { return m_backBufferHandle; }
+        [[nodiscard]] GLuint GetDefaultTexture() const { return m_textures.Get(m_defaultTexture).GLHandle; }
     protected:
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
     private:
-        static void ReflectShader(Shader &shader, std::span<const uint32_t> spirvCode);
         static GLuint CompileShader(GLenum type, std::string_view source);
-        static GLuint CompileSPIRVShader(GLenum type, std::span<const uint32_t> binary, std::string_view stageName);
+        [[nodiscard]] GLuint GetSharedSampler(std::string_view name) const;
     private:
         VertexArrayCache m_vertexArrays;
         RenderTargetHandle m_backBufferHandle;
+        TextureHandle m_defaultTexture; // what a material's textures show until they are set
+
+        GLuint m_linearWrapSampler = 0;
+        GLuint m_linearClampSampler = 0;
+        GLuint m_pointClampSampler = 0;
+        GLuint m_shadowCompareSampler = 0;
     };
 }

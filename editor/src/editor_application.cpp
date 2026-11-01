@@ -4,17 +4,17 @@
 #include <crimson/core/log.hpp>
 #include <crimson/core/profiler.hpp>
 #include <crimson/renderer/renderer_api.hpp>
-#include "crimson_editor/utils.hpp"
+#include <crimson/renderer/shadow_atlas.hpp>
 #include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glfw/glfw3.h>
+#include <GLFW/glfw3.h>
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include "crimson/asset_manager/importers/material_importer.hpp"
 #include "crimson/asset_manager/importers/mesh_importer.hpp"
+#include "crimson/asset_manager/importers/shader_importer.hpp"
 #include "crimson/asset_manager/importers/texture_importer.hpp"
 #include "crimson_editor/editor_resources.hpp"
-#include "crimson_editor/importers/shader_importer.hpp"
 #include "crimson_editor/ui/asset_browser_panel.hpp"
 #include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
@@ -46,8 +46,18 @@ namespace crimson::editor
         SetupLighting();
         SetupUI();
 
-	    m_mesh = m_assetManager->GetAsset<Mesh>(m_assetManager->FindByPath("meshes/stanford-bunny.obj")).value();
-	    m_mesh.Materials[0] = m_pyramidMat;
+        m_camera.SetPosition(glm::vec3(0.0f, 3.5f, 7.0f));
+        m_camera.LookAt(glm::vec3(0.0f, 0.0f, 0.0f));
+
+	    // The editor has to start without its assets too, the scene is just empty then
+	    if (const AssetID id = m_assetManager->FindByPath("meshes/stanford-bunny.obj"))
+	    {
+	        if (auto mesh = m_assetManager->GetAsset<Mesh>(id))
+	        {
+	            m_mesh = std::move(*mesh);
+	            m_mesh.Materials[0] = m_pyramidMat;
+	        }
+	    }
     }
 
     Mesh EditorApplication::CreateMesh(std::span<const std::byte> vertices, std::span<const uint32_t> indices)
@@ -55,10 +65,12 @@ namespace crimson::editor
         VertexBufferInfo vInfo{ .Layout = kVertexLayout, .Size = vertices.size_bytes(), .Usage = BufferUsage::Static };
         IndexBufferInfo  iInfo{ .Size = indices.size_bytes(), .Usage = BufferUsage::Static, .Type = IndexType::UInt32 };
 
-        return Mesh{
+        Mesh mesh{
             GpuResources().CreateVertexBuffer(vInfo, vertices.data()),
             GpuResources().CreateIndexBuffer(iInfo, indices.data())
         };
+        mesh.SubMeshes.push_back({ .FirstIndex = 0, .IndexCount = static_cast<uint32_t>(indices.size()), .MaterialSlot = 0 });
+        return mesh;
     }
 
     void EditorApplication::CreateMeshes()
@@ -107,11 +119,15 @@ namespace crimson::editor
 	    m_floorMat   = loadMaterial("materials/floor.mat");
 	    m_pyramidMat = loadMaterial("materials/pyramid.mat");
 	    m_shadowMat  = loadMaterial("materials/shadow.mat");
+
+	    m_floor.Materials   = { m_floorMat };
+	    m_pyramid.Materials = { m_pyramidMat };
 	}
 
     void EditorApplication::CreateRenderTargets()
     {
-        RenderTargetInfo shadowInfo{ .Width = 2048, .Height = 2048, .DepthFormat = TextureFormat::Depth32F };
+        const ShadowAtlasSettings atlas;
+        RenderTargetInfo shadowInfo{ .Width = atlas.AtlasSize, .Height = atlas.AtlasSize, .DepthFormat = TextureFormat::Depth32F };
         m_shadowTarget = GpuResources().CreateRenderTarget(shadowInfo);
         m_shadowDepth  = GpuResources().GetDepthAttachment(m_shadowTarget).value();
 
@@ -129,36 +145,43 @@ namespace crimson::editor
 
     void EditorApplication::SetupLighting()
     {
-        const glm::vec3 lightDir  = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f));
-        const glm::mat4 lightView = glm::lookAt(-lightDir * 30.0f, glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        const glm::mat4 lightProj = glm::orthoRH_ZO(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 60.0f);
-        m_lightViewProj = lightProj * lightView;
-
-        m_lighting.CameraPosition   = m_camera.GetPosition();
-        m_lighting.AmbientColor     = glm::vec3(0.05f);
-        m_lighting.ShadowLightIndex = 0;
-        m_lighting.ShadowViewProj   = m_lightViewProj;
+        m_lighting.AmbientColor = glm::vec3(0.05f);
 
         m_lighting.Lights.push_back(Light{
             .Type = LightType::Directional,
-            .Direction = lightDir,
+            .Direction = glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)),
             .Color = glm::vec3(1.0f),
-            .Intensity = 1.0f
+            .Intensity = 0.5f,
+            .CastsShadow = true
         });
         m_lighting.Lights.push_back(Light{
             .Type = LightType::Point,
             .Position = glm::vec3(2.0f, 3.0f, 0.0f),
             .Color = glm::vec3(1.0f, 0.5f, 0.2f),
-            .Intensity = 5.0f,
-            .Range = 8.0f
+            .Intensity = 1.5f,
+            .Range = 8.0f,
+            .CastsShadow = true
         });
         m_lighting.Lights.push_back(Light{
             .Type = LightType::Point,
             .Position = glm::vec3(-2.0f, 3.0f, 0.0f),
             .Color = glm::vec3(0.8f, 0.1f, 0.2f),
-            .Intensity = 5.0f,
+            .Intensity = 1.5f,
             .Range = 8.0f
         });
+        m_lighting.Lights.push_back(Light{
+            .Type = LightType::Spot,
+            .Position = glm::vec3(0.0f, 4.0f, 3.0f),
+            .Direction = glm::normalize(glm::vec3(0.0f, -1.0f, -0.8f)),
+            .Color = glm::vec3(0.2f, 0.5f, 1.0f),
+            .Intensity = 2.5f,
+            .Range = 12.0f,
+            .InnerConeAngle = glm::radians(20.0f),
+            .OuterConeAngle = glm::radians(35.0f),
+            .CastsShadow = true
+        });
+
+        m_lighting.Shadows = BuildShadowViews(m_lighting.Lights, ShadowAtlasSettings{});
     }
 
     void EditorApplication::SetupUI()
@@ -167,7 +190,8 @@ namespace crimson::editor
 
         m_ui->AddPanel<ui::ViewportPanel>("Scene",      imgui.GetOrCreateTextureId(m_mainColor),   16.0f / 9.0f);
         m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_shadowDepth), 1.0f);
-	    m_ui->AddPanel<ui::ViewportPanel>("Test Texture", imgui.GetOrCreateTextureId(m_testTexture), 875.0f / 350.0f);
+	    if (m_testTexture)
+	        m_ui->AddPanel<ui::ViewportPanel>("Test Texture", imgui.GetOrCreateTextureId(m_testTexture), 875.0f / 350.0f);
 	    m_ui->AddPanel<ui::ConsolePanel>();
 	    m_ui->AddPanel<ui::HierarchyPanel>();
 	    m_ui->AddPanel<ui::InspectorPanel>();
@@ -177,8 +201,8 @@ namespace crimson::editor
 
     void EditorApplication::CreateTextures()
     {
-	    AssetID id = m_assetManager->FindByPath("textures/test.jpg");
-	    m_testTexture = m_assetManager->GetAsset<TextureHandle>(id).value();
+	    if (const AssetID id = m_assetManager->FindByPath("textures/test.jpg"))
+	        m_testTexture = m_assetManager->GetAsset<TextureHandle>(id).value_or(TextureHandle::Invalid());
     }
 
     void EditorApplication::Run()
@@ -213,7 +237,8 @@ namespace crimson::editor
 
 	    m_graphicsBackend->Imgui->NewFrame();
 
-        RecordShadowPass(frame);
+        AddSceneObjects(frame);
+        RecordShadowPasses(frame);
         RecordMainPass(frame);
         RecordUIPass(frame);
 
@@ -258,17 +283,41 @@ namespace crimson::editor
         stats.LastFrameTime = now;
     }
 
-    void EditorApplication::RecordShadowPass(FrameContext& frame)
+    void EditorApplication::AddSceneObjects(FrameContext& frame)
     {
-        RenderPassInfo info{
-            .Target = m_shadowTarget,
-            .ClearFlags = ClearFlags::Depth,
-            .ViewProj = m_lightViewProj
-        };
+        constexpr float kFloorHeight = -0.5f;
+        constexpr float kMeshHeight = 1.5f;
 
-        auto& pass = frame.BeginRenderPass(info);
-        pass.Draw({ m_floor.VB,   m_floor.IB,   m_shadowMat });
-        pass.Draw({ m_pyramid.VB, m_pyramid.IB, m_shadowMat });
+        const MeshBounds& bounds = m_mesh.Bounds;
+        const float meshScale = kMeshHeight / std::max(bounds.Max.y - bounds.Min.y, 0.0001f);
+        const glm::vec3 meshCenter = (bounds.Min + bounds.Max) * 0.5f;
+
+        glm::mat4 meshTransform = glm::translate(glm::mat4(1.0f), glm::vec3(1.2f, kFloorHeight, 0.5f));
+        meshTransform = glm::rotate(meshTransform, static_cast<float>(glfwGetTime()) * 0.5f, glm::vec3(0.0f, 1.0f, 0.0f));
+        meshTransform = glm::scale(meshTransform, glm::vec3(meshScale));
+        meshTransform = glm::translate(meshTransform, glm::vec3(-meshCenter.x, -bounds.Min.y, -meshCenter.z));
+
+        m_floorObject = frame.AddObject(glm::mat4(1.0f));
+        m_pyramidObject = frame.AddObject(glm::translate(glm::mat4(1.0f), glm::vec3(-1.5f, kFloorHeight, 0.0f)));
+        m_meshObject = frame.AddObject(meshTransform);
+    }
+
+    void EditorApplication::RecordShadowPasses(FrameContext& frame)
+    {
+        for (const ShadowView& view : m_lighting.Shadows)
+        {
+            RenderPassInfo info{
+                .Target = m_shadowTarget,
+                .ClearFlags = ClearFlags::Depth,
+                .ViewProj = view.Shadow.ViewProj,
+                .Viewport = view.Viewport
+            };
+
+            auto& pass = frame.BeginRenderPass(info);
+            pass.Draw(m_floor, m_floorObject, m_shadowMat);
+            pass.Draw(m_pyramid, m_pyramidObject, m_shadowMat);
+            pass.Draw(m_mesh, m_meshObject, m_shadowMat);
+        }
     }
 
     void EditorApplication::RecordMainPass(FrameContext& frame)
@@ -282,9 +331,9 @@ namespace crimson::editor
         };
 
         auto& pass = frame.BeginRenderPass(info);
-        pass.Draw({ m_floor.VB,   m_floor.IB,   m_floorMat });
-        pass.Draw({m_pyramid.VB, m_pyramid.IB, m_pyramidMat });
-	    pass.Draw(m_mesh);
+        pass.Draw(m_floor, m_floorObject);
+        pass.Draw(m_pyramid, m_pyramidObject);
+	    pass.Draw(m_mesh, m_meshObject);
     }
 
     void EditorApplication::RecordUIPass(FrameContext& frame)

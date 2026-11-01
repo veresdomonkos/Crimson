@@ -20,7 +20,9 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/buffers.hpp
         include/crimson/renderer/camera_data.hpp
         include/crimson/renderer/shader_property_info.hpp
-        include/crimson/renderer/binding_conventions.hpp
+        include/crimson/renderer/shader_interface.hpp
+        include/crimson/renderer/shader_compiler.hpp
+        include/crimson/renderer/shadow_atlas.hpp
         include/crimson/renderer/light.hpp
         include/crimson/renderer/frame_data.hpp
 		include/crimson/graphics/graphincs_backend.hpp
@@ -32,6 +34,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/asset_manager/asset_manager.hpp
         include/crimson/asset_manager/importers/texture_importer.hpp
         include/crimson/asset_manager/importers/material_importer.hpp
+        include/crimson/asset_manager/importers/shader_importer.hpp
         include/crimson/renderer/mesh.hpp
         include/crimson/asset_manager/importers/mesh_importer.hpp
         include/crimson/core/profiler.hpp
@@ -56,6 +59,11 @@ set(ENGINE_IMPLEMENTATION
         src/platform/opengl/utils.hpp
         src/platform/opengl/vertex_array_cache.hpp
         src/platform/opengl/opengl_state_cache.hpp
+        src/platform/opengl/spirv_to_glsl.hpp
+        src/platform/opengl/spirv_to_glsl.cpp
+        src/shader/hlsl_compiler.cpp
+        src/shader/shader_reflection.hpp
+        src/shader/shader_reflection.cpp
         include/crimson/renderer/texture.hpp
         src/platform/vulkan/utils.hpp
         src/platform/opengl/opengl_imgui_backend.hpp
@@ -79,6 +87,7 @@ set(ENGINE_IMPLEMENTATION
         src/asset_manager/importers/texture_importer.cpp
         src/asset_manager/importers/material_importer.cpp
         src/asset_manager/importers/mesh_importer.cpp
+        src/asset_manager/importers/shader_importer.cpp
 )
 
 add_library(Engine STATIC
@@ -92,7 +101,7 @@ set_target_properties(Engine PROPERTIES
         CXX_EXTENSIONS OFF
 )
 
-target_include_directories(Engine PUBLIC include)
+target_include_directories(Engine PUBLIC include PRIVATE src)
 
 # vulkan_raii.hpp is very large, so only the Vulkan backend pays for it
 set(ENGINE_VULKAN_SOURCES ${ENGINE_IMPLEMENTATION})
@@ -122,6 +131,10 @@ target_link_libraries(Engine
         glad
 		Vulkan::Vulkan
         spirv-reflect-static
+        spirv-cross-glsl
+        glslang::glslang
+        glslang::SPIRV
+        glslang::glslang-default-resource-limits
         stb_image
         tinyobjloader
         GPUOpen::VulkanMemoryAllocator

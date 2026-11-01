@@ -21,5 +21,6 @@ namespace crimson
     protected:
         RenderStats m_stats;
         RenderStats m_lastStats;
+        FrameGpuData m_gpuData;
     };
 }

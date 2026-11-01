@@ -1,7 +1,7 @@
 #pragma once
-#include <crimson/asset_manager/asset_importer.hpp>
+#include "crimson/asset_manager/asset_importer.hpp"
 
-namespace crimson::editor
+namespace crimson
 {
     class ShaderImporter final : public AssetImporter
     {

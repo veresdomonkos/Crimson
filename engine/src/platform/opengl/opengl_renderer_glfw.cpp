@@ -1,4 +1,5 @@
 #include "opengl_renderer.hpp"
+#include "spirv_to_glsl.hpp"
 #include "utils.hpp"
 #include "crimson/core/log.hpp"
 #include "crimson/core/profiler.hpp"
@@ -10,27 +11,41 @@ namespace crimson::opengl
     OpenGLRenderer::OpenGLRenderer(OpenGLDevice &device, OpenGLResourceManager &resourceManager)
         :m_device(device), m_resourceManager(resourceManager)
     {
-        glCreateBuffers(1, &m_cameraUBO);
-        glNamedBufferData(m_cameraUBO, sizeof(CameraBlock), nullptr, GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_UNIFORM_BUFFER, kCameraBlockBinding, m_cameraUBO);
+        glCreateBuffers(1, &m_frameUBO);
+        glNamedBufferData(m_frameUBO, sizeof(FrameBlock), nullptr, GL_DYNAMIC_DRAW);
 
-        glCreateBuffers(1, &m_lightingUBO);
-        glNamedBufferData(m_lightingUBO, sizeof(LightingBlock), nullptr, GL_DYNAMIC_DRAW);
-        glBindBufferBase(GL_UNIFORM_BUFFER, kLightingBlockBinding, m_lightingUBO);
+        glCreateBuffers(1, &m_viewUBO);
+        glNamedBufferData(m_viewUBO, sizeof(ViewBlock), nullptr, GL_DYNAMIC_DRAW);
+
+        glCreateBuffers(1, &m_lightsBuffer);
+        glCreateBuffers(1, &m_shadowsBuffer);
+        glCreateBuffers(1, &m_objectsBuffer);
 
         TracyGpuContext;
     }
 
     OpenGLRenderer::~OpenGLRenderer()
     {
-        if (m_cameraUBO != 0) { glDeleteBuffers(1, &m_cameraUBO); m_cameraUBO = 0; }
-        if (m_lightingUBO != 0) { glDeleteBuffers(1, &m_lightingUBO); m_lightingUBO = 0; }
+        if (m_frameUBO != 0) { glDeleteBuffers(1, &m_frameUBO); m_frameUBO = 0; }
+        if (m_viewUBO != 0) { glDeleteBuffers(1, &m_viewUBO); m_viewUBO = 0; }
+        if (m_lightsBuffer != 0) { glDeleteBuffers(1, &m_lightsBuffer); m_lightsBuffer = 0; }
+        if (m_shadowsBuffer != 0) { glDeleteBuffers(1, &m_shadowsBuffer); m_shadowsBuffer = 0; }
+        if (m_objectsBuffer != 0) { glDeleteBuffers(1, &m_objectsBuffer); m_objectsBuffer = 0; }
     }
 
     void OpenGLRenderer::SetShadowMap(TextureHandle shadowMap)
     {
-        const OpenGLTexture& tex = m_resourceManager.GetTexture(shadowMap);
-        glBindTextureUnit(kShadowMapBinding, tex.GLHandle);
+        m_shadowAtlas = m_resourceManager.GetTexture(shadowMap).GLHandle;
+    }
+
+    // Replaces the buffer's storage, so a frame the GPU is still reading isn't waited on.
+    // An empty buffer can't be bound, so it stays at least one element large.
+    static void UploadStorageBuffer(GLuint buffer, const void* data, std::size_t size, std::size_t minimumSize)
+    {
+        if (size == 0)
+            glNamedBufferData(buffer, static_cast<GLsizeiptr>(minimumSize), nullptr, GL_STREAM_DRAW);
+        else
+            glNamedBufferData(buffer, static_cast<GLsizeiptr>(size), data, GL_STREAM_DRAW);
     }
 
     FrameContext OpenGLRenderer::BeginFrame(const FrameLightingData& lighting)
@@ -39,16 +54,11 @@ namespace crimson::opengl
 
         m_stats = {};
 
-        LightingBlock block{};
-        block.AmbientColor = glm::vec4(lighting.AmbientColor, 0.0f);
-        block.ShadowViewProj = lighting.ShadowViewProj;
-        block.ShadowLightIndex = lighting.ShadowLightIndex;
-        block.LightCount = std::min<uint32_t>(static_cast<uint32_t>(lighting.Lights.size()), kMaxLights);
+        m_gpuData.Build(lighting);
 
-        for (uint32_t i = 0; i < block.LightCount; ++i)
-            block.Lights[i] = lighting.Lights[i].ToGPULight();
-
-        glNamedBufferSubData(m_lightingUBO, 0, sizeof(LightingBlock), &block);
+        glNamedBufferSubData(m_frameUBO, 0, sizeof(FrameBlock), &m_gpuData.Block);
+        UploadStorageBuffer(m_lightsBuffer, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes(), sizeof(GpuLight));
+        UploadStorageBuffer(m_shadowsBuffer, m_gpuData.Shadows.data(), std::span(m_gpuData.Shadows).size_bytes(), sizeof(GpuShadow));
 
         m_frames[0].Reset();
         m_frames[0].Init(m_resourceManager.GetBackBufferHandle(), true);
@@ -64,6 +74,11 @@ namespace crimson::opengl
 
         // ImGui and resource creation may have touched GL state since the last frame
         ResetBoundState();
+
+        const std::span<const ObjectData> objects = frame.GetObjects();
+        UploadStorageBuffer(m_objectsBuffer, objects.data(), objects.size_bytes(), sizeof(ObjectData));
+
+        BindFrameResources();
 
         m_stats.Passes = static_cast<uint32_t>(frame.GetPasses().size());
 
@@ -106,14 +121,17 @@ namespace crimson::opengl
 
     void OpenGLRenderer::ExecuteBeginRenderPass(const RenderPassInfo& info)
     {
-        CameraBlock block{};
+        ViewBlock block{};
         block.ViewProj = info.ViewProj;
-        block.Position = glm::vec4(info.CameraPosition, 0.0f);
-        glNamedBufferSubData(m_cameraUBO, 0, sizeof(CameraBlock), &block);
+        block.CameraPosition = glm::vec4(info.CameraPosition, 0.0f);
+        glNamedBufferSubData(m_viewUBO, 0, sizeof(ViewBlock), &block);
 
         const auto& target = m_resourceManager.GetRenderTarget(info.Target);
         m_state.BindFramebuffer(target.FrameBufferHandle);
-        glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
+
+        const RenderRect rect = info.Viewport.value_or(RenderRect{ 0, 0, target.Width, target.Height });
+        glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
+        m_state.SetScissor(info.Viewport ? &rect : nullptr);
 
         ClearTarget(info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
 
@@ -125,6 +143,7 @@ namespace crimson::opengl
         const auto& target = m_resourceManager.GetRenderTarget(info.Target);
         m_state.BindFramebuffer(target.FrameBufferHandle);
         glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
+        m_state.SetScissor(nullptr);
 
         ClearTarget(info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
 
@@ -166,6 +185,15 @@ namespace crimson::opengl
         m_boundIndexBuffer = IndexBufferHandle::Invalid();
     }
 
+    void OpenGLRenderer::BindFrameResources()
+    {
+        m_state.BindUniformBuffer(kFrameBlockSlot, m_frameUBO);
+        m_state.BindUniformBuffer(kViewBlockSlot, m_viewUBO);
+        m_state.BindStorageBuffer(kLightsSlot, m_lightsBuffer);
+        m_state.BindStorageBuffer(kShadowsSlot, m_shadowsBuffer);
+        m_state.BindStorageBuffer(kObjectsSlot, m_objectsBuffer);
+    }
+
     void OpenGLRenderer::ExecuteDraw(const DrawInfo& info)
     {
         CRIMSON_PROFILE_FUNCTION();
@@ -174,13 +202,10 @@ namespace crimson::opengl
         OpenGLMaterial& material = m_resourceManager.GetMaterial(info.Material);
         OpenGLShader& shader = m_resourceManager.GetShader(material.Shader);
 
-        if (material.GLBufferHandle != 0 && shader.UBOSize > 0)
+        if (material.GLBufferHandle != 0 && material.IsDirty)
         {
-            if (material.IsDirty)
-            {
-                glNamedBufferSubData(material.GLBufferHandle, 0, static_cast<GLsizeiptr>(material.UniformDataSize), material.UniformData.get());
-                material.IsDirty = false;
-            }
+            glNamedBufferSubData(material.GLBufferHandle, 0, static_cast<GLsizeiptr>(material.UniformDataSize), material.UniformData.get());
+            material.IsDirty = false;
         }
 
         // Applied on every draw because clearing depth between passes can change depth write
@@ -190,19 +215,40 @@ namespace crimson::opengl
         m_state.SetDepthWrite(!transparent);
         m_state.SetCull(material.Settings.Cull);
 
+        bool programChanged = false;
+
         if (info.Material != m_boundMaterial)
         {
-            if (material.GLBufferHandle != 0 && shader.UBOSize > 0)
-                m_state.BindUniformBuffer(shader.MaterialUboBinding, material.GLBufferHandle);
+            if (material.GLBufferHandle != 0)
+                m_state.BindUniformBuffer(kMaterialBlockSlot, material.GLBufferHandle);
 
-            for (const auto& [bindingUnit, glTexture] : material.BoundTextures)
-                m_state.BindTexture(bindingUnit, glTexture);
+            for (const OpenGLShaderTextureUnit& unit : shader.TextureUnits)
+            {
+                GLuint texture = m_shadowAtlas;
 
-            if (m_state.UseProgram(shader.GLHandle))
+                if (!unit.IsShadowAtlas)
+                {
+                    const auto it = material.Textures.find(unit.Texture);
+                    texture = it != material.Textures.end() ? it->second : m_resourceManager.GetDefaultTexture();
+                }
+
+                m_state.BindTexture(unit.Unit, texture);
+                m_state.BindSampler(unit.Unit, unit.Sampler);
+            }
+
+            programChanged = m_state.UseProgram(shader.GLHandle);
+            if (programChanged)
                 ++m_stats.PipelineBinds;
 
             m_boundMaterial = info.Material;
             ++m_stats.MaterialBinds;
+        }
+
+        // Each program has its own copy of the uniform
+        if (programChanged || info.Object != m_boundObject)
+        {
+            glUniform1ui(shader.ObjectIndexLocation, info.Object);
+            m_boundObject = info.Object;
         }
 
         if (info.VertexBuffer != m_boundVertexBuffer || info.IndexBuffer != m_boundIndexBuffer)

@@ -7,13 +7,18 @@
 #include <iostream>
 #include <span>
 #include <variant>
+#include <vector>
 
+#include "frame_data.hpp"
 #include "mesh.hpp"
 #include "native_handles.hpp"
 
 namespace crimson
 {
-    constexpr uint32_t MaxRenderPasses = 16;
+    constexpr uint32_t MaxRenderPasses = 64;
+
+    // An index into the frame's object transforms. 0 is always the identity transform.
+    using ObjectId = uint32_t;
 
     struct DrawInfo
     {
@@ -22,6 +27,7 @@ namespace crimson
         MaterialHandle Material;
         uint32_t FirstIndex = 0;
         uint32_t IndexCount = 0;
+        ObjectId Object = 0;
     };
 
     class RenderPass
@@ -33,16 +39,20 @@ namespace crimson
         [[nodiscard]] const RenderPassInfo& Info() const { return m_info; }
         [[nodiscard]] std::span<const DrawInfo> GetDraws() const { return m_drawInfos;}
 
+        // A draw without a material is skipped, so a shader that failed to compile leaves the object out of the frame
         void Draw(const DrawInfo& drawInfo)
         {
-            m_drawInfos.emplace_back(drawInfo);
+            if (drawInfo.Material)
+                m_drawInfos.emplace_back(drawInfo);
         }
 
-        void Draw(const Mesh& mesh)
+        // A valid materialOverride replaces the materials of all submeshes, as a shadow pass needs
+        void Draw(const Mesh& mesh, ObjectId object = 0, MaterialHandle materialOverride = {})
         {
             for (auto subMesh : mesh.SubMeshes)
             {
-                m_drawInfos.emplace_back(mesh.VB, mesh.IB, mesh.Materials[subMesh.MaterialSlot], subMesh.FirstIndex, subMesh.IndexCount);
+                const MaterialHandle material = materialOverride ? materialOverride : mesh.Materials[subMesh.MaterialSlot];
+                Draw(DrawInfo{ mesh.VB, mesh.IB, material, subMesh.FirstIndex, subMesh.IndexCount, object });
             }
         }
 
@@ -101,6 +111,7 @@ namespace crimson
         uint32_t FrameIndex = 0;
         std::array<PassEntry, MaxRenderPasses> Passes;
         uint32_t PassCount = 0;
+        std::vector<ObjectData> Objects;
         RenderTargetHandle DefaultTarget = RenderTargetHandle::Invalid();
         bool ShouldRender = false;
     };
@@ -140,6 +151,13 @@ namespace crimson
             m_data->Passes[index] = RawPass{info};
         }
 
+        // The id stays valid for this frame and can be drawn in any of its passes
+        ObjectId AddObject(const glm::mat4& transform)
+        {
+            m_data->Objects.push_back({ transform, glm::transpose(glm::inverse(transform)) });
+            return static_cast<ObjectId>(m_data->Objects.size() - 1);
+        }
+
         [[nodiscard]] uint32_t GetIndex() const { return m_data->FrameIndex; }
         [[nodiscard]] bool ShouldRender() const { return m_data->ShouldRender; }
     private:
@@ -153,6 +171,8 @@ namespace crimson
         {
             return std::span(m_data.Passes.data(), m_data.PassCount);
         }
+
+        [[nodiscard]] std::span<const ObjectData> GetObjects() const { return m_data.Objects; }
 
         void Init(RenderTargetHandle defaultTarget, bool shouldRender)
         {
@@ -170,6 +190,8 @@ namespace crimson
             }
 
             m_data.PassCount = 0;
+            m_data.Objects.clear();
+            m_data.Objects.push_back({ glm::mat4(1.0f), glm::mat4(1.0f) });
             m_data.DefaultTarget = RenderTargetHandle::Invalid();
             m_data.ShouldRender = false;
         }

@@ -1,5 +1,7 @@
 #include "crimson/core/log.hpp"
 
+#include <cstdio>
+
 namespace crimson
 {
     void Logger::Subscribe(LogCallback callback)
@@ -25,6 +27,9 @@ namespace crimson
             case LogLevel::Warn:  fmt::print(fg(fmt::color::yellow), "{}\n", msg); break;
             case LogLevel::Error: fmt::print(fg(fmt::color::red),    "{}\n", msg); break;
         }
+
+        // stdout is fully buffered when redirected, the last messages before a crash would be lost
+        std::fflush(stdout);
 
         s_History.push_back({ level, msg });
         if (s_History.size() > kMaxHistory)

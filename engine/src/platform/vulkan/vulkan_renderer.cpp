@@ -57,90 +57,145 @@ namespace crimson::vulkan
 
     void VulkanRenderer::InitGlobals()
     {
-        vk::DeviceSize minUboAlignment =
-            m_device.GetProperties().limits.minUniformBufferOffsetAlignment;
+        const vk::raii::Device& device = m_device.GetDevice();
+        const VmaAllocator allocator = m_device.GetAllocator();
 
-        m_cameraUboAlignment =
-            (sizeof(CameraBlock) + minUboAlignment - 1) & ~(minUboAlignment - 1);
+        const vk::DeviceSize minUboAlignment = m_device.GetProperties().limits.minUniformBufferOffsetAlignment;
+        m_viewUboAlignment = (sizeof(ViewBlock) + minUboAlignment - 1) & ~(minUboAlignment - 1);
 
-        vk::DeviceSize cameraBufferSize =
-            m_cameraUboAlignment * MaxRenderPasses * MAX_FRAMES_IN_FLIGHT;
+        m_viewUBO = CreateAllocatedBuffer(allocator, m_viewUboAlignment * MaxRenderPasses * MAX_FRAMES_IN_FLIGHT, vk::BufferUsageFlagBits::eUniformBuffer, BufferMemory::HostMapped);
 
-        m_cameraUBO = CreateAllocatedBuffer(m_device.GetAllocator(), cameraBufferSize, vk::BufferUsageFlagBits::eUniformBuffer, BufferMemory::HostMapped);
-
-        if (!m_cameraUBO)
+        if (!m_viewUBO)
         {
-            LOG_ERROR("[Vulkan Renderer] Failed to create camera UBO");
+            LOG_ERROR("[Vulkan Renderer] Failed to create the view UBO");
             return;
         }
 
-        m_lightingUboAlignment =
-            (sizeof(LightingBlock) + minUboAlignment - 1) & ~(minUboAlignment - 1);
+        const vk::DescriptorSetLayout viewLayout = m_resourceManager.GetViewSetLayout();
 
-        vk::DeviceSize lightingBufferSize =
-            m_lightingUboAlignment * MAX_FRAMES_IN_FLIGHT;
+        vk::DescriptorSetAllocateInfo viewAllocInfo{};
+        viewAllocInfo.descriptorPool = m_resourceManager.GetDescriptorPool();
+        viewAllocInfo.descriptorSetCount = 1;
+        viewAllocInfo.pSetLayouts = &viewLayout;
 
-        m_lightingUBO = CreateAllocatedBuffer(m_device.GetAllocator(), lightingBufferSize, vk::BufferUsageFlagBits::eUniformBuffer, BufferMemory::HostMapped);
+        m_viewDescriptorSet = std::move(device.allocateDescriptorSets(viewAllocInfo).front());
 
-        if (!m_lightingUBO)
+        vk::DescriptorBufferInfo viewBufferInfo{};
+        viewBufferInfo.buffer = m_viewUBO.Get();
+        viewBufferInfo.offset = 0;
+        viewBufferInfo.range = sizeof(ViewBlock);
+
+        vk::WriteDescriptorSet viewWrite{};
+        viewWrite.dstSet = *m_viewDescriptorSet;
+        viewWrite.dstBinding = kViewBlockBinding;
+        viewWrite.descriptorType = vk::DescriptorType::eUniformBufferDynamic;
+        viewWrite.descriptorCount = 1;
+        viewWrite.pBufferInfo = &viewBufferInfo;
+
+        device.updateDescriptorSets(viewWrite, nullptr);
+
+        const vk::DescriptorSetLayout frameLayout = m_resourceManager.GetFrameSetLayout();
+
+        for (FrameResources& resources : m_frameResources)
         {
-            LOG_ERROR("[Vulkan Renderer] Failed to create lighting UBO");
-            return;
+            vk::DescriptorSetAllocateInfo frameAllocInfo{};
+            frameAllocInfo.descriptorPool = m_resourceManager.GetDescriptorPool();
+            frameAllocInfo.descriptorSetCount = 1;
+            frameAllocInfo.pSetLayouts = &frameLayout;
+
+            resources.DescriptorSet = std::move(device.allocateDescriptorSets(frameAllocInfo).front());
+
+            resources.FrameBlockBuffer = CreateAllocatedBuffer(allocator, sizeof(FrameBlock), vk::BufferUsageFlagBits::eUniformBuffer, BufferMemory::HostMapped);
+
+            if (!resources.FrameBlockBuffer)
+            {
+                LOG_ERROR("[Vulkan Renderer] Failed to create the frame UBO");
+                return;
+            }
+
+            vk::DescriptorBufferInfo frameBufferInfo{};
+            frameBufferInfo.buffer = resources.FrameBlockBuffer.Get();
+            frameBufferInfo.offset = 0;
+            frameBufferInfo.range = sizeof(FrameBlock);
+
+            vk::WriteDescriptorSet frameWrite{};
+            frameWrite.dstSet = *resources.DescriptorSet;
+            frameWrite.dstBinding = kFrameBlockBinding;
+            frameWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
+            frameWrite.descriptorCount = 1;
+            frameWrite.pBufferInfo = &frameBufferInfo;
+
+            device.updateDescriptorSets(frameWrite, nullptr);
+
+            // Every binding has to point at something before the first frame, whatever it ends up holding
+            constexpr std::size_t kInitialStorageSize = 16 * 1024;
+            UploadStorageBuffer(resources, resources.Lights, kLightsBinding, nullptr, kInitialStorageSize);
+            UploadStorageBuffer(resources, resources.Shadows, kShadowsBinding, nullptr, kInitialStorageSize);
+            UploadStorageBuffer(resources, resources.Objects, kObjectsBinding, nullptr, kInitialStorageSize);
+        }
+    }
+
+    // Only call this for a frame whose fence has been waited on, as it can free the buffer the frame used last
+    void VulkanRenderer::UploadStorageBuffer(const FrameResources& resources, FrameStorageBuffer& storage, uint32_t binding, const void* data, std::size_t size)
+    {
+        if (size > storage.Capacity)
+        {
+            vk::DeviceSize capacity = std::max<vk::DeviceSize>(storage.Capacity, 1);
+            while (capacity < size)
+                capacity *= 2;
+
+            AllocatedBuffer buffer = CreateAllocatedBuffer(m_device.GetAllocator(), capacity, vk::BufferUsageFlagBits::eStorageBuffer, BufferMemory::HostMapped);
+
+            if (!buffer)
+            {
+                LOG_ERROR("[Vulkan Renderer] Failed to grow a storage buffer to {} bytes", capacity);
+                return;
+            }
+
+            storage.Buffer = std::move(buffer);
+            storage.Capacity = capacity;
+
+            vk::DescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = storage.Buffer.Get();
+            bufferInfo.offset = 0;
+            bufferInfo.range = VK_WHOLE_SIZE;
+
+            vk::WriteDescriptorSet write{};
+            write.dstSet = *resources.DescriptorSet;
+            write.dstBinding = binding;
+            write.descriptorType = vk::DescriptorType::eStorageBuffer;
+            write.descriptorCount = 1;
+            write.pBufferInfo = &bufferInfo;
+
+            m_device.GetDevice().updateDescriptorSets(write, nullptr);
         }
 
-        const vk::DescriptorSetLayout globalLayout = m_resourceManager.GetGlobalSetLayout();
-
-        vk::DescriptorSetAllocateInfo allocInfo{};
-        allocInfo.descriptorPool = m_resourceManager.GetDescriptorPool();
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &globalLayout;
-
-        m_globalDescriptorSet = std::move(m_device.GetDevice().allocateDescriptorSets(allocInfo).front());
-
-        vk::DescriptorBufferInfo cameraBufferInfo{};
-        cameraBufferInfo.buffer = m_cameraUBO.Get();
-        cameraBufferInfo.offset = 0;
-        cameraBufferInfo.range = sizeof(CameraBlock);
-
-        vk::DescriptorBufferInfo lightingBufferInfo{};
-        lightingBufferInfo.buffer = m_lightingUBO.Get();
-        lightingBufferInfo.offset = 0;
-        lightingBufferInfo.range = sizeof(LightingBlock);
-
-        std::array<vk::WriteDescriptorSet, 2> writes{};
-
-        writes[0].dstSet = *m_globalDescriptorSet;
-        writes[0].dstBinding = kCameraBlockBinding;
-        writes[0].descriptorType = vk::DescriptorType::eUniformBufferDynamic;
-        writes[0].descriptorCount = 1;
-        writes[0].pBufferInfo = &cameraBufferInfo;
-
-        writes[1].dstSet = *m_globalDescriptorSet;
-        writes[1].dstBinding = kLightingBlockBinding;
-        writes[1].descriptorType = vk::DescriptorType::eUniformBufferDynamic;
-        writes[1].descriptorCount = 1;
-        writes[1].pBufferInfo = &lightingBufferInfo;
-
-        m_device.GetDevice().updateDescriptorSets(writes, nullptr);
+        if (data)
+            std::memcpy(storage.Buffer.Mapped(), data, size);
     }
 
     void VulkanRenderer::SetShadowMap(TextureHandle shadowMap)
     {
         const VulkanTexture& tex = m_resourceManager.GetTexture(shadowMap);
 
+        // Called between frames, so frames still in flight must finish before their sets change
+        m_device.WaitIdle();
+
         vk::DescriptorImageInfo imageInfo{};
-        imageInfo.sampler = m_resourceManager.GetDefaultSampler();
         imageInfo.imageView = *tex.View;
         imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-        vk::WriteDescriptorSet write{};
-        write.dstSet = *m_globalDescriptorSet;
-        write.dstBinding = kShadowMapBinding;
-        write.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        write.descriptorCount = 1;
-        write.pImageInfo = &imageInfo;
+        for (const FrameResources& resources : m_frameResources)
+        {
+            vk::WriteDescriptorSet write{};
+            write.dstSet = *resources.DescriptorSet;
+            write.dstBinding = kShadowAtlasBinding;
+            write.descriptorType = vk::DescriptorType::eSampledImage;
+            write.descriptorCount = 1;
+            write.pImageInfo = &imageInfo;
 
-        m_device.GetDevice().updateDescriptorSets(write, nullptr);
+            m_device.GetDevice().updateDescriptorSets(write, nullptr);
+        }
     }
 
     void VulkanRenderer::TransitionImage(const vk::raii::CommandBuffer& cmd, VulkanTexture& texture, vk::ImageLayout newLayout)
@@ -222,21 +277,21 @@ namespace crimson::vulkan
     {
         VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(info.Target);
 
-        if (m_cameraUBO)
+        if (m_viewUBO)
         {
-            CameraBlock block{};
+            ViewBlock block{};
             block.ViewProj = info.ViewProj;
-            block.Position = glm::vec4(info.CameraPosition, 0.0f);
+            block.CameraPosition = glm::vec4(info.CameraPosition, 0.0f);
 
             uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
-            vk::DeviceSize offset = globalPassIndex * m_cameraUboAlignment;
-            std::memcpy(static_cast<char*>(m_cameraUBO.Mapped()) + offset, &block, sizeof(CameraBlock));
+            vk::DeviceSize offset = globalPassIndex * m_viewUboAlignment;
+            std::memcpy(static_cast<char*>(m_viewUBO.Mapped()) + offset, &block, sizeof(ViewBlock));
         }
 
-        BeginRenderingOnTarget(cmdBuffer, rt, info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
+        BeginRenderingOnTarget(cmdBuffer, rt, info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil, info.Viewport);
 
-        // The camera's dynamic offset is different for every pass
-        m_bound.GlobalsBound = false;
+        // The view block's dynamic offset is different for every pass
+        m_bound.ViewSetBound = false;
     }
 
     void VulkanRenderer::ExecuteEndRenderPass(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt)
@@ -262,7 +317,7 @@ namespace crimson::vulkan
         const RawPassInfo& info = pass.Info();
         VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(info.Target);
 
-        BeginRenderingOnTarget(cmdBuffer, rt, info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
+        BeginRenderingOnTarget(cmdBuffer, rt, info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil, std::nullopt);
 
         NativeFrameHandles handles{};
         handles.Device = static_cast<VkDevice>(*m_device.GetDevice());
@@ -277,7 +332,7 @@ namespace crimson::vulkan
     }
 
     void VulkanRenderer::BeginRenderingOnTarget(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget &rt, ClearFlags flags,
-        const glm::vec4 &clearColorValue, float clearDepthValue, uint32_t clearStencilValue)
+        const glm::vec4 &clearColorValue, float clearDepthValue, uint32_t clearStencilValue, const std::optional<RenderRect>& area)
     {
         const bool clearColor = HasClearFlag(flags, ClearFlags::Color);
         const bool clearDepth = HasClearFlag(flags, ClearFlags::Depth);
@@ -323,7 +378,9 @@ namespace crimson::vulkan
         }
 
         vk::RenderingInfo rendering{};
-        rendering.renderArea = vk::Rect2D{ vk::Offset2D{ 0, 0 }, vk::Extent2D{ rt.Width, rt.Height } };
+        // A load op clear only touches the render area, so a pass can clear just its part of the target
+        const RenderRect rect = area.value_or(RenderRect{ 0, 0, rt.Width, rt.Height });
+        rendering.renderArea = vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } };
         rendering.layerCount = 1;
         rendering.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
         rendering.pColorAttachments = colorAttachments.data();
@@ -332,7 +389,7 @@ namespace crimson::vulkan
 
         cmdBuffer.beginRendering(rendering);
 
-        cmdBuffer.setViewport(0, vk::Viewport{ 0.0f, 0.0f, static_cast<float>(rt.Width), static_cast<float>(rt.Height), 0.0f, 1.0f });
+        cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
         cmdBuffer.setScissor(0, rendering.renderArea);
     }
 
@@ -368,8 +425,8 @@ namespace crimson::vulkan
             ++m_stats.PipelineBinds;
         }
 
-        // Each shader has its own layout. Set 0 is the same in all of them and stays valid,
-        // but set 1 differs, so a new layout invalidates the bound material.
+        // Each shader has its own layout. The frame and view sets and the push constant are the same
+        // in all of them and stay valid, but the material set differs, so a new layout invalidates it.
         if (m_bound.Layout != pipeline.Layout)
         {
             m_bound.Layout = pipeline.Layout;
@@ -394,23 +451,33 @@ namespace crimson::vulkan
             m_bound.IndexBuffer = indexBufferHandle;
         }
 
-        if (!m_bound.GlobalsBound)
+        if (!m_bound.FrameSetBound)
         {
-            uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
-            const std::array<uint32_t, 2> dynamicOffsets = {
-                static_cast<uint32_t>(globalPassIndex * m_cameraUboAlignment),
-                static_cast<uint32_t>(m_currentFrameIndex * m_lightingUboAlignment)
-            };
+            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, kFrameSpace, *m_frameResources[m_currentFrameIndex].DescriptorSet, nullptr);
+            m_bound.FrameSetBound = true;
+        }
 
-            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, 0, *m_globalDescriptorSet, dynamicOffsets);
-            m_bound.GlobalsBound = true;
+        if (!m_bound.ViewSetBound)
+        {
+            const uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
+            const uint32_t dynamicOffset = static_cast<uint32_t>(globalPassIndex * m_viewUboAlignment);
+
+            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, kViewSpace, *m_viewDescriptorSet, dynamicOffset);
+            m_bound.ViewSetBound = true;
         }
 
         if (m_bound.MaterialSet != *material.DescriptorSet)
         {
-            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, 1, *material.DescriptorSet, nullptr);
+            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, kMaterialSpace, *material.DescriptorSet, nullptr);
             m_bound.MaterialSet = *material.DescriptorSet;
             ++m_stats.MaterialBinds;
+        }
+
+        if (m_bound.Object != draw.Object)
+        {
+            const DrawData drawData{ draw.Object };
+            cmdBuffer.pushConstants<DrawData>(pipeline.Layout, vk::ShaderStageFlagBits::eVertex, 0, drawData);
+            m_bound.Object = draw.Object;
         }
 
         const uint32_t total = static_cast<uint32_t>(indexBuffer.Size / Index::Size(indexBuffer.Type));
@@ -451,20 +518,13 @@ namespace crimson::vulkan
             (void)device.waitForFences(*sync.InFlightFence, VK_TRUE, UINT64_MAX);
         }
 
-        if (m_lightingUBO)
-        {
-            LightingBlock block{};
-            block.AmbientColor = glm::vec4(lighting.AmbientColor, 0.0f);
-            block.ShadowViewProj = lighting.ShadowViewProj;
-            block.ShadowLightIndex = lighting.ShadowLightIndex;
-            block.LightCount = std::min<uint32_t>(static_cast<uint32_t>(lighting.Lights.size()), kMaxLights);
+        m_gpuData.Build(lighting);
 
-            for (uint32_t i = 0; i < block.LightCount; ++i)
-                block.Lights[i] = lighting.Lights[i].ToGPULight();
+        FrameResources& resources = m_frameResources[m_currentFrameIndex];
 
-            vk::DeviceSize offset = m_currentFrameIndex * m_lightingUboAlignment;
-            std::memcpy(static_cast<char*>(m_lightingUBO.Mapped()) + offset, &block, sizeof(LightingBlock));
-        }
+        std::memcpy(resources.FrameBlockBuffer.Mapped(), &m_gpuData.Block, sizeof(FrameBlock));
+        UploadStorageBuffer(resources, resources.Lights, kLightsBinding, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes());
+        UploadStorageBuffer(resources, resources.Shadows, kShadowsBinding, m_gpuData.Shadows.data(), std::span(m_gpuData.Shadows).size_bytes());
 
         uint32_t imageIndex = 0;
         vk::Result result = vk::Result::eSuccess;
@@ -514,6 +574,11 @@ namespace crimson::vulkan
         FrameSync& sync = m_frameSyncs[frameContext.GetIndex()];
         const vk::raii::CommandBuffer& cmdBuffer = sync.CommandBuffer;
         [[maybe_unused]] const VkCommandBuffer tracyCmdBuffer = static_cast<VkCommandBuffer>(*cmdBuffer);
+
+        // Nothing has bound this frame's set yet, so the buffer can still grow
+        FrameResources& resources = m_frameResources[frameContext.GetIndex()];
+        const std::span<const ObjectData> objects = frame.GetObjects();
+        UploadStorageBuffer(resources, resources.Objects, kObjectsBinding, objects.data(), objects.size_bytes());
 
         uint32_t passIndex = 0;
         m_stats.Passes = static_cast<uint32_t>(frame.GetPasses().size());

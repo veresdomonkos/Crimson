@@ -1,0 +1,41 @@
+#pragma once
+#include <cstdint>
+#include <vector>
+
+namespace crimson
+{
+    struct ShaderBinary
+    {
+        std::vector<uint32_t> Vertex;
+        std::vector<uint32_t> Pixel;
+    };
+
+    // Resources are grouped by how often they change, each group is an HLSL space and a descriptor set.
+    // assets/shaders/crimson/bindings.hlsli declares the same layout for the shaders.
+    constexpr uint32_t kFrameSpace    = 0;
+    constexpr uint32_t kViewSpace     = 1;
+    constexpr uint32_t kMaterialSpace = 2;
+
+    // HLSL numbers b, t and s registers separately but SPIR-V has one range, the compiler shifts them apart
+    constexpr uint32_t kTextureBindingShift = 16;
+    constexpr uint32_t kSamplerBindingShift = 32;
+    constexpr uint32_t kStorageBindingShift = 48;
+
+    constexpr uint32_t kFrameBlockBinding        = 0;
+    constexpr uint32_t kLightsBinding            = kTextureBindingShift + 0;
+    constexpr uint32_t kShadowsBinding           = kTextureBindingShift + 1;
+    constexpr uint32_t kObjectsBinding           = kTextureBindingShift + 2;
+    constexpr uint32_t kShadowAtlasBinding       = kTextureBindingShift + 3;
+    constexpr uint32_t kLinearWrapBinding        = kSamplerBindingShift + 0;
+    constexpr uint32_t kLinearClampBinding       = kSamplerBindingShift + 1;
+    constexpr uint32_t kPointClampBinding        = kSamplerBindingShift + 2;
+    constexpr uint32_t kShadowCompareBinding     = kSamplerBindingShift + 3;
+
+    constexpr uint32_t kViewBlockBinding = 0;
+
+    // The per-draw push constant
+    struct DrawData
+    {
+        uint32_t ObjectIndex = 0;
+    };
+}

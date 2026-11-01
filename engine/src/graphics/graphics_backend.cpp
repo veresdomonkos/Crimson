@@ -1,5 +1,4 @@
 // graphics_backend_vulkan.cpp
-#include <io.h>
 
 #include "crimson/graphics/graphincs_backend.hpp"
 #include "../platform/vulkan/vulkan_device.hpp"

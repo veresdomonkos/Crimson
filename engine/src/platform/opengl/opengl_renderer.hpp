@@ -24,9 +24,14 @@ namespace crimson::opengl
         void ExecuteBeginRawPass(const RawPassInfo& info);
         void ClearTarget(ClearFlags flags, const glm::vec4& color, float depth, uint32_t stencil);
         void ResetBoundState();
+        void BindFrameResources();
     private:
-        GLuint m_cameraUBO = 0;
-        GLuint m_lightingUBO = 0;
+        GLuint m_frameUBO = 0;
+        GLuint m_viewUBO = 0;
+        GLuint m_lightsBuffer = 0;
+        GLuint m_shadowsBuffer = 0;
+        GLuint m_objectsBuffer = 0;
+        GLuint m_shadowAtlas = 0;
 
         OpenGLDevice& m_device;
         OpenGLResourceManager& m_resourceManager;
@@ -37,5 +42,6 @@ namespace crimson::opengl
         MaterialHandle m_boundMaterial;
         VertexBufferHandle m_boundVertexBuffer;
         IndexBufferHandle m_boundIndexBuffer;
+        ObjectId m_boundObject = 0;
     };
 }
