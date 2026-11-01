@@ -2,6 +2,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <cstdlib>
 #include <cstring>
 #include <set>
 #include <stdexcept>
@@ -129,8 +130,13 @@ namespace crimson::vulkan
 
         std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
 
+        const bool syncValidation = m_validationEnabled && std::getenv("CRIMSON_VK_SYNC_VALIDATION") != nullptr;
+
         if (m_validationEnabled)
             extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+
+        if (syncValidation)
+            extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
 
         VkInstanceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -141,6 +147,12 @@ namespace crimson::vulkan
         std::vector<const char*> layers;
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
 
+        const VkValidationFeatureEnableEXT enabledFeature = VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT;
+        VkValidationFeaturesEXT validationFeatures{};
+        validationFeatures.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
+        validationFeatures.enabledValidationFeatureCount = 1;
+        validationFeatures.pEnabledValidationFeatures = &enabledFeature;
+
         if (m_validationEnabled)
         {
             layers.push_back(s_validationLayer);
@@ -150,6 +162,9 @@ namespace crimson::vulkan
 
             PopulateDebugMessengerCreateInfo(debugCreateInfo);
             createInfo.pNext = &debugCreateInfo;
+
+            if (syncValidation)
+                debugCreateInfo.pNext = &validationFeatures;
         }
 
         if (vkCreateInstance(&createInfo, nullptr, &m_instance) != VK_SUCCESS)
