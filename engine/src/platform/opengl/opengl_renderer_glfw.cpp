@@ -37,6 +37,8 @@ namespace crimson::opengl
     {
         CRIMSON_PROFILE_FUNCTION();
 
+        m_stats = {};
+
         auto* window = m_device.GetPrimaryWindow();
         glfwMakeContextCurrent(window);
 
@@ -64,15 +66,14 @@ namespace crimson::opengl
         auto* window = m_device.GetPrimaryWindow();
         glfwMakeContextCurrent(window);
 
-        size_t drawCalls = 0;
+        m_stats.Passes = static_cast<uint32_t>(frame.GetPasses().size());
+
         for (const auto& entry : frame.GetPasses())
         {
             if (const auto* materialPass = std::get_if<RenderPass>(&entry))
             {
                 CRIMSON_PROFILE_SCOPE("Render Pass");
                 TracyGpuZone("Render Pass");
-
-                drawCalls += materialPass->GetDraws().size();
 
                 ExecuteBeginRenderPass(materialPass->Info());
                 for (const auto& draw : materialPass->GetDraws())
@@ -87,14 +88,17 @@ namespace crimson::opengl
             }
         }
 
-        CRIMSON_PROFILE_PLOT("Draw Calls", drawCalls);
+        CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
 
         {
             CRIMSON_PROFILE_SCOPE("Swap Buffers");
+            ScopedWaitTimer waitTimer(m_stats);
             glfwSwapBuffers(window);
         }
 
         TracyGpuCollect;
+
+        m_lastStats = m_stats;
     }
 
     void OpenGLRenderer::ExecuteBeginRenderPass(const RenderPassInfo& info)
@@ -205,5 +209,8 @@ namespace crimson::opengl
         const auto offset = reinterpret_cast<const void*>(static_cast<uintptr_t>(info.FirstIndex) * Index::Size(indexBuffer.Type));
 
         glDrawElements(GL_TRIANGLES, count, utils::GetGLIndexType(indexBuffer.Type), offset);
+
+        ++m_stats.DrawCalls;
+        m_stats.Triangles += count / 3;
     }
 }

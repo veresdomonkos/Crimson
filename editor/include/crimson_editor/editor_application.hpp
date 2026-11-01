@@ -6,6 +6,7 @@
 #include <crimson/graphics/graphincs_backend.hpp>
 #include <crimson/asset_manager/asset_manager.hpp>
 
+#include "crimson_editor/frame_stats.hpp"
 #include "crimson_editor/ui/editor_ui.hpp"
 
 namespace crimson::editor
@@ -30,6 +31,7 @@ namespace crimson::editor
 	    void RecordShadowPass(FrameContext& frame);
 	    void RecordMainPass(FrameContext& frame);
 	    void RecordUIPass(FrameContext& frame);
+	    void UpdateFrameStats();
 
 	    // --- Input / events ---
 	    void HandleMove(float deltaTime);
@@ -41,6 +43,8 @@ namespace crimson::editor
 	private:
 	    bool   m_running;
 	    double m_lastTime;
+	    RendererAPIType m_rendererType;
+	    FrameStats m_frameStats;
 
 	    std::unique_ptr<Window>          m_window;
 	    std::unique_ptr<GraphicsBackend> m_graphicsBackend;

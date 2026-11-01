@@ -5,6 +5,7 @@
 #include <crimson/core/profiler.hpp>
 #include <crimson/renderer/renderer_api.hpp>
 #include "crimson_editor/utils.hpp"
+#include <algorithm>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glfw/glfw3.h>
 
@@ -18,6 +19,7 @@
 #include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 #include "crimson_editor/ui/inspector_panel.hpp"
+#include "crimson_editor/ui/stats_panel.hpp"
 #include "crimson_editor/ui/viewport_panel.hpp"
 #include "glm/gtx/quaternion.hpp"
 
@@ -25,7 +27,7 @@
 namespace crimson::editor
 {
 	EditorApplication::EditorApplication(RendererAPIType rendererType)
-        : m_running(true), m_lastTime(0.0)
+        : m_running(true), m_lastTime(0.0), m_rendererType(rendererType)
     {
         m_window          = Window::Create(rendererType, WindowData{ "Crimson Editor", 1280, 720, BIND_FN(OnEvent) });
         m_graphicsBackend = GraphicsBackend::Create(rendererType, *m_window);
@@ -170,6 +172,7 @@ namespace crimson::editor
 	    m_ui->AddPanel<ui::HierarchyPanel>();
 	    m_ui->AddPanel<ui::InspectorPanel>();
 	    m_ui->AddPanel<ui::AssetBrowserPanel>();
+	    m_ui->AddPanel<ui::StatsPanel>(m_frameStats, m_rendererType);
     }
 
     void EditorApplication::CreateTextures()
@@ -215,6 +218,44 @@ namespace crimson::editor
         RecordUIPass(frame);
 
         renderer.EndFrame(frame);
+
+        UpdateFrameStats();
+    }
+
+    void EditorApplication::UpdateFrameStats()
+    {
+        const double now = glfwGetTime();
+        FrameStats& stats = m_frameStats;
+
+        stats.Render = m_graphicsBackend->Renderer->GetStats();
+
+        if (stats.LastFrameTime > 0.0)
+        {
+            const double frameSeconds = now - stats.LastFrameTime;
+
+            stats.WindowSeconds += frameSeconds;
+            stats.WindowWaitSeconds += stats.Render.WaitSeconds;
+            stats.WindowWorstSeconds = std::max(stats.WindowWorstSeconds, frameSeconds);
+            ++stats.WindowFrames;
+
+            if (stats.WindowSeconds >= 1.0)
+            {
+                const double frames = stats.WindowFrames;
+
+                stats.AverageFps = static_cast<float>(frames / stats.WindowSeconds);
+                stats.AverageFrameMs = static_cast<float>(stats.WindowSeconds / frames * 1000.0);
+                stats.WorstFrameMs = static_cast<float>(stats.WindowWorstSeconds * 1000.0);
+                stats.AverageWaitMs = static_cast<float>(stats.WindowWaitSeconds / frames * 1000.0);
+                stats.AverageCpuMs = stats.AverageFrameMs - stats.AverageWaitMs;
+
+                stats.WindowSeconds = 0.0;
+                stats.WindowWaitSeconds = 0.0;
+                stats.WindowWorstSeconds = 0.0;
+                stats.WindowFrames = 0;
+            }
+        }
+
+        stats.LastFrameTime = now;
     }
 
     void EditorApplication::RecordShadowPass(FrameContext& frame)

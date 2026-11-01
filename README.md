@@ -14,7 +14,7 @@ Crimson is a small, data-driven real-time rendering engine written in modern C++
 - **Shader reflection** - material properties and texture bindings are discovered from SPIR-V with SPIRV-Reflect; shaders only declare what they use.
 - **Lighting** - directional, point and spot lights in a single GPU light array (glTF `KHR_lights_punctual`-style), plus a shadow-mapped directional light.
 - **Asset manager** - importer-based pipeline for textures, shaders, materials and meshes, with metadata and a scanned `assets/` directory.
-- **ImGui docking editor** - viewport panels that display engine render targets, console, hierarchy, inspector and asset browser panels, with a custom crimson-accented theme.
+- **ImGui docking editor** - viewport panels that display engine render targets, console, hierarchy, inspector, asset browser and stats panels, with a custom crimson-accented theme.
 
 ## Architecture
 
@@ -101,6 +101,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 
 - **Viewport** - displays a render target texture (scene, shadow map, ...).
 - **Hierarchy / Inspector / Asset Browser / Console**
+- **Stats** - FPS, frame, CPU and wait times, draw calls, triangles and passes.
 
 ## Project layout
 

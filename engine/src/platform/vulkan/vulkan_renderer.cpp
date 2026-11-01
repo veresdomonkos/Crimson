@@ -362,12 +362,16 @@ namespace crimson::vulkan
         const uint32_t total = static_cast<uint32_t>(indexBuffer.Size / Index::Size(indexBuffer.Type));
         const uint32_t indexCount = draw.IndexCount ? draw.IndexCount : total;
         cmdBuffer.drawIndexed(indexCount, 1, draw.FirstIndex, 0, 0);
+
+        ++m_stats.DrawCalls;
+        m_stats.Triangles += indexCount / 3;
     }
 
     FrameContext VulkanRenderer::BeginFrame(const FrameLightingData& lighting)
     {
         CRIMSON_PROFILE_FUNCTION();
 
+        m_stats = {};
         m_frames[m_currentFrameIndex].Reset();
 
         uint32_t windowWidth = m_device.GetPrimaryWindow().Width();
@@ -389,6 +393,7 @@ namespace crimson::vulkan
 
         {
             CRIMSON_PROFILE_SCOPE("Wait For Frame Fence");
+            ScopedWaitTimer waitTimer(m_stats);
             (void)device.waitForFences(*sync.InFlightFence, VK_TRUE, UINT64_MAX);
         }
 
@@ -413,6 +418,7 @@ namespace crimson::vulkan
         try
         {
             CRIMSON_PROFILE_SCOPE("Acquire Swapchain Image");
+            ScopedWaitTimer waitTimer(m_stats);
             const auto acquired = surface.Swapchain.acquireNextImage(UINT64_MAX, *sync.ImageAvailableSemaphore);
             result = acquired.result;
             imageIndex = acquired.value;
@@ -455,15 +461,14 @@ namespace crimson::vulkan
         [[maybe_unused]] const VkCommandBuffer tracyCmdBuffer = static_cast<VkCommandBuffer>(*cmdBuffer);
 
         uint32_t passIndex = 0;
-        size_t drawCalls = 0;
+        m_stats.Passes = static_cast<uint32_t>(frame.GetPasses().size());
+
         for (const auto& entry : frame.GetPasses())
         {
             if (const auto* materialPass = std::get_if<RenderPass>(&entry))
             {
                 CRIMSON_PROFILE_SCOPE("Render Pass");
                 TracyVkZone(m_tracyContext, tracyCmdBuffer, "Render Pass");
-
-                drawCalls += materialPass->GetDraws().size();
 
                 const RenderPassInfo& passInfo = materialPass->Info();
                 VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(passInfo.Target);
@@ -483,7 +488,7 @@ namespace crimson::vulkan
             }
         }
 
-        CRIMSON_PROFILE_PLOT("Draw Calls", drawCalls);
+        CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
 
         cmdBuffer.end();
 
@@ -523,6 +528,7 @@ namespace crimson::vulkan
         vk::Result result;
         {
             CRIMSON_PROFILE_SCOPE("Queue Present");
+            ScopedWaitTimer waitTimer(m_stats);
             result = queue.presentKHR(present);
         }
 
@@ -531,6 +537,7 @@ namespace crimson::vulkan
             surface.IsDirty = true;
         }
 
+        m_lastStats = m_stats;
         m_currentFrameIndex = (m_currentFrameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 }
