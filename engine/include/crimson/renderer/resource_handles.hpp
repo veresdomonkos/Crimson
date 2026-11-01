@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstddef>
 #include "crimson/renderer/resource_tags.hpp"
 
 namespace crimson

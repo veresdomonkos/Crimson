@@ -1,6 +1,9 @@
 #include "crimson_editor/ui/console_panel.hpp"
 
+#include <chrono>
+#include <ctime>
 #include <iomanip>
+#include <sstream>
 
 namespace crimson::editor::ui
 {

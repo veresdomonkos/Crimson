@@ -6,6 +6,7 @@
 #include <cstring>
 #include <stdexcept>
 #include <vector>
+#include <utility>
 
 #include "crimson/core/log.hpp"
 #include "crimson/core/window.hpp"

@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <new>
 #include <glad/glad.h>
 
 #include "crimson/renderer/buffers.hpp"

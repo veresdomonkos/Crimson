@@ -1,6 +1,7 @@
 #pragma once
 
 #include <span>
+#include <string_view>
 
 #include "crimson/renderer/buffers.hpp"
 #include "crimson/renderer/material_settings.hpp"

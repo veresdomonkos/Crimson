@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 #include <glm/glm.hpp>
 
 #include "glm/ext/matrix_clip_space.hpp"

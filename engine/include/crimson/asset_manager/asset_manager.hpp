@@ -2,6 +2,8 @@
 #include <iostream>
 #include <memory>
 #include <unordered_map>
+#include <typeinfo>
+#include <utility>
 #include "crimson/asset_manager/asset_importer.hpp"
 #include "crimson/core/log.hpp"
 #include "crimson/graphics/graphics_device.hpp"

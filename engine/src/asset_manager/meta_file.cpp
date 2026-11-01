@@ -1,5 +1,6 @@
 #include "crimson/asset_manager/meta_file.hpp"
 #include <fstream>
+#include <exception>
 #include "crimson/core/log.hpp"
 
 namespace crimson::meta

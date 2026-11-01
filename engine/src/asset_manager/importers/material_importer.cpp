@@ -1,6 +1,7 @@
 #include "crimson/asset_manager/importers/material_importer.hpp"
 
 #include <fstream>
+#include <exception>
 #include <glm/glm.hpp>
 
 #include "crimson/asset_manager/asset_manager.hpp"

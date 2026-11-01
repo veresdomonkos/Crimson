@@ -1,6 +1,7 @@
 #include "opengl_resource_manager.hpp"
 
 #include <algorithm>
+#include <string_view>
 
 #include "spirv_to_glsl.hpp"
 #include "utils.hpp"

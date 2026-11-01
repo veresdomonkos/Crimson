@@ -5,6 +5,7 @@
 #include <array>
 #include <map>
 #include <algorithm>
+#include <limits>
 #include "crimson/core/log.hpp"
 #include "crimson/renderer/mesh.hpp"
 

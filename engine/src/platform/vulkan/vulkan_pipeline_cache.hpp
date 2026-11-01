@@ -1,6 +1,7 @@
 #pragma once
 
 #include <unordered_map>
+#include <functional>
 
 #include "crimson/renderer/buffer_layout.hpp"
 #include "crimson/renderer/material_settings.hpp"

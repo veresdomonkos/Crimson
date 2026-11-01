@@ -3,6 +3,7 @@
 #include <functional>
 #include <random>
 #include <string>
+#include <cstdio>
 
 namespace crimson
 {

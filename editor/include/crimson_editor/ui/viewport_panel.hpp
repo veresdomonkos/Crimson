@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <string_view>
 #include <imgui.h>
 
 #include "crimson_editor/ui/panel.hpp"

@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include "crimson/renderer/core.hpp"
 #include <glad/glad.h>
 

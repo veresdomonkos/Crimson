@@ -1,4 +1,5 @@
 #pragma once
+#include <string_view>
 #include "opengl_device.hpp"
 #include "opengl_resources.hpp"
 #include "vertex_array_cache.hpp"

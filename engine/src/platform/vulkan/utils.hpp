@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 
 #include "vulkan_include.hpp"
 #include "crimson/renderer/texture.hpp"

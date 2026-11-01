@@ -1,5 +1,6 @@
 #include "crimson/asset_manager/asset_manager.hpp"
 #include <algorithm>
+#include <utility>
 #include "crimson/asset_manager/meta_file.hpp"
 #include "crimson/core/log.hpp"
 
