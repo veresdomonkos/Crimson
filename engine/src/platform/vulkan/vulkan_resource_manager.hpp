@@ -53,8 +53,6 @@ namespace crimson::vulkan
         [[nodiscard]] VkDescriptorPool GetDescriptorPool() const { return m_descriptorPool; }
         [[nodiscard]] VkDescriptorSetLayout GetGlobalSetLayout() const { return m_globalSetLayout; }
         [[nodiscard]] VkSampler GetDefaultSampler() const { return m_defaultSampler; }
-
-        bool CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory) const;
     protected:
         VulkanGraphicsPipeline CreateGraphicsPipeline(const GraphicsPipelineInfo& info) override;
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
@@ -77,6 +75,7 @@ namespace crimson::vulkan
 
         bool CreateImageView(VulkanTexture& texture, VkImageAspectFlags aspect) const;
 
+        AllocatedBuffer CreateBufferWithData(VkDeviceSize size, VkBufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const;
         void CopyBuffer(VkBuffer src, VkBuffer dst, VkDeviceSize size) const;
         void UploadTextureData(VulkanTexture& texture, const TextureInfo& info, const void* data) const;
 

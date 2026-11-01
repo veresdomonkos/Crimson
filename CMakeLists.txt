@@ -41,5 +41,8 @@ set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 set(TRACY_ONLY_LOCALHOST ON CACHE BOOL "" FORCE)
 add_subdirectory(external/tracy)
 
+#vulkan memory allocator
+add_subdirectory(external/VulkanMemoryAllocator)
+
 add_subdirectory(engine)
 add_subdirectory(editor)

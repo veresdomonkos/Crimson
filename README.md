@@ -108,7 +108,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 Crimson/
   engine/            core, renderer, backends (vulkan/, opengl/), asset manager
   editor/            Crimson Editor (application, panels, importers, assets/)
-  external/          glfw, glad, glm, fmt, imgui, spirv-reflect, tiny-process-library, tracy
+  external/          glfw, glad, glm, fmt, imgui, spirv-reflect, tiny-process-library, tracy, VulkanMemoryAllocator
 ```
 
 ## Building

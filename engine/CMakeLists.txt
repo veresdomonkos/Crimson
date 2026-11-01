@@ -47,6 +47,8 @@ set(ENGINE_IMPLEMENTATION
         src/platform/opengl/opengl_renderer_glfw.cpp
 		src/platform/opengl/opengl_resources.hpp
         src/platform/vulkan/vulkan_resources.hpp
+        src/platform/vulkan/vulkan_allocator.hpp
+        src/platform/vulkan/vulkan_allocator.cpp
         src/platform/opengl/utils.hpp
         src/platform/opengl/vertex_array_cache.hpp
         include/crimson/renderer/texture.hpp
@@ -101,4 +103,5 @@ target_link_libraries(Engine
         spirv-reflect-static
         stb_image
         tinyobjloader
+        GPUOpen::VulkanMemoryAllocator
 )

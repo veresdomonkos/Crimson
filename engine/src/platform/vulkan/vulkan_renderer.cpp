@@ -25,20 +25,6 @@ namespace crimson::vulkan
             m_globalDescriptorSet = VK_NULL_HANDLE;
         }
 
-        auto destroyMapped = [&](VkBuffer& buf, VkDeviceMemory& mem, void*& mapped)
-        {
-            if (buf != VK_NULL_HANDLE)
-            {
-                if (mapped != nullptr) { vkUnmapMemory(m_device.GetDevice(), mem); mapped = nullptr; }
-                vkDestroyBuffer(m_device.GetDevice(), buf, nullptr);
-                vkFreeMemory(m_device.GetDevice(), mem, nullptr);
-                buf = VK_NULL_HANDLE;
-            }
-        };
-
-        destroyMapped(m_cameraUBOBuffer, m_cameraUBOBufferMemory, m_cameraMappedData);
-        destroyMapped(m_lightingUBOBuffer, m_lightingUBOBufferMemory, m_lightingMappedData);
-
         for (FrameSync& sync : m_frameSyncs)
         {
             vkDestroySemaphore(m_device.GetDevice(), sync.ImageAvailableSemaphore, nullptr);
@@ -110,26 +96,11 @@ namespace crimson::vulkan
         VkDeviceSize cameraBufferSize =
             m_cameraUboAlignment * MaxRenderPasses * MAX_FRAMES_IN_FLIGHT;
 
-        if (!m_resourceManager.CreateBuffer(
-                cameraBufferSize,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                m_cameraUBOBuffer,
-                m_cameraUBOBufferMemory))
+        m_cameraUBO = CreateAllocatedBuffer(m_device.GetAllocator(), cameraBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferMemory::HostMapped);
+
+        if (!m_cameraUBO)
         {
             LOG_ERROR("[Vulkan Renderer] Failed to create camera UBO");
-            return;
-        }
-
-        if (vkMapMemory(
-                m_device.GetDevice(),
-                m_cameraUBOBufferMemory,
-                0,
-                cameraBufferSize,
-                0,
-                &m_cameraMappedData) != VK_SUCCESS)
-        {
-            LOG_ERROR("[Vulkan Renderer] Failed to map camera UBO");
             return;
         }
 
@@ -139,30 +110,11 @@ namespace crimson::vulkan
         VkDeviceSize lightingBufferSize =
             m_lightingUboAlignment * MAX_FRAMES_IN_FLIGHT;
 
-        if (!m_resourceManager.CreateBuffer(
-                lightingBufferSize,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                m_lightingUBOBuffer,
-                m_lightingUBOBufferMemory))
+        m_lightingUBO = CreateAllocatedBuffer(m_device.GetAllocator(), lightingBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferMemory::HostMapped);
+
+        if (!m_lightingUBO)
         {
             LOG_ERROR("[Vulkan Renderer] Failed to create lighting UBO");
-            vkUnmapMemory(m_device.GetDevice(), m_cameraUBOBufferMemory);
-            m_cameraMappedData = nullptr;
-            return;
-        }
-
-        if (vkMapMemory(
-                m_device.GetDevice(),
-                m_lightingUBOBufferMemory,
-                0,
-                lightingBufferSize,
-                0,
-                &m_lightingMappedData) != VK_SUCCESS)
-        {
-            LOG_ERROR("[Vulkan Renderer] Failed to map lighting UBO");
-            vkUnmapMemory(m_device.GetDevice(), m_cameraUBOBufferMemory);
-            m_cameraMappedData = nullptr;
             return;
         }
 
@@ -182,23 +134,16 @@ namespace crimson::vulkan
                 &m_globalDescriptorSet) != VK_SUCCESS)
         {
             LOG_ERROR("[Vulkan Renderer] Failed to allocate global descriptor set");
-
-            vkUnmapMemory(m_device.GetDevice(), m_lightingUBOBufferMemory);
-            m_lightingMappedData = nullptr;
-
-            vkUnmapMemory(m_device.GetDevice(), m_cameraUBOBufferMemory);
-            m_cameraMappedData = nullptr;
-
             return;
         }
 
         VkDescriptorBufferInfo cameraBufferInfo{};
-        cameraBufferInfo.buffer = m_cameraUBOBuffer;
+        cameraBufferInfo.buffer = m_cameraUBO.Get();
         cameraBufferInfo.offset = 0;
         cameraBufferInfo.range = sizeof(CameraBlock);
 
         VkDescriptorBufferInfo lightingBufferInfo{};
-        lightingBufferInfo.buffer = m_lightingUBOBuffer;
+        lightingBufferInfo.buffer = m_lightingUBO.Get();
         lightingBufferInfo.offset = 0;
         lightingBufferInfo.range = sizeof(LightingBlock);
 
@@ -325,7 +270,7 @@ namespace crimson::vulkan
     {
         VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(info.Target);
 
-        if (m_cameraMappedData != nullptr)
+        if (m_cameraUBO)
         {
             CameraBlock block{};
             block.ViewProj = info.ViewProj;
@@ -333,7 +278,7 @@ namespace crimson::vulkan
 
             uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
             VkDeviceSize offset = globalPassIndex * m_cameraUboAlignment;
-            std::memcpy(static_cast<char*>(m_cameraMappedData) + offset, &block, sizeof(CameraBlock));
+            std::memcpy(static_cast<char*>(m_cameraUBO.Mapped()) + offset, &block, sizeof(CameraBlock));
         }
 
         BeginRenderingOnTarget(cmdBuffer, rt, info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
@@ -455,9 +400,10 @@ namespace crimson::vulkan
 
         vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.Pipeline);
 
-        VkDeviceSize vbOffset = 0;
-        vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &vertexBuffer.Buffer, &vbOffset);
-        vkCmdBindIndexBuffer(cmdBuffer, indexBuffer.Buffer, 0, indexBuffer.Type == IndexType::UInt32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+        const VkBuffer vb = vertexBuffer.Buffer.Get();
+        const VkDeviceSize vbOffset = 0;
+        vkCmdBindVertexBuffers(cmdBuffer, 0, 1, &vb, &vbOffset);
+        vkCmdBindIndexBuffer(cmdBuffer, indexBuffer.Buffer.Get(), 0, indexBuffer.Type == IndexType::UInt32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
 
         uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
         uint32_t dynamicOffsets[2] = {
@@ -499,7 +445,7 @@ namespace crimson::vulkan
             vkWaitForFences(m_device.GetDevice(), 1, &frameFence, VK_TRUE, UINT64_MAX);
         }
 
-        if (m_lightingMappedData != nullptr)
+        if (m_lightingUBO)
         {
             LightingBlock block{};
             block.AmbientColor = glm::vec4(lighting.AmbientColor, 0.0f);
@@ -511,7 +457,7 @@ namespace crimson::vulkan
                 block.Lights[i] = lighting.Lights[i].ToGPULight();
 
             VkDeviceSize offset = m_currentFrameIndex * m_lightingUboAlignment;
-            std::memcpy(static_cast<char*>(m_lightingMappedData) + offset, &block, sizeof(LightingBlock));
+            std::memcpy(static_cast<char*>(m_lightingUBO.Mapped()) + offset, &block, sizeof(LightingBlock));
         }
 
         uint32_t imageIndex;

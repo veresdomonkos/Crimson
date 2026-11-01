@@ -140,65 +140,45 @@ namespace crimson::vulkan
         return CreateSwapchainResources(surface);
     }
 
+    AllocatedBuffer VulkanResourceManager::CreateBufferWithData(VkDeviceSize size, VkBufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const
+    {
+        const VmaAllocator allocator = m_device.GetAllocator();
+
+        if (bufferUsage == BufferUsage::Static && data)
+        {
+            AllocatedBuffer staging = CreateAllocatedBuffer(allocator, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, BufferMemory::HostMapped);
+
+            if (!staging)
+                return {};
+
+            std::memcpy(staging.Mapped(), data, static_cast<size_t>(size));
+
+            AllocatedBuffer buffer = CreateAllocatedBuffer(allocator, size, usage | VK_BUFFER_USAGE_TRANSFER_DST_BIT, BufferMemory::DeviceLocal);
+
+            if (buffer)
+                CopyBuffer(staging.Get(), buffer.Get(), size);
+
+            return buffer;
+        }
+
+        AllocatedBuffer buffer = CreateAllocatedBuffer(allocator, size, usage, BufferMemory::HostMapped);
+
+        if (buffer && data)
+            std::memcpy(buffer.Mapped(), data, static_cast<size_t>(size));
+
+        return buffer;
+    }
+
     VertexBufferHandle VulkanResourceManager::CreateVertexBuffer(const VertexBufferInfo& info, const void* data)
     {
         VulkanVertexBuffer buffer{};
         buffer.Size = info.Size;
         buffer.Layout = info.Layout;
         buffer.Usage = info.Usage;
+        buffer.Buffer = CreateBufferWithData(info.Size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, info.Usage, data);
 
-        if (info.Usage == BufferUsage::Static && data)
-        {
-            VkBuffer stagingBuffer = VK_NULL_HANDLE;
-            VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-
-            if (!CreateBuffer(info.Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingMemory))
-                return {};
-
-            void* mapped = nullptr;
-
-            if (vkMapMemory(m_device.GetDevice(), stagingMemory, 0, info.Size, 0, &mapped) != VK_SUCCESS)
-            {
-                vkDestroyBuffer(m_device.GetDevice(), stagingBuffer, nullptr);
-                vkFreeMemory(m_device.GetDevice(), stagingMemory, nullptr);
-                return {};
-            }
-
-            std::memcpy(mapped, data, static_cast<size_t>(info.Size));
-            vkUnmapMemory(m_device.GetDevice(), stagingMemory);
-
-            if (!CreateBuffer(info.Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer.Buffer, buffer.Memory))
-            {
-                vkDestroyBuffer(m_device.GetDevice(), stagingBuffer, nullptr);
-                vkFreeMemory(m_device.GetDevice(), stagingMemory, nullptr);
-                return {};
-            }
-
-            CopyBuffer(stagingBuffer, buffer.Buffer, info.Size);
-
-            vkDestroyBuffer(m_device.GetDevice(), stagingBuffer, nullptr);
-            vkFreeMemory(m_device.GetDevice(), stagingMemory, nullptr);
-        }
-        else
-        {
-            if (!CreateBuffer(info.Size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, buffer.Buffer, buffer.Memory))
-                return {};
-
-            if (data)
-            {
-                void* mapped = nullptr;
-
-                if (vkMapMemory(m_device.GetDevice(), buffer.Memory, 0, info.Size, 0, &mapped) != VK_SUCCESS)
-                {
-                    vkDestroyBuffer(m_device.GetDevice(), buffer.Buffer, nullptr);
-                    vkFreeMemory(m_device.GetDevice(), buffer.Memory, nullptr);
-                    return {};
-                }
-
-                std::memcpy(mapped, data, static_cast<size_t>(info.Size));
-                vkUnmapMemory(m_device.GetDevice(), buffer.Memory);
-            }
-        }
+        if (!buffer.Buffer)
+            return {};
 
         return m_vertexBuffers.Register(std::move(buffer));
     }
@@ -206,17 +186,6 @@ namespace crimson::vulkan
     void VulkanResourceManager::DestroyVertexBuffer(VertexBufferHandle handle)
     {
         m_device.WaitIdle();
-
-        VulkanVertexBuffer* buffer = m_vertexBuffers.Find(handle);
-        if (!buffer)
-            return;
-
-        if (buffer->Buffer != VK_NULL_HANDLE)
-            vkDestroyBuffer(m_device.GetDevice(), buffer->Buffer, nullptr);
-
-        if (buffer->Memory != VK_NULL_HANDLE)
-            vkFreeMemory(m_device.GetDevice(), buffer->Memory, nullptr);
-
         m_vertexBuffers.Unregister(handle);
     }
 
@@ -226,59 +195,10 @@ namespace crimson::vulkan
         buffer.Size = info.Size;
         buffer.Type = info.Type;
         buffer.Usage = info.Usage;
+        buffer.Buffer = CreateBufferWithData(info.Size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, info.Usage, data);
 
-        if (info.Usage == BufferUsage::Static && data)
-        {
-            VkBuffer stagingBuffer = VK_NULL_HANDLE;
-            VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
-
-            if (!CreateBuffer(info.Size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingMemory))
-                return {};
-
-            void* mapped = nullptr;
-
-            if (vkMapMemory(m_device.GetDevice(), stagingMemory, 0, info.Size, 0, &mapped) != VK_SUCCESS)
-            {
-                vkDestroyBuffer(m_device.GetDevice(), stagingBuffer, nullptr);
-                vkFreeMemory(m_device.GetDevice(), stagingMemory, nullptr);
-                return {};
-            }
-
-            std::memcpy(mapped, data, static_cast<size_t>(info.Size));
-            vkUnmapMemory(m_device.GetDevice(), stagingMemory);
-
-            if (!CreateBuffer(info.Size, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, buffer.Buffer, buffer.Memory))
-            {
-                vkDestroyBuffer(m_device.GetDevice(), stagingBuffer, nullptr);
-                vkFreeMemory(m_device.GetDevice(), stagingMemory, nullptr);
-                return {};
-            }
-
-            CopyBuffer(stagingBuffer, buffer.Buffer, info.Size);
-
-            vkDestroyBuffer(m_device.GetDevice(), stagingBuffer, nullptr);
-            vkFreeMemory(m_device.GetDevice(), stagingMemory, nullptr);
-        }
-        else
-        {
-            if (!CreateBuffer(info.Size, VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, buffer.Buffer, buffer.Memory))
-                return {};
-
-            if (data)
-            {
-                void* mapped = nullptr;
-
-                if (vkMapMemory(m_device.GetDevice(), buffer.Memory, 0, info.Size, 0, &mapped) != VK_SUCCESS)
-                {
-                    vkDestroyBuffer(m_device.GetDevice(), buffer.Buffer, nullptr);
-                    vkFreeMemory(m_device.GetDevice(), buffer.Memory, nullptr);
-                    return {};
-                }
-
-                std::memcpy(mapped, data, static_cast<size_t>(info.Size));
-                vkUnmapMemory(m_device.GetDevice(), buffer.Memory);
-            }
-        }
+        if (!buffer.Buffer)
+            return {};
 
         return m_indexBuffers.Register(std::move(buffer));
     }
@@ -286,17 +206,6 @@ namespace crimson::vulkan
     void VulkanResourceManager::DestroyIndexBuffer(IndexBufferHandle handle)
     {
         m_device.WaitIdle();
-
-        VulkanIndexBuffer* buffer = m_indexBuffers.Find(handle);
-        if (!buffer)
-            return;
-
-        if (buffer->Buffer != VK_NULL_HANDLE)
-            vkDestroyBuffer(m_device.GetDevice(), buffer->Buffer, nullptr);
-
-        if (buffer->Memory != VK_NULL_HANDLE)
-            vkFreeMemory(m_device.GetDevice(), buffer->Memory, nullptr);
-
         m_indexBuffers.Unregister(handle);
     }
 
@@ -403,22 +312,16 @@ namespace crimson::vulkan
 
         if (material.UniformBufferSize > 0)
         {
-            if (!CreateBuffer(material.UniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, material.UniformBuffer, material.UniformBufferMemory))
-            {
-                vkFreeDescriptorSets(m_device.GetDevice(), m_descriptorPool, 1, &material.DescriptorSet);
-                return {};
-            }
+            material.UniformBuffer = CreateAllocatedBuffer(m_device.GetAllocator(), material.UniformBufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, BufferMemory::HostMapped);
 
-            if (vkMapMemory(m_device.GetDevice(), material.UniformBufferMemory, 0, material.UniformBufferSize, 0, &material.MappedData) != VK_SUCCESS)
+            if (!material.UniformBuffer)
             {
-                vkDestroyBuffer(m_device.GetDevice(), material.UniformBuffer, nullptr);
-                vkFreeMemory(m_device.GetDevice(), material.UniformBufferMemory, nullptr);
                 vkFreeDescriptorSets(m_device.GetDevice(), m_descriptorPool, 1, &material.DescriptorSet);
                 return {};
             }
 
             VkDescriptorBufferInfo bufferInfo{};
-            bufferInfo.buffer = material.UniformBuffer;
+            bufferInfo.buffer = material.UniformBuffer.Get();
             bufferInfo.offset = 0;
             bufferInfo.range = material.UniformBufferSize;
 
@@ -443,18 +346,6 @@ namespace crimson::vulkan
         VulkanMaterial* material = m_materials.Find(handle);
         if (!material)
             return;
-
-        if (material->MappedData)
-        {
-            vkUnmapMemory(m_device.GetDevice(), material->UniformBufferMemory);
-            material->MappedData = nullptr;
-        }
-
-        if (material->UniformBuffer != VK_NULL_HANDLE)
-            vkDestroyBuffer(m_device.GetDevice(), material->UniformBuffer, nullptr);
-
-        if (material->UniformBufferMemory != VK_NULL_HANDLE)
-            vkFreeMemory(m_device.GetDevice(), material->UniformBufferMemory, nullptr);
 
         if (material->DescriptorSet != VK_NULL_HANDLE)
             vkFreeDescriptorSets(m_device.GetDevice(), m_descriptorPool, 1, &material->DescriptorSet);
@@ -531,23 +422,14 @@ namespace crimson::vulkan
         imageInfo.usage = usage;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-        if (vkCreateImage(m_device.GetDevice(), &imageInfo, nullptr, &texture.Image) != VK_SUCCESS)
+        const bool isAttachment = (usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) != 0;
+
+        texture.Allocation = CreateAllocatedImage(m_device.GetAllocator(), imageInfo, isAttachment);
+
+        if (!texture.Allocation)
             return TextureHandle::Invalid();
 
-        VkMemoryRequirements memoryRequirements{};
-        vkGetImageMemoryRequirements(m_device.GetDevice(), texture.Image, &memoryRequirements);
-
-        VkMemoryAllocateInfo allocateInfo{VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO};
-        allocateInfo.allocationSize = memoryRequirements.size;
-        allocateInfo.memoryTypeIndex = m_device.FindMemoryType(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-        if (vkAllocateMemory(m_device.GetDevice(), &allocateInfo, nullptr, &texture.Memory) != VK_SUCCESS)
-        {
-            vkDestroyImage(m_device.GetDevice(), texture.Image, nullptr);
-            return TextureHandle::Invalid();
-        }
-
-        vkBindImageMemory(m_device.GetDevice(), texture.Image, texture.Memory, 0);
+        texture.Image = texture.Allocation.Get();
 
         VkImageViewCreateInfo viewInfo{VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO};
         viewInfo.image = texture.Image;
@@ -561,11 +443,7 @@ namespace crimson::vulkan
         viewInfo.subresourceRange.layerCount = 1;
 
         if (vkCreateImageView(m_device.GetDevice(), &viewInfo, nullptr, &texture.View) != VK_SUCCESS)
-        {
-            vkFreeMemory(m_device.GetDevice(), texture.Memory, nullptr);
-            vkDestroyImage(m_device.GetDevice(), texture.Image, nullptr);
             return TextureHandle::Invalid();
-        }
 
         if (utils::HasStencilComponent(format))
         {
@@ -574,13 +452,11 @@ namespace crimson::vulkan
             if (vkCreateImageView(m_device.GetDevice(), &viewInfo, nullptr, &texture.AttachmentView) != VK_SUCCESS)
             {
                 vkDestroyImageView(m_device.GetDevice(), texture.View, nullptr);
-                vkFreeMemory(m_device.GetDevice(), texture.Memory, nullptr);
-                vkDestroyImage(m_device.GetDevice(), texture.Image, nullptr);
                 return TextureHandle::Invalid();
             }
         }
 
-        TextureHandle handle = m_textures.Register(texture);
+        TextureHandle handle = m_textures.Register(std::move(texture));
 
         if (data)
             UploadTextureData(m_textures.Get(handle), info, data);
@@ -602,15 +478,6 @@ namespace crimson::vulkan
 
         if (texture->AttachmentView != VK_NULL_HANDLE)
             vkDestroyImageView(m_device.GetDevice(), texture->AttachmentView, nullptr);
-
-        if (!texture->IsSwapchainImage)
-        {
-            if (texture->Image != VK_NULL_HANDLE)
-                vkDestroyImage(m_device.GetDevice(), texture->Image, nullptr);
-
-            if (texture->Memory != VK_NULL_HANDLE)
-                vkFreeMemory(m_device.GetDevice(), texture->Memory, nullptr);
-        }
 
         m_textures.Unregister(handle);
     }
@@ -877,48 +744,10 @@ namespace crimson::vulkan
         if (property == shader.Properties.end())
             return;
 
-        if (!material.MappedData)
+        if (!material.UniformBuffer)
             return;
 
-        std::memcpy(static_cast<std::byte*>(material.MappedData) + property->second.Offset, data.data(), data.size());
-    }
-
-    bool VulkanResourceManager::CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& memory) const
-    {
-        VkBufferCreateInfo bufferInfo{};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = size;
-        bufferInfo.usage = usage;
-        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        if (vkCreateBuffer(m_device.GetDevice(), &bufferInfo, nullptr, &buffer) != VK_SUCCESS)
-            return false;
-
-        VkMemoryRequirements requirements{};
-        vkGetBufferMemoryRequirements(m_device.GetDevice(), buffer, &requirements);
-
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = requirements.size;
-        allocInfo.memoryTypeIndex = m_device.FindMemoryType(requirements.memoryTypeBits, properties);
-
-        if (vkAllocateMemory(m_device.GetDevice(), &allocInfo, nullptr, &memory) != VK_SUCCESS)
-        {
-            vkDestroyBuffer(m_device.GetDevice(), buffer, nullptr);
-            buffer = VK_NULL_HANDLE;
-            return false;
-        }
-
-        if (vkBindBufferMemory(m_device.GetDevice(), buffer, memory, 0) != VK_SUCCESS)
-        {
-            vkDestroyBuffer(m_device.GetDevice(), buffer, nullptr);
-            vkFreeMemory(m_device.GetDevice(), memory, nullptr);
-            buffer = VK_NULL_HANDLE;
-            memory = VK_NULL_HANDLE;
-            return false;
-        }
-
-        return true;
+        std::memcpy(static_cast<std::byte*>(material.UniformBuffer.Mapped()) + property->second.Offset, data.data(), data.size());
     }
 
     bool VulkanResourceManager::CreateImageView(VulkanTexture& texture, VkImageAspectFlags aspect) const
@@ -951,23 +780,12 @@ namespace crimson::vulkan
     {
         const VkDeviceSize size = static_cast<VkDeviceSize>(info.Width) * info.Height * utils::GetBytesPerPixel(info.Format);
 
-        VkBuffer stagingBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory stagingMemory = VK_NULL_HANDLE;
+        AllocatedBuffer staging = CreateAllocatedBuffer(m_device.GetAllocator(), size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, BufferMemory::HostMapped);
 
-        if (!CreateBuffer(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingMemory))
+        if (!staging)
             return;
 
-        void* mapped = nullptr;
-
-        if (vkMapMemory(m_device.GetDevice(), stagingMemory, 0, size, 0, &mapped) != VK_SUCCESS)
-        {
-            vkDestroyBuffer(m_device.GetDevice(), stagingBuffer, nullptr);
-            vkFreeMemory(m_device.GetDevice(), stagingMemory, nullptr);
-            return;
-        }
-
-        std::memcpy(mapped, data, static_cast<size_t>(size));
-        vkUnmapMemory(m_device.GetDevice(), stagingMemory);
+        std::memcpy(staging.Mapped(), data, static_cast<size_t>(size));
 
         m_device.ImmediateSubmit([&](VkCommandBuffer commandBuffer)
         {
@@ -994,7 +812,7 @@ namespace crimson::vulkan
             region.imageSubresource.baseArrayLayer = 0;
             region.imageSubresource.layerCount = 1;
             region.imageExtent = { info.Width, info.Height, 1 };
-            vkCmdCopyBufferToImage(commandBuffer, stagingBuffer, texture.Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+            vkCmdCopyBufferToImage(commandBuffer, staging.Get(), texture.Image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
             barrier.srcStageMask = VK_PIPELINE_STAGE_2_COPY_BIT;
             barrier.srcAccessMask = VK_ACCESS_2_TRANSFER_WRITE_BIT;
@@ -1006,9 +824,6 @@ namespace crimson::vulkan
         });
 
         texture.Layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        vkDestroyBuffer(m_device.GetDevice(), stagingBuffer, nullptr);
-        vkFreeMemory(m_device.GetDevice(), stagingMemory, nullptr);
     }
 
     TextureHandle VulkanResourceManager::WrapSwapchainImage(VkImage image, VkFormat format, uint32_t width, uint32_t height)
@@ -1020,7 +835,6 @@ namespace crimson::vulkan
         texture.Height = height;
         texture.Aspect = VK_IMAGE_ASPECT_COLOR_BIT;
         texture.Layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        texture.IsSwapchainImage = true;
 
         if (!CreateImageView(texture, texture.Aspect))
             return {};

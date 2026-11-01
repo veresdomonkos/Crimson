@@ -74,6 +74,7 @@ namespace crimson::vulkan
         PickPhysicalDevice();
         CreateLogicalDevice();
         CreateImmediateCommandPool();
+        CreateAllocator();
     }
 
     VulkanDevice::~VulkanDevice()
@@ -87,6 +88,9 @@ namespace crimson::vulkan
 
             if (m_immediateCommandPool != VK_NULL_HANDLE)
                 vkDestroyCommandPool(m_device, m_immediateCommandPool, nullptr);
+
+            if (m_allocator != VK_NULL_HANDLE)
+                vmaDestroyAllocator(m_allocator);
 
             vkDestroyDevice(m_device, nullptr);
             m_device = VK_NULL_HANDLE;
@@ -221,7 +225,6 @@ namespace crimson::vulkan
 
         vkGetPhysicalDeviceProperties(m_physicalDevice, &m_properties);
         vkGetPhysicalDeviceFeatures(m_physicalDevice, &m_features);
-        vkGetPhysicalDeviceMemoryProperties(m_physicalDevice, &m_memoryProperties);
 
         LOG_INFO("[Vulkan Device] Selected GPU: {}", m_properties.deviceName);
     }
@@ -283,6 +286,18 @@ namespace crimson::vulkan
 
         if (vkCreateFence(m_device, &fenceInfo, nullptr, &m_immediateFence) != VK_SUCCESS)
             throw std::runtime_error("Failed to create immediate fence.");
+    }
+
+    void VulkanDevice::CreateAllocator()
+    {
+        VmaAllocatorCreateInfo createInfo{};
+        createInfo.instance = m_instance;
+        createInfo.physicalDevice = m_physicalDevice;
+        createInfo.device = m_device;
+        createInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+
+        if (vmaCreateAllocator(&createInfo, &m_allocator) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create Vulkan memory allocator.");
     }
 
     bool VulkanDevice::IsDeviceSuitable(VkPhysicalDevice device) const
@@ -361,20 +376,6 @@ namespace crimson::vulkan
         }
 
         return true;
-    }
-
-    uint32_t VulkanDevice::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const
-    {
-        for (uint32_t i = 0; i < m_memoryProperties.memoryTypeCount; ++i)
-        {
-            if ((typeFilter & (1u << i)) &&
-                (m_memoryProperties.memoryTypes[i].propertyFlags & properties) == properties)
-            {
-                return i;
-            }
-        }
-
-        throw std::runtime_error("Failed to find suitable Vulkan memory type.");
     }
 
     void VulkanDevice::WaitIdle() const

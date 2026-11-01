@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vulkan/vulkan.h>
+#include "vulkan_allocator.hpp"
 #include "crimson/core/window.hpp"
 #include "crimson/graphics/graphics_device.hpp"
 
@@ -29,9 +30,8 @@ namespace crimson::vulkan
 
         [[nodiscard]] const VkPhysicalDeviceProperties& GetProperties() const { return m_properties; }
         [[nodiscard]] const VkPhysicalDeviceFeatures& GetFeatures() const { return m_features; }
-        [[nodiscard]] const VkPhysicalDeviceMemoryProperties& GetMemoryProperties() const { return m_memoryProperties; }
 
-        [[nodiscard]] uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
+        [[nodiscard]] VmaAllocator GetAllocator() const { return m_allocator; }
 
         void ImmediateSubmit(const std::function<void(VkCommandBuffer)>& function);
         void WaitIdle() const override;
@@ -43,6 +43,7 @@ namespace crimson::vulkan
         void PickPhysicalDevice();
         void CreateLogicalDevice();
         void CreateImmediateCommandPool();
+        void CreateAllocator();
 
         [[nodiscard]] bool IsDeviceSuitable(VkPhysicalDevice device) const;
         [[nodiscard]] uint32_t FindGraphicsQueueFamily(VkPhysicalDevice device) const;
@@ -71,7 +72,8 @@ namespace crimson::vulkan
 
         VkPhysicalDeviceProperties m_properties{};
         VkPhysicalDeviceFeatures m_features{};
-        VkPhysicalDeviceMemoryProperties m_memoryProperties{};
+
+        VmaAllocator m_allocator{};
 
         VkCommandPool m_immediateCommandPool{};
         VkCommandBuffer m_immediateCommandBuffer{};

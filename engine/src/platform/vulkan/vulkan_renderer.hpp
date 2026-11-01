@@ -51,14 +51,10 @@ namespace crimson::vulkan
 
         VkDescriptorSet m_globalDescriptorSet = VK_NULL_HANDLE;
 
-        VkBuffer m_cameraUBOBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory m_cameraUBOBufferMemory = VK_NULL_HANDLE;
-        void* m_cameraMappedData = nullptr;
+        AllocatedBuffer m_cameraUBO;
         VkDeviceSize m_cameraUboAlignment = 0;
 
-        VkBuffer m_lightingUBOBuffer = VK_NULL_HANDLE;
-        VkDeviceMemory m_lightingUBOBufferMemory = VK_NULL_HANDLE;
-        void* m_lightingMappedData = nullptr;
+        AllocatedBuffer m_lightingUBO;
         VkDeviceSize m_lightingUboAlignment = 0;
 
         std::array<Frame, MAX_FRAMES_IN_FLIGHT> m_frames;
