@@ -30,7 +30,12 @@ namespace crimson::editor::ui
         ImGui::Text("Draw calls: %u", m_stats.Render.DrawCalls);
         ImGui::Text("Triangles: %llu", static_cast<unsigned long long>(m_stats.Render.Triangles));
         ImGui::Text("Passes: %u", m_stats.Render.Passes);
-        ImGui::SetItemTooltip("Draw calls and triangles exclude the editor UI");
+        ImGui::SetItemTooltip("Includes the editor UI pass. All other stats here exclude the UI");
+
+        ImGui::Separator();
+        ImGui::Text("Pipeline binds: %u", m_stats.Render.PipelineBinds);
+        ImGui::Text("Material binds: %u", m_stats.Render.MaterialBinds);
+        ImGui::Text("Buffer binds: %u", m_stats.Render.BufferBinds);
 
         ImGui::End();
     }

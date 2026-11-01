@@ -39,9 +39,6 @@ namespace crimson::opengl
 
         m_stats = {};
 
-        auto* window = m_device.GetPrimaryWindow();
-        glfwMakeContextCurrent(window);
-
         LightingBlock block{};
         block.AmbientColor = glm::vec4(lighting.AmbientColor, 0.0f);
         block.ShadowViewProj = lighting.ShadowViewProj;
@@ -64,7 +61,9 @@ namespace crimson::opengl
 
         Frame& frame = m_frames[frameContext.GetIndex()];
         auto* window = m_device.GetPrimaryWindow();
-        glfwMakeContextCurrent(window);
+
+        // ImGui and resource creation may have touched GL state since the last frame
+        ResetBoundState();
 
         m_stats.Passes = static_cast<uint32_t>(frame.GetPasses().size());
 
@@ -76,8 +75,10 @@ namespace crimson::opengl
                 TracyGpuZone("Render Pass");
 
                 ExecuteBeginRenderPass(materialPass->Info());
-                for (const auto& draw : materialPass->GetDraws())
-                    ExecuteDraw(draw);
+
+                m_resourceManager.BuildDrawOrder(materialPass->GetDraws(), m_drawOrder);
+                for (const SortedDraw& sorted : m_drawOrder)
+                    ExecuteDraw(*sorted.Draw);
             }
             else if (const auto* rawPass = std::get_if<RawPass>(&entry))
             {
@@ -109,54 +110,58 @@ namespace crimson::opengl
         glNamedBufferSubData(m_cameraUBO, 0, sizeof(CameraBlock), &block);
 
         const auto& target = m_resourceManager.GetRenderTarget(info.Target);
-        glBindFramebuffer(GL_FRAMEBUFFER, target.FrameBufferHandle);
+        m_state.BindFramebuffer(target.FrameBufferHandle);
         glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
 
-        GLbitfield clearMask = 0;
-        if (HasClearFlag(info.ClearFlags, ClearFlags::Color))
-        {
-            glClearColor(info.ClearColor.r, info.ClearColor.g, info.ClearColor.b, info.ClearColor.a);
-            clearMask |= GL_COLOR_BUFFER_BIT;
-        }
-        if (HasClearFlag(info.ClearFlags, ClearFlags::Depth))
-        {
-            glClearDepth(info.ClearDepth);
-            clearMask |= GL_DEPTH_BUFFER_BIT;
-        }
-        if (HasClearFlag(info.ClearFlags, ClearFlags::Stencil))
-        {
-            glClearStencil(static_cast<GLint>(info.ClearStencil));
-            clearMask |= GL_STENCIL_BUFFER_BIT;
-        }
-        if (clearMask != 0) glClear(clearMask);
+        ClearTarget(info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
+
+        m_state.SetDepthTest(true);
     }
 
     void OpenGLRenderer::ExecuteBeginRawPass(const RawPassInfo &info)
     {
         const auto& target = m_resourceManager.GetRenderTarget(info.Target);
-        glBindFramebuffer(GL_FRAMEBUFFER, target.FrameBufferHandle);
+        m_state.BindFramebuffer(target.FrameBufferHandle);
         glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
 
-        GLbitfield clearMask = 0;
-        if (HasClearFlag(info.ClearFlags, ClearFlags::Color))
-        {
-            glClearColor(info.ClearColor.r, info.ClearColor.g, info.ClearColor.b, info.ClearColor.a);
-            clearMask |= GL_COLOR_BUFFER_BIT;
-        }
-        if (HasClearFlag(info.ClearFlags, ClearFlags::Depth))
-        {
-            glClearDepth(info.ClearDepth);
-            clearMask |= GL_DEPTH_BUFFER_BIT;
-        }
-        if (HasClearFlag(info.ClearFlags, ClearFlags::Stencil))
-        {
-            glClearStencil(static_cast<GLint>(info.ClearStencil));
-            clearMask |= GL_STENCIL_BUFFER_BIT;
-        }
-        if (clearMask != 0) glClear(clearMask);
+        ClearTarget(info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
 
         NativeFrameHandles handles{};
         info.Callback(handles);
+
+        // The callback runs code that changes GL state without going through m_state
+        ResetBoundState();
+    }
+
+    void OpenGLRenderer::ClearTarget(ClearFlags flags, const glm::vec4& color, float depth, uint32_t stencil)
+    {
+        GLbitfield clearMask = 0;
+        if (HasClearFlag(flags, ClearFlags::Color))
+        {
+            glClearColor(color.r, color.g, color.b, color.a);
+            clearMask |= GL_COLOR_BUFFER_BIT;
+        }
+        if (HasClearFlag(flags, ClearFlags::Depth))
+        {
+            // glClear obeys the depth mask, which a transparent draw may have left off
+            m_state.SetDepthWrite(true);
+            glClearDepth(depth);
+            clearMask |= GL_DEPTH_BUFFER_BIT;
+        }
+        if (HasClearFlag(flags, ClearFlags::Stencil))
+        {
+            glClearStencil(static_cast<GLint>(stencil));
+            clearMask |= GL_STENCIL_BUFFER_BIT;
+        }
+        if (clearMask != 0) glClear(clearMask);
+    }
+
+    void OpenGLRenderer::ResetBoundState()
+    {
+        m_state.Reset();
+        m_boundMaterial = MaterialHandle::Invalid();
+        m_boundVertexBuffer = VertexBufferHandle::Invalid();
+        m_boundIndexBuffer = IndexBufferHandle::Invalid();
     }
 
     void OpenGLRenderer::ExecuteDraw(const DrawInfo& info)
@@ -174,19 +179,38 @@ namespace crimson::opengl
                 glNamedBufferSubData(material.GLBufferHandle, 0, static_cast<GLsizeiptr>(material.UniformDataSize), material.UniformData.get());
                 material.IsDirty = false;
             }
-            glBindBufferBase(GL_UNIFORM_BUFFER, shader.MaterialUboBinding, material.GLBufferHandle);
         }
 
-        glEnable(GL_DEPTH_TEST);
-        glDepthFunc(GL_LESS);
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_BACK);
+        // Applied on every draw because clearing depth between passes can change depth write
+        const bool transparent = material.Settings.RenderMode == MaterialRenderMode::Transparent;
 
-        for (const auto& [bindingUnit, glTexture] : material.BoundTextures)
-            glBindTextureUnit(bindingUnit, glTexture);
+        m_state.SetBlend(transparent);
+        m_state.SetDepthWrite(!transparent);
+        m_state.SetCull(material.Settings.Cull);
 
-        glUseProgram(shader.GLHandle);
-        glBindVertexArray(m_resourceManager.GetOrCreateVertexArray(info.VertexBuffer, info.IndexBuffer));
+        if (info.Material != m_boundMaterial)
+        {
+            if (material.GLBufferHandle != 0 && shader.UBOSize > 0)
+                m_state.BindUniformBuffer(shader.MaterialUboBinding, material.GLBufferHandle);
+
+            for (const auto& [bindingUnit, glTexture] : material.BoundTextures)
+                m_state.BindTexture(bindingUnit, glTexture);
+
+            if (m_state.UseProgram(shader.GLHandle))
+                ++m_stats.PipelineBinds;
+
+            m_boundMaterial = info.Material;
+            ++m_stats.MaterialBinds;
+        }
+
+        if (info.VertexBuffer != m_boundVertexBuffer || info.IndexBuffer != m_boundIndexBuffer)
+        {
+            if (m_state.BindVertexArray(m_resourceManager.GetOrCreateVertexArray(info.VertexBuffer, info.IndexBuffer)))
+                ++m_stats.BufferBinds;
+
+            m_boundVertexBuffer = info.VertexBuffer;
+            m_boundIndexBuffer = info.IndexBuffer;
+        }
 
         const GLsizei total = static_cast<GLsizei>(indexBuffer.Size / Index::Size(indexBuffer.Type));
         const GLsizei count = info.IndexCount ? info.IndexCount : total;

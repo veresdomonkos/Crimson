@@ -78,6 +78,7 @@ namespace crimson::vulkan
         vk::raii::ShaderModule Fragment{ nullptr };
 
         vk::raii::DescriptorSetLayout MaterialSetLayout{ nullptr };
+        vk::raii::PipelineLayout PipelineLayout{ nullptr };
         size_t MaterialUniformSize = 0;
         uint32_t MaterialUboBinding = 0;
 
@@ -87,7 +88,7 @@ namespace crimson::vulkan
 
     struct VulkanGraphicsPipeline
     {
-        vk::raii::PipelineLayout Layout{ nullptr };
+        vk::PipelineLayout Layout; // owned by the shader
         vk::raii::Pipeline Pipeline{ nullptr };
     };
 

@@ -103,7 +103,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 
 - **Viewport** - displays a render target texture (scene, shadow map, ...).
 - **Hierarchy / Inspector / Asset Browser / Console**
-- **Stats** - FPS, frame, CPU and wait times, draw calls, triangles and passes.
+- **Stats** - FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts.
 
 ## Project layout
 
@@ -155,9 +155,8 @@ Data is only collected while a viewer is connected, and the client only listens 
 
 ## Roadmap
 
-- [ ] Profiler: bind statistics
 - [ ] Per-pass material override (dedicated depth-only shadow material)
-- [ ] State caching and draw sorting to reduce redundant pipeline/descriptor binds
+- [ ] Back-to-front sorting of transparent draws (needs per-object transforms)
 - [ ] Viewport-driven render target resizing
 - [ ] Per-object transforms (push constants on Vulkan, UBO on OpenGL)
 - [ ] Multiple shadow-casting lights, cascaded shadow maps

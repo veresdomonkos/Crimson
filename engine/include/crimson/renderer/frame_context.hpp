@@ -24,6 +24,14 @@ namespace crimson
         uint32_t IndexCount = 0;
     };
 
+    struct SortedDraw
+    {
+        const DrawInfo* Draw = nullptr;
+        uint64_t Shader = 0;
+        uint32_t Cull = 0;
+        bool Transparent = false;
+    };
+
     class RenderPass
     {
     public:

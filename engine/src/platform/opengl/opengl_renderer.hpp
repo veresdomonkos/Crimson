@@ -1,7 +1,10 @@
 #pragma once
 #include "opengl_resource_manager.hpp"
 #include "opengl_device.hpp"
+#include "opengl_state_cache.hpp"
 #include "crimson/renderer/renderer.hpp"
+
+#include <vector>
 
 namespace crimson::opengl
 {
@@ -18,6 +21,8 @@ namespace crimson::opengl
         void ExecuteDraw(const DrawInfo &info);
         void ExecuteBeginRenderPass(const RenderPassInfo& info);
         void ExecuteBeginRawPass(const RawPassInfo& info);
+        void ClearTarget(ClearFlags flags, const glm::vec4& color, float depth, uint32_t stencil);
+        void ResetBoundState();
     private:
         GLuint m_cameraUBO = 0;
         GLuint m_lightingUBO = 0;
@@ -25,5 +30,11 @@ namespace crimson::opengl
         OpenGLDevice& m_device;
         OpenGLResourceManager& m_resourceManager;
         Frame m_frames[1];
+
+        std::vector<SortedDraw> m_drawOrder;
+        OpenGLStateCache m_state;
+        MaterialHandle m_boundMaterial;
+        VertexBufferHandle m_boundVertexBuffer;
+        IndexBufferHandle m_boundIndexBuffer;
     };
 }

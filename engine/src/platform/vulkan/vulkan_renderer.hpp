@@ -19,6 +19,24 @@ namespace crimson::vulkan
         vk::raii::Fence InFlightFence{ nullptr };
     };
 
+    // What the current command buffer has bound, so nothing gets recorded twice
+    struct BoundDrawState
+    {
+        // Key of the last pipeline lookup, to skip the hash lookup when none of it changed
+        const VulkanGraphicsPipeline* PipelineEntry = nullptr;
+        ShaderHandle Shader;
+        MaterialSettings Settings;
+        RenderTargetHandle Target;
+        VertexBufferHandle VertexBufferHandle;
+
+        vk::Pipeline Pipeline;
+        vk::PipelineLayout Layout;
+        vk::Buffer VertexBuffer;
+        vk::Buffer IndexBuffer;
+        vk::DescriptorSet MaterialSet;
+        bool GlobalsBound = false;
+    };
+
     class VulkanRenderer : public Renderer
     {
     public:
@@ -63,6 +81,9 @@ namespace crimson::vulkan
         vk::raii::CommandPool m_commandPool{ nullptr };
         std::array<FrameSync, MAX_FRAMES_IN_FLIGHT> m_frameSyncs;
         uint32_t m_currentFrameIndex = 0;
+
+        std::vector<SortedDraw> m_drawOrder;
+        BoundDrawState m_bound;
 
         TracyVkCtx m_tracyContext = nullptr;
     };

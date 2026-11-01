@@ -54,6 +54,7 @@ set(ENGINE_IMPLEMENTATION
         src/platform/vulkan/vulkan_pipeline_cache.hpp
         src/platform/opengl/utils.hpp
         src/platform/opengl/vertex_array_cache.hpp
+        src/platform/opengl/opengl_state_cache.hpp
         include/crimson/renderer/texture.hpp
         src/platform/vulkan/utils.hpp
         src/platform/opengl/opengl_imgui_backend.hpp

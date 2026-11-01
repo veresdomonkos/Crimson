@@ -10,6 +10,9 @@ namespace crimson
         uint32_t DrawCalls = 0;
         uint64_t Triangles = 0;
         uint32_t Passes = 0;
+        uint32_t PipelineBinds = 0;
+        uint32_t MaterialBinds = 0;
+        uint32_t BufferBinds = 0;
         double WaitSeconds = 0.0; // blocked on fences, image acquire, present or swap
     };
 

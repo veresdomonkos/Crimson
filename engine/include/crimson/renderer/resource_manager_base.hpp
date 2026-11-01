@@ -1,5 +1,11 @@
 #pragma once
 
+#include <algorithm>
+#include <span>
+#include <tuple>
+#include <vector>
+
+#include "crimson/renderer/frame_context.hpp"
 #include "crimson/renderer/handle_registry.hpp"
 #include "crimson/renderer/resource_manager.hpp"
 
@@ -30,6 +36,38 @@ namespace crimson
         const Shader& GetShader(ShaderHandle handle) const { return m_shaders.Get(handle); }
         const Material& GetMaterial(MaterialHandle handle) const { return  m_materials.Get(handle); }
         const Texture& GetTexture(TextureHandle handle) const { return m_textures.Get(handle); }
+
+        // Opaque draws first, grouped by state so the renderers rebind as little as possible.
+        // Transparent draws stay in submission order, they have no depth to sort by yet.
+        void BuildDrawOrder(std::span<const DrawInfo> draws, std::vector<SortedDraw>& order) const
+        {
+            order.clear();
+            order.reserve(draws.size());
+
+            for (const DrawInfo& draw : draws)
+            {
+                const Material& material = m_materials.Get(draw.Material);
+
+                order.push_back({
+                    .Draw = &draw,
+                    .Shader = material.Shader.GetRaw(),
+                    .Cull = static_cast<uint32_t>(material.Settings.Cull),
+                    .Transparent = material.Settings.RenderMode == MaterialRenderMode::Transparent
+                });
+            }
+
+            std::stable_sort(order.begin(), order.end(), [](const SortedDraw& a, const SortedDraw& b)
+            {
+                if (a.Transparent != b.Transparent)
+                    return b.Transparent;
+
+                if (a.Transparent)
+                    return false;
+
+                return std::tuple(a.Shader, a.Cull, a.Draw->Material.GetRaw(), a.Draw->VertexBuffer.GetRaw(), a.Draw->IndexBuffer.GetRaw(), a.Draw->FirstIndex)
+                     < std::tuple(b.Shader, b.Cull, b.Draw->Material.GetRaw(), b.Draw->VertexBuffer.GetRaw(), b.Draw->IndexBuffer.GetRaw(), b.Draw->FirstIndex);
+            });
+        }
     protected:
         HandleRegistry<RenderTargetHandle, RenderTarget> m_renderTargets;
         HandleRegistry<VertexBufferHandle, VertexBuffer> m_vertexBuffers;

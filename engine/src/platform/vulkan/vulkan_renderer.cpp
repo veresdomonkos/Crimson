@@ -234,6 +234,9 @@ namespace crimson::vulkan
         }
 
         BeginRenderingOnTarget(cmdBuffer, rt, info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
+
+        // The camera's dynamic offset is different for every pass
+        m_bound.GlobalsBound = false;
     }
 
     void VulkanRenderer::ExecuteEndRenderPass(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt)
@@ -266,6 +269,9 @@ namespace crimson::vulkan
         handles.CommandBuffer = static_cast<VkCommandBuffer>(*cmdBuffer);
         handles.ColorFormat = static_cast<uint32_t>(m_resourceManager.GetTexture(rt.ColorAttachments[0]).Format);
         info.Callback(handles);
+
+        // The callback records its own pipeline, buffer and descriptor set binds
+        m_bound = {};
 
         ExecuteEndRenderPass(cmdBuffer, rt);
     }
@@ -340,24 +346,72 @@ namespace crimson::vulkan
 
         if (!*material.DescriptorSet) return;
 
-        VulkanGraphicsPipeline& pipeline = m_resourceManager.GetOrCreateGraphicsPipeline({
-            .Layout = vertexBuffer.Layout, .Shader = material.Shader, .Target = target, .Settings = material.Settings
-        });
+        if (!m_bound.PipelineEntry || m_bound.Shader != material.Shader || m_bound.Settings != material.Settings
+            || m_bound.Target != target || m_bound.VertexBufferHandle != draw.VertexBuffer)
+        {
+            m_bound.PipelineEntry = &m_resourceManager.GetOrCreateGraphicsPipeline({
+                .Layout = vertexBuffer.Layout, .Shader = material.Shader, .Target = target, .Settings = material.Settings
+            });
+            m_bound.Shader = material.Shader;
+            m_bound.Settings = material.Settings;
+            m_bound.Target = target;
+            m_bound.VertexBufferHandle = draw.VertexBuffer;
+        }
+
+        const VulkanGraphicsPipeline& pipeline = *m_bound.PipelineEntry;
         if (!*pipeline.Pipeline) return;
 
-        cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.Pipeline);
+        if (m_bound.Pipeline != *pipeline.Pipeline)
+        {
+            cmdBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline.Pipeline);
+            m_bound.Pipeline = *pipeline.Pipeline;
+            ++m_stats.PipelineBinds;
+        }
 
-        cmdBuffer.bindVertexBuffers(0, vertexBuffer.Buffer.Get(), vk::DeviceSize{ 0 });
-        cmdBuffer.bindIndexBuffer(indexBuffer.Buffer.Get(), 0, indexBuffer.Type == IndexType::UInt32 ? vk::IndexType::eUint32 : vk::IndexType::eUint16);
+        // Each shader has its own layout. Set 0 is the same in all of them and stays valid,
+        // but set 1 differs, so a new layout invalidates the bound material.
+        if (m_bound.Layout != pipeline.Layout)
+        {
+            m_bound.Layout = pipeline.Layout;
+            m_bound.MaterialSet = nullptr;
+        }
 
-        uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
-        const std::array<uint32_t, 2> dynamicOffsets = {
-            static_cast<uint32_t>(globalPassIndex * m_cameraUboAlignment),
-            static_cast<uint32_t>(m_currentFrameIndex * m_lightingUboAlignment)
-        };
+        const vk::Buffer vertexBufferHandle = vertexBuffer.Buffer.Get();
+        const vk::Buffer indexBufferHandle = indexBuffer.Buffer.Get();
 
-        const std::array<vk::DescriptorSet, 2> descriptorSets = { *m_globalDescriptorSet, *material.DescriptorSet };
-        cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline.Layout, 0, descriptorSets, dynamicOffsets);
+        if (m_bound.VertexBuffer != vertexBufferHandle || m_bound.IndexBuffer != indexBufferHandle)
+            ++m_stats.BufferBinds;
+
+        if (m_bound.VertexBuffer != vertexBufferHandle)
+        {
+            cmdBuffer.bindVertexBuffers(0, vertexBufferHandle, vk::DeviceSize{ 0 });
+            m_bound.VertexBuffer = vertexBufferHandle;
+        }
+
+        if (m_bound.IndexBuffer != indexBufferHandle)
+        {
+            cmdBuffer.bindIndexBuffer(indexBufferHandle, 0, indexBuffer.Type == IndexType::UInt32 ? vk::IndexType::eUint32 : vk::IndexType::eUint16);
+            m_bound.IndexBuffer = indexBufferHandle;
+        }
+
+        if (!m_bound.GlobalsBound)
+        {
+            uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
+            const std::array<uint32_t, 2> dynamicOffsets = {
+                static_cast<uint32_t>(globalPassIndex * m_cameraUboAlignment),
+                static_cast<uint32_t>(m_currentFrameIndex * m_lightingUboAlignment)
+            };
+
+            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, 0, *m_globalDescriptorSet, dynamicOffsets);
+            m_bound.GlobalsBound = true;
+        }
+
+        if (m_bound.MaterialSet != *material.DescriptorSet)
+        {
+            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, 1, *material.DescriptorSet, nullptr);
+            m_bound.MaterialSet = *material.DescriptorSet;
+            ++m_stats.MaterialBinds;
+        }
 
         const uint32_t total = static_cast<uint32_t>(indexBuffer.Size / Index::Size(indexBuffer.Type));
         const uint32_t indexCount = draw.IndexCount ? draw.IndexCount : total;
@@ -443,6 +497,7 @@ namespace crimson::vulkan
         vk::CommandBufferBeginInfo begin{};
         begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
         sync.CommandBuffer.begin(begin);
+        m_bound = {};
 
         TracyVkCollect(m_tracyContext, static_cast<VkCommandBuffer>(*sync.CommandBuffer));
 
@@ -474,8 +529,11 @@ namespace crimson::vulkan
                 VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(passInfo.Target);
 
                 ExecuteBeginRenderPass(cmdBuffer, passInfo, passIndex);
-                for (const auto& draw : materialPass->GetDraws())
-                    ExecuteDraw(cmdBuffer, draw, passInfo.Target, passIndex);
+
+                m_resourceManager.BuildDrawOrder(materialPass->GetDraws(), m_drawOrder);
+                for (const SortedDraw& sorted : m_drawOrder)
+                    ExecuteDraw(cmdBuffer, *sorted.Draw, passInfo.Target, passIndex);
+
                 ExecuteEndRenderPass(cmdBuffer, rt);
                 ++passIndex;
             }

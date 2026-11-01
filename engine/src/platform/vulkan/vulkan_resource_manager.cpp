@@ -222,6 +222,15 @@ namespace crimson::vulkan
 
             shader.MaterialSetLayout = m_device.GetDevice().createDescriptorSetLayout(layoutInfo);
 
+            // Shared by all of the shader's pipelines, so switching between them keeps its material bound
+            const std::array<vk::DescriptorSetLayout, 2> setLayouts = { *m_globalSetLayout, *shader.MaterialSetLayout };
+
+            vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
+            pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
+            pipelineLayoutInfo.pSetLayouts = setLayouts.data();
+
+            shader.PipelineLayout = m_device.GetDevice().createPipelineLayout(pipelineLayoutInfo);
+
             return m_shaders.Register(std::move(shader));
         }
         catch (const vk::SystemError& error)
@@ -633,18 +642,11 @@ namespace crimson::vulkan
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
         dynamicState.pDynamicStates = dynamicStates.data();
 
-        std::array<vk::DescriptorSetLayout, 2> setLayouts = { *m_globalSetLayout, *shader.MaterialSetLayout };
-
-        vk::PipelineLayoutCreateInfo layoutInfo{};
-        layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-        layoutInfo.pSetLayouts = setLayouts.data();
-
         VulkanGraphicsPipeline pipeline{};
+        pipeline.Layout = *shader.PipelineLayout;
 
         try
         {
-            pipeline.Layout = m_device.GetDevice().createPipelineLayout(layoutInfo);
-
             vk::PipelineRenderingCreateInfo renderingInfo{};
             renderingInfo.viewMask = 0;
             renderingInfo.colorAttachmentCount = static_cast<uint32_t>(colorFormats.size());
@@ -664,7 +666,7 @@ namespace crimson::vulkan
             pipelineInfo.pDepthStencilState = &depthState;
             pipelineInfo.pColorBlendState = &colorBlendInfo;
             pipelineInfo.pDynamicState = &dynamicState;
-            pipelineInfo.layout = *pipeline.Layout;
+            pipelineInfo.layout = pipeline.Layout;
             pipelineInfo.subpass = 0;
             pipelineInfo.basePipelineIndex = -1;
 
