@@ -52,7 +52,7 @@ namespace crimson
     {
         const entt::entity handle = m_registry.create();
 
-        m_registry.emplace<NameComponent>(handle, std::move(name));
+        m_registry.emplace<NameComponent>(handle, std::move(name), true, AssetID::Generate());
         m_registry.emplace<TransformComponent>(handle);
         m_registry.emplace<RelationshipComponent>(handle);
 
@@ -77,6 +77,12 @@ namespace crimson
 
         Detach(entity.GetHandle());
         m_registry.destroy(entity.GetHandle());
+    }
+
+    void Scene::Clear()
+    {
+        m_registry.clear();
+        m_roots.clear();
     }
 
     bool Scene::SetParent(Entity entity, Entity parent)

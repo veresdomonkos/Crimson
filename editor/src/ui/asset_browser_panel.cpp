@@ -41,6 +41,7 @@ namespace crimson::editor::ui
             case AssetType::Mesh:     return IM_COL32(60, 110, 150, 255);
             case AssetType::Shader:   return IM_COL32(95, 75, 150, 255);
             case AssetType::Texture:  return IM_COL32(60, 130, 90, 255);
+            case AssetType::Scene:    return IM_COL32(170, 105, 50, 255);
             default:                  return IM_COL32(90, 90, 90, 255);
         }
     }
@@ -223,7 +224,7 @@ namespace crimson::editor::ui
 
             if (!IsEngineFolder(folder))
             {
-                for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture })
+                for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture, AssetType::Scene })
                 {
                     if (const AssetID dropped = AcceptAssetOnLastItem(m_context.Assets, type))
                         MoveAssetToFolder(dropped, folder);
@@ -307,7 +308,7 @@ namespace crimson::editor::ui
 
         if (!IsEngineFolder(folder))
         {
-            for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture })
+            for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture, AssetType::Scene })
             {
                 if (const AssetID dropped = AcceptAssetOnLastItem(m_context.Assets, type))
                     MoveAssetToFolder(dropped, folder);
@@ -326,8 +327,11 @@ namespace crimson::editor::ui
         const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
         const bool selected = m_context.SelectedAsset == item.Id;
 
-        if (ImGui::Selectable("##Asset", selected, 0, ImVec2(tileSize, tileSize + lineHeight)))
+        if (ImGui::Selectable("##Asset", selected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(tileSize, tileSize + lineHeight)))
             m_context.SelectAsset(item.Id);
+
+        if (item.Type == AssetType::Scene && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+            m_context.OpenScene(item.Id);
 
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", item.Path.c_str());
@@ -397,6 +401,12 @@ namespace crimson::editor::ui
             OpenDialog(Dialog::NewMaterial, "New Material");
         }
 
+        if (ImGui::MenuItem("New Scene"))
+        {
+            m_currentFolder = folder;
+            OpenDialog(Dialog::NewScene, "New Scene");
+        }
+
         if (ImGui::MenuItem("New Folder"))
         {
             m_currentFolder = folder;
@@ -430,6 +440,9 @@ namespace crimson::editor::ui
         if (ImGui::MenuItem("New Material"))
             OpenDialog(Dialog::NewMaterial, "New Material");
 
+        if (ImGui::MenuItem("New Scene"))
+            OpenDialog(Dialog::NewScene, "New Scene");
+
         if (ImGui::MenuItem("New Folder"))
             OpenDialog(Dialog::NewFolder, "New Folder");
 
@@ -461,6 +474,7 @@ namespace crimson::editor::ui
             {
                 case Dialog::NewFolder:    return "New Folder###AssetDialog";
                 case Dialog::NewMaterial:  return "New Material###AssetDialog";
+                case Dialog::NewScene:     return "New Scene###AssetDialog";
                 case Dialog::RenameAsset:
                 case Dialog::RenameFolder: return "Rename###AssetDialog";
                 case Dialog::DeleteAsset:
@@ -548,6 +562,14 @@ namespace crimson::editor::ui
                 refreshAfter([this, path = JoinToCurrent(name + ".mat")]
                 {
                     if (const AssetID id = m_context.Assets.CreateMaterial(path))
+                        m_context.SelectAsset(id);
+                });
+                break;
+
+            case Dialog::NewScene:
+                refreshAfter([this, path = JoinToCurrent(name + ".scene")]
+                {
+                    if (const AssetID id = m_context.Assets.CreateScene(path))
                         m_context.SelectAsset(id);
                 });
                 break;

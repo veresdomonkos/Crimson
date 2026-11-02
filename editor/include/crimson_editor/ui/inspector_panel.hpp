@@ -15,6 +15,7 @@ namespace crimson::editor::ui
         void DrawTransform(Entity entity);
         void DrawLight(Entity entity);
         void DrawMeshRenderer(Entity entity);
+        void DrawSceneInstance(Entity entity);
         void DrawAddComponent(Entity entity);
     private:
         EditorContext& m_context;

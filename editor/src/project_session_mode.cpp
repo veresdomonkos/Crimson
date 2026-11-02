@@ -2,12 +2,14 @@
 
 #include <crimson/core/log.hpp>
 #include <crimson/core/profiler.hpp>
+#include <crimson/scene/scene_serializer.hpp>
 #include <algorithm>
 #include <utility>
+#include <vector>
 #include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/quaternion.hpp>
 #include <GLFW/glfw3.h>
 
+#include "crimson_editor/recent_projects.hpp"
 #include "crimson_editor/ui/asset_browser_panel.hpp"
 #include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
@@ -29,18 +31,20 @@ namespace crimson::editor
           m_assetEdits(std::make_unique<AssetEdits>(*m_assetManager)),
           m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, *m_services.Graphics.Imgui)),
           m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails,
-                     .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); } }
+                     .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
+                     .OpenScene = [this](AssetID id) { OpenScene(id); } }
     {
         LOG_INFO("[Editor] Opening project '{}' at {}", m_project.Name(), m_project.Root().string());
 
         m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer);
         m_ui = std::make_unique<ui::EditorUI>(
-            [this] { m_assetEdits->SaveAll(); },
+            [this] { SaveAll(); },
             [this] { RequestClose(m_services.CloseProject); });
 
         CreateRenderTargets();
-        CreateScene();
+        SetupRenderer();
         SetupUI();
+        LoadScene(ChooseScene(m_services.Recents.GetLastScene(m_project.Root())));
 
         m_cameraController = std::make_unique<SceneCameraController>(m_camera, m_services.AppInput, *m_sceneViewport);
 
@@ -72,73 +76,8 @@ namespace crimson::editor
         m_mainColor  = GpuResources().GetColorAttachment(m_mainTarget, 0);
     }
 
-    Entity ProjectSessionMode::CreateMeshEntity(const char* name, const char* mesh, const char* material)
+    void ProjectSessionMode::SetupRenderer()
     {
-        const AssetID meshAsset = m_assetManager->FindId(mesh);
-        if (!meshAsset)
-            return {};
-
-        const Entity entity = m_scene.CreateEntity(name);
-
-        auto& renderer = entity.AddComponent<MeshRendererComponent>();
-        renderer.MeshAsset = meshAsset;
-        renderer.MaterialAssets = { m_assetManager->FindId(material) };
-        ResolveMeshRenderer(renderer, *m_assetManager);
-
-        return entity;
-    }
-
-    void ProjectSessionMode::CreateScene()
-    {
-        constexpr float kFloorHeight = -0.5f;
-        constexpr float kBunnyHeight = 1.5f;
-
-        const auto addLight = [this](const char* name, Entity parent, const LightComponent& light, const glm::vec3& position, const glm::vec3& direction)
-        {
-            const Entity entity = m_scene.CreateEntity(name, parent);
-            entity.AddComponent<LightComponent>(light);
-
-            // Points the light's -Z axis along the direction
-            auto& transform = entity.GetComponent<TransformComponent>();
-            transform.Position = position;
-            transform.RotationDegrees = glm::degrees(glm::eulerAngles(glm::quatLookAt(glm::normalize(direction), glm::vec3(0.0f, 1.0f, 0.0f))));
-        };
-
-        // Only the demo project has these meshes, any other project starts with just the lights
-        if (const Entity floor = CreateMeshEntity("Floor", "meshes/floor.obj", "materials/floor.mat"))
-            floor.GetComponent<TransformComponent>().Position = glm::vec3(0.0f, kFloorHeight, 0.0f);
-
-        if (const Entity pyramid = CreateMeshEntity("Pyramid", "meshes/pyramid.obj", "materials/pyramid.mat"))
-            pyramid.GetComponent<TransformComponent>().Position = glm::vec3(-1.5f, kFloorHeight, 0.0f);
-
-        // The bunny's file is in its own units and not centered, so fit it to the floor
-        if (const Entity bunny = CreateMeshEntity("Bunny", "meshes/stanford-bunny.obj", "materials/bunny.mat"))
-        {
-            const MeshBounds& bounds = bunny.GetComponent<MeshRendererComponent>().Resolved.Bounds;
-            const float bunnyScale = kBunnyHeight / std::max(bounds.Max.y - bounds.Min.y, 0.0001f);
-            const glm::vec3 bunnyOrigin((bounds.Min.x + bounds.Max.x) * 0.5f, bounds.Min.y, (bounds.Min.z + bounds.Max.z) * 0.5f);
-
-            auto& bunnyTransform = bunny.GetComponent<TransformComponent>();
-            bunnyTransform.Scale = glm::vec3(bunnyScale);
-            bunnyTransform.Position = glm::vec3(1.2f, kFloorHeight, 0.5f) - bunnyScale * bunnyOrigin;
-        }
-
-        const Entity lights = m_scene.CreateEntity("Lights");
-
-        addLight("Sun", lights, { .Type = LightType::Directional, .Color = glm::vec3(1.0f), .Intensity = 1.2f, .CastsShadow = true },
-            glm::vec3(0.0f, 8.0f, 0.0f), glm::vec3(-0.5f, -1.0f, -0.3f));
-
-        addLight("Orange Point", lights, { .Type = LightType::Point, .Color = glm::vec3(1.0f, 0.5f, 0.2f), .Intensity = 10.0f, .Range = 12.0f, .CastsShadow = true },
-            glm::vec3(2.0f, 3.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
-
-        addLight("Red Point", lights, { .Type = LightType::Point, .Color = glm::vec3(0.8f, 0.1f, 0.2f), .Intensity = 10.0f, .Range = 12.0f },
-            glm::vec3(-2.0f, 3.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
-
-        addLight("Blue Spot", lights, { .Type = LightType::Spot, .Color = glm::vec3(0.2f, 0.5f, 1.0f), .Intensity = 25.0f, .Range = 16.0f, .InnerConeDegrees = 20.0f, .OuterConeDegrees = 35.0f, .CastsShadow = true },
-            glm::vec3(0.0f, 4.0f, 3.0f), glm::vec3(0.0f, -1.0f, -0.8f));
-
-        m_lighting.AmbientColor = glm::vec3(0.05f);
-
         m_sceneRenderer->SetToneMapMaterial(m_assetManager->LoadMaterial("engine/materials/tonemap.mat"), kMainTargetWidth, kMainTargetHeight);
         m_sceneRenderer->SetShadowMaterial(m_assetManager->LoadMaterial("engine/materials/shadow.mat"));
         m_sceneRenderer->SetOutlineMaterials(m_assetManager->LoadMaterial("engine/materials/outline_mask.mat"), m_assetManager->LoadMaterial("engine/materials/outline.mat"), kMainTargetWidth, kMainTargetHeight);
@@ -155,7 +94,7 @@ namespace crimson::editor
         m_ui->AddPanel<ui::HierarchyPanel>(m_context);
         m_ui->AddPanel<ui::InspectorPanel>(m_context);
         m_ui->AddPanel<ui::StatsPanel>(m_frameStats, m_services.RendererType);
-        m_ui->AddPanel<ui::RenderSettingsPanel>(m_context, *m_sceneRenderer, m_lighting);
+        m_ui->AddPanel<ui::RenderSettingsPanel>(m_context, *m_sceneRenderer, m_environment);
     }
 
     void ProjectSessionMode::RunDeferred()
@@ -209,11 +148,107 @@ namespace crimson::editor
 
         // Also for materials that went away because a shader they used is gone
         ResolveAllMeshRenderers();
+
+        if (isRemoved(m_context.ActiveSceneAsset))
+        {
+            LoadScene(ChooseScene({}));
+            return;
+        }
+
+        std::vector<Entity> brokenInstances;
+
+        for (auto [handle, instance] : m_scene.GetRegistry().view<SceneInstanceComponent>().each())
+        {
+            if (isRemoved(instance.Scene))
+                brokenInstances.push_back(m_scene.GetEntity(handle));
+        }
+
+        for (const Entity instance : brokenInstances)
+        {
+            // It can be inside of another one that just went
+            if (instance)
+                BreakSceneInstance(instance, m_scene);
+        }
+    }
+
+    AssetID ProjectSessionMode::ChooseScene(AssetID preferred)
+    {
+        if (const AssetInfo* info = m_assetManager->GetInfo(preferred); info && info->Type == AssetType::Scene)
+            return preferred;
+
+        const std::vector<const AssetInfo*> scenes = m_assetManager->List(AssetType::Scene);
+        return scenes.empty() ? m_assetManager->CreateScene("scenes/main.scene") : scenes.front()->Id;
+    }
+
+    void ProjectSessionMode::OpenScene(AssetID id)
+    {
+        if (id == m_context.ActiveSceneAsset)
+            return;
+
+        RequestClose([this, id]
+        {
+            m_context.Deferred.emplace_back([this, id] { LoadScene(id); });
+        });
+    }
+
+    void ProjectSessionMode::LoadScene(AssetID id)
+    {
+        m_context.Selected = {};
+        m_context.ActiveSceneAsset = {};
+        m_context.SceneChanged = false;
+        m_scene.Clear();
+
+        const std::optional<SceneData> data = m_assetManager->ReadSceneFile(id);
+        if (!data)
+            return;
+
+        InstantiateScene(*data, m_scene, {}, *m_assetManager, id);
+
+        m_environment = data->Environment;
+        m_sceneRenderer->SetToneMapping(m_environment.Exposure, m_environment.Mapper);
+
+        // Not the file's data, as loading can fill things in that shouldn't count as a change
+        m_savedScene = CaptureScene(m_scene, m_environment, *m_assetManager);
+        m_context.ActiveSceneAsset = id;
+
+        m_services.Recents.SetLastScene(m_project.Root(), id);
+    }
+
+    bool ProjectSessionMode::IsSceneChanged()
+    {
+        return m_context.ActiveSceneAsset && CaptureScene(m_scene, m_environment, *m_assetManager) != m_savedScene;
+    }
+
+    bool ProjectSessionMode::SaveAll()
+    {
+        bool saved = m_assetEdits->SaveAll();
+
+        if (!m_context.ActiveSceneAsset)
+        {
+            LOG_WARN("[Editor] No scene is open, so no scene was saved");
+            return saved;
+        }
+
+        SceneData current = CaptureScene(m_scene, m_environment, *m_assetManager);
+        if (current == m_savedScene)
+            return saved;
+
+        if (m_assetManager->SaveScene(m_context.ActiveSceneAsset, current))
+        {
+            m_savedScene = std::move(current);
+            m_context.SceneChanged = false;
+        }
+        else
+        {
+            saved = false;
+        }
+
+        return saved;
     }
 
     void ProjectSessionMode::RequestClose(std::function<void()> proceed)
     {
-        if (!m_assetEdits->HasUnsavedChanges())
+        if (!m_assetEdits->HasUnsavedChanges() && !IsSceneChanged())
         {
             proceed();
             return;
@@ -226,7 +261,7 @@ namespace crimson::editor
     void ProjectSessionMode::SaveAllAndClose()
     {
         // A file that can't be written is in the console, and it is better to stay than to lose the edit
-        if (m_assetEdits->SaveAll())
+        if (SaveAll())
             std::exchange(m_closeAction, {})();
     }
 
@@ -254,7 +289,7 @@ namespace crimson::editor
         if (!ImGui::BeginPopupModal(kPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
             return;
 
-        ImGui::TextUnformatted("Some assets have changes that aren't saved.");
+        ImGui::TextUnformatted("The scene or some assets have changes that aren't saved.");
         ImGui::Spacing();
 
         bool close = false;
@@ -287,6 +322,8 @@ namespace crimson::editor
 
     void ProjectSessionMode::PrepareFrame()
     {
+        m_lighting.AmbientColor = m_environment.Ambient;
+
         m_scene.UpdateWorldTransforms();
         m_sceneRenderer->BuildLighting(m_scene, m_lighting);
     }
@@ -314,6 +351,15 @@ namespace crimson::editor
     {
         RunDeferred();
         UpdateFrameStats();
+
+        constexpr float kSceneCheckSeconds = 0.25f;
+
+        m_sinceSceneCheck += deltaTime;
+        if (m_sinceSceneCheck >= kSceneCheckSeconds)
+        {
+            m_sinceSceneCheck = 0.0f;
+            m_context.SceneChanged = IsSceneChanged();
+        }
 
         m_cameraController->Update(deltaTime);
         HandleShortcuts();
@@ -358,7 +404,7 @@ namespace crimson::editor
     void ProjectSessionMode::HandleShortcuts()
     {
         if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
-            m_assetEdits->SaveAll();
+            SaveAll();
 
         if (!ImGui::GetIO().WantTextInput && !m_services.AppInput.IsMouseButtonDown(MouseButton::Right)
             && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_context.Selected)

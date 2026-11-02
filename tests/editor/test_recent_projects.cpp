@@ -22,6 +22,29 @@ TEST_CASE("The recent projects are empty on a first start", "[recent projects]")
     CHECK(recents.GetEntries().empty());
 }
 
+TEST_CASE("A project's last scene is remembered", "[recent projects]")
+{
+    const TempFolder temp;
+    const fs::path file = temp.Path() / "recent.json";
+    const Project project = *Project::Create(temp.Path(), "A");
+    const AssetID scene = AssetID::Generate();
+
+    {
+        RecentProjects recents(file);
+        recents.Add(project);
+        CHECK_FALSE(recents.GetLastScene(project.Root()));
+
+        recents.SetLastScene(project.Root(), scene);
+        recents.SetLastScene(temp.Path() / "not listed", AssetID::Generate());
+
+        // Opening it again is no reason to forget
+        recents.Add(project);
+        CHECK(recents.GetLastScene(project.Root()) == scene);
+    }
+
+    CHECK(RecentProjects(file).GetLastScene(project.Root()) == scene);
+}
+
 TEST_CASE("The most recently added project comes first", "[recent projects]")
 {
     const TempFolder temp;

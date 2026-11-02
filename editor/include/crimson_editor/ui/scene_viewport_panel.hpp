@@ -20,6 +20,7 @@ namespace crimson::editor::ui
         void HandlePicking(const ImVec2& position, const ImVec2& size);
         void HandleAssetDrop(const ImVec2& position, const ImVec2& size);
         void CreateEntityFromMesh(AssetID mesh, const glm::vec3& origin, const glm::vec3& direction);
+        void CreateInstanceOfScene(AssetID scene, const glm::vec3& origin, const glm::vec3& direction);
         void AssignMaterialToEntity(AssetID material, const glm::vec3& origin, const glm::vec3& direction);
 
         // False when the mouse is on the bars around the image

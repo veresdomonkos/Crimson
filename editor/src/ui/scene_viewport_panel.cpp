@@ -5,11 +5,21 @@
 #include <glm/gtc/type_ptr.hpp>
 
 #include <crimson/scene/scene_renderer.hpp>
+#include <crimson/scene/scene_serializer.hpp>
 
 #include "crimson_editor/ui/asset_drag.hpp"
 
 namespace crimson::editor::ui
 {
+    // Where the mouse points on the ground, unless it points above the horizon
+    static glm::vec3 GetDropPosition(const glm::vec3& origin, const glm::vec3& direction)
+    {
+        constexpr float kDistanceWithoutGround = 5.0f;
+
+        const float toGround = direction.y < -0.0001f ? -origin.y / direction.y : -1.0f;
+        return origin + direction * (toGround > 0.0f ? toGround : kDistanceWithoutGround);
+    }
+
     void SceneViewportPanel::OnImageDrawn(const ImVec2& position, const ImVec2& size)
     {
         HandleAssetDrop(position, size);
@@ -36,8 +46,17 @@ namespace crimson::editor::ui
             return;
 
         glm::vec3 direction;
-        if (GetRayUnderMouse(position, size, direction))
-            m_context.SelectEntity(m_context.ActiveScene.Raycast(m_camera.GetPosition(), direction));
+        if (!GetRayUnderMouse(position, size, direction))
+            return;
+
+        Scene& scene = m_context.ActiveScene;
+        Entity entity = scene.Raycast(m_camera.GetPosition(), direction);
+
+        // What is inside an instance can't be changed here, so a click means the instance
+        while (entity && entity.HasComponent<InstancedComponent>())
+            entity = scene.GetEntity(entity.GetComponent<RelationshipComponent>().Parent);
+
+        m_context.SelectEntity(entity);
     }
 
     bool SceneViewportPanel::GetRayUnderMouse(const ImVec2& position, const ImVec2& size, glm::vec3& direction) const
@@ -62,8 +81,9 @@ namespace crimson::editor::ui
     {
         const AssetID mesh = AcceptAssetOnLastItem(m_context.Assets, AssetType::Mesh);
         const AssetID material = AcceptAssetOnLastItem(m_context.Assets, AssetType::Material);
+        const AssetID scene = AcceptAssetOnLastItem(m_context.Assets, AssetType::Scene);
 
-        if (!mesh && !material)
+        if (!mesh && !material && !scene)
             return;
 
         glm::vec3 direction;
@@ -72,10 +92,12 @@ namespace crimson::editor::ui
 
         const glm::vec3 origin = m_camera.GetPosition();
 
-        m_context.Deferred.emplace_back([this, mesh, material, origin, direction]
+        m_context.Deferred.emplace_back([this, mesh, material, scene, origin, direction]
         {
             if (mesh)
                 CreateEntityFromMesh(mesh, origin, direction);
+            else if (scene)
+                CreateInstanceOfScene(scene, origin, direction);
             else
                 AssignMaterialToEntity(material, origin, direction);
         });
@@ -87,14 +109,8 @@ namespace crimson::editor::ui
         if (!info)
             return;
 
-        constexpr float kDistanceWithoutGround = 5.0f;
-
-        // Where the mouse points on the ground, unless it points above the horizon
-        const float toGround = direction.y < -0.0001f ? -origin.y / direction.y : -1.0f;
-        const float distance = toGround > 0.0f ? toGround : kDistanceWithoutGround;
-
         const Entity entity = m_context.ActiveScene.CreateEntity(std::filesystem::path(info->Path).stem().string());
-        entity.GetComponent<TransformComponent>().Position = origin + direction * distance;
+        entity.GetComponent<TransformComponent>().Position = GetDropPosition(origin, direction);
 
         auto& renderer = entity.AddComponent<MeshRendererComponent>();
         renderer.MeshAsset = mesh;
@@ -103,10 +119,20 @@ namespace crimson::editor::ui
         m_context.SelectEntity(entity);
     }
 
+    void SceneViewportPanel::CreateInstanceOfScene(AssetID scene, const glm::vec3& origin, const glm::vec3& direction)
+    {
+        const Entity entity = CreateSceneInstance(scene, m_context.ActiveScene, {}, m_context.Assets, m_context.ActiveSceneAsset);
+        if (!entity)
+            return;
+
+        entity.GetComponent<TransformComponent>().Position = GetDropPosition(origin, direction);
+        m_context.SelectEntity(entity);
+    }
+
     void SceneViewportPanel::AssignMaterialToEntity(AssetID material, const glm::vec3& origin, const glm::vec3& direction)
     {
         const Entity entity = m_context.ActiveScene.Raycast(origin, direction);
-        if (!entity)
+        if (!entity || entity.HasComponent<InstancedComponent>())
             return;
 
         auto* renderer = entity.TryGetComponent<MeshRendererComponent>();
@@ -160,7 +186,7 @@ namespace crimson::editor::ui
     void SceneViewportPanel::DrawGizmo(const ImVec2& position, const ImVec2& size)
     {
         const Entity entity = m_context.Selected;
-        if (!entity)
+        if (!entity || entity.HasComponent<InstancedComponent>())
             return;
 
         // Holding alt is for moving the camera

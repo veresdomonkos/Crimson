@@ -20,24 +20,24 @@ namespace crimson::editor::ui
 
         constexpr std::array kToneMapperNames = { "ACES", "None" };
 
-        bool changed = ImGui::SliderFloat("Exposure", &m_exposure, 0.05f, 16.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+        bool changed = ImGui::SliderFloat("Exposure", &m_environment.Exposure, 0.05f, 16.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
 
-        int toneMapper = static_cast<int>(m_toneMapper);
+        int toneMapper = static_cast<int>(m_environment.Mapper);
         if (ImGui::Combo("Tone Mapper", &toneMapper, kToneMapperNames.data(), static_cast<int>(kToneMapperNames.size())))
         {
-            m_toneMapper = static_cast<ToneMapper>(toneMapper);
+            m_environment.Mapper = static_cast<ToneMapper>(toneMapper);
             changed = true;
         }
 
         if (changed)
         {
-            m_context.Deferred.emplace_back([this, exposure = m_exposure, mapper = m_toneMapper]
+            m_context.Deferred.emplace_back([this, exposure = m_environment.Exposure, mapper = m_environment.Mapper]
             {
                 m_renderer.SetToneMapping(exposure, mapper);
             });
         }
 
-        LinearColorEdit("Ambient", &m_lighting.AmbientColor.x, 3);
+        LinearColorEdit("Ambient", &m_environment.Ambient.x, 3);
 
         ImGui::End();
     }

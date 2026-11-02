@@ -33,6 +33,11 @@ namespace crimson::editor
         [[nodiscard]] EditorContext& GetContext() { return m_context; }
         [[nodiscard]] bool IsAskingAboutUnsavedChanges() const { return static_cast<bool>(m_closeAction); }
 
+        [[nodiscard]] bool IsSceneChanged();
+
+        // The material edits and the scene
+        bool SaveAll();
+
         // What the unsaved changes dialog does
         void SaveAllAndClose();
         void DiscardAllAndClose();
@@ -40,7 +45,7 @@ namespace crimson::editor
     private:
         // --- Setup called from constructor ---
         void CreateRenderTargets();
-        void CreateScene();
+        void SetupRenderer();
         void SetupUI();
 
         void UpdateFrameStats();
@@ -52,9 +57,13 @@ namespace crimson::editor
         void ResolveAllMeshRenderers();
         void ForgetAssets(std::span<const AssetID> removed);
 
+        // --- The open scene ---
+        // The preferred one if it exists, then the first there is, and if there are none it makes one
+        [[nodiscard]] AssetID ChooseScene(AssetID preferred);
+        void OpenScene(AssetID id);
+        void LoadScene(AssetID id);
+
         // --- Utils ---
-        // An invalid entity if the project doesn't have the mesh
-        Entity CreateMeshEntity(const char* name, const char* mesh, const char* material);
         [[nodiscard]] GpuResourceManager& GpuResources() { return *m_services.Graphics.GPUResources; }
     private:
         // Declared so that whatever uses something is destroyed before it
@@ -75,6 +84,11 @@ namespace crimson::editor
 
         // Textures
         TextureHandle m_mainColor;
+
+        // What the open scene's file says, to tell if it has changed since
+        SceneData m_savedScene;
+        SceneEnvironment m_environment;
+        float m_sinceSceneCheck = 0.0f;
 
         // Light
         FrameLightingData m_lighting;

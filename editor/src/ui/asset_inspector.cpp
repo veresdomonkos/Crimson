@@ -71,10 +71,23 @@ namespace crimson::editor::ui
             case AssetType::Texture:  DrawTexture(*info); break;
             case AssetType::Mesh:     DrawMesh(*info); break;
             case AssetType::Shader:   DrawShader(*info); break;
+            case AssetType::Scene:    DrawScene(*info); break;
             default: break;
         }
 
         ImGui::PopItemWidth();
+    }
+
+    void AssetInspector::DrawScene(const AssetInfo& info)
+    {
+        const bool open = info.Id == m_context.ActiveSceneAsset;
+
+        ImGui::BeginDisabled(open);
+        if (ImGui::Button(open ? "Open Already" : "Open", ImVec2(-1.0f, 0.0f)))
+            m_context.OpenScene(info.Id);
+        ImGui::EndDisabled();
+
+        ImGui::TextDisabled("Drag it into the Scene view to use it in another scene");
     }
 
     void AssetInspector::DrawHeader(const AssetInfo& info)

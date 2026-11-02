@@ -7,8 +7,10 @@
 #include <system_error>
 #include <typeinfo>
 #include <utility>
+#include <glm/gtc/quaternion.hpp>
 #include "crimson/asset_manager/importers/material_importer.hpp"
 #include "crimson/asset_manager/importers/mesh_importer.hpp"
+#include "crimson/asset_manager/importers/scene_importer.hpp"
 #include "crimson/asset_manager/importers/shader_importer.hpp"
 #include "crimson/asset_manager/importers/texture_importer.hpp"
 #include "crimson/asset_manager/meta_file.hpp"
@@ -66,6 +68,7 @@ namespace crimson
         AddImporter(std::make_unique<ShaderImporter>());
         AddImporter(std::make_unique<MaterialImporter>());
         AddImporter(std::make_unique<MeshImporter>());
+        AddImporter(std::make_unique<SceneImporter>());
 
         RegisterEngineResources();
 
@@ -394,18 +397,12 @@ namespace crimson
         return info && !info->ReadOnly ? m_root / fs::path(info->Path) : fs::path();
     }
 
-    // What a .mat file can point to
-    static bool IsUsedByMaterials(AssetType type)
-    {
-        return type == AssetType::Texture || type == AssetType::Shader;
-    }
-
     std::vector<AssetID> AssetManager::Refresh()
     {
         std::unordered_map<std::string, AssetID> moved;
 
         for (const auto& [id, entry] : m_assets)
-            if (!entry.Info.ReadOnly && IsUsedByMaterials(entry.Info.Type))
+            if (!entry.Info.ReadOnly)
                 moved.emplace(entry.Info.Path, id);
 
         std::unordered_set<AssetID> seen;
@@ -437,7 +434,8 @@ namespace crimson
 
         for (const auto& [id, entry] : m_assets)
         {
-            if (entry.Info.Type != AssetType::Material || entry.Info.ReadOnly)
+            const bool isMaterial = entry.Info.Type == AssetType::Material;
+            if ((!isMaterial && entry.Info.Type != AssetType::Scene) || entry.Info.ReadOnly)
                 continue;
 
             const fs::path file = m_root / fs::path(entry.Info.Path);
@@ -445,7 +443,9 @@ namespace crimson
             if (!text)
                 continue;
 
-            const std::optional<std::string> updated = UpdateMaterialReferences(*text, moved, *this);
+            const std::optional<std::string> updated = isMaterial
+                ? UpdateMaterialReferences(*text, moved, *this)
+                : UpdateSceneReferences(*text, moved, *this);
             if (!updated)
                 continue;
 
@@ -491,7 +491,7 @@ namespace crimson
             entry.Material = std::move(updated);
         }
 
-        for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader })
+        for (const AssetType type : { AssetType::Scene, AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader })
         {
             for (const AssetID id : ids)
             {
@@ -518,9 +518,33 @@ namespace crimson
 
     AssetID AssetManager::CreateMaterial(std::string_view path)
     {
-        if (!IsUsableAssetPath(path) || NormalizeExt(fs::path(path)) != ".mat")
+        MaterialData data;
+        data.Shader = FindId(kDefaultShaderPath);
+        data.Properties["Color"] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+        return CreateAssetFile(path, ".mat", WriteMaterialData(data, *this));
+    }
+
+    AssetID AssetManager::CreateScene(std::string_view path)
+    {
+        SceneNode sun;
+        sun.Id = AssetID::Generate();
+        sun.Name = "Sun";
+        sun.Position = glm::vec3(0.0f, 8.0f, 0.0f);
+        sun.RotationDegrees = glm::degrees(glm::eulerAngles(glm::quatLookAt(glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)), glm::vec3(0.0f, 1.0f, 0.0f))));
+        sun.Light = LightComponent{ .Type = LightType::Directional, .Intensity = 1.2f, .CastsShadow = true };
+
+        SceneData data;
+        data.Roots.push_back(std::move(sun));
+
+        return CreateAssetFile(path, ".scene", WriteSceneData(data, *this));
+    }
+
+    AssetID AssetManager::CreateAssetFile(std::string_view path, std::string_view extension, const std::string& contents)
+    {
+        if (!IsUsableAssetPath(path) || NormalizeExt(fs::path(path)) != extension)
         {
-            LOG_ERROR("[Assets] Can't create a material at '{}'", path);
+            LOG_ERROR("[Assets] Can't create a {} file at '{}'", extension, path);
             return {};
         }
 
@@ -535,11 +559,7 @@ namespace crimson
 
         fs::create_directories(file.parent_path(), error);
 
-        MaterialData data;
-        data.Shader = FindId(kDefaultShaderPath);
-        data.Properties["Color"] = { 1.0f, 1.0f, 1.0f, 1.0f };
-
-        if (std::ofstream stream(file, std::ios::binary); !(stream << WriteMaterialData(data, *this)))
+        if (std::ofstream stream(file, std::ios::binary); !(stream << contents))
         {
             LOG_ERROR("[Assets] Can't write '{}'", path);
             return {};
@@ -597,8 +617,7 @@ namespace crimson
         m_idsByPath.erase(oldPath);
         m_idsByPath[entry.Info.Path] = id;
 
-        if (IsUsedByMaterials(entry.Info.Type))
-            UpdateReferencesTo({ { oldPath, id } });
+        UpdateReferencesTo({ { oldPath, id } });
 
         return true;
     }
@@ -674,6 +693,19 @@ namespace crimson
 
         const std::optional<std::string> text = source.Read();
         return text ? ParseMaterialData(*text, *this, entry.Info.Path) : std::nullopt;
+    }
+
+    std::optional<SceneData> AssetManager::ReadSceneFile(AssetID id) const
+    {
+        const auto it = m_assets.find(id);
+        if (it == m_assets.end() || it->second.Info.Type != AssetType::Scene)
+            return std::nullopt;
+
+        const Entry& entry = it->second;
+        const AssetSource source{ entry.Info, m_root / fs::path(entry.Info.Path), nullptr };
+
+        const std::optional<std::string> text = source.Read();
+        return text ? ParseSceneData(*text, *this, entry.Info.Path) : std::nullopt;
     }
 
     const MaterialData* AssetManager::GetMaterialData(AssetID id)
@@ -757,6 +789,45 @@ namespace crimson
         if (std::ofstream stream(file, std::ios::binary); !(stream << WriteMaterialData(data, *this)))
         {
             LOG_ERROR("[Assets] Can't write {}", it->second.Info.Path);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool AssetManager::SaveScene(AssetID id, const SceneData& data)
+    {
+        const auto it = m_assets.find(id);
+        if (it == m_assets.end() || it->second.Info.Type != AssetType::Scene)
+        {
+            LOG_ERROR("[Assets] This scene can't be saved");
+            return false;
+        }
+
+        // A scene is a lot of work, so a write that fails halfway shouldn't take the old file with it
+        const fs::path file = m_root / fs::path(it->second.Info.Path);
+        fs::path temporary = file;
+        temporary += ".saving";
+
+        {
+            std::ofstream stream(temporary, std::ios::binary);
+            stream << WriteSceneData(data, *this);
+            stream.close();
+
+            if (!stream)
+            {
+                LOG_ERROR("[Assets] Can't write {}", it->second.Info.Path);
+                return false;
+            }
+        }
+
+        std::error_code error;
+        fs::rename(temporary, file, error);
+
+        if (error)
+        {
+            LOG_ERROR("[Assets] Can't write {}: {}", it->second.Info.Path, error.message());
+            fs::remove(temporary, error);
             return false;
         }
 
