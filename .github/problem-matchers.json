@@ -14,6 +14,29 @@
       ]
     },
     {
+      "owner": "crimson-cmake",
+      "pattern": [
+        {
+          "regexp": "^CMake Error at (.+?):(\\d+) \\(.+\\):$",
+          "file": 1,
+          "line": 2
+        },
+        {
+          "regexp": "^\\s*(.+)$",
+          "message": 1
+        }
+      ]
+    },
+    {
+      "owner": "crimson-cmake-general",
+      "pattern": [
+        {
+          "regexp": "^(CMake Error: .*)$",
+          "message": 1
+        }
+      ]
+    },
+    {
       "owner": "crimson-linker",
       "pattern": [
         {

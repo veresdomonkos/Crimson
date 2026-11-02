@@ -1,87 +1,25 @@
 name: CI
 
+# On pull requests, and on main to check the result of merging them
 on:
+  pull_request:
   push:
-    branches: ["**"]
+    branches: [main, feature/cd]
   workflow_dispatch:
   workflow_call:
 
 permissions:
   contents: read
 
-# A newer push to the same branch makes the older run pointless
+# A newer push to the same pull request makes the older run pointless
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # The toolchain the project is developed with. The runners have no GPU, so this builds and runs the CPU tests.
-  windows-mingw:
-    runs-on: windows-latest
-    timeout-minutes: 60
-
-    defaults:
-      run:
-        shell: msys2 {0}
-
-    steps:
-      - name: Check out, with the submodules
-        uses: actions/checkout@v7
-        with:
-          submodules: recursive
-
-      # Git LFS bandwidth is metered, and the demo meshes are 26 MB that nothing here reads.
-      # Only the files embedded into the executable are needed to build.
-      - name: Download the embedded files from Git LFS
-        shell: pwsh
-        run: git lfs pull --include="editor/resources/**"
-
-      - name: Install the toolchain
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: UCRT64
-          update: false
-          pacboy: >-
-            toolchain:p
-            cmake:p
-            ninja:p
-            ccache:p
-            vulkan-headers:p
-            vulkan-loader:p
-
-      - name: Show errors on the run's page
-        shell: pwsh
-        run: echo "::add-matcher::.github/problem-matchers.json"
-
-      # A fresh build takes minutes, most of it third party code that never changes
-      - name: Restore the compiler cache
-        uses: actions/cache@v6
-        with:
-          path: .ccache
-          key: ccache-mingw-debug-${{ github.sha }}
-          restore-keys: ccache-mingw-debug-
-
-      - name: Configure
-        env:
-          CCACHE_DIR: ${{ github.workspace }}/.ccache
-        run: >-
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
-
-      - name: Build
-        env:
-          CCACHE_DIR: ${{ github.workspace }}/.ccache
-          CCACHE_SLOPPINESS: pch_defines,time_macros
-          CCACHE_MAXSIZE: 1G
-        run: cmake --build build --target Editor CrimsonTests CrimsonGpuTests
-
-      - name: Test
-        run: ctest --test-dir build --label-exclude gpu --output-on-failure
-
-  # The build that gets released. Every run has one to download from its page.
-  windows-package:
+  # Tests the build that gets released, then packages it. Every run has one to download from its page.
+  # The runners have no GPU, so the GPU tests only get built here, and they run on Linux.
+  windows:
     runs-on: windows-latest
     timeout-minutes: 60
 
@@ -161,7 +99,6 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
           -DCMAKE_C_COMPILER_LAUNCHER=ccache
-          -DCRIMSON_BUILD_TESTS=OFF
           -DCRIMSON_ENABLE_PROFILER=OFF
 
       - name: Build
@@ -169,7 +106,10 @@ jobs:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
           CCACHE_SLOPPINESS: pch_defines,time_macros
           CCACHE_MAXSIZE: 1G
-        run: cmake --build build --target Editor
+        run: cmake --build build --target Editor CrimsonTests CrimsonGpuTests
+
+      - name: Test
+        run: ctest --test-dir build --label-exclude gpu --output-on-failure
 
       # It has to run on a machine with nothing but Windows and a graphics driver
       - name: Check what the executable needs
@@ -363,7 +303,6 @@ jobs:
           CCACHE_SLOPPINESS: pch_defines,time_macros
           CCACHE_MAXSIZE: 1G
         run: cmake --build build --target Editor CrimsonTests CrimsonGpuTests
-
       - name: Test
         env:
           ASAN_OPTIONS: detect_leaks=0

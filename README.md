@@ -234,7 +234,7 @@ Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are alr
 
 A run fails on any logged error that a test didn't expect, and in Debug builds that includes validation errors.
 
-[CI](.github/workflows/ci.yml) runs on every push. Windows builds with MinGW and runs `CrimsonTests`. Linux builds with GCC and runs both, once as it is and once with AddressSanitizer, where Mesa renders on the CPU with llvmpipe for OpenGL and lavapipe for Vulkan, on an Xvfb display. A bug in a GPU's driver won't show up there, so `CrimsonGpuTests` is still worth running locally.
+[CI](.github/workflows/ci.yml) runs on pull requests and on `main`. Windows builds the release configuration with MinGW, runs `CrimsonTests` and packages it. Linux packages an AppImage, and runs both test programs in Debug, once as it is and once with AddressSanitizer, where Mesa renders on the CPU with llvmpipe for OpenGL and lavapipe for Vulkan, on an Xvfb display. A bug in a GPU's driver won't show up there, so `CrimsonGpuTests` is still worth running locally.
 
 ## Releases
 
