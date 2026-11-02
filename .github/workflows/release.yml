@@ -1,0 +1,38 @@
+name: Release
+
+# Pushing a tag like v0.1.0 makes a draft release, once everything in CI has passed.
+# A draft isn't public: it waits on the Releases page to be checked and published.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download the package
+        uses: actions/download-artifact@v8
+        with:
+          name: Crimson-windows-x64
+          path: Crimson-${{ github.ref_name }}-windows-x64
+
+      - name: Compress the package
+        run: zip -r "Crimson-$GITHUB_REF_NAME-windows-x64.zip" "Crimson-$GITHUB_REF_NAME-windows-x64"
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" "Crimson-$GITHUB_REF_NAME-windows-x64.zip"
+          --repo "$GITHUB_REPOSITORY"
+          --verify-tag
+          --draft
+          --generate-notes

@@ -2,7 +2,12 @@ name: CI
 
 on:
   push:
+    branches: ["**"]
   workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
 
 # A newer push to the same branch makes the older run pointless
 concurrency:
@@ -74,6 +79,117 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --label-exclude gpu --output-on-failure
+
+  # The build that gets released. Every run has one to download from its page.
+  windows-package:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    env:
+      VULKAN_SDK_VERSION: 1.4.350.0
+
+    steps:
+      - name: Check out, with the submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      # The package includes the demo project, and LFS bandwidth is metered, so its files only download once
+      - name: List the Git LFS files
+        shell: pwsh
+        run: git lfs ls-files --long | Out-File .lfs-files
+
+      - name: Restore the Git LFS files
+        uses: actions/cache@v6
+        with:
+          path: .git/lfs
+          key: lfs-package-${{ hashFiles('.lfs-files') }}
+
+      - name: Download the Git LFS files
+        shell: pwsh
+        run: git lfs pull --include="editor/resources/**,samples/**"
+
+      # MSYS2's Vulkan library is named libvulkan-1.dll, which wouldn't be on a user's machine.
+      # The SDK's is vulkan-1.dll, which graphics drivers install.
+      - name: Restore the Vulkan SDK
+        id: vulkan-sdk
+        uses: actions/cache@v6
+        with:
+          path: C:\VulkanSDK
+          key: vulkan-sdk-${{ env.VULKAN_SDK_VERSION }}
+
+      - name: Install the Vulkan SDK
+        if: steps.vulkan-sdk.outputs.cache-hit != 'true'
+        shell: pwsh
+        run: |
+          $installer = "$env:RUNNER_TEMP\vulkan_sdk.exe"
+          Invoke-WebRequest "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/vulkan_sdk.exe" -OutFile $installer
+          Start-Process -Wait -FilePath $installer -ArgumentList "--root C:\VulkanSDK\$env:VULKAN_SDK_VERSION --accept-licenses --default-answer --confirm-command install"
+
+      - name: Install the toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          pacboy: >-
+            toolchain:p
+            cmake:p
+            ninja:p
+            ccache:p
+
+      - name: Show errors on the run's page
+        shell: pwsh
+        run: echo "::add-matcher::.github/problem-matchers.json"
+
+      - name: Restore the compiler cache
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-mingw-release-${{ github.sha }}
+          restore-keys: ccache-mingw-release-
+
+      - name: Configure
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          VULKAN_SDK: C:\VulkanSDK\${{ env.VULKAN_SDK_VERSION }}
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCRIMSON_BUILD_TESTS=OFF
+          -DCRIMSON_ENABLE_PROFILER=OFF
+
+      - name: Build
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_SLOPPINESS: pch_defines,time_macros
+          CCACHE_MAXSIZE: 1G
+        run: cmake --build build --target Editor
+
+      # It has to run on a machine with nothing but Windows and a graphics driver
+      - name: Check what the executable needs
+        run: |
+          objdump -p build/editor/Editor.exe | grep 'DLL Name' | sed 's/.*: //' | tee imports.txt
+          grep -q '^vulkan-1\.dll$' imports.txt
+          ! grep -iE '^(lib|zlib)' imports.txt
+
+      - name: Package
+        run: |
+          mkdir -p package/samples
+          cp build/editor/Editor.exe LICENSE README.md package/
+          cp -r samples/Demo package/samples/
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v7
+        with:
+          name: Crimson-windows-x64
+          path: package
+          retention-days: 14
 
   # Runs everything. Without a GPU Mesa renders on the CPU, with llvmpipe for OpenGL and lavapipe for Vulkan,
   # and Xvfb is the display the windows open on. Debug builds turn the validation layers on.

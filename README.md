@@ -236,6 +236,19 @@ A run fails on any logged error that a test didn't expect, and in Debug builds t
 
 [CI](.github/workflows/ci.yml) runs on every push. Windows builds with MinGW and runs `CrimsonTests`. Linux builds with GCC and runs both, once as it is and once with AddressSanitizer, where Mesa renders on the CPU with llvmpipe for OpenGL and lavapipe for Vulkan, on an Xvfb display. A bug in a GPU's driver won't show up there, so `CrimsonGpuTests` is still worth running locally.
 
+## Releases
+
+Pushing a version tag starts a release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+[The workflow](.github/workflows/release.yml) runs all of CI, packages the Windows build with the demo project, and creates a draft on the Releases page. A draft isn't public, so it can be downloaded and checked before publishing it by hand. Every CI run also has the same package to download from its page.
+
+The editor only needs Windows 10 or newer and a graphics driver, as `vulkan-1.dll` comes with the driver. It needs that file to start even with `--opengl`.
+
 ## Profiling
 
 Crimson is instrumented with [Tracy](https://github.com/wolfpld/tracy): CPU zones, per-pass GPU zones on both backends, and a `Draw Calls` plot. To profile, run the editor and connect the [Tracy v0.14.1 viewer](https://github.com/wolfpld/tracy/releases/tag/v0.14.1) to `127.0.0.1`. The viewer version must match the `external/tracy` submodule.
