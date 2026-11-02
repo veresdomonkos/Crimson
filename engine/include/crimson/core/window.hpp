@@ -27,6 +27,9 @@ namespace crimson
 	    virtual uint32_t Width() const = 0;
 	    virtual uint32_t Height() const = 0;
 
+	    virtual void SetTitle(const std::string& title) = 0;
+	    virtual void SetSize(uint32_t width, uint32_t height) = 0;
+
 	    virtual void* GetNativeHandle() const = 0;
 
 	    static Unique<Window> Create(RendererAPIType rendererAPI, WindowData data);

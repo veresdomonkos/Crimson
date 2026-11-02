@@ -6,7 +6,7 @@
 
 namespace crimson
 {
-    void Logger::Subscribe(LogCallback callback)
+    uint64_t Logger::Subscribe(LogCallback callback)
     {
         std::lock_guard<std::mutex> lock(s_Mutex);
 
@@ -16,7 +16,15 @@ namespace crimson
                 callback(e.Level, e.Message);
         }
 
-        s_Callbacks.push_back(std::move(callback));
+        const uint64_t id = s_NextSubscriberId++;
+        s_Subscribers.push_back({ id, std::move(callback) });
+        return id;
+    }
+
+    void Logger::Unsubscribe(uint64_t id)
+    {
+        std::lock_guard<std::mutex> lock(s_Mutex);
+        std::erase_if(s_Subscribers, [id](const Subscriber& subscriber) { return subscriber.Id == id; });
     }
 
     void Logger::Write(const LogLevel level, const std::string& msg)
@@ -37,10 +45,10 @@ namespace crimson
         if (s_History.size() > kMaxHistory)
             s_History.pop_front();
 
-        for (const auto& callback : s_Callbacks)
+        for (const Subscriber& subscriber : s_Subscribers)
         {
-            if (callback)
-                callback(level, msg);
+            if (subscriber.Callback)
+                subscriber.Callback(level, msg);
         }
     }
 }

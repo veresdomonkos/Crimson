@@ -1,9 +1,9 @@
 #pragma once
+#include <functional>
 #include <memory>
 #include <vector>
 
 #include <imgui.h>
-#include <crimson/ui/imgui_backend.hpp>
 #include "crimson_editor/ui/panel.hpp"
 
 namespace crimson::editor::ui
@@ -11,7 +11,7 @@ namespace crimson::editor::ui
     class EditorUI
     {
     public:
-        EditorUI(ImGuiBackend& backend);
+        explicit EditorUI(std::function<void()> onCloseProject);
         ~EditorUI();
 
         template<typename T, typename... Args>
@@ -23,14 +23,14 @@ namespace crimson::editor::ui
             return ref;
         }
 
-        void Draw(const NativeFrameHandles& handles);
+        void Draw();
     private:
         void DrawMainMenu();
         void DrawDockSpace();
         void BuildDefaultLayout(ImGuiID dockSpace, const ImVec2& size);
     private:
         std::vector<Panel*> m_panels;
-        ImGuiBackend& m_backend;
+        std::function<void()> m_onCloseProject;
         bool m_resetLayout = false;
     };
 }

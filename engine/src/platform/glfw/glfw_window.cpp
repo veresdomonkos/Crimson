@@ -86,6 +86,9 @@ namespace crimson::glfw
 
 	    glfwSetWindowSizeCallback(m_handle, [](GLFWwindow* window, int width, int height) {
 	        auto* windowsWindow = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
+	        windowsWindow->m_data.Width = static_cast<uint32_t>(width);
+	        windowsWindow->m_data.Height = static_cast<uint32_t>(height);
+
 	        WindowResizeEvent event(static_cast<uint32_t>(width), static_cast<uint32_t>(height));
 	        windowsWindow->m_data.EventCallbackFn(event);
 	    });
@@ -105,4 +108,15 @@ namespace crimson::glfw
 	{
 		glfwPollEvents();
 	}
+
+    void GLFWWindow::SetTitle(const std::string& title)
+    {
+        m_data.Title = title;
+        glfwSetWindowTitle(m_handle, title.c_str());
+    }
+
+    void GLFWWindow::SetSize(uint32_t width, uint32_t height)
+    {
+        glfwSetWindowSize(m_handle, static_cast<int>(width), static_cast<int>(height));
+    }
 }

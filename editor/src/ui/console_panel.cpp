@@ -9,10 +9,15 @@ namespace crimson::editor::ui
 {
     ConsolePanel::ConsolePanel()
     {
-        Logger::Subscribe([this](LogLevel level, const std::string& message)
+        m_LogSubscription = Logger::Subscribe([this](LogLevel level, const std::string& message)
         {
             AddLog(level, message);
         });
+    }
+
+    ConsolePanel::~ConsolePanel()
+    {
+        Logger::Unsubscribe(m_LogSubscription);
     }
 
     void ConsolePanel::AddLog(LogLevel level, const std::string& message, const std::string& stackTrace)

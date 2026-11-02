@@ -47,6 +47,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/scene/entity.hpp
         include/crimson/scene/scene.hpp
         include/crimson/scene/scene_renderer.hpp
+        include/crimson/project/project.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -98,6 +99,7 @@ set(ENGINE_IMPLEMENTATION
         src/asset_manager/importers/shader_importer.cpp
         src/scene/scene.cpp
         src/scene/scene_renderer.cpp
+        src/project/project.cpp
 )
 
 add_library(Engine STATIC

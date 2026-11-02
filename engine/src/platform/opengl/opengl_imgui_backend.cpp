@@ -21,6 +21,7 @@ namespace crimson::opengl
     {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
     }
 
     void OpenGLImGuiBackend::NewFrame()

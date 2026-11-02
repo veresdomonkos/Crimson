@@ -2,11 +2,12 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <ImGuizmo.h>
+#include <utility>
 
 namespace crimson::editor::ui
 {
-    EditorUI::EditorUI(ImGuiBackend& backend)
-        : m_backend(backend)
+    EditorUI::EditorUI(std::function<void()> onCloseProject)
+        : m_onCloseProject(std::move(onCloseProject))
     {
     }
 
@@ -16,7 +17,7 @@ namespace crimson::editor::ui
             delete panel;
     }
 
-    void EditorUI::Draw(const NativeFrameHandles& handles)
+    void EditorUI::Draw()
     {
         ImGuizmo::BeginFrame();
 
@@ -24,15 +25,20 @@ namespace crimson::editor::ui
         DrawDockSpace();
         for (auto panel : m_panels)
             panel->OnImGui();
-
-        ImGui::Render();
-        m_backend.RenderDrawData(ImGui::GetDrawData(), handles);
     }
 
     void EditorUI::DrawMainMenu()
     {
         if (!ImGui::BeginMainMenuBar())
             return;
+
+        if (ImGui::BeginMenu("File"))
+        {
+            if (ImGui::MenuItem("Close Project"))
+                m_onCloseProject();
+
+            ImGui::EndMenu();
+        }
 
         if (ImGui::BeginMenu("View"))
         {

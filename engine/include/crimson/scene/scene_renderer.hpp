@@ -14,7 +14,7 @@ namespace crimson
     class Scene;
 
     // Loads the renderer's mesh and materials into Resolved and sizes MaterialAssets to the mesh's slots.
-    // Empty slots get defaultMaterial.
+    // Empty slots get the default material.
     void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets);
 
     // Turns a scene into the frame's lighting data and render passes

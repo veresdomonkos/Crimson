@@ -13,6 +13,7 @@ namespace crimson::vulkan
         void NewFrame() override;
         void RenderDrawData(ImDrawData* drawData, const NativeFrameHandles& handles) override;
         ImTextureID GetOrCreateTextureId(TextureHandle texture) override;
+        void ReleaseTexture(TextureHandle texture) override;
     private:
         VulkanDevice& m_device;
         VulkanResourceManager& m_resourceManager;

@@ -3,6 +3,19 @@ add_executable(Editor
 
         src/main.cpp
         src/editor_application.cpp
+        include/crimson_editor/app_mode.hpp
+        include/crimson_editor/project_session_mode.hpp
+        src/project_session_mode.cpp
+        include/crimson_editor/project_manager_mode.hpp
+        src/project_manager_mode.cpp
+        include/crimson_editor/recent_projects.hpp
+        src/recent_projects.cpp
+        include/crimson_editor/editor_icons.hpp
+        src/editor_icons.cpp
+        include/crimson_editor/editor_paths.hpp
+        src/editor_paths.cpp
+        include/crimson_editor/file_dialog.hpp
+        src/file_dialog.cpp
         include/crimson_editor/scene_camera_controller.hpp
         src/scene_camera_controller.cpp
         include/crimson_editor/ui/Panel.hpp
@@ -36,6 +49,7 @@ target_link_libraries(Editor
         PRIVATE
             Engine
             imguizmo
+            nfd
 )
 
 if(MINGW)
@@ -45,12 +59,3 @@ if(MINGW)
     # The two are the same function, so the linker can keep either.
     target_link_options(Editor PRIVATE -Wl,--allow-multiple-definition)
 endif()
-
-# A custom target runs on every build, so editing only a shader still reaches the output directory
-add_custom_target(EditorAssets ALL
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_SOURCE_DIR}/samples/Demo/assets"
-        "$<TARGET_FILE_DIR:Editor>/assets"
-        COMMENT "Copying assets to output directory"
-)
-add_dependencies(Editor EditorAssets)

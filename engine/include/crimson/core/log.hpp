@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <mutex>
@@ -23,7 +24,9 @@ namespace crimson
     class Logger
     {
     public:
-        static void Subscribe(LogCallback callback);
+        // Returns the id to unsubscribe with. The callback first gets the messages logged so far.
+        static uint64_t Subscribe(LogCallback callback);
+        static void Unsubscribe(uint64_t id);
 
         template<typename... Args>
         static void Info(fmt::format_string<Args...> format, Args&&... args)
@@ -52,10 +55,17 @@ namespace crimson
             std::string Message;
         };
 
+        struct Subscriber
+        {
+            uint64_t Id;
+            LogCallback Callback;
+        };
+
         static constexpr size_t kMaxHistory = 2000;
 
         static inline std::deque<Entry> s_History;
-        static inline std::vector<LogCallback> s_Callbacks;
+        static inline std::vector<Subscriber> s_Subscribers;
+        static inline uint64_t s_NextSubscriberId = 1;
         static inline std::mutex s_Mutex;
     };
 }

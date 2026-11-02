@@ -16,7 +16,8 @@ Crimson is a small, data-driven real-time rendering engine written in modern C++
 - **Lighting** - any number of directional, point and spot lights in a GPU buffer (glTF `KHR_lights_punctual`-style). Any light can cast shadows through a shared shadow atlas with PCF filtering.
 - **Per-object transforms** - each draw indexes a per-frame buffer of object transforms.
 - **Entity component system** - scenes are built on [EnTT](https://github.com/skypjack/entt) behind `Scene` and `Entity` wrappers, with a parent/child hierarchy.
-- **Asset manager** - importer-based pipeline for textures, shaders, materials and meshes, with metadata and a scanned `assets/` directory.
+- **Projects** - a project manager to create and open projects, each with its own `assets/` folder.
+- **Asset manager** - importer-based pipeline for textures, shaders, materials and meshes, with metadata, scanning the open project and exposing the engine's own shaders and materials.
 - **ImGui docking editor** - viewport panels that display engine render targets, console, hierarchy, inspector, asset browser and stats panels, with a custom crimson-accented theme.
 
 ## Architecture
@@ -85,7 +86,7 @@ Shaders are HLSL, with a `VSMain` and a `PSMain` in one `.hlsl` file:
                            -> SPIRV-Cross -> GLSL 4.5 -> OpenGL
 ```
 
-Resources are grouped by how often they change. `crimson/bindings.hlsli` declares the standard ones, so shaders include it instead of restating them. Includes resolve relative to the shader's folder. glslang's HLSL support is around Shader Model 5, so Shader Model 6 features such as wave ops and mesh shaders aren't available.
+Resources are grouped by how often they change. `crimson/bindings.hlsli` declares the standard ones, so shaders include it instead of restating them. Includes resolve relative to the shader's folder, then to the engine's shaders. glslang's HLSL support is around Shader Model 5, so Shader Model 6 features such as wave ops and mesh shaders aren't available.
 
 | Space | Scope | Resources |
 |:------|:------|:----------|
@@ -134,11 +135,11 @@ scene.SetParent(light, {}); // back to the top level, it stays where it is in th
 
 Every entity has the first three, and the others are optional. Meshes and renderers share one component because there is only one kind of renderer so far. It can be split when something else needs a mesh, such as skinned meshes.
 
-`SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLightingData`, gives every active renderer an object transform, and records the shadow passes and the main pass. It can outline an entity and its children: their meshes are drawn into a mask, and a pass over the whole screen colors the pixels next to it. The color comes from `materials/outline.mat`.
+`SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLightingData`, gives every active renderer an object transform, and records the shadow passes and the main pass. It can outline an entity and its children: their meshes are drawn into a mask, and a pass over the whole screen colors the pixels next to it. The color comes from `engine/materials/outline.mat`.
 
 ### Asset pipeline
 
-`AssetManager` scans the `assets/` directory and dispatches files to registered importers:
+`AssetManager` scans a project's `assets/` folder and dispatches files to its importers:
 
 | Importer | Produces |
 |:---------|:---------|
@@ -147,13 +148,22 @@ Every entity has the first three, and the others are optional. Meshes and render
 | `MaterialImporter` | `MaterialHandle` (`.mat`) |
 | `MeshImporter` | `Mesh` (vertex/index buffers + materials, e.g. `.obj`) |
 
-Assets are addressed by path or `AssetID` (`FindByPath`, `GetAsset<T>`).
+Assets are addressed by a path relative to `assets/`, or by `AssetID`, and load on first use (`LoadMaterial`, `LoadMesh`, ...). A load that fails is logged once and gives an invalid handle or null. A file's id lives in the `.meta` written next to it, so those belong in version control.
+
+The engine's own shaders and materials live in `engine/resources/` and are bundled into the executable. They are always available under `engine/`, read-only and with the same ids in every project, so a project's material can use `"shader": "engine/shaders/main.hlsl"`. The editor's font and icons live in `editor/resources/`, are bundled the same way, and never go through the asset manager.
 
 `.mat` files can also set `"renderMode"` (`"opaque"` or `"transparent"`) and `"cull"` (`"back"`, `"front"` or `"none"`), which default to opaque and back. Transparent materials are alpha blended using the alpha the shader outputs, don't write depth, and draw after opaque ones in the order they were submitted.
 
 ### Editor
 
-Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single raw pass. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default.
+`EditorApplication` owns what lives for the whole run (window, graphics backend, input) and shows one `AppMode` at a time. Modes are only swapped between frames, so a mode can free its GPU resources when it is destroyed.
+
+- `ProjectManagerMode` - shown on start. Lists the recent projects, and creates, imports or opens one. `--project <folder>` skips it.
+- `ProjectSessionMode` - the editor with one project open. Its asset manager, scene and panels all live and die with it, and **File > Close Project** goes back to the project manager.
+
+A project is a folder with a `project.crimson` file and an `assets/` folder. Scenes can't be saved yet, so every project opens with the same built-in scene: its lights, and the test meshes if the project has them, as `samples/Demo` does.
+
+Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single raw pass. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default. That file and the recent projects are kept in `%APPDATA%/Crimson` (`~/.config/crimson` elsewhere).
 
 - **Viewport** - displays a render target texture (scene, shadow map, ...). The Scene view has a [ImGuizmo](https://github.com/CedricGuillemet/ImGuizmo) gizmo on the selected entity, with a toolbar for its operation and for local or world axes.
 - **Hierarchy** - the entity tree. Click to select, drag onto an entity to reparent or onto the empty area to make a root, right-click to create or delete, `Delete` deletes the selection.
@@ -165,9 +175,11 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 
 ```
 Crimson/
-  engine/            core, renderer, backends (vulkan/, opengl/), asset manager
-  editor/            Crimson Editor (application, panels, assets/)
-  external/          glfw, glad, glm, fmt, imgui, entt, glslang, ImGuizmo, json, spirv-cross, spirv-reflect, stb_image, tinyobjloader, tracy, VulkanMemoryAllocator
+  engine/            core, renderer, backends (vulkan/, opengl/), asset manager, resources/
+  editor/            Crimson Editor (application, modes, panels, resources/)
+  samples/Demo/      a project with the test meshes and materials
+  cmake/             embeds files into the executable
+  external/          glfw, glad, glm, fmt, imgui, entt, glslang, ImGuizmo, json, nativefiledialog-extended, spirv-cross, spirv-reflect, stb_image, tinyobjloader, tracy, VulkanMemoryAllocator
 ```
 
 ## Building
@@ -188,7 +200,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target Editor
 ```
 
-The editor links everything statically, including the shader compiler, so it needs no DLLs of its own. It only uses the system's graphics driver and the `assets/` directory, which is copied next to the executable on every build. The graphics API is selected when the `EditorApplication` is constructed (see `main.cpp`).
+The editor links everything statically, including the shader compiler, so it needs no DLLs of its own. It only uses the system's graphics driver, and the executable can run from anywhere. The graphics API is selected when the `EditorApplication` is constructed (see `main.cpp`).
 
 > Use **Release** (or RelWithDebInfo) when measuring performance. Debug builds, especially with validation layers enabled, are many times slower and give misleading numbers.
 

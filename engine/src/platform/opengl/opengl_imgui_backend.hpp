@@ -13,6 +13,7 @@ namespace crimson::opengl
         void NewFrame() override;
         void RenderDrawData(ImDrawData* drawData, const NativeFrameHandles& handles) override;
         ImTextureID GetOrCreateTextureId(TextureHandle texture) override;
+        void ReleaseTexture(TextureHandle) override {} // the id is the texture's own GL handle
     private:
         OpenGLResourceManager& m_resourceManager;
     };

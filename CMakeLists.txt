@@ -73,6 +73,9 @@ add_subdirectory(external/tracy)
 #vulkan memory allocator
 add_subdirectory(external/VulkanMemoryAllocator)
 
+#native file dialogs
+add_subdirectory(external/nativefiledialog-extended)
+
 include(cmake/EmbedResources.cmake)
 
 add_subdirectory(engine)

@@ -21,10 +21,13 @@ namespace crimson::editor::ui
     {
     public:
         ConsolePanel();
+        ~ConsolePanel() override;
         void AddLog(LogLevel level, const std::string& message, const std::string& stackTrace = "");
         void Clear();
         void OnImGui() override;
     private:
+        uint64_t m_LogSubscription = 0;
+
         std::vector<LogEntry> m_RawLogs;
         std::vector<LogEntry> m_CollapsedLogs;
 

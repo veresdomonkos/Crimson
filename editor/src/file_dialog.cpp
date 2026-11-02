@@ -1,0 +1,34 @@
+#include "crimson_editor/file_dialog.hpp"
+
+#include <string>
+
+#include <crimson/core/log.hpp>
+#include <crimson/core/window.hpp>
+#include <GLFW/glfw3.h>
+#include <nfd.h>
+#include <nfd_glfw3.h>
+
+namespace crimson::editor
+{
+    std::optional<std::filesystem::path> PickFolder(const Window& parent, const std::filesystem::path& startFolder)
+    {
+        const std::string start = startFolder.string();
+
+        nfdpickfolderu8args_t args{};
+        args.defaultPath = start.empty() ? nullptr : start.c_str();
+        NFD_GetNativeWindowFromGLFWWindow(static_cast<GLFWwindow*>(parent.GetNativeHandle()), &args.parentWindow);
+
+        nfdu8char_t* picked = nullptr;
+        const nfdresult_t result = NFD_PickFolderU8_With(&picked, &args);
+
+        if (result == NFD_ERROR)
+            LOG_ERROR("[Editor] The folder picker failed: {}", NFD_GetError());
+
+        if (result != NFD_OKAY)
+            return std::nullopt;
+
+        std::filesystem::path path(picked);
+        NFD_FreePathU8(picked);
+        return path;
+    }
+}

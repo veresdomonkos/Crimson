@@ -15,6 +15,10 @@ namespace crimson::glfw
 
 	    uint32_t Width() const override { return m_data.Width; }
 	    uint32_t Height() const override { return m_data.Height; }
+
+	    void SetTitle(const std::string& title) override;
+	    void SetSize(uint32_t width, uint32_t height) override;
+
 	    void* GetNativeHandle() const override { return m_handle; }
 	private:
 	    WindowData m_data;

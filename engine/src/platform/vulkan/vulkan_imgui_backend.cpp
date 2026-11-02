@@ -74,4 +74,17 @@ namespace crimson::vulkan
         m_textureIdCache[texture] = descriptorSet;
         return reinterpret_cast<ImTextureID>(descriptorSet);
     }
+
+    void VulkanImGuiBackend::ReleaseTexture(TextureHandle texture)
+    {
+        const auto it = m_textureIdCache.find(texture);
+        if (it == m_textureIdCache.end())
+            return;
+
+        // Frames still in flight can be using the set
+        m_device.WaitIdle();
+
+        ImGui_ImplVulkan_RemoveTexture(it->second);
+        m_textureIdCache.erase(it);
+    }
 }

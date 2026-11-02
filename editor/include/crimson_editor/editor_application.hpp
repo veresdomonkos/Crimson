@@ -1,75 +1,58 @@
 #pragma once
 
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <string>
+
 #include <crimson/core/input.hpp>
 #include <crimson/core/window.hpp>
-#include <crimson/renderer/renderer.hpp>
-#include <crimson/ui/imgui_backend.hpp>
 #include <crimson/graphics/graphincs_backend.hpp>
-#include <crimson/asset_manager/asset_manager.hpp>
-#include <crimson/scene/scene_renderer.hpp>
+#include <crimson/project/project.hpp>
 
-#include "crimson_editor/editor_context.hpp"
-#include "crimson_editor/frame_stats.hpp"
-#include "crimson_editor/scene_camera_controller.hpp"
-#include "crimson_editor/ui/editor_ui.hpp"
-#include "crimson_editor/ui/viewport_panel.hpp"
+#include "crimson_editor/app_mode.hpp"
+#include "crimson_editor/editor_icons.hpp"
+#include "crimson_editor/recent_projects.hpp"
 
 namespace crimson::editor
 {
+	// What lives for the whole run: the window, the graphics backend and the mode being shown
 	class EditorApplication
 	{
 	public:
-		explicit EditorApplication(RendererAPIType rendererType = RendererAPIType::OpenGL);
-        ~EditorApplication() = default;
+		// An empty path starts with the project manager
+		EditorApplication(RendererAPIType rendererType, const std::filesystem::path& projectPath);
+        ~EditorApplication();
 		void Run();
 	private:
-	    // --- Setup called from constructor ---
-	    void CreateRenderTargets();
-	    void CreateScene();
-	    void SetupUI();
-	    void CreateTextures();
-
 	    // --- Frame ---
 	    void RenderFrame();
-	    void RecordScenePasses(FrameContext& frame);
 	    void RecordUIPass(FrameContext& frame);
-	    void UpdateFrameStats();
+
+	    // --- Modes ---
+	    void ShowProjectManager(std::string error = {});
+	    void ShowProject(Project project);
+	    void ApplyRequestedMode();
 
 	    // --- Input / events ---
-	    void HandleShortcuts();
 	    void OnEvent(Event& event);
-
-	    // --- Utils ---
-	    Entity CreateMeshEntity(const char* name, const char* mesh, const char* material);
-	    [[nodiscard]] GpuResourceManager& GpuResources() { return *m_graphicsBackend->GPUResources; }
 	private:
-	    bool   m_running;
+	    bool m_running;
 	    double m_lastTime;
-	    RendererAPIType m_rendererType;
-	    FrameStats m_frameStats;
+
+	    // ImGui only keeps a pointer to this, so it has to outlive the backend
+	    std::string m_imguiIniPath;
 
 	    std::unique_ptr<Window>          m_window;
 	    std::unique_ptr<GraphicsBackend> m_graphicsBackend;
-	    std::unique_ptr<ui::EditorUI>    m_ui;
-	    std::unique_ptr<AssetManager>    m_assetManager;
+	    std::unique_ptr<Input>           m_input;
+	    std::unique_ptr<EditorIcons>     m_icons;
+	    std::unique_ptr<RecentProjects>  m_recentProjects;
+	    std::unique_ptr<EditorServices>  m_services;
 
-	    PerspectiveCamera m_camera;
-	    std::unique_ptr<Input> m_input;
-	    std::unique_ptr<SceneCameraController> m_cameraController;
+	    std::unique_ptr<AppMode> m_mode;
 
-	    Scene m_scene;
-	    std::unique_ptr<EditorContext> m_context;
-	    std::unique_ptr<SceneRenderer> m_sceneRenderer;
-	    const ui::ViewportPanel* m_sceneViewport = nullptr;
-
-	    // Render targets
-	    RenderTargetHandle m_mainTarget;
-
-	    // Textures
-	    TextureHandle m_mainColor;
-	    TextureHandle m_testTexture;
-
-	    // Light
-	    FrameLightingData m_lighting;
+	    std::optional<Project> m_requestedProject;
+	    bool m_closeProjectRequested = false;
 	};
 }
