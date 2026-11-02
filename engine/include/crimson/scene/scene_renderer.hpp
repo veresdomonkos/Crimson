@@ -43,7 +43,7 @@ namespace crimson
     private:
         struct Drawable
         {
-            const Mesh* Mesh = nullptr;
+            const crimson::Mesh* Mesh = nullptr;
             ObjectId Object = 0;
             bool CastsShadows = false;
             bool Outlined = false;

@@ -1,0 +1,58 @@
+{
+  "problemMatcher": [
+    {
+      "owner": "crimson-gcc",
+      "pattern": [
+        {
+          "regexp": "^(.+?):(\\d+):(\\d+):\\s+(?:fatal\\s+)?(error):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      ]
+    },
+    {
+      "owner": "crimson-linker",
+      "pattern": [
+        {
+          "regexp": "^(.*(?:undefined reference to|multiple definition of|cannot find -l).*)$",
+          "message": 1
+        }
+      ]
+    },
+    {
+      "owner": "crimson-catch2",
+      "pattern": [
+        {
+          "regexp": "^(.+?):(\\d+): FAILED:$",
+          "file": 1,
+          "line": 2
+        },
+        {
+          "regexp": "^\\s*(.+)$",
+          "message": 1
+        }
+      ]
+    },
+    {
+      "owner": "crimson-tests",
+      "pattern": [
+        {
+          "regexp": "^(Unexpected (?:error|exception): .*)$",
+          "message": 1
+        }
+      ]
+    },
+    {
+      "owner": "crimson-sanitizer",
+      "pattern": [
+        {
+          "regexp": "^(?:\\d+: )?(==\\d+==ERROR: AddressSanitizer: .*|SUMMARY: AddressSanitizer: .*)$",
+          "message": 1
+        }
+      ]
+    }
+  ]
+}

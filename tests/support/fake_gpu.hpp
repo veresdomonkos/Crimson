@@ -69,6 +69,8 @@ namespace crimson::tests
 
         void DestroyTexture(TextureHandle) override { --LiveTextures; }
 
+        std::vector<std::byte> ReadColorPixels(TextureHandle) override { return {}; }
+
         RenderTargetHandle CreateRenderTarget(const RenderTargetInfo&) override { ++LiveRenderTargets; return RenderTargetHandle{ m_nextId++, 1 }; }
         void DestroyRenderTarget(RenderTargetHandle) override { --LiveRenderTargets; }
 

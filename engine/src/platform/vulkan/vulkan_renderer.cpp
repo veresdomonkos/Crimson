@@ -176,10 +176,36 @@ namespace crimson::vulkan
 
     void VulkanRenderer::SetShadowMap(TextureHandle shadowMap)
     {
-        const VulkanTexture& tex = m_resourceManager.GetTexture(shadowMap);
+        VulkanTexture& tex = m_resourceManager.GetTexture(shadowMap);
 
         // Called between frames, so frames still in flight must finish before their sets change
         m_device.WaitIdle();
+
+        // Every frame binds it, including those without a shadow pass to have rendered to it first
+        if (tex.Layout == vk::ImageLayout::eUndefined)
+        {
+            m_device.ImmediateSubmit([&](vk::CommandBuffer commandBuffer)
+            {
+                vk::ImageMemoryBarrier2 barrier{};
+                barrier.srcStageMask = vk::PipelineStageFlagBits2::eNone;
+                barrier.srcAccessMask = vk::AccessFlagBits2::eNone;
+                barrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+                barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
+                barrier.oldLayout = vk::ImageLayout::eUndefined;
+                barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+                barrier.image = tex.Image;
+                barrier.subresourceRange = vk::ImageSubresourceRange{ tex.Aspect, 0, VK_REMAINING_MIP_LEVELS, 0, 1 };
+
+                vk::DependencyInfo dependency{};
+                dependency.imageMemoryBarrierCount = 1;
+                dependency.pImageMemoryBarriers = &barrier;
+                commandBuffer.pipelineBarrier2(dependency);
+            });
+
+            tex.Layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        }
 
         vk::DescriptorImageInfo imageInfo{};
         imageInfo.imageView = *tex.View;

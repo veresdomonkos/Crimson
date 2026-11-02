@@ -52,7 +52,7 @@ namespace crimson
     struct RenderPassInfo
     {
         RenderTargetHandle Target;
-        ClearFlags ClearFlags = ClearFlags::None;
+        crimson::ClearFlags ClearFlags = crimson::ClearFlags::None;
         glm::vec4 ClearColor{0, 0, 0, 1};
         float ClearDepth = 1.0f;
         uint32_t ClearStencil = 0;

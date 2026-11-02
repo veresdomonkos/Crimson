@@ -212,20 +212,29 @@ The editor renders as fast as it can by default. Set `CRIMSON_VSYNC=1` to limit 
 ## Testing
 
 ```bash
-cmake --build build --target CrimsonTests
+cmake --build build --target CrimsonTests CrimsonGpuTests
 ctest --test-dir build --output-on-failure
 ```
 
-Tests use [Catch2](https://github.com/catchorg/Catch2) and need no GPU or window, so they run on CI too. `-DCRIMSON_BUILD_TESTS=OFF` leaves them out. They cover everything above the graphics APIs:
+Tests use [Catch2](https://github.com/catchorg/Catch2). `-DCRIMSON_BUILD_TESTS=OFF` leaves them out.
+
+`CrimsonTests` needs no GPU or window. It covers everything above the graphics APIs:
 
 - **Scene** - hierarchy, transforms and raycasts.
 - **Assets and projects** - scanning, metas, loading and its failures, using real files in a temporary folder.
 - **Shaders** - every engine shader goes through what the backends do before reaching the GPU: HLSL to SPIR-V, reflection, and translation to GLSL.
 - **Frames** - pass recording, draw sorting, shadow views and `SceneRenderer`.
 
-Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are already interfaces, so `tests/support/fake_gpu.hpp` stands in for them. Testability shouldn't cost anything per frame, so nothing gains a virtual function just to be faked: `BuildDrawOrder` takes its materials as a template parameter, and `Scene`, `Entity` and `Input` stay concrete. What can't be reached that way, like the backends themselves and the ImGui panels, isn't covered.
+Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are already interfaces, so `tests/support/fake_gpu.hpp` stands in for them. Testability shouldn't cost anything per frame, so nothing gains a virtual function just to be faked: `BuildDrawOrder` takes its materials as a template parameter, and `Scene`, `Entity` and `Input` stay concrete. 
 
-[CI](.github/workflows/ci.yml) builds the editor and runs the tests on every push.
+`CrimsonGpuTests` runs the real backends, once with `--backend gl` and once with `--backend vk`, and opens a window to do it. `ctest --label-exclude gpu` skips it.
+
+- **Rendering** - renders into a target and checks the pixels with `ReadColorPixels`: placement, depth, materials, textures, blending, lights, all three kinds of shadow, and outlines.
+- **The editor** - drives the real `EditorApplication` frame by frame: the project manager, opening and closing projects, and projects with problems. The panels do draw, but nothing clicks on them yet.
+
+A run fails on any logged error that a test didn't expect, and in Debug builds that includes validation errors.
+
+[CI](.github/workflows/ci.yml) runs on every push. Windows builds with MinGW and runs `CrimsonTests`. Linux builds with GCC and runs both, once as it is and once with AddressSanitizer, where Mesa renders on the CPU with llvmpipe for OpenGL and lavapipe for Vulkan, on an Xvfb display. A bug in a GPU's driver won't show up there, so `CrimsonGpuTests` is still worth running locally.
 
 ## Profiling
 

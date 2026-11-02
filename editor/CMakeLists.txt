@@ -1,21 +1,14 @@
-# The parts of the editor that need no window or GPU, so the tests can link them
+# Everything but main, so the tests can link and drive the editor
 add_library(EditorCore STATIC
-        include/crimson_editor/recent_projects.hpp
-        src/recent_projects.cpp
-)
-target_include_directories(EditorCore PUBLIC include)
-target_link_libraries(EditorCore PUBLIC Engine)
-
-add_executable(Editor
         include/crimson_editor/editor_application.hpp
-
-        src/main.cpp
         src/editor_application.cpp
         include/crimson_editor/app_mode.hpp
         include/crimson_editor/project_session_mode.hpp
         src/project_session_mode.cpp
         include/crimson_editor/project_manager_mode.hpp
         src/project_manager_mode.cpp
+        include/crimson_editor/recent_projects.hpp
+        src/recent_projects.cpp
         include/crimson_editor/editor_icons.hpp
         src/editor_icons.cpp
         include/crimson_editor/editor_paths.hpp
@@ -24,7 +17,7 @@ add_executable(Editor
         src/file_dialog.cpp
         include/crimson_editor/scene_camera_controller.hpp
         src/scene_camera_controller.cpp
-        include/crimson_editor/ui/Panel.hpp
+        include/crimson_editor/ui/panel.hpp
         include/crimson_editor/ui/viewport_panel.hpp
         src/ui/viewport_panel.cpp
         include/crimson_editor/ui/scene_viewport_panel.hpp
@@ -47,16 +40,20 @@ add_executable(Editor
         src/ui/inspector_panel.cpp
 )
 
-target_include_directories(Editor PUBLIC include)
+target_include_directories(EditorCore PUBLIC include)
 
-crimson_embed_resources(Editor DIRECTORY resources NAMESPACE crimson::editor FUNCTION GetEditorResources)
+crimson_embed_resources(EditorCore DIRECTORY resources NAMESPACE crimson::editor FUNCTION GetEditorResources)
 
-target_link_libraries(Editor
-        PRIVATE
+target_link_libraries(EditorCore
+        PUBLIC
             Engine
-            EditorCore
             imguizmo
+        PRIVATE
             nfd
 )
+
+add_executable(Editor src/main.cpp)
+
+target_link_libraries(Editor PRIVATE EditorCore)
 
 crimson_link_statically(Editor)

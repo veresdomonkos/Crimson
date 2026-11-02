@@ -12,7 +12,7 @@ namespace crimson
     {
         std::unique_ptr<GraphicsDevice> Device;
         std::unique_ptr<GpuResourceManager> GPUResources;
-        std::unique_ptr<Renderer> Renderer;
+        std::unique_ptr<crimson::Renderer> Renderer;
         std::unique_ptr<ImGuiBackend> Imgui;
 
         static std::unique_ptr<GraphicsBackend> Create(RendererAPIType type, Window& window);

@@ -50,6 +50,8 @@ namespace crimson::editor
         ImGui::GetIO().IniFilename = m_imguiIniPath.c_str();
         ui::ApplyEditorTheme();
 
+        m_lastTime = glfwGetTime();
+
         if (projectPath.empty())
         {
             ShowProjectManager();
@@ -119,27 +121,28 @@ namespace crimson::editor
 
     void EditorApplication::Run()
     {
-        m_lastTime = glfwGetTime();
-
         while (m_running)
+            RunFrame();
+    }
+
+    void EditorApplication::RunFrame()
+    {
+        const double currentTime = glfwGetTime();
+        const auto deltaTime = static_cast<float>(currentTime - m_lastTime);
+        m_lastTime = currentTime;
+
         {
-            const double currentTime = glfwGetTime();
-            const auto deltaTime = static_cast<float>(currentTime - m_lastTime);
-            m_lastTime = currentTime;
-
-            {
-                CRIMSON_PROFILE_SCOPE("Poll Events");
-                m_window->PollEvents();
-            }
-            RenderFrame();
-
-            m_input->Update();
-            m_mode->Update(deltaTime);
-
-            ApplyRequestedMode();
-
-            CRIMSON_PROFILE_FRAME();
+            CRIMSON_PROFILE_SCOPE("Poll Events");
+            m_window->PollEvents();
         }
+        RenderFrame();
+
+        m_input->Update();
+        m_mode->Update(deltaTime);
+
+        ApplyRequestedMode();
+
+        CRIMSON_PROFILE_FRAME();
     }
 
     void EditorApplication::RenderFrame()
