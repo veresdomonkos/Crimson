@@ -245,9 +245,10 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-[The workflow](.github/workflows/release.yml) runs all of CI, packages the Windows build with the demo project, and creates a draft on the Releases page. A draft isn't public, so it can be downloaded and checked before publishing it by hand. Every CI run also has the same package to download from its page.
+[The workflow](.github/workflows/release.yml) checks that the tag is on `main`, runs all of CI, and creates a draft on the Releases page with the Windows zip, the Linux AppImage and the demo project. A draft isn't public, so it can be downloaded and checked before publishing it by hand. Every CI run also has the same packages to download from its page.
 
-The editor only needs Windows 10 or newer and a graphics driver, as `vulkan-1.dll` comes with the driver. It needs that file to start even with `--opengl`.
+- **Windows** needs 10 or newer and a graphics driver, as `vulkan-1.dll` comes with the driver. It needs that file to start even with `--opengl`.
+- **Linux** is one file, built on Ubuntu 24.04 so it runs on that or newer. Make it executable with `chmod +x`, and install `libfuse2t64` (`libfuse2` on older distros) if it complains about FUSE. It needs a graphics driver with the Vulkan loader (`libvulkan1`). It runs on X11, or on Wayland through XWayland.
 
 ## Profiling
 

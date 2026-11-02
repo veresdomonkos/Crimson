@@ -191,6 +191,113 @@ jobs:
           path: package
           retention-days: 14
 
+  # An AppImage runs on systems with the same glibc or newer, so it is built on the oldest runner with a recent enough compiler
+  linux-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+
+    env:
+      VULKAN_SDK_VERSION: 1.4.350.0
+      LINUXDEPLOY_VERSION: 1-alpha-20251107-1
+      # AppImages normally mount themselves with FUSE, which runners don't have
+      APPIMAGE_EXTRACT_AND_RUN: 1
+
+    steps:
+      - name: Check out, with the submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Download the embedded files from Git LFS
+        run: git lfs pull --include="editor/resources/**"
+
+      - name: Install the toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build ccache patchelf pkg-config file \
+            libvulkan1 libgl-dev libgl1-mesa-dri xvfb \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev \
+            libgtk-3-dev librsvg2-dev
+
+      # This Ubuntu's Vulkan headers are too old for the engine
+      - name: Restore the Vulkan SDK
+        id: vulkan-sdk
+        uses: actions/cache@v6
+        with:
+          path: .vulkan-sdk
+          key: vulkan-sdk-linux-${{ env.VULKAN_SDK_VERSION }}
+
+      - name: Install the Vulkan SDK
+        if: steps.vulkan-sdk.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .vulkan-sdk
+          curl -fsSL "https://sdk.lunarg.com/sdk/download/$VULKAN_SDK_VERSION/linux/vulkan_sdk.tar.xz" | tar -xJ -C .vulkan-sdk
+
+      - name: Show errors on the run's page
+        run: echo "::add-matcher::.github/problem-matchers.json"
+
+      - name: Restore the compiler cache
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-linux-release-${{ github.sha }}
+          restore-keys: ccache-linux-release-
+
+      - name: Configure
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          VULKAN_SDK: ${{ github.workspace }}/.vulkan-sdk/${{ env.VULKAN_SDK_VERSION }}/x86_64
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DCRIMSON_BUILD_TESTS=OFF
+          -DCRIMSON_ENABLE_PROFILER=OFF
+          -DGLFW_BUILD_WAYLAND=OFF
+
+      - name: Build
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_SLOPPINESS: pch_defines,time_macros
+          CCACHE_MAXSIZE: 1G
+        run: cmake --build build --target Editor
+
+      # The Vulkan loader and OpenGL have to come from the user's graphics driver, so they stay out of it
+      - name: Make the AppImage
+        env:
+          DEPLOY_GTK_VERSION: 3
+          OUTPUT: Crimson-x86_64.AppImage
+        run: |
+          curl -fsSLO "https://github.com/linuxdeploy/linuxdeploy/releases/download/$LINUXDEPLOY_VERSION/linuxdeploy-x86_64.AppImage"
+          curl -fsSLO "https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh"
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
+          PATH="$PWD:$PATH" ./linuxdeploy-x86_64.AppImage \
+            --appdir AppDir \
+            --executable build/editor/Editor \
+            --desktop-file packaging/crimson.desktop \
+            --icon-file editor/resources/icons/crimson.png \
+            --plugin gtk \
+            --exclude-library 'libvulkan*' \
+            --output appimage
+
+      - name: Check that the AppImage starts
+        run: |
+          ./Crimson-x86_64.AppImage --help
+
+          # Opens the project manager on Mesa. Still running when the time is up is what a working editor does.
+          status=0
+          timeout 15 xvfb-run --auto-servernum ./Crimson-x86_64.AppImage -gl || status=$?
+          test "$status" -eq 124
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v7
+        with:
+          name: Crimson-linux-x86_64
+          path: Crimson-x86_64.AppImage
+          retention-days: 14
+
   # Runs everything. Without a GPU Mesa renders on the CPU, with llvmpipe for OpenGL and lavapipe for Vulkan,
   # and Xvfb is the display the windows open on. Debug builds turn the validation layers on.
   # The AddressSanitizer build reports memory errors. Leak checking is off, as the graphics drivers keep memory on purpose.
