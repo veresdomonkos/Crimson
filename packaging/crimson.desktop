@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Crimson
+Comment=A real-time rendering engine and its editor
+Exec=Editor
+Icon=crimson
+Categories=Development;Graphics;
+Terminal=false

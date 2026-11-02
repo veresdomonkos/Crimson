@@ -1,0 +1,67 @@
+name: Release
+
+# Pushing a tag like v0.1.0 makes a draft release, once everything in CI has passed.
+# A draft isn't public: it waits on the Releases page to be checked and published.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  check-tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out, with the history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          lfs: false
+
+      - name: Releases only come from main
+        run: git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+
+  ci:
+    needs: check-tag
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: ci
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download the Windows package
+        uses: actions/download-artifact@v8
+        with:
+          name: Crimson-windows-x64
+          path: Crimson-${{ github.ref_name }}-windows-x64
+
+      - name: Download the Linux package
+        uses: actions/download-artifact@v8
+        with:
+          name: Crimson-linux-x86_64
+
+      - name: Prepare the files
+        run: |
+          zip -r "Crimson-$GITHUB_REF_NAME-windows-x64.zip" "Crimson-$GITHUB_REF_NAME-windows-x64"
+          mv Crimson-x86_64.AppImage "Crimson-$GITHUB_REF_NAME-linux-x86_64.AppImage"
+
+          # The AppImage is read-only inside, so the demo project comes on its own
+          (cd "Crimson-$GITHUB_REF_NAME-windows-x64/samples" && zip -r "$GITHUB_WORKSPACE/Crimson-$GITHUB_REF_NAME-demo-project.zip" Demo)
+
+      - name: Create the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME"
+          "Crimson-$GITHUB_REF_NAME-windows-x64.zip"
+          "Crimson-$GITHUB_REF_NAME-linux-x86_64.AppImage"
+          "Crimson-$GITHUB_REF_NAME-demo-project.zip"
+          --repo "$GITHUB_REPOSITORY"
+          --verify-tag
+          --draft
+          --generate-notes

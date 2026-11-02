@@ -234,7 +234,21 @@ Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are alr
 
 A run fails on any logged error that a test didn't expect, and in Debug builds that includes validation errors.
 
-[CI](.github/workflows/ci.yml) runs on every push. Windows builds with MinGW and runs `CrimsonTests`. Linux builds with GCC and runs both, once as it is and once with AddressSanitizer, where Mesa renders on the CPU with llvmpipe for OpenGL and lavapipe for Vulkan, on an Xvfb display. A bug in a GPU's driver won't show up there, so `CrimsonGpuTests` is still worth running locally.
+[CI](.github/workflows/ci.yml) runs on pull requests and on `main`. Windows builds the release configuration with MinGW, runs `CrimsonTests` and packages it. Linux packages an AppImage, and runs both test programs in Debug, once as it is and once with AddressSanitizer, where Mesa renders on the CPU with llvmpipe for OpenGL and lavapipe for Vulkan, on an Xvfb display. A bug in a GPU's driver won't show up there, so `CrimsonGpuTests` is still worth running locally.
+
+## Releases
+
+Pushing a version tag starts a release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+[The workflow](.github/workflows/release.yml) checks that the tag is on `main`, runs all of CI, and creates a draft on the Releases page with the Windows zip, the Linux AppImage and the demo project. A draft isn't public, so it can be downloaded and checked before publishing it by hand. Every CI run also has the same packages to download from its page.
+
+- **Windows** needs 10 or newer and a graphics driver, as `vulkan-1.dll` comes with the driver. It needs that file to start even with `--opengl`.
+- **Linux** is one file, built on Ubuntu 24.04 so it runs on that or newer. Make it executable with `chmod +x`, and install `libfuse2t64` (`libfuse2` on older distros) if it complains about FUSE. It needs a graphics driver with the Vulkan loader (`libvulkan1`). It runs on X11, or on Wayland through XWayland.
 
 ## Profiling
 
