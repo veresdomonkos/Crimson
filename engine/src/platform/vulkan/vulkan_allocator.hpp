@@ -8,7 +8,8 @@ namespace crimson::vulkan
     enum class BufferMemory
     {
         DeviceLocal,
-        HostMapped // persistently mapped and coherent, writes need no flush
+        HostMapped, // persistently mapped and coherent, writes need no flush
+        HostReadable // the same, in memory that is fast for the CPU to read
     };
 
     class AllocatedBuffer

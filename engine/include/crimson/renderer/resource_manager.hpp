@@ -1,7 +1,10 @@
 #pragma once
 
+#include <cstddef>
+#include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
 #include "crimson/renderer/buffers.hpp"
 #include "crimson/renderer/material_settings.hpp"
@@ -43,6 +46,10 @@ namespace crimson
 
         virtual TextureHandle CreateTexture(const TextureInfo& info, const void* data) = 0;
         virtual void DestroyTexture(TextureHandle handle) = 0;
+
+        // The pixels of an RGBA8 color attachment, row by row, with the first row at the bottom of clip space (y = -1).
+        // It waits for the GPU, so it is for tests and tools and not for use while rendering. Can't be called inside a frame.
+        [[nodiscard]] virtual std::vector<std::byte> ReadColorPixels(TextureHandle texture) = 0;
 
         virtual RenderTargetHandle CreateRenderTarget(const RenderTargetInfo& info) = 0;
         virtual void DestroyRenderTarget(RenderTargetHandle handle) = 0;

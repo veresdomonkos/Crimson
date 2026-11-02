@@ -415,6 +415,15 @@ namespace crimson::opengl
         m_textures.Unregister(handle);
     }
 
+    std::vector<std::byte> OpenGLResourceManager::ReadColorPixels(TextureHandle handle)
+    {
+        const OpenGLTexture& tex = m_textures.Get(handle);
+
+        std::vector<std::byte> pixels(static_cast<size_t>(tex.Width) * tex.Height * 4);
+        glGetTextureImage(tex.GLHandle, 0, GL_RGBA, GL_UNSIGNED_BYTE, static_cast<GLsizei>(pixels.size()), pixels.data());
+        return pixels;
+    }
+
     RenderTargetHandle OpenGLResourceManager::CreateRenderTarget(const RenderTargetInfo& info)
     {
         OpenGLRenderTarget rt{};

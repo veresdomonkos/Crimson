@@ -415,8 +415,9 @@ namespace crimson::vulkan
         if (HasTextureUsage(info.Usage, TextureUsage::Sampled))
             usage |= vk::ImageUsageFlagBits::eSampled;
 
+        // Transfer source so that ReadColorPixels can read it
         if (HasTextureUsage(info.Usage, TextureUsage::ColorAttachment))
-            usage |= vk::ImageUsageFlagBits::eColorAttachment;
+            usage |= vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferSrc;
 
         if (HasTextureUsage(info.Usage, TextureUsage::DepthStencilAttachment))
             usage |= vk::ImageUsageFlagBits::eDepthStencilAttachment;
@@ -493,6 +494,81 @@ namespace crimson::vulkan
     {
         m_device.WaitIdle();
         m_textures.Unregister(handle);
+    }
+
+    std::vector<std::byte> VulkanResourceManager::ReadColorPixels(TextureHandle handle)
+    {
+        constexpr uint32_t kBytesPerPixel = 4;
+
+        // The frames still in flight may be writing to it
+        m_device.WaitIdle();
+
+        const VulkanTexture& texture = m_textures.Get(handle);
+        const vk::DeviceSize size = static_cast<vk::DeviceSize>(texture.Width) * texture.Height * kBytesPerPixel;
+
+        AllocatedBuffer staging = CreateAllocatedBuffer(m_device.GetAllocator(), size, vk::BufferUsageFlagBits::eTransferDst, BufferMemory::HostReadable);
+
+        if (!staging)
+        {
+            LOG_ERROR("[Vulkan] Failed to create a buffer to read a texture into");
+            return {};
+        }
+
+        m_device.ImmediateSubmit([&](vk::CommandBuffer commandBuffer)
+        {
+            vk::ImageMemoryBarrier2 barrier{};
+            barrier.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+            barrier.srcAccessMask = vk::AccessFlagBits2::eMemoryWrite;
+            barrier.dstStageMask = vk::PipelineStageFlagBits2::eCopy;
+            barrier.dstAccessMask = vk::AccessFlagBits2::eTransferRead;
+            barrier.oldLayout = texture.Layout;
+            barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = texture.Image;
+            barrier.subresourceRange = vk::ImageSubresourceRange{ texture.Aspect, 0, VK_REMAINING_MIP_LEVELS, 0, 1 };
+
+            vk::DependencyInfo dependency{};
+            dependency.imageMemoryBarrierCount = 1;
+            dependency.pImageMemoryBarriers = &barrier;
+            commandBuffer.pipelineBarrier2(dependency);
+
+            vk::BufferImageCopy region{};
+            region.imageSubresource.aspectMask = texture.Aspect;
+            region.imageSubresource.mipLevel = 0;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount = 1;
+            region.imageExtent = vk::Extent3D{ texture.Width, texture.Height, 1 };
+            commandBuffer.copyImageToBuffer(texture.Image, vk::ImageLayout::eTransferSrcOptimal, staging.Get(), region);
+
+            // Back to how the renderer left it, as it tracks the layout
+            barrier.srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+            barrier.srcAccessMask = vk::AccessFlagBits2::eNone;
+            barrier.dstStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+            barrier.dstAccessMask = vk::AccessFlagBits2::eMemoryRead;
+            barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
+            barrier.newLayout = texture.Layout == vk::ImageLayout::eUndefined ? vk::ImageLayout::eTransferSrcOptimal : texture.Layout;
+            commandBuffer.pipelineBarrier2(dependency);
+
+            vk::BufferMemoryBarrier2 hostBarrier{};
+            hostBarrier.srcStageMask = vk::PipelineStageFlagBits2::eCopy;
+            hostBarrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
+            hostBarrier.dstStageMask = vk::PipelineStageFlagBits2::eHost;
+            hostBarrier.dstAccessMask = vk::AccessFlagBits2::eHostRead;
+            hostBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            hostBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            hostBarrier.buffer = staging.Get();
+            hostBarrier.size = size;
+
+            vk::DependencyInfo hostDependency{};
+            hostDependency.bufferMemoryBarrierCount = 1;
+            hostDependency.pBufferMemoryBarriers = &hostBarrier;
+            commandBuffer.pipelineBarrier2(hostDependency);
+        });
+
+        std::vector<std::byte> pixels(static_cast<size_t>(size));
+        std::memcpy(pixels.data(), staging.Mapped(), pixels.size());
+        return pixels;
     }
 
     RenderTargetHandle VulkanResourceManager::CreateRenderTarget(const RenderTargetInfo& info)

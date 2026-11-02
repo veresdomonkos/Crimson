@@ -10,6 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The toolchain the project is developed with. The runners have no GPU, so this builds and runs the CPU tests.
   windows-mingw:
     runs-on: windows-latest
     timeout-minutes: 60
@@ -43,6 +44,10 @@ jobs:
             vulkan-headers:p
             vulkan-loader:p
 
+      - name: Show errors on the run's page
+        shell: pwsh
+        run: echo "::add-matcher::.github/problem-matchers.json"
+
       # A fresh build takes minutes, most of it third party code that never changes
       - name: Restore the compiler cache
         uses: actions/cache@v6
@@ -65,7 +70,78 @@ jobs:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
           CCACHE_SLOPPINESS: pch_defines,time_macros
           CCACHE_MAXSIZE: 1G
-        run: cmake --build build --target Editor CrimsonTests
+        run: cmake --build build --target Editor CrimsonTests CrimsonGpuTests
 
       - name: Test
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --label-exclude gpu --output-on-failure
+
+  # Runs everything. Without a GPU Mesa renders on the CPU, with llvmpipe for OpenGL and lavapipe for Vulkan,
+  # and Xvfb is the display the windows open on. Debug builds turn the validation layers on.
+  # The AddressSanitizer build reports memory errors. Leak checking is off, as the graphics drivers keep memory on purpose.
+  linux:
+    name: linux-${{ matrix.flavor }}
+    runs-on: ubuntu-26.04
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - flavor: gcc
+            flags: ""
+          - flavor: asan
+            flags: -fsanitize=address -fno-omit-frame-pointer
+
+    steps:
+      - name: Check out, with the submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Download the embedded files from Git LFS
+        run: git lfs pull --include="editor/resources/**"
+
+      - name: Install the toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake ninja-build ccache \
+            libvulkan-dev vulkan-validationlayers mesa-vulkan-drivers \
+            libgl-dev libgl1-mesa-dri xvfb \
+            libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev \
+            libgtk-3-dev
+
+      - name: Show errors on the run's page
+        run: echo "::add-matcher::.github/problem-matchers.json"
+
+      - name: Restore the compiler cache
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-linux-${{ matrix.flavor }}-${{ github.sha }}
+          restore-keys: ccache-linux-${{ matrix.flavor }}-
+
+      - name: Configure
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+          -DGLFW_BUILD_WAYLAND=OFF
+          "-DCMAKE_CXX_FLAGS=${{ matrix.flags }}"
+          "-DCMAKE_C_FLAGS=${{ matrix.flags }}"
+          "-DCMAKE_EXE_LINKER_FLAGS=${{ matrix.flags }}"
+
+      - name: Build
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_SLOPPINESS: pch_defines,time_macros
+          CCACHE_MAXSIZE: 1G
+        run: cmake --build build --target Editor CrimsonTests CrimsonGpuTests
+
+      - name: Test
+        env:
+          ASAN_OPTIONS: detect_leaks=0
+        run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" ctest --test-dir build --output-on-failure

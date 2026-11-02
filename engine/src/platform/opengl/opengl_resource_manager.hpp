@@ -32,6 +32,7 @@ namespace crimson::opengl
 
         TextureHandle CreateTexture(const TextureInfo& info, const void* data) override;
         void DestroyTexture(TextureHandle handle) override;
+        std::vector<std::byte> ReadColorPixels(TextureHandle texture) override;
 
         RenderTargetHandle CreateRenderTarget(const RenderTargetInfo& info) override;
         void DestroyRenderTarget(RenderTargetHandle handle) override;

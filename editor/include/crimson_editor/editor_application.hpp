@@ -24,6 +24,11 @@ namespace crimson::editor
 		EditorApplication(RendererAPIType rendererType, const std::filesystem::path& projectPath);
         ~EditorApplication();
 		void Run();
+
+		// One step of Run, for driving the editor from outside
+		void RunFrame();
+		[[nodiscard]] EditorServices& Services() { return *m_services; }
+		[[nodiscard]] const AppMode& CurrentMode() const { return *m_mode; }
 	private:
 	    // --- Frame ---
 	    void RenderFrame();
