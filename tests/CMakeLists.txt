@@ -14,6 +14,7 @@ add_executable(CrimsonTests
         engine/test_shadow_atlas.cpp
 
         editor/test_recent_projects.cpp
+        editor/test_asset_edits.cpp
 )
 
 # The engine's src folder is for the parts of the backends that run without a GPU, such as GLSL translation

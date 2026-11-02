@@ -25,15 +25,19 @@ namespace crimson::editor
         : m_services(services),
           m_project(std::move(project)),
           m_assetManager(std::make_unique<AssetManager>(GpuResources(), m_project.AssetsDir())),
-          m_context{ m_scene, *m_assetManager }
+          m_assetEdits(std::make_unique<AssetEdits>(*m_assetManager)),
+          m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, *m_services.Graphics.Imgui)),
+          m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails,
+                     .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); } }
     {
         LOG_INFO("[Editor] Opening project '{}' at {}", m_project.Name(), m_project.Root().string());
 
         m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer);
-        m_ui = std::make_unique<ui::EditorUI>(m_services.CloseProject);
+        m_ui = std::make_unique<ui::EditorUI>(
+            [this] { m_assetEdits->SaveAll(); },
+            [this] { RequestClose(m_services.CloseProject); });
 
         CreateRenderTargets();
-        CreateTextures();
         CreateScene();
         SetupUI();
 
@@ -52,8 +56,6 @@ namespace crimson::editor
 
         imgui.ReleaseTexture(m_mainColor);
         imgui.ReleaseTexture(m_sceneRenderer->GetShadowAtlas());
-        if (m_testTexture)
-            imgui.ReleaseTexture(m_testTexture);
 
         GpuResources().DestroyRenderTarget(m_mainTarget);
     }
@@ -147,18 +149,138 @@ namespace crimson::editor
 
         m_sceneViewport = &m_ui->AddPanel<ui::SceneViewportPanel>("Scene", imgui.GetOrCreateTextureId(m_mainColor), 16.0f / 9.0f, m_context, m_camera);
         m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_sceneRenderer->GetShadowAtlas()), 1.0f);
-        if (m_testTexture)
-            m_ui->AddPanel<ui::ViewportPanel>("Test Texture", imgui.GetOrCreateTextureId(m_testTexture), 875.0f / 350.0f);
+        m_ui->AddPanel<ui::AssetBrowserPanel>(m_context, m_services.AppWindow); // before the console, for its tab to be in front
         m_ui->AddPanel<ui::ConsolePanel>();
         m_ui->AddPanel<ui::HierarchyPanel>(m_context);
         m_ui->AddPanel<ui::InspectorPanel>(m_context);
-        m_ui->AddPanel<ui::AssetBrowserPanel>();
         m_ui->AddPanel<ui::StatsPanel>(m_frameStats, m_services.RendererType);
     }
 
-    void ProjectSessionMode::CreateTextures()
+    void ProjectSessionMode::RunDeferred()
     {
-        m_testTexture = m_assetManager->LoadTexture(m_assetManager->FindId("textures/test.jpg"));
+        // An action can add more, which run in the same go
+        for (size_t i = 0; i < m_context.Deferred.size(); ++i)
+        {
+            const std::function<void()> action = std::move(m_context.Deferred[i]);
+            action();
+        }
+
+        m_context.Deferred.clear();
+
+        if (m_assetEdits->Apply())
+            ResolveAllMeshRenderers();
+    }
+
+    void ProjectSessionMode::ResolveAllMeshRenderers()
+    {
+        for (auto [handle, renderer] : m_scene.GetRegistry().view<MeshRendererComponent>().each())
+            ResolveMeshRenderer(renderer, *m_assetManager);
+    }
+
+    void ProjectSessionMode::ForgetAssets(std::span<const AssetID> removed)
+    {
+        if (removed.empty())
+            return;
+
+        for (const AssetID id : removed)
+        {
+            m_assetEdits->Forget(id);
+            m_assetThumbnails->Release(id);
+
+            if (m_context.SelectedAsset == id)
+                m_context.SelectAsset({});
+        }
+
+        const auto isRemoved = [removed](AssetID id) { return std::ranges::find(removed, id) != removed.end(); };
+
+        for (auto [handle, renderer] : m_scene.GetRegistry().view<MeshRendererComponent>().each())
+        {
+            if (isRemoved(renderer.MeshAsset))
+                renderer.MeshAsset = {};
+
+            for (AssetID& material : renderer.MaterialAssets)
+            {
+                if (isRemoved(material))
+                    material = {};
+            }
+        }
+
+        // Also for materials that went away because a shader they used is gone
+        ResolveAllMeshRenderers();
+    }
+
+    void ProjectSessionMode::RequestClose(std::function<void()> proceed)
+    {
+        if (!m_assetEdits->HasUnsavedChanges())
+        {
+            proceed();
+            return;
+        }
+
+        m_closeAction = std::move(proceed);
+        m_openUnsavedChangesDialog = true;
+    }
+
+    void ProjectSessionMode::SaveAllAndClose()
+    {
+        // A file that can't be written is in the console, and it is better to stay than to lose the edit
+        if (m_assetEdits->SaveAll())
+            std::exchange(m_closeAction, {})();
+    }
+
+    void ProjectSessionMode::DiscardAllAndClose()
+    {
+        m_assetEdits->DiscardAll();
+        std::exchange(m_closeAction, {})();
+    }
+
+    void ProjectSessionMode::CancelClose()
+    {
+        m_closeAction = {};
+    }
+
+    void ProjectSessionMode::DrawUnsavedChangesDialog()
+    {
+        static constexpr const char* kPopup = "Unsaved Changes";
+
+        if (m_openUnsavedChangesDialog)
+        {
+            ImGui::OpenPopup(kPopup);
+            m_openUnsavedChangesDialog = false;
+        }
+
+        if (!ImGui::BeginPopupModal(kPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            return;
+
+        ImGui::TextUnformatted("Some assets have changes that aren't saved.");
+        ImGui::Spacing();
+
+        bool close = false;
+
+        if (ImGui::Button("Save All"))
+        {
+            SaveAllAndClose();
+            close = true;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Discard"))
+        {
+            DiscardAllAndClose();
+            close = true;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        {
+            CancelClose();
+            close = true;
+        }
+
+        if (close)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
     }
 
     void ProjectSessionMode::PrepareFrame()
@@ -183,10 +305,12 @@ namespace crimson::editor
     void ProjectSessionMode::OnImGui()
     {
         m_ui->Draw();
+        DrawUnsavedChangesDialog();
     }
 
     void ProjectSessionMode::Update(float deltaTime)
     {
+        RunDeferred();
         UpdateFrameStats();
 
         m_cameraController->Update(deltaTime);
@@ -231,6 +355,9 @@ namespace crimson::editor
 
     void ProjectSessionMode::HandleShortcuts()
     {
+        if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
+            m_assetEdits->SaveAll();
+
         if (!ImGui::GetIO().WantTextInput && !m_services.AppInput.IsMouseButtonDown(MouseButton::Right)
             && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_context.Selected)
         {

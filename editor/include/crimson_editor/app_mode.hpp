@@ -45,6 +45,9 @@ namespace crimson::editor
 
         // After the frame
         virtual void Update(float deltaTime) {}
+
+        // Something wants to close the mode. A mode with unsaved work can ask first, and calls proceed if it goes ahead.
+        virtual void RequestClose(std::function<void()> proceed) { proceed(); }
     private:
         FrameLightingData m_noLighting;
     };

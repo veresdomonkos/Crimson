@@ -50,6 +50,9 @@ namespace crimson
 
         [[nodiscard]] AssetID DefaultMaterial() const;
 
+        // What a loaded shader's materials can set
+        [[nodiscard]] const ShaderInterface& GetShaderInterface(ShaderHandle shader) const { return m_gpuResources.GetShaderInterface(shader); }
+
         TextureHandle LoadTexture(AssetID id);
         ShaderHandle LoadShader(AssetID id);
         MaterialHandle LoadMaterial(AssetID id);

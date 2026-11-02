@@ -6,8 +6,8 @@
 
 namespace crimson::editor::ui
 {
-    EditorUI::EditorUI(std::function<void()> onCloseProject)
-        : m_onCloseProject(std::move(onCloseProject))
+    EditorUI::EditorUI(std::function<void()> onSaveAll, std::function<void()> onCloseProject)
+        : m_onSaveAll(std::move(onSaveAll)), m_onCloseProject(std::move(onCloseProject))
     {
     }
 
@@ -34,6 +34,9 @@ namespace crimson::editor::ui
 
         if (ImGui::BeginMenu("File"))
         {
+            if (ImGui::MenuItem("Save All", "Ctrl+S"))
+                m_onSaveAll();
+
             if (ImGui::MenuItem("Close Project"))
                 m_onCloseProject();
 
@@ -61,14 +64,13 @@ namespace crimson::editor::ui
         ImGuiID left = ImGui::DockBuilderSplitNode(center, ImGuiDir_Left, 0.2f, nullptr, &center);
         ImGuiID right = ImGui::DockBuilderSplitNode(center, ImGuiDir_Right, 0.25f, nullptr, &center);
         const ImGuiID bottom = ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.3f, nullptr, &center);
-        const ImGuiID leftBottom = ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.3f, nullptr, &left);
         const ImGuiID rightBottom = ImGui::DockBuilderSplitNode(right, ImGuiDir_Down, 0.35f, nullptr, &right);
 
         ImGui::DockBuilderDockWindow("Hierarchy", left);
-        ImGui::DockBuilderDockWindow("Assets", leftBottom);
-        ImGui::DockBuilderDockWindow("Test Texture", center);
         ImGui::DockBuilderDockWindow("Scene", center);
+        ImGui::DockBuilderDockWindow("Assets", bottom);
         ImGui::DockBuilderDockWindow("Console", bottom);
+
         ImGui::DockBuilderDockWindow("Inspector", right);
         ImGui::DockBuilderDockWindow("Shadow Map", rightBottom);
         ImGui::DockBuilderDockWindow("Stats", rightBottom);

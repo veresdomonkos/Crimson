@@ -11,7 +11,7 @@ namespace crimson::editor::ui
     class EditorUI
     {
     public:
-        explicit EditorUI(std::function<void()> onCloseProject);
+        EditorUI(std::function<void()> onSaveAll, std::function<void()> onCloseProject);
         ~EditorUI();
 
         template<typename T, typename... Args>
@@ -30,6 +30,7 @@ namespace crimson::editor::ui
         void BuildDefaultLayout(ImGuiID dockSpace, const ImVec2& size);
     private:
         std::vector<Panel*> m_panels;
+        std::function<void()> m_onSaveAll;
         std::function<void()> m_onCloseProject;
         bool m_resetLayout = false;
     };

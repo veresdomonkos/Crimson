@@ -1,5 +1,7 @@
 #pragma once
+#include <functional>
 #include <memory>
+#include <span>
 
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/project/project.hpp>
@@ -26,15 +28,29 @@ namespace crimson::editor
         void RecordPasses(FrameContext& frame) override;
         void OnImGui() override;
         void Update(float deltaTime) override;
+        void RequestClose(std::function<void()> proceed) override;
+
+        [[nodiscard]] EditorContext& GetContext() { return m_context; }
+        [[nodiscard]] bool IsAskingAboutUnsavedChanges() const { return static_cast<bool>(m_closeAction); }
+
+        // What the unsaved changes dialog does
+        void SaveAllAndClose();
+        void DiscardAllAndClose();
+        void CancelClose();
     private:
         // --- Setup called from constructor ---
         void CreateRenderTargets();
         void CreateScene();
         void SetupUI();
-        void CreateTextures();
 
         void UpdateFrameStats();
         void HandleShortcuts();
+        void DrawUnsavedChangesDialog();
+
+        // --- Assets changing ---
+        void RunDeferred();
+        void ResolveAllMeshRenderers();
+        void ForgetAssets(std::span<const AssetID> removed);
 
         // --- Utils ---
         // An invalid entity if the project doesn't have the mesh
@@ -46,6 +62,8 @@ namespace crimson::editor
         Project m_project;
 
         std::unique_ptr<AssetManager> m_assetManager;
+        std::unique_ptr<AssetEdits> m_assetEdits;
+        std::unique_ptr<AssetThumbnails> m_assetThumbnails;
 
         PerspectiveCamera m_camera;
         Scene m_scene;
@@ -57,7 +75,6 @@ namespace crimson::editor
 
         // Textures
         TextureHandle m_mainColor;
-        TextureHandle m_testTexture;
 
         // Light
         FrameLightingData m_lighting;
@@ -66,5 +83,9 @@ namespace crimson::editor
         std::unique_ptr<ui::EditorUI> m_ui;
         const ui::ViewportPanel* m_sceneViewport = nullptr;
         std::unique_ptr<SceneCameraController> m_cameraController;
+
+        // What to do once the unsaved changes dialog is answered, empty while it isn't showing
+        std::function<void()> m_closeAction;
+        bool m_openUnsavedChangesDialog = false;
     };
 }
