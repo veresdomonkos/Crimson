@@ -22,7 +22,7 @@ namespace crimson::editor::ui
         ImGui::InvisibleButton("##HierarchyBackground", ImVec2(std::max(available.x, 1.0f), std::max(available.y, 1.0f)));
 
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-            m_context.Selected = {};
+            m_context.SelectEntity({});
 
         if (ImGui::BeginDragDropTarget())
         {
@@ -84,7 +84,7 @@ namespace crimson::editor::ui
             ImGui::PopStyleColor();
 
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
-            m_context.Selected = entity;
+            m_context.SelectEntity(entity);
 
         if (ImGui::BeginDragDropSource())
         {
@@ -136,7 +136,7 @@ namespace crimson::editor::ui
                 if (setup)
                     setup(created);
 
-                m_context.Selected = created;
+                m_context.SelectEntity(created);
             });
         };
 

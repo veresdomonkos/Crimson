@@ -1,11 +1,19 @@
 #include "crimson_editor/ui/scene_viewport_panel.hpp"
 
+#include <filesystem>
+
 #include <glm/gtc/type_ptr.hpp>
+
+#include <crimson/scene/scene_renderer.hpp>
+
+#include "crimson_editor/ui/asset_drag.hpp"
 
 namespace crimson::editor::ui
 {
     void SceneViewportPanel::OnImageDrawn(const ImVec2& position, const ImVec2& size)
     {
+        HandleAssetDrop(position, size);
+
         // Left clicks focus a window by themselves, but flying starts with a right click
         if (IsHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
             ImGui::SetWindowFocus();
@@ -27,21 +35,86 @@ namespace crimson::editor::ui
         if (ImGui::IsAnyItemHovered() || (m_context.Selected && ImGuizmo::IsOver()))
             return;
 
+        glm::vec3 direction;
+        if (GetRayUnderMouse(position, size, direction))
+            m_context.SelectEntity(m_context.ActiveScene.Raycast(m_camera.GetPosition(), direction));
+    }
+
+    bool SceneViewportPanel::GetRayUnderMouse(const ImVec2& position, const ImVec2& size, glm::vec3& direction) const
+    {
+        const ImGuiIO& io = ImGui::GetIO();
         const glm::vec2 uv((io.MousePos.x - position.x) / size.x, (io.MousePos.y - position.y) / size.y);
 
         // The bars around the image aren't part of the scene
         if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f)
-            return;
+            return false;
 
         const glm::mat4 clipToWorld = glm::inverse(m_camera.GetViewProj());
 
         // The panel shows the image flipped, so the top of it is the top of clip space
         const glm::vec4 farPoint = clipToWorld * glm::vec4(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f, 1.0f, 1.0f);
 
-        const glm::vec3 origin = m_camera.GetPosition();
-        const glm::vec3 direction = glm::normalize(glm::vec3(farPoint) / farPoint.w - origin);
+        direction = glm::normalize(glm::vec3(farPoint) / farPoint.w - m_camera.GetPosition());
+        return true;
+    }
 
-        m_context.Selected = m_context.ActiveScene.Raycast(origin, direction);
+    void SceneViewportPanel::HandleAssetDrop(const ImVec2& position, const ImVec2& size)
+    {
+        const AssetID mesh = AcceptAssetOnLastItem(m_context.Assets, AssetType::Mesh);
+        const AssetID material = AcceptAssetOnLastItem(m_context.Assets, AssetType::Material);
+
+        if (!mesh && !material)
+            return;
+
+        glm::vec3 direction;
+        if (!GetRayUnderMouse(position, size, direction))
+            return;
+
+        const glm::vec3 origin = m_camera.GetPosition();
+
+        m_context.Deferred.emplace_back([this, mesh, material, origin, direction]
+        {
+            if (mesh)
+                CreateEntityFromMesh(mesh, origin, direction);
+            else
+                AssignMaterialToEntity(material, origin, direction);
+        });
+    }
+
+    void SceneViewportPanel::CreateEntityFromMesh(AssetID mesh, const glm::vec3& origin, const glm::vec3& direction)
+    {
+        const AssetInfo* info = m_context.Assets.GetInfo(mesh);
+        if (!info)
+            return;
+
+        constexpr float kDistanceWithoutGround = 5.0f;
+
+        // Where the mouse points on the ground, unless it points above the horizon
+        const float toGround = direction.y < -0.0001f ? -origin.y / direction.y : -1.0f;
+        const float distance = toGround > 0.0f ? toGround : kDistanceWithoutGround;
+
+        const Entity entity = m_context.ActiveScene.CreateEntity(std::filesystem::path(info->Path).stem().string());
+        entity.GetComponent<TransformComponent>().Position = origin + direction * distance;
+
+        auto& renderer = entity.AddComponent<MeshRendererComponent>();
+        renderer.MeshAsset = mesh;
+        ResolveMeshRenderer(renderer, m_context.Assets);
+
+        m_context.SelectEntity(entity);
+    }
+
+    void SceneViewportPanel::AssignMaterialToEntity(AssetID material, const glm::vec3& origin, const glm::vec3& direction)
+    {
+        const Entity entity = m_context.ActiveScene.Raycast(origin, direction);
+        if (!entity)
+            return;
+
+        auto* renderer = entity.TryGetComponent<MeshRendererComponent>();
+        if (!renderer || renderer->MaterialAssets.empty())
+            return;
+
+        renderer->MaterialAssets[0] = material;
+        ResolveMeshRenderer(*renderer, m_context.Assets);
     }
 
     void SceneViewportPanel::HandleShortcuts()

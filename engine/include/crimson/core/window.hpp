@@ -30,6 +30,12 @@ namespace crimson
 	    virtual void SetTitle(const std::string& title) = 0;
 	    virtual void SetSize(uint32_t width, uint32_t height) = 0;
 
+	    // A normal window filling the screen, with its title bar and the taskbar still there
+	    virtual void Maximize() = 0;
+	    virtual void Restore() = 0;
+
+	    [[nodiscard]] virtual bool IsFocused() const = 0;
+
 	    virtual void* GetNativeHandle() const = 0;
 
 	    static Unique<Window> Create(RendererAPIType rendererAPI, WindowData data);

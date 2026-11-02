@@ -9,6 +9,8 @@
 
 #include <crimson/scene/scene_renderer.hpp>
 
+#include "crimson_editor/ui/asset_drag.hpp"
+
 namespace crimson::editor::ui
 {
     // A collapsible section. Returns true while it is open, and needs EndComponentSection then.
@@ -56,6 +58,12 @@ namespace crimson::editor::ui
             ImGui::EndCombo();
         }
 
+        if (const AssetID dropped = AcceptAssetOnLastItem(assets, type); dropped && dropped != current)
+        {
+            current = dropped;
+            changed = true;
+        }
+
         return changed;
     }
 
@@ -63,7 +71,11 @@ namespace crimson::editor::ui
     {
         ImGui::Begin("Inspector");
 
-        if (const Entity entity = m_context.Selected)
+        if (m_context.SelectedAsset)
+        {
+            m_assetInspector.Draw(m_context.SelectedAsset);
+        }
+        else if (const Entity entity = m_context.Selected)
         {
             DrawHeader(entity);
 

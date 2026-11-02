@@ -153,6 +153,8 @@ Assets are addressed by a path relative to `assets/`, or by `AssetID`, and load 
 
 The engine's own shaders and materials live in `engine/resources/` and are bundled into the executable. They are always available under `engine/`, read-only and with the same ids in every project, so a project's material can use `"shader": "engine/shaders/main.hlsl"`. The editor's font and icons live in `editor/resources/`, are bundled the same way, and never go through the asset manager.
 
+The asset manager can also change what it has while running: `Refresh` looks at the folder again, `CreateMaterial`, `Rename` and `Delete` change files, `ApplyMaterial` shows new values on a material, and `ReimportTexture` applies new import settings. A file moved along with its `.meta` keeps its id. Anything that changes GPU resources has to run between frames, which is why panels queue these in `EditorContext::Deferred`.
+
 `.mat` files can also set `"renderMode"` (`"opaque"` or `"transparent"`) and `"cull"` (`"back"`, `"front"` or `"none"`), which default to opaque and back. Transparent materials are alpha blended using the alpha the shader outputs, don't write depth, and draw after opaque ones in the order they were submitted.
 
 ### Editor
@@ -168,8 +170,13 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 
 - **Viewport** - displays a render target texture (scene, shadow map, ...). The Scene view has a [ImGuizmo](https://github.com/CedricGuillemet/ImGuizmo) gizmo on the selected entity, with a toolbar for its operation and for local or world axes.
 - **Hierarchy** - the entity tree. Click to select, drag onto an entity to reparent or onto the empty area to make a root, right-click to create or delete, `Delete` deletes the selection.
-- **Inspector** - name, active flag and components of the selected entity, with mesh and material pickers. **Add Component** adds a component, right-clicking a component's header removes it.
-- **Asset Browser / Console**
+- **Inspector** - shows the selected entity or asset, as only one thing is selected at a time.
+  - **Entity:** name, active flag and components, with mesh and material pickers. **Add Component** adds a component, right-clicking a component's header removes it.
+  - **Material:** shader, render mode, culling, and whatever properties and textures its shader declares. Edits show right away and only reach the file on **Save**, or go away on **Revert**. **File > Save All** or `Ctrl+S` saves everything, and closing with unsaved changes asks first.
+  - **Texture:** preview, size, and import settings for mipmaps and flipping.
+  - **Mesh and shader:** read-only details.
+- **Assets** - browses the project's files and the engine's read-only ones, with a folder tree, a grid and search. Click selects an asset, right-click creates, renames or deletes, and dragging moves an asset to a folder, assigns it in the Inspector, or drops it in the Scene view: a mesh makes a new entity, a material goes on the entity under the mouse. Files changed outside the editor appear when it regains focus.
+- **Console**
 - **Stats** - FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts.
 
 ## Project layout

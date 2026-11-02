@@ -18,6 +18,12 @@ namespace crimson::editor::ui
         void OnImageDrawn(const ImVec2& position, const ImVec2& size) override;
     private:
         void HandlePicking(const ImVec2& position, const ImVec2& size);
+        void HandleAssetDrop(const ImVec2& position, const ImVec2& size);
+        void CreateEntityFromMesh(AssetID mesh, const glm::vec3& origin, const glm::vec3& direction);
+        void AssignMaterialToEntity(AssetID material, const glm::vec3& origin, const glm::vec3& direction);
+
+        // False when the mouse is on the bars around the image
+        bool GetRayUnderMouse(const ImVec2& position, const ImVec2& size, glm::vec3& direction) const;
         void HandleShortcuts();
         void DrawToolbar(const ImVec2& position);
         void DrawGizmo(const ImVec2& position, const ImVec2& size);

@@ -298,13 +298,7 @@ namespace crimson::opengl
             return;
         }
 
-        if (!texture)
-        {
-            LOG_WARN("Invalid TextureHandle passed for '{}'!", name);
-            return;
-        }
-
-        mat.Textures[it->first] = m_textures.Get(texture).GLHandle;
+        mat.Textures[it->first] = m_textures.Get(texture ? texture : m_defaultTexture).GLHandle;
     }
 
     void OpenGLResourceManager::SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data)

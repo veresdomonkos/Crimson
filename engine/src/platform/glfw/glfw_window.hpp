@@ -18,6 +18,9 @@ namespace crimson::glfw
 
 	    void SetTitle(const std::string& title) override;
 	    void SetSize(uint32_t width, uint32_t height) override;
+	    void Maximize() override { glfwMaximizeWindow(m_handle); }
+	    void Restore() override { glfwRestoreWindow(m_handle); }
+	    [[nodiscard]] bool IsFocused() const override { return glfwGetWindowAttrib(m_handle, GLFW_FOCUSED) == GLFW_TRUE; }
 
 	    void* GetNativeHandle() const override { return m_handle; }
 	private:

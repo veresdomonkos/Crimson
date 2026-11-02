@@ -36,9 +36,11 @@ namespace crimson::vulkan
 
         ShaderHandle CreateShader(const ShaderBinary& binary) override;
         void DestroyShader(ShaderHandle handle) override;
+        [[nodiscard]] const ShaderInterface& GetShaderInterface(ShaderHandle handle) const override { return m_shaders.Get(handle).Interface; }
 
         MaterialHandle CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings) override;
         void DestroyMaterial(MaterialHandle handle) override;
+        void SetMaterialSettings(MaterialHandle handle, const MaterialSettings& settings) override { m_materials.Get(handle).Settings = settings; }
 
         void SetMaterialTexture(MaterialHandle handle, std::string_view name, TextureHandle texture) override;
 

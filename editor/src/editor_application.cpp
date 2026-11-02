@@ -80,6 +80,7 @@ namespace crimson::editor
             LOG_ERROR("[Editor] {}", error);
 
         m_window->SetTitle("Crimson - Projects");
+        m_window->Restore();
         m_window->SetSize(kProjectManagerWidth, kProjectManagerHeight);
         m_mode = std::make_unique<ProjectManagerMode>(*m_services, std::move(error));
     }
@@ -92,7 +93,11 @@ namespace crimson::editor
         m_recentProjects->Add(project);
 
         m_window->SetTitle(project.Name() + " - Crimson Editor");
+
+        // The size is what it goes back to when no longer maximized
         m_window->SetSize(kEditorWidth, kEditorHeight);
+        m_window->Maximize();
+
         m_mode = std::make_unique<ProjectSessionMode>(*m_services, std::move(project));
     }
 
@@ -187,7 +192,7 @@ namespace crimson::editor
 		EventDispatcher dispatcher(event);
 
 		dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& event) {
-			m_running = false;
+			RequestQuit();
 			return true;
 		});
 	}

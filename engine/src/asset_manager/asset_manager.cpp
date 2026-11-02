@@ -1,5 +1,6 @@
 #include "crimson/asset_manager/asset_manager.hpp"
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <fstream>
 #include <iterator>
@@ -20,6 +21,7 @@ namespace crimson
 {
     static constexpr std::string_view kEnginePathPrefix = "engine/";
     static constexpr std::string_view kDefaultMaterialPath = "engine/materials/default.mat";
+    static constexpr std::string_view kDefaultShaderPath = "engine/shaders/main.hlsl";
 
     // FNV-1a. An engine resource has no meta to store an id in, and scenes must find it again in any project.
     static AssetID EngineResourceId(std::string_view path)
@@ -66,7 +68,9 @@ namespace crimson
         AddImporter(std::make_unique<MeshImporter>());
 
         RegisterEngineResources();
-        Scan();
+
+        std::unordered_set<AssetID> seen;
+        Scan(seen);
     }
 
     AssetManager::~AssetManager()
@@ -102,6 +106,7 @@ namespace crimson
             info.Id = EngineResourceId(info.Path);
             info.Type = importer->second->Type();
             info.Settings = importer->second->DefaultSettings();
+            info.ReadOnly = true;
 
             const AssetID id = info.Id;
             m_idsByPath[info.Path] = id;
@@ -109,7 +114,7 @@ namespace crimson
         }
     }
 
-    void AssetManager::Scan()
+    void AssetManager::Scan(std::unordered_set<AssetID>& seen)
     {
         LOG_INFO("[Assets] Scanning {}", m_root.string());
 
@@ -132,13 +137,13 @@ namespace crimson
             }
 
             if (it->is_regular_file(error))
-                RegisterFile(it->path());
+                RegisterFile(it->path(), seen);
         }
 
         LOG_INFO("[Assets] Scan done: {} assets", m_assets.size());
     }
 
-    void AssetManager::RegisterFile(const fs::path& file)
+    void AssetManager::RegisterFile(const fs::path& file, std::unordered_set<AssetID>& seen)
     {
         const std::string extension = NormalizeExt(file);
         if (extension == ".meta" || extension == ".hlsli")
@@ -161,10 +166,43 @@ namespace crimson
 
         const fs::path metaPath = meta::MetaPathFor(file);
         std::optional<AssetInfo> existing = meta::Read(metaPath);
+
+        // Already known from an earlier scan. If only its meta is gone, it keeps the id it has.
+        if (const AssetID known = FindId(path); known && (!existing || existing->Id == known))
+        {
+            if (!existing && !meta::Write(metaPath, m_assets.at(known).Info))
+                LOG_ERROR("[Assets] Failed to write {}", metaPath.string());
+
+            seen.insert(known);
+            return;
+        }
+
+        bool duplicate = false;
+
+        if (existing)
+        {
+            if (const auto other = m_assets.find(existing->Id); other != m_assets.end())
+            {
+                std::error_code error;
+                const bool originalStillThere = !other->second.Info.ReadOnly && fs::exists(m_root / fs::path(other->second.Info.Path), error);
+
+                // Moved along with its meta, so nothing using it notices
+                if (!originalStillThere && !other->second.Info.ReadOnly)
+                {
+                    m_idsByPath.erase(other->second.Info.Path);
+                    other->second.Info.Path = path;
+                    m_idsByPath[path] = existing->Id;
+                    seen.insert(existing->Id);
+                    return;
+                }
+
+                // A file copied along with its meta would otherwise replace the original's entry
+                duplicate = true;
+            }
+        }
+
         AssetInfo info;
 
-        // A file copied along with its meta would otherwise replace the original's entry
-        const bool duplicate = existing && m_assets.contains(existing->Id);
         if (duplicate)
             LOG_WARN("[Assets] {} has the same id as {}, giving it a new one", path, m_assets.at(existing->Id).Info.Path);
 
@@ -193,6 +231,7 @@ namespace crimson
         m_idsByPath[info.Path] = info.Id;
         const AssetID id = info.Id;
         m_assets.emplace(id, Entry{ .Info = std::move(info), .Importer = importer->second });
+        seen.insert(id);
     }
 
     const AssetInfo* AssetManager::GetInfo(AssetID id) const
@@ -225,6 +264,24 @@ namespace crimson
 
         std::ranges::sort(assets, {}, &AssetInfo::Path);
         return assets;
+    }
+
+    std::vector<const AssetInfo*> AssetManager::ListAll() const
+    {
+        std::vector<const AssetInfo*> assets;
+        assets.reserve(m_assets.size());
+
+        for (const auto& [id, entry] : m_assets)
+            assets.push_back(&entry.Info);
+
+        std::ranges::sort(assets, {}, &AssetInfo::Path);
+        return assets;
+    }
+
+    bool AssetManager::IsLoaded(AssetID id) const
+    {
+        const auto it = m_assets.find(id);
+        return it != m_assets.end() && !std::holds_alternative<std::monostate>(it->second.Loaded);
     }
 
     AssetID AssetManager::DefaultMaterial() const
@@ -301,10 +358,354 @@ namespace crimson
 
     void AssetManager::Unload(Entry& entry)
     {
+        entry.Material.reset();
+
         if (std::holds_alternative<std::monostate>(entry.Loaded))
             return;
 
         entry.Importer->Unload(entry.Loaded, m_gpuResources);
         entry.Loaded = {};
+    }
+
+    fs::path AssetManager::GetFilePath(AssetID id) const
+    {
+        const AssetInfo* info = GetInfo(id);
+        return info && !info->ReadOnly ? m_root / fs::path(info->Path) : fs::path();
+    }
+
+    std::vector<AssetID> AssetManager::Refresh()
+    {
+        std::unordered_set<AssetID> seen;
+        Scan(seen);
+
+        std::vector<AssetID> removed;
+
+        for (const auto& [id, entry] : m_assets)
+            if (!entry.Info.ReadOnly && !seen.contains(id))
+                removed.push_back(id);
+
+        RemoveAssets(removed);
+        return removed;
+    }
+
+    void AssetManager::RemoveAssets(std::span<const AssetID> ids)
+    {
+        const auto isRemoved = [ids](AssetID id) { return std::ranges::find(ids, id) != ids.end(); };
+
+        // Materials first, as they can use the textures and shaders being removed
+        for (auto& [id, entry] : m_assets)
+        {
+            if (entry.Info.Type != AssetType::Material || isRemoved(id) || std::holds_alternative<std::monostate>(entry.Loaded))
+                continue;
+
+            const MaterialData* data = GetMaterialData(id);
+            if (!data)
+                continue;
+
+            if (isRemoved(data->Shader))
+            {
+                Unload(entry);
+                continue;
+            }
+
+            MaterialData updated = *data;
+            const MaterialHandle material = std::get<MaterialHandle>(entry.Loaded);
+
+            for (const auto& [slot, texture] : data->Textures)
+            {
+                if (isRemoved(texture))
+                {
+                    m_gpuResources.SetMaterialTexture(material, slot, TextureHandle::Invalid());
+                    updated.Textures.erase(slot);
+                }
+            }
+
+            entry.Material = std::move(updated);
+        }
+
+        for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader })
+        {
+            for (const AssetID id : ids)
+            {
+                const auto it = m_assets.find(id);
+                if (it != m_assets.end() && it->second.Info.Type == type)
+                {
+                    Unload(it->second);
+                    m_idsByPath.erase(it->second.Info.Path);
+                    m_assets.erase(it);
+                }
+            }
+        }
+    }
+
+    static bool IsUsableAssetPath(std::string_view path)
+    {
+        const fs::path parsed(path);
+
+        if (path.empty() || parsed.is_absolute() || !parsed.has_filename() || path.starts_with(kEnginePathPrefix))
+            return false;
+
+        return std::ranges::none_of(parsed, [](const fs::path& part) { return part == ".."; });
+    }
+
+    AssetID AssetManager::CreateMaterial(std::string_view path)
+    {
+        if (!IsUsableAssetPath(path) || NormalizeExt(fs::path(path)) != ".mat")
+        {
+            LOG_ERROR("[Assets] Can't create a material at '{}'", path);
+            return {};
+        }
+
+        std::error_code error;
+        const fs::path file = m_root / fs::path(path);
+
+        if (fs::exists(file, error))
+        {
+            LOG_ERROR("[Assets] '{}' already exists", path);
+            return {};
+        }
+
+        fs::create_directories(file.parent_path(), error);
+
+        MaterialData data;
+        data.Shader = FindId(kDefaultShaderPath);
+        data.Properties["Color"] = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+        if (std::ofstream stream(file, std::ios::binary); !(stream << WriteMaterialData(data, *this)))
+        {
+            LOG_ERROR("[Assets] Can't write '{}'", path);
+            return {};
+        }
+
+        std::unordered_set<AssetID> seen;
+        RegisterFile(file, seen);
+        return FindId(path);
+    }
+
+    bool AssetManager::Rename(AssetID id, std::string_view newPath)
+    {
+        const auto it = m_assets.find(id);
+
+        if (it == m_assets.end() || it->second.Info.ReadOnly || !IsUsableAssetPath(newPath))
+        {
+            LOG_ERROR("[Assets] Can't rename an asset to '{}'", newPath);
+            return false;
+        }
+
+        Entry& entry = it->second;
+
+        // The extension decides what the file is, and an asset can't change what it is
+        if (NormalizeExt(fs::path(newPath)) != NormalizeExt(fs::path(entry.Info.Path)))
+        {
+            LOG_ERROR("[Assets] Renaming to '{}' would change the type of {}", newPath, entry.Info.Path);
+            return false;
+        }
+
+        std::error_code error;
+        const fs::path from = m_root / fs::path(entry.Info.Path);
+        const fs::path to = m_root / fs::path(newPath);
+
+        if (fs::exists(to, error))
+        {
+            LOG_ERROR("[Assets] '{}' already exists", newPath);
+            return false;
+        }
+
+        fs::create_directories(to.parent_path(), error);
+        fs::rename(from, to, error);
+
+        if (error)
+        {
+            LOG_ERROR("[Assets] Can't rename {}: {}", entry.Info.Path, error.message());
+            return false;
+        }
+
+        fs::rename(meta::MetaPathFor(from), meta::MetaPathFor(to), error);
+        if (error)
+            LOG_WARN("[Assets] {} lost its meta file: {}", newPath, error.message());
+
+        m_idsByPath.erase(entry.Info.Path);
+        entry.Info.Path = std::string(newPath);
+        m_idsByPath[entry.Info.Path] = id;
+        return true;
+    }
+
+    bool AssetManager::Delete(AssetID id)
+    {
+        const auto it = m_assets.find(id);
+
+        if (it == m_assets.end() || it->second.Info.ReadOnly)
+        {
+            LOG_ERROR("[Assets] This asset can't be deleted");
+            return false;
+        }
+
+        std::error_code error;
+        const fs::path file = m_root / fs::path(it->second.Info.Path);
+
+        fs::remove(file, error);
+
+        if (error)
+        {
+            LOG_ERROR("[Assets] Can't delete {}: {}", it->second.Info.Path, error.message());
+            return false;
+        }
+
+        fs::remove(meta::MetaPathFor(file), error);
+
+        const std::array removed = { id };
+        RemoveAssets(removed);
+        return true;
+    }
+
+    std::optional<MaterialData> AssetManager::ReadMaterialFile(AssetID id) const
+    {
+        const auto it = m_assets.find(id);
+        if (it == m_assets.end() || it->second.Info.Type != AssetType::Material)
+            return std::nullopt;
+
+        const Entry& entry = it->second;
+        const AssetSource source{ entry.Info, entry.Embedded ? fs::path() : m_root / fs::path(entry.Info.Path), entry.Embedded };
+
+        const std::optional<std::string> text = source.Read();
+        return text ? ParseMaterialData(*text, *this, entry.Info.Path) : std::nullopt;
+    }
+
+    const MaterialData* AssetManager::GetMaterialData(AssetID id)
+    {
+        const auto it = m_assets.find(id);
+        if (it == m_assets.end() || it->second.Info.Type != AssetType::Material)
+            return nullptr;
+
+        if (!it->second.Material)
+            it->second.Material = ReadMaterialFile(id);
+
+        return it->second.Material ? &*it->second.Material : nullptr;
+    }
+
+    MaterialApplyResult AssetManager::ApplyMaterial(AssetID id, const MaterialData& data)
+    {
+        const auto it = m_assets.find(id);
+        if (it == m_assets.end() || it->second.Info.Type != AssetType::Material || it->second.Info.ReadOnly)
+            return MaterialApplyResult::Failed;
+
+        const MaterialHandle current = LoadMaterial(id);
+        const MaterialData* currentData = GetMaterialData(id);
+
+        Entry& entry = it->second;
+        ImportContext ctx{ m_gpuResources, *this };
+
+        // A material's GPU resources are laid out for its shader, so another shader needs a new material
+        if (!current || !currentData || currentData->Shader != data.Shader)
+        {
+            const MaterialHandle replacement = CreateMaterialFromData(data, ctx, entry.Info.Path);
+            if (!replacement)
+                return MaterialApplyResult::Failed;
+
+            Unload(entry);
+            entry.Loaded = replacement;
+            entry.Failed = false;
+            entry.Material = data;
+            return MaterialApplyResult::Replaced;
+        }
+
+        // Only what changed: replacing a texture has to wait for the GPU, and a dragged color slider gets here every frame
+        MaterialData values = data;
+        values.Textures.clear();
+        ApplyMaterialValues(values, current, ctx);
+
+        for (const auto& [slot, texture] : data.Textures)
+        {
+            const auto previous = currentData->Textures.find(slot);
+            if (previous != currentData->Textures.end() && previous->second == texture)
+                continue;
+
+            if (const TextureHandle handle = LoadTexture(texture))
+                m_gpuResources.SetMaterialTexture(current, slot, handle);
+        }
+
+        for (const auto& [slot, texture] : currentData->Textures)
+        {
+            if (!data.Textures.contains(slot))
+                m_gpuResources.SetMaterialTexture(current, slot, TextureHandle::Invalid());
+        }
+
+        entry.Material = data;
+        return MaterialApplyResult::Updated;
+    }
+
+    bool AssetManager::SaveMaterial(AssetID id, const MaterialData& data)
+    {
+        const auto it = m_assets.find(id);
+        if (it == m_assets.end() || it->second.Info.Type != AssetType::Material || it->second.Info.ReadOnly)
+        {
+            LOG_ERROR("[Assets] This material can't be saved");
+            return false;
+        }
+
+        const fs::path file = m_root / fs::path(it->second.Info.Path);
+
+        if (std::ofstream stream(file, std::ios::binary); !(stream << WriteMaterialData(data, *this)))
+        {
+            LOG_ERROR("[Assets] Can't write {}", it->second.Info.Path);
+            return false;
+        }
+
+        return true;
+    }
+
+    bool AssetManager::ReimportTexture(AssetID id, nlohmann::json settings)
+    {
+        const auto it = m_assets.find(id);
+        if (it == m_assets.end() || it->second.Info.Type != AssetType::Texture || it->second.Info.ReadOnly)
+        {
+            LOG_ERROR("[Assets] This texture can't be reimported");
+            return false;
+        }
+
+        Entry& entry = it->second;
+        const fs::path file = m_root / fs::path(entry.Info.Path);
+
+        entry.Info.Settings = std::move(settings);
+
+        if (!meta::Write(meta::MetaPathFor(file), entry.Info))
+            LOG_ERROR("[Assets] Failed to write the meta file of {}", entry.Info.Path);
+
+        // Not in use yet, so the next load picks the settings up
+        if (std::holds_alternative<std::monostate>(entry.Loaded))
+        {
+            entry.Failed = false;
+            return true;
+        }
+
+        ImportContext ctx{ m_gpuResources, *this };
+        const AssetSource source{ entry.Info, file, nullptr };
+
+        LoadedAsset replacement = entry.Importer->Load(source, ctx);
+        if (std::holds_alternative<std::monostate>(replacement))
+        {
+            LOG_ERROR("[Assets] Failed to reimport {}", entry.Info.Path);
+            return false;
+        }
+
+        const TextureHandle texture = std::get<TextureHandle>(replacement);
+
+        for (auto& [materialId, material] : m_assets)
+        {
+            if (material.Info.Type != AssetType::Material || std::holds_alternative<std::monostate>(material.Loaded))
+                continue;
+
+            const MaterialData* data = GetMaterialData(materialId);
+            if (!data)
+                continue;
+
+            for (const auto& [slot, used] : data->Textures)
+                if (used == id)
+                    m_gpuResources.SetMaterialTexture(std::get<MaterialHandle>(material.Loaded), slot, texture);
+        }
+
+        entry.Importer->Unload(entry.Loaded, m_gpuResources);
+        entry.Loaded = std::move(replacement);
+        return true;
     }
 }

@@ -30,8 +30,12 @@ namespace crimson
         virtual ShaderHandle CreateShader(const ShaderBinary& binary) = 0;
         virtual void DestroyShader(ShaderHandle handle) = 0;
 
+        // What the shader's materials can set
+        [[nodiscard]] virtual const ShaderInterface& GetShaderInterface(ShaderHandle handle) const = 0;
+
         virtual MaterialHandle CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings) = 0;
         virtual void DestroyMaterial(MaterialHandle handle) = 0;
+        virtual void SetMaterialSettings(MaterialHandle handle, const MaterialSettings& settings) = 0;
 
         template<MaterialProperty T>
         void SetMaterialPropertyByName(MaterialHandle handle, std::string_view name, const T& value)
@@ -42,6 +46,7 @@ namespace crimson
             );
             SetMaterialPropertyByNameImpl(handle, name, bytes);
         }
+        // An invalid texture goes back to the default white one. Can't be called inside a frame.
         virtual void SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture) = 0;
 
         virtual TextureHandle CreateTexture(const TextureInfo& info, const void* data) = 0;

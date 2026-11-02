@@ -3,6 +3,7 @@ add_executable(CrimsonTests
         support/temp_folder.hpp
 
         engine/test_asset_manager.cpp
+        engine/test_asset_editing.cpp
         engine/test_frame.cpp
         engine/test_handle_registry.cpp
         engine/test_log.cpp
@@ -13,6 +14,7 @@ add_executable(CrimsonTests
         engine/test_shadow_atlas.cpp
 
         editor/test_recent_projects.cpp
+        editor/test_asset_edits.cpp
 )
 
 # The engine's src folder is for the parts of the backends that run without a GPU, such as GLSL translation
@@ -36,6 +38,7 @@ add_executable(CrimsonGpuTests
         gpu/gpu_test.cpp
         gpu/test_rendering.cpp
         gpu/test_lighting.cpp
+        gpu/test_asset_editing.cpp
         gpu/test_editor.cpp
 )
 

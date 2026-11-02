@@ -28,7 +28,12 @@ namespace crimson::editor
 		// One step of Run, for driving the editor from outside
 		void RunFrame();
 		[[nodiscard]] EditorServices& Services() { return *m_services; }
+		[[nodiscard]] AppMode& CurrentMode() { return *m_mode; }
 		[[nodiscard]] const AppMode& CurrentMode() const { return *m_mode; }
+		[[nodiscard]] bool IsRunning() const { return m_running; }
+
+		// The same as the window's close button
+		void RequestQuit() { m_mode->RequestClose([this] { m_running = false; }); }
 	private:
 	    // --- Frame ---
 	    void RenderFrame();

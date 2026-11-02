@@ -8,6 +8,8 @@
 #include <crimson/renderer/renderer.hpp>
 #include <crimson/renderer/resource_manager.hpp>
 
+#include "shader/shader_reflection.hpp"
+
 namespace crimson::tests
 {
     // Hands out handles and remembers what it was asked to do, so code above the graphics backends runs without a GPU
@@ -28,11 +30,19 @@ namespace crimson::tests
         IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo&, const void*) override { ++LiveIndexBuffers; return IndexBufferHandle{ m_nextId++, 1 }; }
         void DestroyIndexBuffer(IndexBufferHandle) override { --LiveIndexBuffers; }
 
-        ShaderHandle CreateShader(const ShaderBinary&) override
+        ShaderHandle CreateShader(const ShaderBinary& binary) override
         {
             ++ShadersCreated;
             ++LiveShaders;
-            return ShaderHandle{ m_nextId++, 1 };
+
+            const ShaderHandle handle{ m_nextId++, 1 };
+            m_shaderInterfaces[handle.GetRaw()] = ReflectShaderInterface(binary).value_or(ShaderInterface{});
+            return handle;
+        }
+
+        [[nodiscard]] const ShaderInterface& GetShaderInterface(ShaderHandle handle) const override
+        {
+            return m_shaderInterfaces.at(handle.GetRaw());
         }
 
         void DestroyShader(ShaderHandle) override
@@ -55,9 +65,17 @@ namespace crimson::tests
             DestroyOrder.emplace_back("material");
         }
 
+        void SetMaterialSettings(MaterialHandle material, const MaterialSettings& settings) override
+        {
+            Materials[material.GetRaw()].Settings = settings;
+        }
+
         void SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture) override
         {
-            Materials[material.GetRaw()].Textures[std::string(name)] = texture;
+            if (texture)
+                Materials[material.GetRaw()].Textures[std::string(name)] = texture;
+            else
+                Materials[material.GetRaw()].Textures.erase(std::string(name));
         }
 
         TextureHandle CreateTexture(const TextureInfo& info, const void*) override
@@ -100,6 +118,7 @@ namespace crimson::tests
         }
     private:
         uint32_t m_nextId = 1;
+        std::map<uint64_t, ShaderInterface> m_shaderInterfaces;
     };
 
     // A renderer that records nothing and only keeps the frame for SceneRenderer to fill

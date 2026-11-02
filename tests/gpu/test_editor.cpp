@@ -1,6 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
+#include <filesystem>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include <crimson/core/log.hpp>
 #include <crimson/project/project.hpp>
@@ -14,6 +18,7 @@
 using namespace crimson;
 using namespace crimson::tests;
 using crimson::editor::EditorApplication;
+using crimson::editor::EditorContext;
 using crimson::editor::ProjectManagerMode;
 using crimson::editor::ProjectSessionMode;
 
@@ -154,6 +159,255 @@ TEST_CASE("One project can replace another directly", "[editor]")
     RunFrames(app);
 
     CHECK(IsShowing<ProjectSessionMode>(app));
+}
+
+namespace
+{
+    // A project with one of each kind of asset, and the session showing it
+    struct AssetFixture
+    {
+        TempFolder Temp;
+        Project OpenProject;
+        EditorApplication App;
+
+        AssetFixture()
+            : OpenProject(MakeAssetProject(Temp)), App(SelectedBackend(), OpenProject.Root())
+        {
+            RunFrames(App);
+            REQUIRE(IsShowing<ProjectSessionMode>(App));
+        }
+
+        static Project MakeAssetProject(const TempFolder& temp)
+        {
+            ShutdownGpu();
+
+            Project project = MakeProject(temp, "Assets", true);
+            temp.Write("Assets/assets/textures/picture.bmp", std::string_view(
+                "BM\x3A\0\0\0\0\0\0\0\x36\0\0\0\x28\0\0\0\1\0\0\0\1\0\0\0\1\0\x18\0\0\0\0\0\4\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\xFF\0\0\0", 58));
+            temp.Write("Assets/assets/shaders/own.hlsl", "#include \"crimson/bindings.hlsli\"\n"
+                "float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }\n"
+                "float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }\n");
+            return project;
+        }
+
+        ProjectSessionMode& Session() { return dynamic_cast<ProjectSessionMode&>(App.CurrentMode()); }
+        EditorContext& Context() { return Session().GetContext(); }
+        AssetManager& Assets() { return Context().Assets; }
+    };
+}
+
+// The panels draw whatever is selected on every frame, so asserts and validation errors in those views show up here
+TEST_CASE_METHOD(AssetFixture, "Every kind of asset can be selected", "[editor]")
+{
+    for (const char* path : { "materials/floor.mat", "textures/picture.bmp", "meshes/floor.obj", "shaders/own.hlsl",
+                              "engine/materials/default.mat", "engine/shaders/main.hlsl" })
+    {
+        CAPTURE(path);
+
+        const AssetID id = Assets().FindId(path);
+        REQUIRE(id);
+
+        Context().SelectAsset(id);
+        RunFrames(App);
+
+        CHECK(Context().SelectedAsset == id);
+    }
+}
+
+TEST_CASE_METHOD(AssetFixture, "Selecting an entity and an asset replace each other", "[editor]")
+{
+    const Entity entity = Context().ActiveScene.CreateEntity("Thing");
+
+    Context().SelectEntity(entity);
+    Context().SelectAsset(Assets().FindId("materials/floor.mat"));
+    CHECK_FALSE(Context().Selected);
+
+    Context().SelectEntity(entity);
+    CHECK_FALSE(Context().SelectedAsset);
+}
+
+TEST_CASE_METHOD(AssetFixture, "A material's edits show and can be saved or reverted", "[editor]")
+{
+    const AssetID id = Assets().FindId("materials/floor.mat");
+    const MaterialHandle handle = Assets().LoadMaterial(id);
+
+    Context().SelectAsset(id);
+    RunFrames(App);
+
+    MaterialData data = *Context().Edits.GetMaterial(id);
+    data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
+    data.Textures["ColorMap"] = Assets().FindId("textures/picture.bmp");
+    Context().Edits.SetMaterial(id, data);
+    RunFrames(App);
+
+    CHECK(Assets().LoadMaterial(id) == handle);
+    CHECK(*Assets().GetMaterialData(id) == data);
+    CHECK(Context().Edits.IsDirty(id));
+
+    SECTION("Reverting")
+    {
+        Context().Edits.Revert(id);
+        RunFrames(App);
+        CHECK_FALSE(Assets().GetMaterialData(id)->Textures.contains("ColorMap"));
+    }
+
+    SECTION("Saving")
+    {
+        REQUIRE(Context().Edits.Save(id));
+        CHECK(Assets().ReadMaterialFile(id)->Properties.at("Color") == data.Properties.at("Color"));
+    }
+}
+
+TEST_CASE_METHOD(AssetFixture, "Changing a material's shader keeps the scene drawing", "[editor]")
+{
+    const AssetID id = Assets().FindId("materials/floor.mat");
+    const MaterialHandle before = Assets().LoadMaterial(id);
+
+    MaterialData data = *Context().Edits.GetMaterial(id);
+    data.Shader = Assets().FindId("shaders/own.hlsl");
+    Context().Edits.SetMaterial(id, data);
+    RunFrames(App);
+
+    CHECK(Assets().LoadMaterial(id) != before);
+
+    // The floor uses this material, and it still has a valid handle or a draw would have failed
+    CHECK(App.Services().Graphics.Renderer->GetStats().DrawCalls > 0);
+}
+
+TEST_CASE_METHOD(AssetFixture, "Reimporting a texture a panel is showing", "[editor]")
+{
+    const AssetID id = Assets().FindId("textures/picture.bmp");
+
+    Context().SelectAsset(id);
+    RunFrames(App);
+
+    nlohmann::json settings = Assets().GetInfo(id)->Settings;
+    settings["flipY"] = true;
+
+    Context().Deferred.emplace_back([&] { Context().Thumbnails.Release(id); Assets().ReimportTexture(id, settings); });
+    RunFrames(App);
+
+    CHECK(Assets().GetInfo(id)->Settings.at("flipY") == true);
+}
+
+TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
+{
+    SECTION("A material: the entity falls back to the default one")
+    {
+        const AssetID id = Assets().FindId("materials/floor.mat");
+        Context().SelectAsset(id);
+        RunFrames(App);
+
+        Context().Deferred.emplace_back([&]
+        {
+            REQUIRE(Assets().Delete(id));
+            const std::array removed = { id };
+            Context().OnAssetsRemoved(removed);
+        });
+        RunFrames(App);
+
+        CHECK_FALSE(Context().SelectedAsset);
+        CHECK(App.Services().Graphics.Renderer->GetStats().DrawCalls > 0);
+    }
+
+    SECTION("A mesh: the entity stops drawing it")
+    {
+        const AssetID id = Assets().FindId("meshes/floor.obj");
+
+        Context().Deferred.emplace_back([&]
+        {
+            REQUIRE(Assets().Delete(id));
+            const std::array removed = { id };
+            Context().OnAssetsRemoved(removed);
+        });
+        RunFrames(App);
+
+        CHECK(IsShowing<ProjectSessionMode>(App));
+    }
+
+    SECTION("A texture a material is showing, and a shader")
+    {
+        const AssetID material = Assets().FindId("materials/floor.mat");
+
+        MaterialData data = *Context().Edits.GetMaterial(material);
+        data.Textures["ColorMap"] = Assets().FindId("textures/picture.bmp");
+        Context().Edits.SetMaterial(material, data);
+        Context().SelectAsset(material);
+        RunFrames(App);
+
+        Context().Deferred.emplace_back([&]
+        {
+            const AssetID texture = Assets().FindId("textures/picture.bmp");
+            REQUIRE(Assets().Delete(texture));
+            const std::array removed = { texture };
+            Context().OnAssetsRemoved(removed);
+        });
+        RunFrames(App);
+
+        CHECK(Assets().GetMaterialData(material)->Textures.empty());
+    }
+
+    SECTION("Through a refresh, when the file went away by itself")
+    {
+        std::filesystem::remove(Temp.Path() / "Assets/assets/materials/floor.mat");
+
+        Context().Deferred.emplace_back([&]
+        {
+            const std::vector<AssetID> removed = Assets().Refresh();
+            Context().OnAssetsRemoved(removed);
+        });
+        RunFrames(App);
+
+        CHECK_FALSE(Assets().FindId("materials/floor.mat"));
+    }
+}
+
+TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[editor]")
+{
+    const AssetID id = Assets().FindId("materials/floor.mat");
+
+    MaterialData data = *Context().Edits.GetMaterial(id);
+    data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
+    Context().Edits.SetMaterial(id, data);
+    RunFrames(App);
+
+    App.RequestQuit();
+    RunFrames(App);
+
+    CHECK(App.IsRunning());
+    REQUIRE(Session().IsAskingAboutUnsavedChanges());
+
+    SECTION("Cancel stays")
+    {
+        Session().CancelClose();
+        RunFrames(App);
+
+        CHECK(App.IsRunning());
+        CHECK(Context().Edits.IsDirty(id));
+    }
+
+    SECTION("Discard closes without saving")
+    {
+        const std::string before = std::string(Assets().ReadMaterialFile(id)->Properties.contains("Color") ? "had" : "none");
+        Session().DiscardAllAndClose();
+
+        CHECK_FALSE(App.IsRunning());
+        CHECK(std::string(Assets().ReadMaterialFile(id)->Properties.contains("Color") ? "had" : "none") == before);
+    }
+
+    SECTION("Save writes it and closes")
+    {
+        Session().SaveAllAndClose();
+
+        CHECK_FALSE(App.IsRunning());
+        CHECK(Assets().ReadMaterialFile(id)->Properties.at("Color") == data.Properties.at("Color"));
+    }
+}
+
+TEST_CASE_METHOD(AssetFixture, "Closing with nothing unsaved doesn't ask", "[editor]")
+{
+    App.RequestQuit();
+    CHECK_FALSE(App.IsRunning());
 }
 
 TEST_CASE("A project with a broken shader still opens", "[editor]")
