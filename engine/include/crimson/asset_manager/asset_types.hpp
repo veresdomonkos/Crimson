@@ -7,7 +7,7 @@
 
 namespace crimson
 {
-    enum class AssetType : uint8_t { None, Texture, Mesh, Shader, Material };
+    enum class AssetType : uint8_t { None, Texture, Mesh, Shader, Material, Scene };
 
     inline std::string_view ToString(AssetType t)
     {
@@ -17,6 +17,7 @@ namespace crimson
             case AssetType::Mesh:     return "Mesh";
             case AssetType::Shader:   return "Shader";
             case AssetType::Material: return "Material";
+            case AssetType::Scene:    return "Scene";
             default:                  return "None";
         }
     }
@@ -27,6 +28,7 @@ namespace crimson
         if (s == "Mesh")     return AssetType::Mesh;
         if (s == "Shader")   return AssetType::Shader;
         if (s == "Material") return AssetType::Material;
+        if (s == "Scene")    return AssetType::Scene;
         return AssetType::None;
     }
 

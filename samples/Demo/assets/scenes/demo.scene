@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "environment": {
+    "ambient": [0.05, 0.05, 0.05],
+    "exposure": 1.0,
+    "toneMapper": "aces"
+  },
+  "entities": [
+    {
+      "id": "5d5ca7328e8680bb",
+      "name": "Floor",
+      "active": true,
+      "position": [0.0, -0.5, 0.0],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [1.0, 1.0, 1.0],
+      "meshRenderer": {
+        "mesh": {
+          "guid": "94355c53d8df4b76",
+          "path": "meshes/floor.obj"
+        },
+        "materials": [
+          {
+            "guid": "c769ee5d5bc701d2",
+            "path": "materials/floor.mat"
+          }
+        ],
+        "castsShadows": true
+      }
+    },
+    {
+      "id": "47e706f7172fc4f5",
+      "name": "Pyramid",
+      "active": true,
+      "position": [-1.6747603, -0.5, 0.0],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [1.0, 1.0, 1.0],
+      "meshRenderer": {
+        "mesh": {
+          "guid": "c658e853806d4476",
+          "path": "meshes/pyramid.obj"
+        },
+        "materials": [
+          {
+            "guid": "ec1cd4caa08993f8",
+            "path": "materials/pyramid.mat"
+          }
+        ],
+        "castsShadows": true
+      }
+    },
+    {
+      "id": "b41f7e2a9c063d58",
+      "name": "Bunny",
+      "active": true,
+      "position": [2.2985759, -0.8206066, 2.6433892],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [9.71918, 9.71918, 9.71918],
+      "meshRenderer": {
+        "mesh": {
+          "guid": "9485c71393af28a8",
+          "path": "meshes/stanford-bunny.obj"
+        },
+        "materials": [
+          {
+            "guid": "a7c31e5d90b24f16",
+            "path": "materials/bunny.mat"
+          }
+        ],
+        "castsShadows": true
+      }
+    },
+    {
+      "id": "af0f7ddfcb32bfa3",
+      "name": "Lights",
+      "active": true,
+      "position": [0.0, 0.0, 0.0],
+      "rotation": [0.0, 0.0, 0.0],
+      "scale": [1.0, 1.0, 1.0],
+      "children": [
+        {
+          "id": "1432f67ccf49d462",
+          "name": "Sun",
+          "active": true,
+          "position": [0.0, 8.0, 0.0],
+          "rotation": [-59.753746, 59.036243, -3.318875e-06],
+          "scale": [1.0, 1.0, 1.0],
+          "light": {
+            "type": "directional",
+            "color": [1.0, 1.0, 1.0],
+            "intensity": 1.2,
+            "range": 10.0,
+            "innerCone": 20.0,
+            "outerCone": 35.0,
+            "castsShadow": true
+          }
+        },
+        {
+          "id": "b72b3bc16b015867",
+          "name": "Orange Point",
+          "active": true,
+          "position": [2.0, 3.0, 0.0],
+          "rotation": [0.0, -0.0, 0.0],
+          "scale": [1.0, 1.0, 1.0],
+          "light": {
+            "type": "point",
+            "color": [1.0, 0.5, 0.2],
+            "intensity": 10.0,
+            "range": 12.0,
+            "innerCone": 20.0,
+            "outerCone": 35.0,
+            "castsShadow": true
+          }
+        },
+        {
+          "id": "854f452a789fa9e9",
+          "name": "Red Point",
+          "active": true,
+          "position": [-2.0, 3.0, 0.0],
+          "rotation": [0.0, -0.0, 0.0],
+          "scale": [1.0, 1.0, 1.0],
+          "light": {
+            "type": "point",
+            "color": [0.8, 0.1, 0.2],
+            "intensity": 10.0,
+            "range": 12.0,
+            "innerCone": 20.0,
+            "outerCone": 35.0,
+            "castsShadow": false
+          }
+        },
+        {
+          "id": "78448aeb6e7aaa88",
+          "name": "Blue Spot",
+          "active": true,
+          "position": [0.0, 4.0, 3.0],
+          "rotation": [-51.340187, 0.0, 0.0],
+          "scale": [1.0, 1.0, 1.0],
+          "light": {
+            "type": "spot",
+            "color": [0.2, 0.5, 1.0],
+            "intensity": 25.0,
+            "range": 16.0,
+            "innerCone": 20.0,
+            "outerCone": 35.0,
+            "castsShadow": true
+          }
+        }
+      ]
+    }
+  ]
+}

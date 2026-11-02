@@ -17,6 +17,7 @@ namespace crimson
     {
         std::string Name;
         bool Active = true; // false also disables the children
+        AssetID Id; // stays the same through saving and loading
     };
 
     struct TransformComponent
@@ -53,6 +54,8 @@ namespace crimson
         float InnerConeDegrees = 20.0f;
         float OuterConeDegrees = 35.0f;
         bool CastsShadow = false;
+
+        bool operator==(const LightComponent&) const = default;
     };
 
     // One component for what Unity splits into a mesh filter and a mesh renderer.
@@ -66,4 +69,13 @@ namespace crimson
         // The loaded assets, set by ResolveMeshRenderer
         Mesh Resolved;
     };
+
+    // Everything below this entity comes from a scene's file, and is created when this is loaded
+    struct SceneInstanceComponent
+    {
+        AssetID Scene;
+    };
+
+    // This entity came from an instance's scene, so it can't be changed here and isn't saved here
+    struct InstancedComponent {};
 }

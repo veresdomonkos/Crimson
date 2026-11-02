@@ -78,6 +78,9 @@ namespace crimson::editor::ui
         }
         else if (const Entity entity = m_context.Selected)
         {
+            // What comes from an instance's scene is only changed by opening that scene
+            ImGui::BeginDisabled(entity.HasComponent<InstancedComponent>());
+
             DrawHeader(entity);
 
             // Fields fill the panel, leaving room for their labels
@@ -87,7 +90,13 @@ namespace crimson::editor::ui
             DrawMeshRenderer(entity);
             ImGui::PopItemWidth();
 
-            DrawAddComponent(entity);
+            // An instance's own components wouldn't be saved
+            if (!entity.HasComponent<SceneInstanceComponent>())
+                DrawAddComponent(entity);
+
+            ImGui::EndDisabled();
+
+            DrawSceneInstance(entity);
         }
         else
         {
@@ -208,6 +217,19 @@ namespace crimson::editor::ui
 
         if (removed)
             entity.RemoveComponent<MeshRendererComponent>();
+    }
+
+    void InspectorPanel::DrawSceneInstance(Entity entity)
+    {
+        const auto* instance = entity.TryGetComponent<SceneInstanceComponent>();
+        if (!instance)
+            return;
+
+        ImGui::Spacing();
+        ImGui::TextDisabled("Instance of %s", GetAssetName(m_context.Assets, instance->Scene).c_str());
+
+        if (ImGui::Button("Open Source", ImVec2(-1.0f, 0.0f)))
+            m_context.OpenScene(instance->Scene);
     }
 
     void InspectorPanel::DrawAddComponent(Entity entity)

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include <crimson/asset_manager/asset_id.hpp>
 #include <crimson/project/project.hpp>
 
 namespace crimson::editor
@@ -18,6 +19,7 @@ namespace crimson::editor
             std::string Name;
             std::filesystem::path Path;
             int64_t LastOpened = 0; // seconds since the epoch
+            AssetID LastScene; // what to open next time. Kept here for it not to change the project's files.
         };
 
         explicit RecentProjects(std::filesystem::path file);
@@ -29,6 +31,9 @@ namespace crimson::editor
 
         // Only forgets it, the project's files stay where they are
         void Remove(const std::filesystem::path& path);
+
+        void SetLastScene(const std::filesystem::path& path, AssetID scene);
+        [[nodiscard]] AssetID GetLastScene(const std::filesystem::path& path) const;
     private:
         void Load();
         void Save() const;

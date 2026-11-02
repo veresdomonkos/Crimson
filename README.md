@@ -17,6 +17,7 @@ Crimson is a small, data-driven real-time rendering engine written in modern C++
 - **HDR and PBR** - the scene renders in linear light to a floating-point target and is tone mapped for display, with metallic-roughness materials using the same slots as glTF.
 - **Per-object transforms** - each draw indexes a per-frame buffer of object transforms.
 - **Entity component system** - scenes are built on [EnTT](https://github.com/skypjack/entt) behind `Scene` and `Entity` wrappers, with a parent/child hierarchy.
+- **Scenes as assets** - scenes are saved to `.scene` files, and any scene can be placed inside another as an instance.
 - **Projects** - a project manager to create and open projects, each with its own `assets/` folder.
 - **Asset manager** - importer-based pipeline for textures, shaders, materials and meshes, with metadata, scanning the open project and exposing the engine's own shaders and materials.
 - **ImGui docking editor** - viewport panels that display engine render targets, console, hierarchy, inspector, asset browser and stats panels, with a custom crimson-accented theme.
@@ -175,6 +176,29 @@ Every entity has the first three, and the others are optional. Meshes and render
 
 `SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLightingData`, gives every active renderer an object transform, and records the passes under [Rendering](#rendering). It can outline an entity and its children: their meshes are drawn into a mask, and a pass over the whole screen colors the pixels next to it. The color comes from `engine/materials/outline.mat`.
 
+A scene is saved as a `.scene` asset: readable JSON with the entities nested the way they are in the hierarchy, and the scene's exposure, tone mapper and ambient light. `CaptureScene` turns a `Scene` into a `SceneData` that `WriteSceneData` writes, and `ParseSceneData` and `InstantiateScene` go the other way.
+
+```json
+{
+  "version": 1,
+  "environment": { "ambient": [0.05, 0.05, 0.05], "exposure": 1.0, "toneMapper": "aces" },
+  "entities": [
+    {
+      "id": "a7c31e5d90b24f16",
+      "name": "Floor",
+      "position": [0, -0.5, 0],
+      "meshRenderer": { "mesh": "meshes/floor.obj", "materials": ["materials/floor.mat"] },
+      "children": []
+    },
+    { "id": "63fd20ab1c8e47d9", "name": "Crate", "position": [2, 0, 0], "instance": "scenes/crate.scene" }
+  ]
+}
+```
+
+There are no prefabs, as any scene can be used inside another one as an instance. An instance is an entity with the other scene's roots as its children. Its own name, transform and active flag are saved with it, while what is under it comes from the other scene's file each time the scene opens, and can't be changed from here. There are no per-instance overrides yet. A scene that would end up containing itself can't be dropped in, and one written that way by hand leaves that instance empty.
+
+Hand-written references can be plain paths. Saving writes both the id and the path, and an empty material slot stays empty in the file, so it can still find its material. A reference that can't be resolved is logged, and is gone once the scene is saved again. A file that can't be read, including one from a newer version, opens no scene at all, so that saving can't overwrite it.
+
 ### Asset pipeline
 
 `AssetManager` scans a project's `assets/` folder and dispatches files to its importers:
@@ -190,7 +214,7 @@ Assets are addressed by a path relative to `assets/`, or by `AssetID`, and load 
 
 The engine's own shaders and materials live in `engine/resources/` and are bundled into the executable. They are always available under `engine/`, read-only and with the same ids in every project, so a project's material can use `"shader": "engine/shaders/main.hlsl"`. The editor's font and icons live in `editor/resources/`, are bundled the same way, and never go through the asset manager.
 
-The asset manager can also change what it has while running: `Refresh` looks at the folder again, `CreateMaterial`, `Rename` and `Delete` change files, `ApplyMaterial` shows new values on a material, and `ReimportTexture` applies new import settings. A file moved along with its `.meta` keeps its id. Moving a texture or shader while the engine runs also updates the `.mat` files that reference it, even if they only name its path. A reference with only a path breaks if the file moves while nothing is running. Anything that changes GPU resources has to run between frames, which is why panels queue these in `EditorContext::Deferred`.
+The asset manager can also change what it has while running: `Refresh` looks at the folder again, `CreateMaterial`, `Rename` and `Delete` change files, `ApplyMaterial` shows new values on a material, and `ReimportTexture` applies new import settings. A file moved along with its `.meta` keeps its id. Moving an asset while the engine runs also updates the `.mat` and `.scene` files that reference it, even if they only name its path. A reference with only a path breaks if the file moves while nothing is running. Anything that changes GPU resources has to run between frames, which is why panels queue these in `EditorContext::Deferred`.
 
 A mesh's material slots fill themselves in: an empty slot uses `materials/<slot name>.mat` next to the mesh if that file exists, and the default material if not. For an `.obj`, the slot names are the material names in its `.mtl`. The `.mtl`'s values and textures aren't imported, so those `.mat` files are made by hand.
 
@@ -203,7 +227,7 @@ A mesh's material slots fill themselves in: an empty slot uses `materials/<slot 
 - `ProjectManagerMode` - shown on start. Lists the recent projects, and creates, imports or opens one. `--project <folder>` skips it.
 - `ProjectSessionMode` - the editor with one project open. Its asset manager, scene and panels all live and die with it, and **File > Close Project** goes back to the project manager.
 
-A project is a folder with a `project.crimson` file and an `assets/` folder. Scenes can't be saved yet, so every project opens with the same built-in scene: its lights, and the test meshes if the project has them, as `samples/Demo` does.
+A project is a folder with a `project.crimson` file and an `assets/` folder. It opens on the scene that was last open, or on its first one, and one with no scenes gets a new `scenes/main.scene`.
 
 Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single raw pass. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default. That file and the recent projects are kept in `%APPDATA%/Crimson` (`~/.config/crimson` elsewhere).
 
@@ -214,8 +238,8 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
   - **Material:** shader, render mode, culling, and whatever properties and textures its shader declares. Edits show right away and only reach the file on **Save**, or go away on **Revert**. **File > Save All** or `Ctrl+S` saves everything, and closing with unsaved changes asks first.
   - **Texture:** preview, size, and import settings for sRGB, mipmaps and flipping.
   - **Mesh and shader:** read-only details.
-- **Render Settings** - exposure, tone mapper and ambient light. These last until the project closes, as scenes can't be saved yet.
-- **Assets** - browses the project's files and the engine's read-only ones, with a folder tree, a grid and search. Click selects an asset, right-click creates, renames or deletes, and dragging moves an asset to a folder, assigns it in the Inspector, or drops it in the Scene view: a mesh makes a new entity, a material goes on the entity under the mouse. Files changed outside the editor appear when it regains focus.
+- **Render Settings** - exposure, tone mapper and ambient light, which are saved with the scene.
+- **Assets** - browses the project's files and the engine's read-only ones, with a folder tree, a grid and search. Click selects an asset, right-click creates, renames or deletes, and dragging moves an asset to a folder, assigns it in the Inspector, or drops it in the Scene view: a mesh makes a new entity, a material goes on the entity under the mouse, and a scene becomes an instance. Double-clicking a scene opens it. Files changed outside the editor appear when it regains focus.
 - **Console**
 - **Stats** - FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts.
 

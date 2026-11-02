@@ -11,6 +11,7 @@
 
 #include "crimson/asset_manager/asset_importer.hpp"
 #include "crimson/asset_manager/material_data.hpp"
+#include "crimson/asset_manager/scene_data.hpp"
 
 namespace crimson
 {
@@ -80,6 +81,7 @@ namespace crimson
 
         // These report failures in the log. Engine assets can't be changed, and project assets can't go under "engine/".
         AssetID CreateMaterial(std::string_view path);
+        AssetID CreateScene(std::string_view path); // with a light, for it not to start out black
         bool Rename(AssetID id, std::string_view newPath);
         bool Delete(AssetID id);
 
@@ -90,6 +92,9 @@ namespace crimson
         // Shows the data on the material, leaving its file alone
         MaterialApplyResult ApplyMaterial(AssetID id, const MaterialData& data);
         bool SaveMaterial(AssetID id, const MaterialData& data);
+
+        [[nodiscard]] std::optional<SceneData> ReadSceneFile(AssetID id) const;
+        bool SaveScene(AssetID id, const SceneData& data);
 
         // Stores the settings in the texture's meta file, and if it is loaded, recreates it for the materials using it
         bool ReimportTexture(AssetID id, nlohmann::json settings);
@@ -110,6 +115,7 @@ namespace crimson
         void RegisterFile(const std::filesystem::path& file, std::unordered_set<AssetID>& seen);
         void RemoveAssets(std::span<const AssetID> ids);
         void UpdateReferencesTo(const std::unordered_map<std::string, AssetID>& moved); // old path to id
+        AssetID CreateAssetFile(std::string_view path, std::string_view extension, const std::string& contents);
 
         const LoadedAsset& Load(AssetID id);
         AssetID FindIdOrWarn(std::string_view path) const;

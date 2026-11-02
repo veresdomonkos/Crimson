@@ -1,6 +1,8 @@
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 
 #include <algorithm>
+#include <filesystem>
+#include <string>
 
 #include <imgui.h>
 
@@ -13,6 +15,19 @@ namespace crimson::editor::ui
         ImGui::Begin("Hierarchy");
 
         Scene& scene = m_context.ActiveScene;
+
+        if (const AssetInfo* info = m_context.Assets.GetInfo(m_context.ActiveSceneAsset))
+        {
+            const std::string name = std::filesystem::path(info->Path).stem().string();
+            ImGui::TextDisabled("%s%s", m_context.SceneChanged ? "* " : "", name.c_str());
+            ImGui::SetItemTooltip("%s", info->Path.c_str());
+        }
+        else
+        {
+            ImGui::TextDisabled("No scene is open, this won't be saved");
+        }
+
+        ImGui::Separator();
 
         for (const entt::entity root : scene.GetRoots())
             DrawEntity(root);
@@ -41,7 +56,7 @@ namespace crimson::editor::ui
             ImGui::EndPopup();
         }
 
-        if (m_context.Selected && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)
+        if (m_context.Selected && !m_context.Selected.HasComponent<InstancedComponent>() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)
             && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
         {
             const Entity selected = m_context.Selected;
@@ -64,6 +79,10 @@ namespace crimson::editor::ui
         const auto& relationship = entity.GetComponent<RelationshipComponent>();
         const auto& name = entity.GetComponent<NameComponent>();
 
+        // What comes from an instance's scene can only be looked at
+        const bool readOnly = entity.HasComponent<InstancedComponent>();
+        const bool isInstance = entity.HasComponent<SceneInstanceComponent>();
+
         ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
             | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
 
@@ -73,27 +92,27 @@ namespace crimson::editor::ui
         if (m_context.Selected == entity)
             flags |= ImGuiTreeNodeFlags_Selected;
 
-        const bool activeInHierarchy = entity.GetComponent<TransformComponent>().ActiveInHierarchy;
-        if (!activeInHierarchy)
+        const bool dimmed = readOnly || !entity.GetComponent<TransformComponent>().ActiveInHierarchy;
+        if (dimmed)
             ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 
         ImGui::PushID(static_cast<int>(entt::to_integral(handle)));
-        const bool open = ImGui::TreeNodeEx("##Entity", flags, "%s", name.Name.c_str());
+        const bool open = ImGui::TreeNodeEx("##Entity", flags, isInstance ? "%s [scene]" : "%s", name.Name.c_str());
 
-        if (!activeInHierarchy)
+        if (dimmed)
             ImGui::PopStyleColor();
 
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
             m_context.SelectEntity(entity);
 
-        if (ImGui::BeginDragDropSource())
+        if (!readOnly && ImGui::BeginDragDropSource())
         {
             ImGui::SetDragDropPayload(kEntityPayload, &handle, sizeof(handle));
             ImGui::TextUnformatted(name.Name.c_str());
             ImGui::EndDragDropSource();
         }
 
-        if (ImGui::BeginDragDropTarget())
+        if (!readOnly && !isInstance && ImGui::BeginDragDropTarget())
         {
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kEntityPayload))
             {
@@ -104,10 +123,13 @@ namespace crimson::editor::ui
             ImGui::EndDragDropTarget();
         }
 
-        if (ImGui::BeginPopupContextItem("##EntityContext"))
+        if (!readOnly && ImGui::BeginPopupContextItem("##EntityContext"))
         {
-            DrawCreateMenu(entity);
-            ImGui::Separator();
+            if (!isInstance)
+            {
+                DrawCreateMenu(entity);
+                ImGui::Separator();
+            }
 
             if (ImGui::MenuItem("Delete"))
                 m_deferred.emplace_back([this, entity] { m_context.ActiveScene.DestroyEntity(entity); });

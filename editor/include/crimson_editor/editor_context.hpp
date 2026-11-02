@@ -23,6 +23,13 @@ namespace crimson::editor
         // Call after assets are gone, so nothing keeps using them
         std::function<void(std::span<const AssetID>)> OnAssetsRemoved;
 
+        // Replaces the scene with that one, after asking about unsaved changes
+        std::function<void(AssetID)> OpenScene;
+
+        // The file of ActiveScene. Invalid if the scene couldn't be loaded, and then there is nothing to save to.
+        AssetID ActiveSceneAsset;
+        bool SceneChanged = false; // looked at a few times a second, as finding out goes over the whole scene
+
         // One thing is selected at a time: an entity or an asset
         Entity Selected;
         AssetID SelectedAsset;

@@ -25,6 +25,7 @@ namespace crimson::editor::ui
         void DrawTexture(const AssetInfo& info);
         void DrawMesh(const AssetInfo& info);
         void DrawShader(const AssetInfo& info);
+        void DrawScene(const AssetInfo& info);
 
         void ShowTexture(const AssetInfo& info);
     private:

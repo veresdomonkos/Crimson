@@ -19,6 +19,9 @@ namespace crimson
         // Also destroys the children
         void DestroyEntity(Entity entity);
 
+        // Destroys every entity
+        void Clear();
+
         // An invalid parent makes the entity a root. It stays where it is in the world.
         // Returns false without changing anything if the parent is the entity or one of its children.
         bool SetParent(Entity entity, Entity parent);

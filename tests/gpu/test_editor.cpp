@@ -2,12 +2,15 @@
 
 #include <array>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <vector>
 
 #include <crimson/core/log.hpp>
 #include <crimson/project/project.hpp>
+#include <crimson/scene/scene_serializer.hpp>
 #include <crimson_editor/editor_application.hpp>
 #include <crimson_editor/project_manager_mode.hpp>
 #include <crimson_editor/project_session_mode.hpp>
@@ -40,7 +43,7 @@ namespace
         return dynamic_cast<const Mode*>(&app.CurrentMode()) != nullptr;
     }
 
-    // A project with the meshes the baked scene looks for, and an empty one otherwise
+    // A project with some meshes and a scene using them, and an empty one otherwise
     Project MakeProject(const TempFolder& temp, const char* name, bool withMeshes)
     {
         const auto project = Project::Create(temp.Path(), name);
@@ -51,6 +54,11 @@ namespace
             temp.Write(std::string(name) + "/assets/meshes/floor.obj", kQuad);
             temp.Write(std::string(name) + "/assets/meshes/pyramid.obj", kQuad);
             temp.Write(std::string(name) + "/assets/materials/floor.mat", R"({ "shader": "engine/shaders/main.hlsl" })");
+            temp.Write(std::string(name) + "/assets/scenes/main.scene", R"({ "version": 1, "entities": [
+                { "name": "Floor", "meshRenderer": { "mesh": "meshes/floor.obj", "materials": [ "materials/floor.mat" ] } },
+                { "name": "Pyramid", "meshRenderer": { "mesh": "meshes/pyramid.obj" } },
+                { "name": "Sun", "light": { "type": "directional" } }
+            ] })");
         }
 
         return *project;
@@ -199,7 +207,7 @@ namespace
 // The panels draw whatever is selected on every frame, so asserts and validation errors in those views show up here
 TEST_CASE_METHOD(AssetFixture, "Every kind of asset can be selected", "[editor]")
 {
-    for (const char* path : { "materials/floor.mat", "textures/picture.bmp", "meshes/floor.obj", "shaders/own.hlsl",
+    for (const char* path : { "materials/floor.mat", "textures/picture.bmp", "meshes/floor.obj", "shaders/own.hlsl", "scenes/main.scene",
                               "engine/materials/default.mat", "engine/shaders/main.hlsl" })
     {
         CAPTURE(path);
@@ -402,6 +410,203 @@ TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[edit
         CHECK_FALSE(App.IsRunning());
         CHECK(Assets().ReadMaterialFile(id)->Properties.at("Color") == data.Properties.at("Color"));
     }
+}
+
+TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[editor]")
+{
+    const AssetID id = Assets().FindId("scenes/main.scene");
+    REQUIRE(Context().ActiveSceneAsset == id);
+    CHECK_FALSE(Session().IsSceneChanged());
+
+    Context().ActiveScene.CreateEntity("New");
+    CHECK(Session().IsSceneChanged());
+
+    SECTION("Saving writes it")
+    {
+        REQUIRE(Session().SaveAll());
+
+        CHECK_FALSE(Session().IsSceneChanged());
+        CHECK(Assets().ReadSceneFile(id)->Roots.back().Name == "New");
+    }
+
+    SECTION("Closing asks first")
+    {
+        App.RequestQuit();
+        RunFrames(App);
+        REQUIRE(Session().IsAskingAboutUnsavedChanges());
+
+        Session().SaveAllAndClose();
+
+        CHECK_FALSE(App.IsRunning());
+        CHECK(Assets().ReadSceneFile(id)->Roots.back().Name == "New");
+    }
+
+    SECTION("Opening another scene asks first, and discarding leaves the file")
+    {
+        AssetID other;
+        Context().Deferred.emplace_back([&] { other = Assets().CreateScene("scenes/other.scene"); });
+        RunFrames(App);
+        REQUIRE(other);
+
+        Context().OpenScene(other);
+        RunFrames(App);
+        REQUIRE(Session().IsAskingAboutUnsavedChanges());
+        CHECK(Context().ActiveSceneAsset == id);
+
+        Session().DiscardAllAndClose();
+        RunFrames(App);
+
+        CHECK(Context().ActiveSceneAsset == other);
+        CHECK_FALSE(Session().IsSceneChanged());
+        CHECK(Assets().ReadSceneFile(id)->Roots.back().Name == "Sun");
+    }
+}
+
+TEST_CASE_METHOD(AssetFixture, "Opening a scene replaces the one showing", "[editor]")
+{
+    const Entity old = Context().ActiveScene.GetEntity(Context().ActiveScene.GetRoots()[0]);
+    Context().SelectEntity(old);
+
+    AssetID other;
+    Context().Deferred.emplace_back([&] { other = Assets().CreateScene("scenes/other.scene"); });
+    RunFrames(App);
+
+    Context().OpenScene(other);
+    RunFrames(App);
+
+    CHECK(Context().ActiveSceneAsset == other);
+    CHECK_FALSE(Context().Selected);
+    REQUIRE(Context().ActiveScene.GetRoots().size() == 1);
+    CHECK(Context().ActiveScene.GetEntity(Context().ActiveScene.GetRoots()[0]).GetComponent<NameComponent>().Name == "Sun");
+
+    SECTION("It is the one that opens next time")
+    {
+        App.Services().CloseProject();
+        RunFrames(App);
+        App.Services().OpenProject(OpenProject);
+        RunFrames(App);
+
+        CHECK(Context().ActiveSceneAsset == other);
+    }
+
+    SECTION("Deleting it goes on to another one, without asking")
+    {
+        Context().ActiveScene.CreateEntity("Unsaved");
+
+        Context().Deferred.emplace_back([&]
+        {
+            REQUIRE(Assets().Delete(other));
+            const std::array removed = { other };
+            Context().OnAssetsRemoved(removed);
+        });
+        RunFrames(App);
+
+        CHECK(Context().ActiveSceneAsset == Assets().FindId("scenes/main.scene"));
+        CHECK_FALSE(Session().IsAskingAboutUnsavedChanges());
+    }
+}
+
+TEST_CASE_METHOD(AssetFixture, "Deleting the only scene makes a new one", "[editor]")
+{
+    const AssetID id = Assets().FindId("scenes/main.scene");
+
+    Context().Deferred.emplace_back([&]
+    {
+        REQUIRE(Assets().Delete(id));
+        const std::array removed = { id };
+        Context().OnAssetsRemoved(removed);
+    });
+    RunFrames(App);
+
+    CHECK(Context().ActiveSceneAsset);
+    CHECK(Context().ActiveSceneAsset != id);
+    CHECK(IsShowing<ProjectSessionMode>(App));
+}
+
+TEST_CASE_METHOD(AssetFixture, "A scene's instances draw and go away with their source", "[editor]")
+{
+    AssetID source;
+    Entity instance;
+
+    Temp.Write("Assets/assets/scenes/crate.scene", R"({ "version": 1, "entities": [ { "name": "Crate", "meshRenderer": { "mesh": "meshes/floor.obj" } } ] })");
+
+    Context().Deferred.emplace_back([&]
+    {
+        Assets().Refresh();
+        source = Assets().FindId("scenes/crate.scene");
+        instance = CreateSceneInstance(source, Context().ActiveScene, {}, Assets(), Context().ActiveSceneAsset);
+    });
+    RunFrames(App);
+
+    REQUIRE(instance);
+    REQUIRE(instance.GetComponent<RelationshipComponent>().Children.size() == 1);
+
+    const uint32_t drawCalls = App.Services().Graphics.Renderer->GetStats().DrawCalls;
+    CHECK(drawCalls > 0);
+
+    // Panels draw what is selected, read-only or not
+    const Entity child = Context().ActiveScene.GetEntity(instance.GetComponent<RelationshipComponent>().Children[0]);
+    Context().SelectEntity(child);
+    RunFrames(App);
+    Context().SelectEntity(instance);
+    RunFrames(App);
+
+    Context().Deferred.emplace_back([&]
+    {
+        REQUIRE(Assets().Delete(source));
+        const std::array removed = { source };
+        Context().OnAssetsRemoved(removed);
+    });
+    RunFrames(App);
+
+    CHECK(instance);
+    CHECK_FALSE(child);
+    CHECK_FALSE(instance.HasComponent<SceneInstanceComponent>());
+    CHECK(App.Services().Graphics.Renderer->GetStats().DrawCalls < drawCalls);
+}
+
+TEST_CASE("A project with no scene gets one", "[editor]")
+{
+    ShutdownGpu();
+
+    const TempFolder temp;
+    EditorApplication app(SelectedBackend(), MakeProject(temp, "Empty", false).Root());
+    RunFrames(app);
+
+    auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
+
+    CHECK(session.GetContext().ActiveSceneAsset == session.GetContext().Assets.FindId("scenes/main.scene"));
+    CHECK(std::filesystem::exists(temp.Path() / "Empty/assets/scenes/main.scene"));
+    CHECK_FALSE(session.IsSceneChanged());
+}
+
+TEST_CASE("A broken scene isn't saved over", "[editor]")
+{
+    ShutdownGpu();
+
+    constexpr std::string_view kBroken = "{ not json";
+
+    const TempFolder temp;
+    const Project project = MakeProject(temp, "Broken", false);
+    const std::filesystem::path file = temp.Write("Broken/assets/scenes/main.scene", kBroken);
+
+    EditorApplication app(SelectedBackend(), project.Root());
+    RunFrames(app);
+
+    auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
+    EditorContext& context = session.GetContext();
+
+    CHECK_FALSE(context.ActiveSceneAsset);
+    CHECK(ExpectLoggedErrors("scenes/main.scene") > 0);
+
+    context.ActiveScene.CreateEntity("Would be lost");
+    CHECK_FALSE(session.IsSceneChanged());
+    CHECK(session.SaveAll());
+
+    std::ifstream stream(file, std::ios::binary);
+    CHECK(std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()) == kBroken);
+
+    RunFrames(app);
 }
 
 TEST_CASE_METHOD(AssetFixture, "Closing with nothing unsaved doesn't ask", "[editor]")
