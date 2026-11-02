@@ -31,7 +31,7 @@ namespace crimson::vulkan
         ShaderHandle Shader;
         MaterialSettings Settings;
         RenderTargetHandle Target;
-        VertexBufferHandle VertexBufferHandle;
+        crimson::VertexBufferHandle VertexBufferHandle;
 
         vk::Pipeline Pipeline;
         vk::PipelineLayout Layout;

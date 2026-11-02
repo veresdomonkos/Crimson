@@ -32,7 +32,7 @@ namespace crimson
     struct BeginRenderPassCommand
     {
         RenderTargetHandle Target;
-        ClearFlags ClearFlags;
+        crimson::ClearFlags ClearFlags;
         glm::vec4 ClearColor;
         float ClearDepth;
         uint32_t ClearStencil;

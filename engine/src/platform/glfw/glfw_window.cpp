@@ -1,3 +1,5 @@
+#include <vulkan/vulkan.h>
+
 #include "glfw_window.hpp"
 
 #include <utility>
@@ -8,31 +10,30 @@ namespace crimson
 {
 	Unique<Window> Window::Create(RendererAPIType rendererAPI, WindowData data)
 	{
-		static bool s_glfwInitialized = false;
+		glfwSetErrorCallback([](int, const char* description) { LOG_ERROR("[GLFW] {}", description); });
 
-		if (!s_glfwInitialized)
+		// By default GLFW loads a DLL by a fixed name on its own, which can miss the loader the engine links or find a different one
+		glfwInitVulkanLoader(vkGetInstanceProcAddr);
+
+		// A window's destructor terminates GLFW, which also forgets the hints, so each window starts over
+		if (!glfwInit())
 		{
-			if (!glfwInit())
-			{
-				LOG_ERROR("Failed to initialize GLFW!");
-				return nullptr;
-			}
+			LOG_ERROR("Failed to initialize GLFW!");
+			return nullptr;
+		}
 
-			switch (rendererAPI)
-			{
-				case RendererAPIType::OpenGL:
-					glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
-					break;
+		switch (rendererAPI)
+		{
+			case RendererAPIType::OpenGL:
+				glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+				break;
 
-				case RendererAPIType::Vulkan:
-					glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-					break;
+			case RendererAPIType::Vulkan:
+				glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+				break;
 
-				default:
-					break;
-			}
-
-			s_glfwInitialized = true;
+			default:
+				break;
 		}
 
 	    return CreateUnique<glfw::GLFWWindow>(std::move(data));
