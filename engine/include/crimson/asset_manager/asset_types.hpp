@@ -35,6 +35,7 @@ namespace crimson
         AssetID Id;
         AssetType Type = AssetType::None;
         std::string Path; // relative to the asset folder, with forward slashes
+        bool ReadOnly = false; // one of the engine's own, built into the executable
         uint32_t ImporterVersion = 1;
         nlohmann::json Settings = nlohmann::json::object();
     };

@@ -374,7 +374,7 @@ namespace crimson::vulkan
     {
         VulkanMaterial& material = m_materials.Get(handle);
         VulkanShader& shader = m_shaders.Get(material.Shader);
-        VulkanTexture& texture = m_textures.Get(textureHandle);
+        VulkanTexture& texture = m_textures.Get(textureHandle ? textureHandle : m_defaultTexture);
 
         auto it = shader.Interface.Textures.find(std::string(name));
 
@@ -383,6 +383,9 @@ namespace crimson::vulkan
             LOG_WARN("[Vulkan] Texture property '{}' not found in shader", name);
             return;
         }
+
+        // Frames still in flight may be using this set
+        m_device.WaitIdle();
 
         WriteMaterialTexture(*material.DescriptorSet, it->second.Binding, texture);
     }
@@ -434,6 +437,10 @@ namespace crimson::vulkan
 
         if (data)
             usage |= vk::ImageUsageFlagBits::eTransferDst;
+
+        // Each mip level is made by blitting from the one above it
+        if (data && info.MipLevels > 1)
+            usage |= vk::ImageUsageFlagBits::eTransferSrc;
 
         vk::ImageCreateInfo imageInfo{};
         imageInfo.imageType = vk::ImageType::e2D;
@@ -901,13 +908,52 @@ namespace crimson::vulkan
             region.imageExtent = vk::Extent3D{ info.Width, info.Height, 1 };
             commandBuffer.copyBufferToImage(staging.Get(), texture.Image, vk::ImageLayout::eTransferDstOptimal, region);
 
-            barrier.srcStageMask = vk::PipelineStageFlagBits2::eCopy;
-            barrier.srcAccessMask = vk::AccessFlagBits2::eTransferWrite;
-            barrier.dstStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
-            barrier.dstAccessMask = vk::AccessFlagBits2::eShaderSampledRead;
-            barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-            barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-            commandBuffer.pipelineBarrier2(dependency);
+            const auto transitionLevel = [&](uint32_t level, vk::ImageLayout from, vk::ImageLayout to,
+                vk::PipelineStageFlags2 srcStage, vk::AccessFlags2 srcAccess, vk::PipelineStageFlags2 dstStage, vk::AccessFlags2 dstAccess)
+            {
+                barrier.srcStageMask = srcStage;
+                barrier.srcAccessMask = srcAccess;
+                barrier.dstStageMask = dstStage;
+                barrier.dstAccessMask = dstAccess;
+                barrier.oldLayout = from;
+                barrier.newLayout = to;
+                barrier.subresourceRange = vk::ImageSubresourceRange{ texture.Aspect, level, 1, 0, 1 };
+                commandBuffer.pipelineBarrier2(dependency);
+            };
+
+            int32_t width = static_cast<int32_t>(info.Width);
+            int32_t height = static_cast<int32_t>(info.Height);
+
+            for (uint32_t level = 1; level < info.MipLevels; ++level)
+            {
+                transitionLevel(level - 1, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal,
+                    level == 1 ? vk::PipelineStageFlagBits2::eCopy : vk::PipelineStageFlagBits2::eBlit, vk::AccessFlagBits2::eTransferWrite,
+                    vk::PipelineStageFlagBits2::eBlit, vk::AccessFlagBits2::eTransferRead);
+
+                const int32_t nextWidth = std::max(width / 2, 1);
+                const int32_t nextHeight = std::max(height / 2, 1);
+
+                vk::ImageBlit blit{};
+                blit.srcSubresource = vk::ImageSubresourceLayers{ texture.Aspect, level - 1, 0, 1 };
+                blit.srcOffsets[1] = vk::Offset3D{ width, height, 1 };
+                blit.dstSubresource = vk::ImageSubresourceLayers{ texture.Aspect, level, 0, 1 };
+                blit.dstOffsets[1] = vk::Offset3D{ nextWidth, nextHeight, 1 };
+
+                commandBuffer.blitImage(texture.Image, vk::ImageLayout::eTransferSrcOptimal, texture.Image, vk::ImageLayout::eTransferDstOptimal, blit, vk::Filter::eLinear);
+
+                transitionLevel(level - 1, vk::ImageLayout::eTransferSrcOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                    vk::PipelineStageFlagBits2::eBlit, vk::AccessFlagBits2::eTransferRead,
+                    vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eShaderSampledRead);
+
+                width = nextWidth;
+                height = nextHeight;
+            }
+
+            const uint32_t lastLevel = info.MipLevels > 0 ? info.MipLevels - 1 : 0;
+
+            transitionLevel(lastLevel, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
+                lastLevel == 0 ? vk::PipelineStageFlagBits2::eCopy : vk::PipelineStageFlagBits2::eBlit, vk::AccessFlagBits2::eTransferWrite,
+                vk::PipelineStageFlagBits2::eFragmentShader, vk::AccessFlagBits2::eShaderSampledRead);
         });
 
         texture.Layout = vk::ImageLayout::eShaderReadOnlyOptimal;

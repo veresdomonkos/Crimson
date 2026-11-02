@@ -35,6 +35,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/asset_manager/asset_types.hpp
         include/crimson/asset_manager/meta_file.hpp
         include/crimson/asset_manager/asset_manager.hpp
+        include/crimson/asset_manager/material_data.hpp
         include/crimson/asset_manager/importers/texture_importer.hpp
         include/crimson/asset_manager/importers/material_importer.hpp
         include/crimson/asset_manager/importers/shader_importer.hpp
@@ -92,6 +93,7 @@ set(ENGINE_IMPLEMENTATION
         src/asset_manager/meta_file.cpp
         include/crimson/asset_manager/asset_importer.hpp
         src/asset_manager/asset_manager.cpp
+        src/asset_manager/material_data.cpp
         include/crimson/asset_manager/importers/texture_importer.hpp
         src/asset_manager/importers/texture_importer.cpp
         src/asset_manager/importers/material_importer.cpp

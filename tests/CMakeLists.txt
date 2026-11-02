@@ -3,6 +3,7 @@ add_executable(CrimsonTests
         support/temp_folder.hpp
 
         engine/test_asset_manager.cpp
+        engine/test_asset_editing.cpp
         engine/test_frame.cpp
         engine/test_handle_registry.cpp
         engine/test_log.cpp
@@ -36,6 +37,7 @@ add_executable(CrimsonGpuTests
         gpu/gpu_test.cpp
         gpu/test_rendering.cpp
         gpu/test_lighting.cpp
+        gpu/test_asset_editing.cpp
         gpu/test_editor.cpp
 )
 

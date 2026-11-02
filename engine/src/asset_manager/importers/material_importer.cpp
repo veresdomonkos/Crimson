@@ -1,6 +1,5 @@
 #include "crimson/asset_manager/importers/material_importer.hpp"
 
-#include <exception>
 #include <glm/glm.hpp>
 
 #include "crimson/asset_manager/asset_manager.hpp"
@@ -8,105 +7,58 @@
 
 namespace crimson
 {
-    namespace
+    static void ApplyProperty(GpuResourceManager& gpu, MaterialHandle material, const std::string& name, const std::vector<float>& v)
     {
-        AssetID ResolveRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
+        switch (v.size())
         {
-            if (ref.is_string())
-                return assets.FindId(ref.get<std::string>());
+            case 1: gpu.SetMaterialPropertyByName(material, name, v[0]); return;
+            case 2: gpu.SetMaterialPropertyByName(material, name, glm::vec2(v[0], v[1])); return;
+            case 3: gpu.SetMaterialPropertyByName(material, name, glm::vec3(v[0], v[1], v[2])); return;
+            case 4: gpu.SetMaterialPropertyByName(material, name, glm::vec4(v[0], v[1], v[2], v[3])); return;
+            default:
+                LOG_WARN("[MaterialImporter] Property '{}': unsupported size {}", name, v.size());
+        }
+    }
 
-            if (!ref.is_object())
-                return {};
+    void ApplyMaterialValues(const MaterialData& data, MaterialHandle material, ImportContext& ctx)
+    {
+        ctx.Gpu.SetMaterialSettings(material, data.Settings);
 
-            if (ref.contains("guid") && ref["guid"].is_string())
+        for (const auto& [name, values] : data.Properties)
+            ApplyProperty(ctx.Gpu, material, name, values);
+
+        for (const auto& [slot, id] : data.Textures)
+        {
+            const TextureHandle texture = ctx.Assets.LoadTexture(id);
+
+            if (!texture)
             {
-                try
-                {
-                    const AssetID id = AssetID::FromString(ref["guid"].get<std::string>());
-                    if (id && assets.GetInfo(id))
-                        return id;
-                }
-                catch (const std::exception&) {}
+                LOG_WARN("[MaterialImporter] Texture '{}' failed to load", slot);
+                continue;
             }
 
-            if (ref.contains("path") && ref["path"].is_string())
-            {
-                const std::string path = ref["path"].get<std::string>();
-                if (const AssetID byPath = assets.FindId(path))
-                {
-                    LOG_WARN("[MaterialImporter] {}: stale guid, resolved by path '{}'", context, path);
-                    return byPath;
-                }
-            }
+            ctx.Gpu.SetMaterialTexture(material, slot, texture);
+        }
+    }
 
-            return {};
+    MaterialHandle CreateMaterialFromData(const MaterialData& data, ImportContext& ctx, std::string_view name)
+    {
+        const ShaderHandle shader = ctx.Assets.LoadShader(data.Shader);
+        if (!shader)
+        {
+            LOG_ERROR("[MaterialImporter] '{}': shader not found or failed to load", name);
+            return MaterialHandle::Invalid();
         }
 
-        void ApplyProperty(GpuResourceManager& gpu, MaterialHandle material,
-                           const std::string& name, const nlohmann::json& value)
+        const MaterialHandle material = ctx.Gpu.CreateMaterial(shader, data.Settings);
+        if (!material)
         {
-            try
-            {
-                if (value.is_number())
-                {
-                    gpu.SetMaterialPropertyByName(material, name, value.get<float>());
-                    return;
-                }
-
-                if (value.is_array())
-                {
-                    const auto v = value.get<std::vector<float>>();
-                    switch (v.size())
-                    {
-                        case 2: gpu.SetMaterialPropertyByName(material, name, glm::vec2(v[0], v[1])); return;
-                        case 3: gpu.SetMaterialPropertyByName(material, name, glm::vec3(v[0], v[1], v[2])); return;
-                        case 4: gpu.SetMaterialPropertyByName(material, name, glm::vec4(v[0], v[1], v[2], v[3])); return;
-                        default:
-                            LOG_WARN("[MaterialImporter] Property '{}': unsupported array size {}", name, v.size());
-                            return;
-                    }
-                }
-
-                LOG_WARN("[MaterialImporter] Property '{}': unsupported value type", name);
-            }
-            catch (const nlohmann::json::exception& e)
-            {
-                LOG_WARN("[MaterialImporter] Property '{}': {}", name, e.what());
-            }
+            LOG_ERROR("[MaterialImporter] CreateMaterial failed for '{}'", name);
+            return MaterialHandle::Invalid();
         }
 
-        MaterialSettings ParseSettings(const nlohmann::json& j, const std::string& file)
-        {
-            MaterialSettings settings;
-
-            if (const auto it = j.find("renderMode"); it != j.end())
-            {
-                const std::string value = it->is_string() ? it->get<std::string>() : std::string{};
-
-                if (value == "opaque")
-                    settings.RenderMode = MaterialRenderMode::Opaque;
-                else if (value == "transparent")
-                    settings.RenderMode = MaterialRenderMode::Transparent;
-                else
-                    LOG_WARN("[MaterialImporter] '{}': unknown renderMode, using opaque", file);
-            }
-
-            if (const auto it = j.find("cull"); it != j.end())
-            {
-                const std::string value = it->is_string() ? it->get<std::string>() : std::string{};
-
-                if (value == "back")
-                    settings.Cull = CullMode::Back;
-                else if (value == "front")
-                    settings.Cull = CullMode::Front;
-                else if (value == "none")
-                    settings.Cull = CullMode::None;
-                else
-                    LOG_WARN("[MaterialImporter] '{}': unknown cull mode, using back", file);
-            }
-
-            return settings;
-        }
+        ApplyMaterialValues(data, material, ctx);
+        return material;
     }
 
     std::span<const std::string_view> MaterialImporter::Extensions() const
@@ -122,58 +74,17 @@ namespace crimson
 
     LoadedAsset MaterialImporter::Load(const AssetSource& source, ImportContext& ctx)
     {
-        const std::string& assetPath = source.Info.Path;
-
         const auto text = source.Read();
         if (!text)
             return {};
 
-        nlohmann::json j;
-        try { j = nlohmann::json::parse(*text); }
-        catch (const nlohmann::json::exception& e)
-        {
-            LOG_ERROR("[MaterialImporter] Invalid JSON in '{}': {}", assetPath, e.what());
+        const auto data = ParseMaterialData(*text, ctx.Assets, source.Info.Path);
+        if (!data)
             return {};
-        }
 
-        if (!j.contains("shader"))
-        {
-            LOG_ERROR("[MaterialImporter] '{}': missing 'shader'", assetPath);
-            return {};
-        }
-
-        const ShaderHandle shader = ctx.Assets.LoadShader(ResolveRef(ctx.Assets, j["shader"], assetPath));
-        if (!shader)
-        {
-            LOG_ERROR("[MaterialImporter] '{}': shader not found or failed to load", assetPath);
-            return {};
-        }
-
-        const auto material = ctx.Gpu.CreateMaterial(shader, ParseSettings(j, assetPath));
+        const MaterialHandle material = CreateMaterialFromData(*data, ctx, source.Info.Path);
         if (!material)
-        {
-            LOG_ERROR("[MaterialImporter] CreateMaterial failed for '{}'", assetPath);
             return {};
-        }
-
-        if (j.contains("properties") && j["properties"].is_object())
-            for (const auto& [name, value] : j["properties"].items())
-                ApplyProperty(ctx.Gpu, material, name, value);
-
-        if (j.contains("textures") && j["textures"].is_object())
-        {
-            for (const auto& [name, ref] : j["textures"].items())
-            {
-                const TextureHandle texture = ctx.Assets.LoadTexture(ResolveRef(ctx.Assets, ref, name));
-
-                if (!texture)
-                {
-                    LOG_WARN("[MaterialImporter] '{}': texture '{}' not found", assetPath, name);
-                    continue;
-                }
-                ctx.Gpu.SetMaterialTexture(material, name, texture);
-            }
-        }
 
         return material;
     }

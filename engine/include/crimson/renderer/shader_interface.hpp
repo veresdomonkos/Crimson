@@ -1,6 +1,11 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
+#include <string>
+#include <unordered_map>
 #include <vector>
+
+#include "crimson/renderer/shader_property_info.hpp"
 
 namespace crimson
 {
@@ -8,6 +13,25 @@ namespace crimson
     {
         std::vector<uint32_t> Vertex;
         std::vector<uint32_t> Pixel;
+    };
+
+    struct ShaderMaterialTexture
+    {
+        uint32_t Binding = 0;
+        bool Vertex = false;
+        bool Pixel = false;
+    };
+
+    // What a shader's material space contains
+    struct ShaderInterface
+    {
+        std::size_t MaterialBlockSize = 0;
+        uint32_t MaterialBlockBinding = 0;
+        bool MaterialBlockInVertex = false;
+        bool MaterialBlockInPixel = false;
+
+        std::unordered_map<std::string, ShaderPropertyInfo> Properties;
+        std::unordered_map<std::string, ShaderMaterialTexture> Textures;
     };
 
     // Resources are grouped by how often they change, each group is an HLSL space and a descriptor set.
