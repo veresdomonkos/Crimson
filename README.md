@@ -209,6 +209,24 @@ Debug builds enable the Vulkan validation layers when they are installed. Set `C
 
 The editor renders as fast as it can by default. Set `CRIMSON_VSYNC=1` to limit it to the display's refresh rate.
 
+## Testing
+
+```bash
+cmake --build build --target CrimsonTests
+ctest --test-dir build --output-on-failure
+```
+
+Tests use [Catch2](https://github.com/catchorg/Catch2) and need no GPU or window, so they run on CI too. `-DCRIMSON_BUILD_TESTS=OFF` leaves them out. They cover everything above the graphics APIs:
+
+- **Scene** - hierarchy, transforms and raycasts.
+- **Assets and projects** - scanning, metas, loading and its failures, using real files in a temporary folder.
+- **Shaders** - every engine shader goes through what the backends do before reaching the GPU: HLSL to SPIR-V, reflection, and translation to GLSL.
+- **Frames** - pass recording, draw sorting, shadow views and `SceneRenderer`.
+
+Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are already interfaces, so `tests/support/fake_gpu.hpp` stands in for them. Testability shouldn't cost anything per frame, so nothing gains a virtual function just to be faked: `BuildDrawOrder` takes its materials as a template parameter, and `Scene`, `Entity` and `Input` stay concrete. What can't be reached that way, like the backends themselves and the ImGui panels, isn't covered.
+
+[CI](.github/workflows/ci.yml) builds the editor and runs the tests on every push.
+
 ## Profiling
 
 Crimson is instrumented with [Tracy](https://github.com/wolfpld/tracy): CPU zones, per-pass GPU zones on both backends, and a `Draw Calls` plot. To profile, run the editor and connect the [Tracy v0.14.1 viewer](https://github.com/wolfpld/tracy/releases/tag/v0.14.1) to `127.0.0.1`. The viewer version must match the `external/tracy` submodule.

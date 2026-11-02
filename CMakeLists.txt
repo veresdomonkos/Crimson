@@ -77,6 +77,14 @@ add_subdirectory(external/VulkanMemoryAllocator)
 add_subdirectory(external/nativefiledialog-extended)
 
 include(cmake/EmbedResources.cmake)
+include(cmake/LinkStatically.cmake)
 
 add_subdirectory(engine)
 add_subdirectory(editor)
+
+option(CRIMSON_BUILD_TESTS "Build the tests" ON)
+if(CRIMSON_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(external/Catch2)
+    add_subdirectory(tests)
+endif()

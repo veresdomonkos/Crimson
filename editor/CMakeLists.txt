@@ -1,3 +1,11 @@
+# The parts of the editor that need no window or GPU, so the tests can link them
+add_library(EditorCore STATIC
+        include/crimson_editor/recent_projects.hpp
+        src/recent_projects.cpp
+)
+target_include_directories(EditorCore PUBLIC include)
+target_link_libraries(EditorCore PUBLIC Engine)
+
 add_executable(Editor
         include/crimson_editor/editor_application.hpp
 
@@ -8,8 +16,6 @@ add_executable(Editor
         src/project_session_mode.cpp
         include/crimson_editor/project_manager_mode.hpp
         src/project_manager_mode.cpp
-        include/crimson_editor/recent_projects.hpp
-        src/recent_projects.cpp
         include/crimson_editor/editor_icons.hpp
         src/editor_icons.cpp
         include/crimson_editor/editor_paths.hpp
@@ -48,14 +54,9 @@ crimson_embed_resources(Editor DIRECTORY resources NAMESPACE crimson::editor FUN
 target_link_libraries(Editor
         PRIVATE
             Engine
+            EditorCore
             imguizmo
             nfd
 )
 
-if(MINGW)
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++ -static")
-
-    # In C++23 std::type_info::operator== is inline, and also defined in the static libstdc++.a.
-    # The two are the same function, so the linker can keep either.
-    target_link_options(Editor PRIVATE -Wl,--allow-multiple-definition)
-endif()
+crimson_link_statically(Editor)
