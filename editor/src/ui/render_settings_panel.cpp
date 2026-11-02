@@ -3,6 +3,7 @@
 #include <array>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #include "crimson_editor/ui/linear_color.hpp"
 
@@ -10,6 +11,10 @@ namespace crimson::editor::ui
 {
     void RenderSettingsPanel::OnImGui()
     {
+        // A layout saved before this panel existed doesn't know about it, so it joins its neighbor
+        if (const ImGuiWindow* stats = ImGui::FindWindowByName("Stats"); stats && stats->DockId != 0)
+            ImGui::SetNextWindowDockID(stats->DockId, ImGuiCond_FirstUseEver);
+
         ImGui::SetNextWindowSize(ImVec2(260.0f, 0.0f), ImGuiCond_FirstUseEver);
         ImGui::Begin("Render Settings");
 

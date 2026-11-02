@@ -125,16 +125,16 @@ namespace crimson::editor
 
         const Entity lights = m_scene.CreateEntity("Lights");
 
-        addLight("Sun", lights, { .Type = LightType::Directional, .Color = glm::vec3(1.0f), .Intensity = 2.5f, .CastsShadow = true },
+        addLight("Sun", lights, { .Type = LightType::Directional, .Color = glm::vec3(1.0f), .Intensity = 1.2f, .CastsShadow = true },
             glm::vec3(0.0f, 8.0f, 0.0f), glm::vec3(-0.5f, -1.0f, -0.3f));
 
-        addLight("Orange Point", lights, { .Type = LightType::Point, .Color = glm::vec3(1.0f, 0.5f, 0.2f), .Intensity = 30.0f, .Range = 12.0f, .CastsShadow = true },
+        addLight("Orange Point", lights, { .Type = LightType::Point, .Color = glm::vec3(1.0f, 0.5f, 0.2f), .Intensity = 10.0f, .Range = 12.0f, .CastsShadow = true },
             glm::vec3(2.0f, 3.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 
-        addLight("Red Point", lights, { .Type = LightType::Point, .Color = glm::vec3(0.8f, 0.1f, 0.2f), .Intensity = 30.0f, .Range = 12.0f },
+        addLight("Red Point", lights, { .Type = LightType::Point, .Color = glm::vec3(0.8f, 0.1f, 0.2f), .Intensity = 10.0f, .Range = 12.0f },
             glm::vec3(-2.0f, 3.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 
-        addLight("Blue Spot", lights, { .Type = LightType::Spot, .Color = glm::vec3(0.2f, 0.5f, 1.0f), .Intensity = 60.0f, .Range = 16.0f, .InnerConeDegrees = 20.0f, .OuterConeDegrees = 35.0f, .CastsShadow = true },
+        addLight("Blue Spot", lights, { .Type = LightType::Spot, .Color = glm::vec3(0.2f, 0.5f, 1.0f), .Intensity = 25.0f, .Range = 16.0f, .InnerConeDegrees = 20.0f, .OuterConeDegrees = 35.0f, .CastsShadow = true },
             glm::vec3(0.0f, 4.0f, 3.0f), glm::vec3(0.0f, -1.0f, -0.8f));
 
         m_lighting.AmbientColor = glm::vec3(0.05f);
@@ -154,8 +154,8 @@ namespace crimson::editor
         m_ui->AddPanel<ui::ConsolePanel>();
         m_ui->AddPanel<ui::HierarchyPanel>(m_context);
         m_ui->AddPanel<ui::InspectorPanel>(m_context);
-        m_ui->AddPanel<ui::RenderSettingsPanel>(m_context, *m_sceneRenderer, m_lighting);
         m_ui->AddPanel<ui::StatsPanel>(m_frameStats, m_services.RendererType);
+        m_ui->AddPanel<ui::RenderSettingsPanel>(m_context, *m_sceneRenderer, m_lighting);
     }
 
     void ProjectSessionMode::RunDeferred()
