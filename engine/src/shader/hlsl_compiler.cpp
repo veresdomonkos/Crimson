@@ -58,12 +58,11 @@ namespace crimson
             [[maybe_unused]] static const bool initialized = glslang::InitializeProcess();
         }
 
-        std::optional<std::vector<uint32_t>> CompileStage(const std::filesystem::path& file, const std::string& source, EShLanguage stage, const char* entryPoint)
+        std::optional<std::vector<uint32_t>> CompileStage(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, EShLanguage stage, const char* entryPoint)
         {
-            const std::string fileName = file.generic_string();
             const char* sourceData = source.data();
             const int sourceLength = static_cast<int>(source.size());
-            const char* sourceName = fileName.c_str();
+            const char* sourceName = name.c_str();
 
             constexpr int kDefaultVersion = 100;
             constexpr EShMessages kMessages = static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgReadHlsl);
@@ -84,7 +83,7 @@ namespace crimson
             shader.setShiftBinding(glslang::EResImage, kStorageBindingShift);
             shader.setShiftBinding(glslang::EResUav, kStorageBindingShift);
 
-            ShaderIncluder includer(file.parent_path());
+            ShaderIncluder includer(includeDirectory);
 
             if (!shader.parse(GetDefaultResources(), kDefaultVersion, false, kMessages, includer))
             {
@@ -107,23 +106,12 @@ namespace crimson
         }
     }
 
-    std::optional<ShaderBinary> CompileHlslShader(const std::filesystem::path& file)
+    std::optional<ShaderBinary> CompileHlslShader(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory)
     {
         InitializeGlslang();
 
-        std::ifstream stream(file, std::ios::binary);
-        if (!stream)
-        {
-            LOG_ERROR("[Shader] Cannot open '{}'", file.string());
-            return std::nullopt;
-        }
-
-        std::stringstream contents;
-        contents << stream.rdbuf();
-        const std::string source = std::move(contents).str();
-
-        auto vertex = CompileStage(file, source, EShLangVertex, "VSMain");
-        auto pixel = CompileStage(file, source, EShLangFragment, "PSMain");
+        auto vertex = CompileStage(name, source, includeDirectory, EShLangVertex, "VSMain");
+        auto pixel = CompileStage(name, source, includeDirectory, EShLangFragment, "PSMain");
 
         if (!vertex || !pixel)
             return std::nullopt;

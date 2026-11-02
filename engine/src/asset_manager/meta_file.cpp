@@ -12,7 +12,7 @@ namespace crimson::meta
         return p;
     }
 
-    std::optional<AssetMetadata> Read(const std::filesystem::path& metaPath)
+    std::optional<AssetInfo> Read(const std::filesystem::path& metaPath)
     {
         std::ifstream file(metaPath);
         if (!file) return std::nullopt;
@@ -21,7 +21,7 @@ namespace crimson::meta
         {
             nlohmann::json j = nlohmann::json::parse(file);
 
-            AssetMetadata m;
+            AssetInfo m;
             m.Id = AssetID::FromString(j.at("guid").get<std::string>());
             m.Type = AssetTypeFromString(j.at("type").get<std::string>());
             m.ImporterVersion = j.value("importerVersion", 1u);
@@ -35,7 +35,7 @@ namespace crimson::meta
         }
     }
 
-    bool Write(const std::filesystem::path& metaPath, const AssetMetadata& m)
+    bool Write(const std::filesystem::path& metaPath, const AssetInfo& m)
     {
         nlohmann::json j;
         j["guid"] = m.Id.ToString();

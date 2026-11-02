@@ -9,7 +9,6 @@ namespace crimson::editor
     {
         Scene& ActiveScene;
         AssetManager& Assets;
-        AssetID DefaultMaterial;
         Entity Selected;
     };
 }

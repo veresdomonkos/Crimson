@@ -1,6 +1,5 @@
 #include "crimson/asset_manager/importers/material_importer.hpp"
 
-#include <fstream>
 #include <exception>
 #include <glm/glm.hpp>
 
@@ -14,7 +13,7 @@ namespace crimson
         AssetID ResolveRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
         {
             if (ref.is_string())
-                return assets.FindByPath(ref.get<std::string>());
+                return assets.FindId(ref.get<std::string>());
 
             if (!ref.is_object())
                 return {};
@@ -24,7 +23,7 @@ namespace crimson
                 try
                 {
                     const AssetID id = AssetID::FromString(ref["guid"].get<std::string>());
-                    if (id && assets.GetMetadata(id))
+                    if (id && assets.GetInfo(id))
                         return id;
                 }
                 catch (const std::exception&) {}
@@ -33,7 +32,7 @@ namespace crimson
             if (ref.contains("path") && ref["path"].is_string())
             {
                 const std::string path = ref["path"].get<std::string>();
-                if (const AssetID byPath = assets.FindByPath(path))
+                if (const AssetID byPath = assets.FindId(path))
                 {
                     LOG_WARN("[MaterialImporter] {}: stale guid, resolved by path '{}'", context, path);
                     return byPath;
@@ -121,41 +120,39 @@ namespace crimson
         return nlohmann::json::object();
     }
 
-    LoadedAsset MaterialImporter::Load(const AssetMetadata&, const std::filesystem::path& path, ImportContext& ctx)
+    LoadedAsset MaterialImporter::Load(const AssetSource& source, ImportContext& ctx)
     {
-        std::ifstream file(path);
-        if (!file)
-        {
-            LOG_ERROR("[MaterialImporter] Cannot open '{}'", path.string());
+        const std::string& assetPath = source.Info.Path;
+
+        const auto text = source.Read();
+        if (!text)
             return {};
-        }
 
         nlohmann::json j;
-        try { j = nlohmann::json::parse(file); }
+        try { j = nlohmann::json::parse(*text); }
         catch (const nlohmann::json::exception& e)
         {
-            LOG_ERROR("[MaterialImporter] Invalid JSON in '{}': {}", path.string(), e.what());
+            LOG_ERROR("[MaterialImporter] Invalid JSON in '{}': {}", assetPath, e.what());
             return {};
         }
 
         if (!j.contains("shader"))
         {
-            LOG_ERROR("[MaterialImporter] '{}': missing 'shader'", path.string());
+            LOG_ERROR("[MaterialImporter] '{}': missing 'shader'", assetPath);
             return {};
         }
 
-        const AssetID shaderId = ResolveRef(ctx.Assets, j["shader"], path.filename().string());
-        const auto shader = ctx.Assets.GetAsset<ShaderHandle>(shaderId);
+        const ShaderHandle shader = ctx.Assets.LoadShader(ResolveRef(ctx.Assets, j["shader"], assetPath));
         if (!shader)
         {
-            LOG_ERROR("[MaterialImporter] '{}': shader not found or failed to load", path.string());
+            LOG_ERROR("[MaterialImporter] '{}': shader not found or failed to load", assetPath);
             return {};
         }
 
-        const auto material = ctx.Gpu.CreateMaterial(shader.value(), ParseSettings(j, path.filename().string()));
+        const auto material = ctx.Gpu.CreateMaterial(shader, ParseSettings(j, assetPath));
         if (!material)
         {
-            LOG_ERROR("[MaterialImporter] CreateMaterial failed for '{}'", path.string());
+            LOG_ERROR("[MaterialImporter] CreateMaterial failed for '{}'", assetPath);
             return {};
         }
 
@@ -167,15 +164,14 @@ namespace crimson
         {
             for (const auto& [name, ref] : j["textures"].items())
             {
-                const AssetID texId = ResolveRef(ctx.Assets, ref, name);
-                const auto tex = ctx.Assets.GetAsset<TextureHandle>(texId);
+                const TextureHandle texture = ctx.Assets.LoadTexture(ResolveRef(ctx.Assets, ref, name));
 
-                if (!tex)
+                if (!texture)
                 {
-                    LOG_WARN("[MaterialImporter] '{}': texture '{}' not found", path.string(), name);
+                    LOG_WARN("[MaterialImporter] '{}': texture '{}' not found", assetPath, name);
                     continue;
                 }
-                ctx.Gpu.SetMaterialTexture(material, name, tex.value());
+                ctx.Gpu.SetMaterialTexture(material, name, texture);
             }
         }
 

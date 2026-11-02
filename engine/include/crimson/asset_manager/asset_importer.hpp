@@ -1,5 +1,8 @@
 #pragma once
+#include <filesystem>
+#include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <variant>
 #include "crimson/asset_manager/asset_types.hpp"
@@ -16,6 +19,16 @@ namespace crimson
         AssetManager&       Assets;
     };
 
+    // The asset an importer is loading. Importers get its bytes from here instead of opening the file.
+    struct AssetSource
+    {
+        const AssetInfo& Info;
+        std::filesystem::path File;
+
+        // Logs when it fails
+        [[nodiscard]] std::optional<std::string> Read() const;
+    };
+
     using LoadedAsset = std::variant<std::monostate, TextureHandle, ShaderHandle, MaterialHandle, Mesh>;
 
     class AssetImporter
@@ -27,10 +40,7 @@ namespace crimson
         [[nodiscard]] virtual std::span<const std::string_view> Extensions() const = 0;
         [[nodiscard]] virtual nlohmann::json DefaultSettings() const = 0;
 
-        virtual LoadedAsset Load(const AssetMetadata& meta, const std::filesystem::path& absoluteSource, ImportContext& ctx) = 0;
+        virtual LoadedAsset Load(const AssetSource& source, ImportContext& ctx) = 0;
         virtual void Unload(const LoadedAsset& asset, GpuResourceManager& gpu) = 0;
     };
-
-    template <typename T>
-    concept AssetImporterType = std::derived_from<T, AssetImporter>;
 }

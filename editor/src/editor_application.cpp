@@ -10,10 +10,6 @@
 #include <glm/gtc/quaternion.hpp>
 #include <GLFW/glfw3.h>
 
-#include "crimson/asset_manager/importers/material_importer.hpp"
-#include "crimson/asset_manager/importers/mesh_importer.hpp"
-#include "crimson/asset_manager/importers/shader_importer.hpp"
-#include "crimson/asset_manager/importers/texture_importer.hpp"
 #include "crimson_editor/ui/asset_browser_panel.hpp"
 #include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
@@ -37,13 +33,8 @@ namespace crimson::editor
         ui::ApplyEditorTheme();
         m_ui              = std::make_unique<ui::EditorUI>(*m_graphicsBackend->Imgui);
 	    m_assetManager    = std::make_unique<AssetManager>(*m_graphicsBackend->GPUResources, "assets");
-	    m_assetManager->RegisterImporter<TextureImporter>();
-	    m_assetManager->RegisterImporter<ShaderImporter>();
-	    m_assetManager->RegisterImporter<MaterialImporter>();
-	    m_assetManager->RegisterImporter<MeshImporter>();
-	    m_assetManager->ScanDirectory();
 
-        m_context       = std::make_unique<EditorContext>(m_scene, *m_assetManager, m_assetManager->FindByPath("materials/default.mat"));
+        m_context       = std::make_unique<EditorContext>(m_scene, *m_assetManager);
         m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_graphicsBackend->Renderer);
 
         CreateRenderTargets();
@@ -75,9 +66,9 @@ namespace crimson::editor
         const Entity entity = m_scene.CreateEntity(name);
 
         auto& renderer = entity.AddComponent<MeshRendererComponent>();
-        renderer.MeshAsset = m_assetManager->FindByPath(mesh);
-        renderer.MaterialAssets = { m_assetManager->FindByPath(material) };
-        ResolveMeshRenderer(renderer, *m_assetManager, m_context->DefaultMaterial);
+        renderer.MeshAsset = m_assetManager->FindId(mesh);
+        renderer.MaterialAssets = { m_assetManager->FindId(material) };
+        ResolveMeshRenderer(renderer, *m_assetManager);
 
         return entity;
     }
@@ -130,14 +121,8 @@ namespace crimson::editor
 
         m_lighting.AmbientColor = glm::vec3(0.05f);
 
-        const auto loadMaterial = [this](const char* path)
-        {
-            const AssetID id = m_assetManager->FindByPath(path);
-            return id ? m_assetManager->GetAsset<MaterialHandle>(id).value_or(MaterialHandle::Invalid()) : MaterialHandle::Invalid();
-        };
-
-        m_sceneRenderer->SetShadowMaterial(loadMaterial("materials/shadow.mat"));
-        m_sceneRenderer->SetOutlineMaterials(loadMaterial("materials/outline_mask.mat"), loadMaterial("materials/outline.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetShadowMaterial(m_assetManager->LoadMaterial("materials/shadow.mat"));
+        m_sceneRenderer->SetOutlineMaterials(m_assetManager->LoadMaterial("materials/outline_mask.mat"), m_assetManager->LoadMaterial("materials/outline.mat"), kMainTargetWidth, kMainTargetHeight);
     }
 
     void EditorApplication::SetupUI()
@@ -157,8 +142,7 @@ namespace crimson::editor
 
     void EditorApplication::CreateTextures()
     {
-	    if (const AssetID id = m_assetManager->FindByPath("textures/test.jpg"))
-	        m_testTexture = m_assetManager->GetAsset<TextureHandle>(id).value_or(TextureHandle::Invalid());
+	    m_testTexture = m_assetManager->LoadTexture(m_assetManager->FindId("textures/test.jpg"));
     }
 
     void EditorApplication::Run()

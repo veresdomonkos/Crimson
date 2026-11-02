@@ -16,15 +16,15 @@ namespace crimson
         return { { "srgb", true }, { "generateMips", false } };
     }
 
-    LoadedAsset TextureImporter::Load(const AssetMetadata& meta, const std::filesystem::path& path, ImportContext& ctx)
+    TextureHandle CreateTextureFromMemory(GpuResourceManager& gpu, std::span<const std::byte> file)
     {
         int w = 0, h = 0, channels = 0;
-        stbi_uc* pixels = stbi_load(path.string().c_str(), &w, &h, &channels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load_from_memory(reinterpret_cast<const stbi_uc*>(file.data()), static_cast<int>(file.size()), &w, &h, &channels, STBI_rgb_alpha);
 
         if (!pixels)
         {
-            LOG_ERROR("[Assets] Failed to load {}: {}", path.string(), stbi_failure_reason());
-            return {};
+            LOG_ERROR("[Assets] Failed to decode image: {}", stbi_failure_reason());
+            return TextureHandle::Invalid();
         }
 
         TextureInfo info{};
@@ -34,10 +34,22 @@ namespace crimson
         info.Usage     = TextureUsage::Sampled;
         info.MipLevels = 1;
 
-        TextureHandle handle = ctx.Gpu.CreateTexture(info, pixels);
+        TextureHandle handle = gpu.CreateTexture(info, pixels);
         stbi_image_free(pixels);
 
-        if (!handle) return {};
+        return handle;
+    }
+
+    LoadedAsset TextureImporter::Load(const AssetSource& source, ImportContext& ctx)
+    {
+        const auto file = source.Read();
+        if (!file)
+            return {};
+
+        const TextureHandle handle = CreateTextureFromMemory(ctx.Gpu, std::as_bytes(std::span(*file)));
+        if (!handle)
+            return {};
+
         return handle;
     }
 

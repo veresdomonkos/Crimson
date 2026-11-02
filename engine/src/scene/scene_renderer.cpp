@@ -8,29 +8,24 @@
 
 namespace crimson
 {
-    void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets, AssetID defaultMaterial)
+    void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets)
     {
         renderer.Resolved = {};
 
-        if (!renderer.MeshAsset)
-            return;
-
-        auto mesh = assets.GetAsset<Mesh>(renderer.MeshAsset);
+        const Mesh* mesh = assets.LoadMesh(renderer.MeshAsset);
         if (!mesh)
             return;
 
-        renderer.Resolved = std::move(*mesh);
+        renderer.Resolved = *mesh;
         renderer.MaterialAssets.resize(renderer.Resolved.Materials.size());
 
         for (size_t slot = 0; slot < renderer.MaterialAssets.size(); ++slot)
         {
             AssetID& asset = renderer.MaterialAssets[slot];
             if (!asset)
-                asset = defaultMaterial;
+                asset = assets.DefaultMaterial();
 
-            renderer.Resolved.Materials[slot] = asset
-                ? assets.GetAsset<MaterialHandle>(asset).value_or(MaterialHandle::Invalid())
-                : MaterialHandle::Invalid();
+            renderer.Resolved.Materials[slot] = assets.LoadMaterial(asset);
         }
     }
 

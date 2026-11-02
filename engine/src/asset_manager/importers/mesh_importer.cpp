@@ -3,14 +3,46 @@
 #include "crimson/asset_manager/importers/mesh_importer.hpp"
 
 #include <array>
+#include <filesystem>
+#include <fstream>
 #include <map>
 #include <algorithm>
 #include <limits>
+#include <sstream>
+#include <utility>
 #include "crimson/core/log.hpp"
 #include "crimson/renderer/mesh.hpp"
 
 namespace crimson
 {
+    namespace
+    {
+        // tinyobj's own file reader can't open paths with non-ASCII characters on Windows
+        class MaterialFolderReader final : public tinyobj::MaterialReader
+        {
+        public:
+            explicit MaterialFolderReader(std::filesystem::path folder) : m_folder(std::move(folder)) {}
+
+            bool operator()(const std::string& matId, std::vector<tinyobj::material_t>* materials,
+                            std::map<std::string, int>* matMap, std::string* warn, std::string* err) override
+            {
+                std::ifstream file(m_folder / std::filesystem::path(matId));
+                if (!file)
+                {
+                    if (warn)
+                        *warn += "Material file '" + matId + "' not found\n";
+                    return false;
+                }
+
+                tinyobj::LoadMtl(matMap, materials, &file, warn, err);
+                return true;
+            }
+
+        private:
+            std::filesystem::path m_folder;
+        };
+    }
+
     std::span<const std::string_view> MeshImporter::Extensions() const
     {
         static constexpr std::string_view exts[] = { ".obj" };
@@ -22,25 +54,31 @@ namespace crimson
         return { { "flipV", true } };
     }
 
-    LoadedAsset MeshImporter::Load(const AssetMetadata& meta, const std::filesystem::path& path, ImportContext& ctx)
+    LoadedAsset MeshImporter::Load(const AssetSource& source, ImportContext& ctx)
     {
-        tinyobj::ObjReaderConfig config;
-        config.triangulate = true;
-        config.mtl_search_path = path.parent_path().string();
+        const std::string& name = source.Info.Path;
 
-        tinyobj::ObjReader reader;
-        if (!reader.ParseFromFile(path.string(), config))
+        const auto file = source.Read();
+        if (!file)
+            return {};
+
+        std::istringstream stream(*file);
+        MaterialFolderReader materialReader(source.File.parent_path());
+
+        tinyobj::attrib_t attrib;
+        std::vector<tinyobj::shape_t> shapes;
+        std::vector<tinyobj::material_t> materials;
+        std::string warning, error;
+
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warning, &error, &stream, &materialReader))
         {
-            LOG_ERROR("[MeshImporter] '{}': {}", path.string(), reader.Error());
+            LOG_ERROR("[MeshImporter] '{}': {}", name, error);
             return {};
         }
-        if (!reader.Warning().empty())
-            LOG_WARN("[MeshImporter] '{}': {}", path.string(), reader.Warning());
+        if (!warning.empty())
+            LOG_WARN("[MeshImporter] '{}': {}", name, warning);
 
-        const auto& attrib    = reader.GetAttrib();
-        const auto& shapes    = reader.GetShapes();
-        const auto& materials = reader.GetMaterials();
-        const bool flipV      = meta.Settings.value("flipV", true);
+        const bool flipV = source.Info.Settings.value("flipV", true);
 
         Mesh mesh;
 
@@ -125,7 +163,7 @@ namespace crimson
 
         if (vertices.empty())
         {
-            LOG_ERROR("[MeshImporter] '{}': no geometry", path.string());
+            LOG_ERROR("[MeshImporter] '{}': no geometry", name);
             return {};
         }
 
@@ -161,14 +199,14 @@ namespace crimson
 
         if (!mesh.VB || !mesh.IB)
         {
-            LOG_ERROR("[MeshImporter] GPU buffer creation failed for '{}'", path.string());
+            LOG_ERROR("[MeshImporter] GPU buffer creation failed for '{}'", name);
             if (mesh.VB) ctx.Gpu.DestroyVertexBuffer(mesh.VB);
             if (mesh.IB) ctx.Gpu.DestroyIndexBuffer(mesh.IB);
             return {};
         }
 
         LOG_INFO("[MeshImporter] '{}': {} vertices, {} indices, {} submeshes",
-                 path.filename().string(), vertices.size(), indices.size(), mesh.SubMeshes.size());
+                 name, vertices.size(), indices.size(), mesh.SubMeshes.size());
         return mesh;
     }
 

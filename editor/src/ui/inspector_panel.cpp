@@ -31,8 +31,8 @@ namespace crimson::editor::ui
 
     static std::string GetAssetName(const AssetManager& assets, AssetID id)
     {
-        const AssetMetadata* metadata = id ? assets.GetMetadata(id) : nullptr;
-        return metadata ? metadata->Source.generic_string() : "None";
+        const AssetInfo* info = assets.GetInfo(id);
+        return info ? info->Path : "None";
     }
 
     // Returns true when another asset was picked
@@ -42,14 +42,14 @@ namespace crimson::editor::ui
 
         if (ImGui::BeginCombo(label, GetAssetName(assets, current).c_str()))
         {
-            for (const AssetID id : assets.GetAssetsOfType(type))
+            for (const AssetInfo* info : assets.List(type))
             {
-                const bool selected = id == current;
+                const bool selected = info->Id == current;
 
-                if (ImGui::Selectable(GetAssetName(assets, id).c_str(), selected))
+                if (ImGui::Selectable(info->Path.c_str(), selected))
                 {
                     changed = !selected;
-                    current = id;
+                    current = info->Id;
                 }
             }
 
@@ -190,7 +190,7 @@ namespace crimson::editor::ui
             ImGui::TreePop();
 
             if (changed)
-                ResolveMeshRenderer(*renderer, m_context.Assets, m_context.DefaultMaterial);
+                ResolveMeshRenderer(*renderer, m_context.Assets);
         }
 
         if (removed)

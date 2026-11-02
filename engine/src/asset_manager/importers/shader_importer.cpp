@@ -16,19 +16,23 @@ namespace crimson
         return nlohmann::json::object();
     }
 
-    LoadedAsset ShaderImporter::Load(const AssetMetadata&, const std::filesystem::path& path, ImportContext& ctx)
+    LoadedAsset ShaderImporter::Load(const AssetSource& source, ImportContext& ctx)
     {
-        const auto binary = CompileHlslShader(path);
+        const auto text = source.Read();
+        if (!text)
+            return {};
+
+        const auto binary = CompileHlslShader(source.Info.Path, *text, source.File.parent_path());
         if (!binary)
         {
-            LOG_ERROR("[ShaderImporter] Compilation failed for '{}'", path.string());
+            LOG_ERROR("[ShaderImporter] Compilation failed for '{}'", source.Info.Path);
             return {};
         }
 
         const ShaderHandle handle = ctx.Gpu.CreateShader(*binary);
         if (!handle)
         {
-            LOG_ERROR("[ShaderImporter] CreateShader failed for '{}'", path.string());
+            LOG_ERROR("[ShaderImporter] CreateShader failed for '{}'", source.Info.Path);
             return {};
         }
 

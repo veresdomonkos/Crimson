@@ -1,6 +1,15 @@
 #include "crimson/asset_manager/asset_manager.hpp"
 #include <algorithm>
+#include <cctype>
+#include <fstream>
+#include <iterator>
+#include <system_error>
+#include <typeinfo>
 #include <utility>
+#include "crimson/asset_manager/importers/material_importer.hpp"
+#include "crimson/asset_manager/importers/mesh_importer.hpp"
+#include "crimson/asset_manager/importers/shader_importer.hpp"
+#include "crimson/asset_manager/importers/texture_importer.hpp"
 #include "crimson/asset_manager/meta_file.hpp"
 #include "crimson/core/log.hpp"
 
@@ -8,6 +17,8 @@ namespace fs = std::filesystem;
 
 namespace crimson
 {
+    static constexpr std::string_view kDefaultMaterialPath = "materials/default.mat";
+
     static std::string NormalizeExt(const fs::path& p)
     {
         std::string e = p.extension().string();
@@ -15,190 +26,238 @@ namespace crimson
         return e;
     }
 
+    std::optional<std::string> AssetSource::Read() const
+    {
+        std::ifstream file(File, std::ios::binary);
+        if (!file)
+        {
+            LOG_ERROR("[Assets] Cannot open '{}'", File.string());
+            return std::nullopt;
+        }
+
+        return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+    }
+
     AssetManager::AssetManager(GpuResourceManager& gpuResources, fs::path root)
         : m_gpuResources(gpuResources), m_root(fs::absolute(std::move(root)).lexically_normal())
     {
+        AddImporter(std::make_unique<TextureImporter>());
+        AddImporter(std::make_unique<ShaderImporter>());
+        AddImporter(std::make_unique<MaterialImporter>());
+        AddImporter(std::make_unique<MeshImporter>());
 
+        Scan();
     }
 
     AssetManager::~AssetManager()
     {
-        constexpr AssetType order[] = { AssetType::Material, AssetType::Mesh, AssetType::Texture,  AssetType::Shader };
+        // Each one can be used by the ones before it
+        constexpr AssetType order[] = { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader };
 
         for (AssetType type : order)
-        {
-            std::vector<AssetID> ids;
-            for (const auto& [id, _] : m_loaded)
-            {
-                auto reg = m_registry.find(id);
-                if (reg != m_registry.end() && reg->second.Type == type)
-                    ids.push_back(id);
-            }
-            for (AssetID id : ids)
-                Unload(id);
-        }
+            for (auto& [id, entry] : m_assets)
+                if (entry.Info.Type == type)
+                    Unload(entry);
     }
 
-    AssetImporter* AssetManager::FindImporter(const fs::path& source) const
+    void AssetManager::AddImporter(std::unique_ptr<AssetImporter> importer)
     {
-        auto it = m_extensionMap.find(NormalizeExt(source));
-        return it != m_extensionMap.end() ? it->second : nullptr;
+        for (std::string_view ext : importer->Extensions())
+            m_importersByExtension[std::string(ext)] = importer.get();
+
+        m_importers.push_back(std::move(importer));
     }
 
-    void AssetManager::ScanDirectory()
+    void AssetManager::Scan()
     {
         LOG_INFO("[Assets] Scanning {}", m_root.string());
 
-        if (!fs::exists(m_root))
+        // An unreadable folder must not take the editor down, so errors are checked instead of thrown
+        std::error_code error;
+        fs::recursive_directory_iterator it(m_root, fs::directory_options::skip_permission_denied, error);
+
+        if (error)
         {
-            LOG_WARN("[Assets] Root does not exist: {}", m_root.string());
+            LOG_WARN("[Assets] Can't read {}: {}", m_root.string(), error.message());
             return;
         }
 
-        size_t imported = 0, skipped = 0;
-
-        for (const auto& entry : fs::recursive_directory_iterator(m_root))
+        for (const fs::recursive_directory_iterator end; it != end; it.increment(error))
         {
-            if (!entry.is_regular_file()) continue;
-            if (entry.path().extension() == ".meta" || entry.path().extension() == ".hlsli") continue;
-            if (!FindImporter(entry.path()))
+            if (error)
             {
-                LOG_WARN("[Assets] Skipped (no importer): {}", fs::relative(entry.path(), m_root).generic_string());
-                ++skipped;
-                continue;
+                LOG_WARN("[Assets] Stopped scanning {}: {}", m_root.string(), error.message());
+                break;
             }
 
-            if (Import(entry.path())) ++imported;
+            if (it->is_regular_file(error))
+                RegisterFile(it->path());
         }
 
-        LOG_INFO("[Assets] Scan done: {} imported, {} skipped", imported, skipped);
+        LOG_INFO("[Assets] Scan done: {} assets", m_assets.size());
     }
 
-    AssetID AssetManager::Import(const fs::path& source)
+    void AssetManager::RegisterFile(const fs::path& file)
     {
-        const fs::path absolute = source.is_absolute() ? source : m_root / source;
-        const fs::path relative = fs::relative(absolute, m_root);
+        const std::string extension = NormalizeExt(file);
+        if (extension == ".meta" || extension == ".hlsli")
+            return;
 
-        AssetImporter* importer = FindImporter(absolute);
-        if (!importer)
+        std::string path = fs::relative(file, m_root).generic_string();
+
+        const auto importer = m_importersByExtension.find(extension);
+        if (importer == m_importersByExtension.end())
         {
-            LOG_WARN("[Assets] No importer for {}", absolute.string());
-            return {};
+            LOG_WARN("[Assets] Skipped (no importer): {}", path);
+            return;
         }
 
-        const fs::path metaPath = meta::MetaPathFor(absolute);
-        AssetMetadata metadata;
+        const fs::path metaPath = meta::MetaPathFor(file);
+        std::optional<AssetInfo> existing = meta::Read(metaPath);
+        AssetInfo info;
 
-        bool createdMeta = false;
+        // A file copied along with its meta would otherwise replace the original's entry
+        const bool duplicate = existing && m_assets.contains(existing->Id);
+        if (duplicate)
+            LOG_WARN("[Assets] {} has the same id as {}, giving it a new one", path, m_assets.at(existing->Id).Info.Path);
 
-        if (auto existing = meta::Read(metaPath))
+        if (existing)
         {
-            metadata = std::move(*existing);
+            info = std::move(*existing);
         }
         else
         {
-            metadata.Id = AssetID::Generate();
-            metadata.Type = importer->Type();
-            metadata.Settings = importer->DefaultSettings();
-            createdMeta = true;
+            info.Settings = importer->second->DefaultSettings();
+        }
 
-            if (!meta::Write(metaPath, metadata))
+        info.Type = importer->second->Type();
+        info.Path = std::move(path);
+
+        if (!existing || duplicate)
+        {
+            info.Id = AssetID::Generate();
+
+            if (!meta::Write(metaPath, info))
                 LOG_ERROR("[Assets] Failed to write {}", metaPath.string());
         }
 
-        metadata.Source = relative;
+        LOG_INFO("[Assets] {} [{}] id={}", info.Path, ToString(info.Type), info.Id.ToString());
 
-        if (m_loaded.contains(metadata.Id))
-            Unload(metadata.Id);
+        m_idsByPath[info.Path] = info.Id;
+        const AssetID id = info.Id;
+        m_assets.emplace(id, Entry{ .Info = std::move(info), .Importer = importer->second });
+    }
 
-        const AssetID id = metadata.Id;
-        m_pathToId[relative.generic_string()] = id;
-        m_registry[id] = std::move(metadata);
+    const AssetInfo* AssetManager::GetInfo(AssetID id) const
+    {
+        const auto it = m_assets.find(id);
+        return it != m_assets.end() ? &it->second.Info : nullptr;
+    }
 
-        LOG_INFO("[Assets] {} {} [{}] id={}",
-         createdMeta ? "Imported (new meta)" : "Imported",
-         relative.generic_string(),
-         ToString(metadata.Type),
-         id.ToString());
+    AssetID AssetManager::FindId(std::string_view path) const
+    {
+        const auto it = m_idsByPath.find(std::string(path));
+        return it != m_idsByPath.end() ? it->second : AssetID{};
+    }
 
+    AssetID AssetManager::FindIdOrWarn(std::string_view path) const
+    {
+        const AssetID id = FindId(path);
+        if (!id)
+            LOG_WARN("[Assets] No asset at '{}'", path);
         return id;
     }
 
-    const AssetMetadata* AssetManager::GetMetadata(AssetID id) const
+    std::vector<const AssetInfo*> AssetManager::List(AssetType type) const
     {
-        auto it = m_registry.find(id);
-        return it != m_registry.end() ? &it->second : nullptr;
+        std::vector<const AssetInfo*> assets;
+
+        for (const auto& [id, entry] : m_assets)
+            if (entry.Info.Type == type)
+                assets.push_back(&entry.Info);
+
+        std::ranges::sort(assets, {}, &AssetInfo::Path);
+        return assets;
     }
 
-    AssetID AssetManager::FindByPath(const fs::path& source) const
+    AssetID AssetManager::DefaultMaterial() const
     {
-        auto it = m_pathToId.find(source.generic_string());
-        return it != m_pathToId.end() ? it->second : AssetID{};
+        return FindId(kDefaultMaterialPath);
     }
 
     const LoadedAsset& AssetManager::Load(AssetID id)
     {
         static const LoadedAsset kEmpty{};
 
-        if (auto it = m_loaded.find(id); it != m_loaded.end())
-            return it->second;
+        const auto it = m_assets.find(id);
+        if (it == m_assets.end())
+            return kEmpty;
 
-        auto reg = m_registry.find(id);
-        if (reg == m_registry.end()) return kEmpty;
+        Entry& entry = it->second;
 
-        auto imp = m_typeMap.find(reg->second.Type);
-        if (imp == m_typeMap.end()) return kEmpty;
+        if (entry.Failed || !std::holds_alternative<std::monostate>(entry.Loaded))
+            return entry.Loaded;
 
         ImportContext ctx{ m_gpuResources, *this };
-        LoadedAsset asset = imp->second->Load(reg->second, m_root / reg->second.Source, ctx);
-        if (std::holds_alternative<std::monostate>(asset)) return kEmpty;
+        const AssetSource source{ entry.Info, m_root / fs::path(entry.Info.Path) };
 
-        return m_loaded.emplace(id, std::move(asset)).first->second;
+        entry.Loaded = entry.Importer->Load(source, ctx);
+        entry.Failed = std::holds_alternative<std::monostate>(entry.Loaded);
+
+        if (entry.Failed)
+            LOG_ERROR("[Assets] Failed to load {}", entry.Info.Path);
+
+        return entry.Loaded;
     }
 
-    std::vector<AssetID> AssetManager::GetAssetsOfType(AssetType type) const
+    template <typename T>
+    const T* AssetManager::LoadAs(AssetID id)
     {
-        std::vector<AssetID> ids;
+        const LoadedAsset& asset = Load(id);
 
-        for (const auto& [id, metadata] : m_registry)
-        {
-            if (metadata.Type == type)
-                ids.push_back(id);
-        }
+        if (const T* resource = std::get_if<T>(&asset))
+            return resource;
 
-        std::ranges::sort(ids, {}, [this](AssetID id) { return m_registry.at(id).Source; });
-        return ids;
+        if (!std::holds_alternative<std::monostate>(asset))
+            LOG_ERROR("[Assets] {} isn't a {}", GetInfo(id)->Path, typeid(T).name());
+
+        return nullptr;
     }
 
-    void AssetManager::Dump() const
+    TextureHandle AssetManager::LoadTexture(AssetID id)
     {
-        for (const auto& [path, id] : m_pathToId)
-        {
-            const AssetMetadata* meta = GetMetadata(id);
-            LOG_INFO("[Assets] {} [{}] guid={}", path, meta ? ToString(meta->Type) : "?", id.ToString());
-        }
+        const auto* texture = LoadAs<TextureHandle>(id);
+        return texture ? *texture : TextureHandle::Invalid();
     }
 
-    void AssetManager::Unload(AssetID id)
+    ShaderHandle AssetManager::LoadShader(AssetID id)
     {
-        auto loaded = m_loaded.find(id);
-        if (loaded == m_loaded.end()) return;
-
-        if (auto reg = m_registry.find(id); reg != m_registry.end())
-            if (auto imp = m_typeMap.find(reg->second.Type); imp != m_typeMap.end())
-                imp->second->Unload(loaded->second, m_gpuResources);
-
-        m_loaded.erase(loaded);
+        const auto* shader = LoadAs<ShaderHandle>(id);
+        return shader ? *shader : ShaderHandle::Invalid();
     }
 
-    void AssetManager::AddImporter(std::unique_ptr<AssetImporter> importer)
+    MaterialHandle AssetManager::LoadMaterial(AssetID id)
     {
-        AssetImporter* raw = importer.get();
+        const auto* material = LoadAs<MaterialHandle>(id);
+        return material ? *material : MaterialHandle::Invalid();
+    }
 
-        for (std::string_view ext : raw->Extensions())
-            m_extensionMap[std::string(ext)] = raw;
+    const Mesh* AssetManager::LoadMesh(AssetID id)
+    {
+        return LoadAs<Mesh>(id);
+    }
 
-        m_typeMap[raw->Type()] = raw;
-        m_importers.push_back(std::move(importer));
+    TextureHandle AssetManager::LoadTexture(std::string_view path) { return LoadTexture(FindIdOrWarn(path)); }
+    ShaderHandle AssetManager::LoadShader(std::string_view path) { return LoadShader(FindIdOrWarn(path)); }
+    MaterialHandle AssetManager::LoadMaterial(std::string_view path) { return LoadMaterial(FindIdOrWarn(path)); }
+    const Mesh* AssetManager::LoadMesh(std::string_view path) { return LoadMesh(FindIdOrWarn(path)); }
+
+    void AssetManager::Unload(Entry& entry)
+    {
+        if (std::holds_alternative<std::monostate>(entry.Loaded))
+            return;
+
+        entry.Importer->Unload(entry.Loaded, m_gpuResources);
+        entry.Loaded = {};
     }
 }

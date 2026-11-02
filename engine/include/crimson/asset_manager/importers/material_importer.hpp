@@ -10,7 +10,7 @@ namespace crimson
         std::span<const std::string_view> Extensions() const override;
         nlohmann::json DefaultSettings() const override;
 
-        LoadedAsset Load(const AssetMetadata&, const std::filesystem::path&, ImportContext&) override;
+        LoadedAsset Load(const AssetSource&, ImportContext&) override;
         void Unload(const LoadedAsset&, GpuResourceManager&) override;
     };
 }
