@@ -540,6 +540,49 @@ TEST_CASE("Destroying the manager frees what it loaded, users first", "[assets]"
     CHECK(lastMaterial < firstShader);
 }
 
+TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("model/two.obj", "mtllib two.mtl\nv 0 0 0\nv 1 0 0\nv 0 2 0\nv 0 0 1\nusemtl stone\nf 1 2 3\nusemtl wood\nf 1 2 4\n");
+    temp.Write("model/two.mtl", "newmtl stone\nnewmtl wood\n");
+    temp.Write("model/materials/stone.mat", kValidMaterial);
+    temp.Write("materials/wood.mat", kValidMaterial); // not next to this mesh
+    temp.Write("mine.mat", kValidMaterial);
+
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    const AssetID mesh = assets.FindId("model/two.obj");
+    const AssetID stone = assets.FindId("model/materials/stone.mat");
+
+    CHECK(assets.FindSlotMaterial(mesh, "stone") == stone);
+    CHECK_FALSE(assets.FindSlotMaterial(mesh, "wood"));
+    CHECK_FALSE(assets.FindSlotMaterial(stone, "stone"));
+    CHECK_FALSE(assets.FindSlotMaterial(AssetID{}, "stone"));
+
+    MeshRendererComponent renderer;
+    renderer.MeshAsset = mesh;
+
+    SECTION("Without one it is the default material")
+    {
+        ResolveMeshRenderer(renderer, assets);
+
+        REQUIRE(renderer.MaterialAssets.size() == 2);
+        CHECK(renderer.MaterialAssets[0] == stone);
+        CHECK(renderer.MaterialAssets[1] == assets.DefaultMaterial());
+        CHECK(renderer.Resolved.Materials[0] == assets.LoadMaterial(stone));
+    }
+
+    SECTION("A chosen material wins")
+    {
+        renderer.MaterialAssets = { assets.FindId("mine.mat") };
+        ResolveMeshRenderer(renderer, assets);
+
+        REQUIRE(renderer.MaterialAssets.size() == 2);
+        CHECK(renderer.MaterialAssets[0] == assets.FindId("mine.mat"));
+    }
+}
+
 TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
 {
     const TempFolder temp;

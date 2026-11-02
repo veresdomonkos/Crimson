@@ -11,6 +11,24 @@ namespace crimson
 {
     namespace
     {
+        // The asset a reference's guid names, if it still exists
+        template <typename Json>
+        AssetID ResolveGuid(const AssetManager& assets, const Json& ref)
+        {
+            if (ref.contains("guid") && ref["guid"].is_string())
+            {
+                try
+                {
+                    const AssetID id = AssetID::FromString(ref["guid"].template get<std::string>());
+                    if (id && assets.GetInfo(id))
+                        return id;
+                }
+                catch (const std::exception&) {}
+            }
+
+            return {};
+        }
+
         AssetID ResolveRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
         {
             if (ref.is_string())
@@ -19,16 +37,8 @@ namespace crimson
             if (!ref.is_object())
                 return {};
 
-            if (ref.contains("guid") && ref["guid"].is_string())
-            {
-                try
-                {
-                    const AssetID id = AssetID::FromString(ref["guid"].get<std::string>());
-                    if (id && assets.GetInfo(id))
-                        return id;
-                }
-                catch (const std::exception&) {}
-            }
+            if (const AssetID id = ResolveGuid(assets, ref))
+                return id;
 
             if (ref.contains("path") && ref["path"].is_string())
             {
@@ -47,6 +57,27 @@ namespace crimson
         {
             const AssetInfo* info = assets.GetInfo(id);
             return info ? nlohmann::json{ { "guid", id.ToString() }, { "path", info->Path } } : nlohmann::json{};
+        }
+
+        bool UpdateRef(nlohmann::ordered_json& ref, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets)
+        {
+            const bool hasPath = ref.is_object() && ref.contains("path") && ref["path"].is_string();
+            if (!ref.is_string() && !hasPath)
+                return false;
+
+            const auto it = moved.find(hasPath ? ref["path"].get<std::string>() : ref.get<std::string>());
+            if (it == moved.end())
+                return false;
+
+            // The id wins over the path when reading, so this one was about something else that used to be there
+            if (hasPath)
+            {
+                if (const AssetID id = ResolveGuid(assets, ref); id && id != it->second)
+                    return false;
+            }
+
+            ref = WriteRef(assets, it->second);
+            return true;
         }
 
         MaterialSettings ParseSettings(const nlohmann::json& j, std::string_view file)
@@ -191,5 +222,25 @@ namespace crimson
         }
 
         return j.dump(2) + "\n";
+    }
+
+    std::optional<std::string> UpdateMaterialReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets)
+    {
+        nlohmann::ordered_json j = nlohmann::ordered_json::parse(text, nullptr, false);
+        if (!j.is_object())
+            return std::nullopt;
+
+        bool updated = false;
+
+        if (const auto shader = j.find("shader"); shader != j.end())
+            updated = UpdateRef(*shader, moved, assets);
+
+        if (const auto textures = j.find("textures"); textures != j.end() && textures->is_object())
+        {
+            for (auto& [slot, ref] : textures->items())
+                updated = UpdateRef(ref, moved, assets) || updated;
+        }
+
+        return updated ? std::optional(j.dump(2) + "\n") : std::nullopt;
     }
 }

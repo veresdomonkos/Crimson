@@ -22,6 +22,9 @@ namespace crimson
         for (size_t slot = 0; slot < renderer.MaterialAssets.size(); ++slot)
         {
             AssetID& asset = renderer.MaterialAssets[slot];
+            if (!asset && slot < renderer.Resolved.MaterialSlots.size())
+                asset = assets.FindSlotMaterial(renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]);
+
             if (!asset)
                 asset = assets.DefaultMaterial();
 
