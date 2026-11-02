@@ -65,8 +65,7 @@ namespace crimson::editor
         RenderTargetInfo mainInfo{
             .Width = kMainTargetWidth,
             .Height = kMainTargetHeight,
-            .ColorFormats = { TextureFormat::RGBA8 },
-            .DepthFormat = TextureFormat::Depth32F
+            .ColorFormats = { TextureFormat::RGBA8 }
         };
         m_mainTarget = GpuResources().CreateRenderTarget(mainInfo);
         m_mainColor  = GpuResources().GetColorAttachment(m_mainTarget, 0);
@@ -139,6 +138,7 @@ namespace crimson::editor
 
         m_lighting.AmbientColor = glm::vec3(0.05f);
 
+        m_sceneRenderer->SetToneMapMaterial(m_assetManager->LoadMaterial("engine/materials/tonemap.mat"), kMainTargetWidth, kMainTargetHeight);
         m_sceneRenderer->SetShadowMaterial(m_assetManager->LoadMaterial("engine/materials/shadow.mat"));
         m_sceneRenderer->SetOutlineMaterials(m_assetManager->LoadMaterial("engine/materials/outline_mask.mat"), m_assetManager->LoadMaterial("engine/materials/outline.mat"), kMainTargetWidth, kMainTargetHeight);
     }

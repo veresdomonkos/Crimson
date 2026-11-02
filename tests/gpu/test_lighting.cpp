@@ -18,7 +18,7 @@ namespace
     constexpr uint32_t kSize = 128;
 
     constexpr glm::vec4 kClearColor(0.0f, 0.0f, 0.2f, 1.0f);
-    constexpr glm::ivec3 kClearPixel(0, 0, 51);
+    constexpr glm::ivec3 kClearPixel(0, 0, 124); // the clear color is linear, this is its sRGB encoding
 
     // Facing +Z when seen with x going right and y going up
     constexpr std::string_view kWall = "v -1 -1 0\nv 1 -1 0\nv 1 1 0\nv -1 1 0\nvn 0 0 1\nf 1//1 2//1 3//1 4//1\n";
@@ -51,6 +51,8 @@ namespace
             Assets = std::make_unique<AssetManager>(*Gpu().GPUResources, Project.Path());
             Subject = std::make_unique<SceneRenderer>(*Gpu().GPUResources, *Gpu().Renderer, ShadowAtlasSettings{ .AtlasSize = 1024, .TileSize = 256 });
 
+            Subject->SetToneMapMaterial(Assets->LoadMaterial("engine/materials/tonemap.mat"), kSize, kSize);
+            Subject->SetToneMapping(1.0f, ToneMapper::None); // so that expected colors only need the sRGB encoding
             Subject->SetShadowMaterial(Assets->LoadMaterial("engine/materials/shadow.mat"));
             Subject->SetOutlineMaterials(Assets->LoadMaterial("engine/materials/outline_mask.mat"), Assets->LoadMaterial("engine/materials/outline.mat"), kSize, kSize);
 
@@ -148,7 +150,7 @@ TEST_CASE_METHOD(Fixture, "A surface is lit by what faces it", "[lighting]")
     SECTION("Ambient light is added evenly")
     {
         Lighting.AmbientColor = glm::vec3(0.5f);
-        CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(127, 127, 127), 4));
+        CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(188, 188, 188), 4));
     }
 
     SECTION("A directional light from the front lights it")
@@ -190,6 +192,53 @@ TEST_CASE_METHOD(Fixture, "A surface is lit by what faces it", "[lighting]")
         const Entity light = AddLight({ .Type = LightType::Directional }, glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
         light.GetComponent<NameComponent>().Active = false;
         CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(0, 0, 0)));
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "The scene is tone mapped from linear HDR values", "[lighting]")
+{
+    AddMesh("wall.obj");
+
+    SECTION("Without a tone mapper, only the sRGB encoding is left")
+    {
+        Lighting.AmbientColor = glm::vec3(0.5f);
+        CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(188, 188, 188), 4));
+    }
+
+    SECTION("Without a tone mapper, what is too bright clamps")
+    {
+        Lighting.AmbientColor = glm::vec3(4.0f);
+        CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(255, 255, 255)));
+    }
+
+    SECTION("Light above 1 survives until exposure brings it back")
+    {
+        Lighting.AmbientColor = glm::vec3(5.0f);
+        Subject->SetToneMapping(0.1f, ToneMapper::None);
+        CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(188, 188, 188), 4));
+    }
+
+    SECTION("ACES follows its curve")
+    {
+        // 1 comes out as 0.8038, which encodes to 231
+        Lighting.AmbientColor = glm::vec3(1.0f);
+        Subject->SetToneMapping(1.0f, ToneMapper::Aces);
+        CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(231, 231, 231), 4));
+    }
+
+    SECTION("ACES tells very bright values apart, where clamping can't")
+    {
+        Subject->SetToneMapping(1.0f, ToneMapper::Aces);
+
+        Lighting.AmbientColor = glm::vec3(1.5f);
+        const int bright = Brightness(PixelAt(Render(), glm::vec3(0.0f)));
+
+        Lighting.AmbientColor = glm::vec3(3.0f);
+        const int brighter = Brightness(PixelAt(Render(), glm::vec3(0.0f)));
+
+        CAPTURE(bright, brighter);
+        CHECK(brighter > bright);
+        CHECK(brighter < 255 * 3);
     }
 }
 
@@ -314,6 +363,18 @@ TEST_CASE_METHOD(Fixture, "A selected mesh gets an outline", "[lighting]")
 
         // Around it, and not over it
         CHECK_FALSE(IsNear(PixelAt(image, glm::vec3(0.0f)), glm::ivec3(255, 166, 26), 40));
+
+        // The same color as with no tone mapping, as it is drawn after that
+        Subject->SetToneMapping(0.5f, ToneMapper::Aces);
+        const Image mapped = Render(wall);
+        int exact = 0;
+
+        for (uint32_t row = 0; row < mapped.Height; ++row)
+            for (uint32_t x = 0; x < mapped.Width; ++x)
+                if (IsNear(mapped.At(x, row), glm::ivec3(255, 166, 26), 2))
+                    ++exact;
+
+        CHECK(exact > 20);
     }
 
     SECTION("Goes away when the selection does")

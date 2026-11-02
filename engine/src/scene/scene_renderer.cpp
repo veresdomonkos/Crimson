@@ -43,12 +43,53 @@ namespace crimson
     {
         m_resources.DestroyRenderTarget(m_shadowTarget);
 
+        if (m_hdrTarget)
+            m_resources.DestroyRenderTarget(m_hdrTarget);
+
         if (m_outlineMaskTarget)
-        {
             m_resources.DestroyRenderTarget(m_outlineMaskTarget);
+
+        if (m_screenTriangleVertices)
+        {
             m_resources.DestroyVertexBuffer(m_screenTriangleVertices);
             m_resources.DestroyIndexBuffer(m_screenTriangleIndices);
         }
+    }
+
+    void SceneRenderer::CreateScreenTriangle()
+    {
+        if (m_screenTriangleVertices)
+            return;
+
+        // A triangle that covers the whole screen, the parts outside of it get clipped
+        constexpr std::array<glm::vec3, 3> vertices = { glm::vec3(-1.0f, -1.0f, 0.0f), glm::vec3(3.0f, -1.0f, 0.0f), glm::vec3(-1.0f, 3.0f, 0.0f) };
+        constexpr std::array<uint32_t, 3> indices = { 0, 1, 2 };
+
+        m_screenTriangleVertices = m_resources.CreateVertexBuffer({ .Layout = { ShaderDataType::Float3 }, .Size = sizeof(vertices), .Usage = BufferUsage::Static }, vertices.data());
+        m_screenTriangleIndices = m_resources.CreateIndexBuffer({ .Size = sizeof(indices), .Usage = BufferUsage::Static, .Type = IndexType::UInt32 }, indices.data());
+    }
+
+    void SceneRenderer::SetToneMapMaterial(MaterialHandle material, uint32_t width, uint32_t height)
+    {
+        if (!material)
+            return;
+
+        m_toneMapMaterial = material;
+
+        const RenderTargetInfo info{ .Width = width, .Height = height, .ColorFormats = { TextureFormat::RGBA16F }, .DepthFormat = TextureFormat::Depth32F };
+        m_hdrTarget = m_resources.CreateRenderTarget(info);
+        m_resources.SetMaterialTexture(material, "SceneColor", m_resources.GetColorAttachment(m_hdrTarget, 0));
+
+        CreateScreenTriangle();
+    }
+
+    void SceneRenderer::SetToneMapping(float exposure, ToneMapper mapper)
+    {
+        if (!m_toneMapMaterial)
+            return;
+
+        m_resources.SetMaterialPropertyByName(m_toneMapMaterial, "Exposure", exposure);
+        m_resources.SetMaterialPropertyByName(m_toneMapMaterial, "ToneMapper", static_cast<float>(mapper));
     }
 
     void SceneRenderer::SetOutlineMaterials(MaterialHandle mask, MaterialHandle outline, uint32_t width, uint32_t height)
@@ -63,12 +104,7 @@ namespace crimson
         m_outlineMaskTarget = m_resources.CreateRenderTarget(info);
         m_resources.SetMaterialTexture(outline, "OutlineMask", m_resources.GetColorAttachment(m_outlineMaskTarget, 0));
 
-        // A triangle that covers the whole screen, the parts outside of it get clipped
-        constexpr std::array<glm::vec3, 3> vertices = { glm::vec3(-1.0f, -1.0f, 0.0f), glm::vec3(3.0f, -1.0f, 0.0f), glm::vec3(-1.0f, 3.0f, 0.0f) };
-        constexpr std::array<uint32_t, 3> indices = { 0, 1, 2 };
-
-        m_screenTriangleVertices = m_resources.CreateVertexBuffer({ .Layout = { ShaderDataType::Float3 }, .Size = sizeof(vertices), .Usage = BufferUsage::Static }, vertices.data());
-        m_screenTriangleIndices = m_resources.CreateIndexBuffer({ .Size = sizeof(indices), .Usage = BufferUsage::Static, .Type = IndexType::UInt32 }, indices.data());
+        CreateScreenTriangle();
     }
 
     void SceneRenderer::BuildLighting(Scene& scene, FrameLightingData& lighting)
@@ -147,14 +183,28 @@ namespace crimson
         if (anyOutlined)
             RecordOutlineMask(frame, mainPass);
 
-        RenderPass& pass = frame.BeginRenderPass(mainPass);
+        RenderPassInfo sceneInfo = mainPass;
+        if (m_hdrTarget)
+            sceneInfo.Target = m_hdrTarget;
+
+        RenderPass& pass = frame.BeginRenderPass(sceneInfo);
 
         for (const Drawable& drawable : m_drawables)
             pass.Draw(*drawable.Mesh, drawable.Object);
 
-        // The outline material is transparent, so this draws after everything else in the pass
+        if (m_hdrTarget)
+        {
+            // Depth too, for a target that has it, as this draws in front of whatever is left in there
+            const RenderPassInfo toneMapInfo{ .Target = mainPass.Target, .ClearFlags = ClearFlags::Color | ClearFlags::Depth, .Viewport = mainPass.Viewport };
+            frame.BeginRenderPass(toneMapInfo).Draw(DrawInfo{ m_screenTriangleVertices, m_screenTriangleIndices, m_toneMapMaterial });
+        }
+
+        // In display colors, after the tone mapping, so that it stays the color it was set to
         if (anyOutlined)
-            pass.Draw(DrawInfo{ m_screenTriangleVertices, m_screenTriangleIndices, m_outlineMaterial });
+        {
+            const RenderPassInfo outlineInfo{ .Target = mainPass.Target, .Viewport = mainPass.Viewport };
+            frame.BeginRenderPass(outlineInfo).Draw(DrawInfo{ m_screenTriangleVertices, m_screenTriangleIndices, m_outlineMaterial });
+        }
     }
 
     void SceneRenderer::RecordOutlineMask(FrameContext& frame, const RenderPassInfo& mainPass)

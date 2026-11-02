@@ -239,15 +239,20 @@ TEST_CASE("Outlining adds a mask pass and a full screen draw", "[scene renderer]
     {
         const std::vector<const RenderPass*> passes = fixture.Record(parent);
 
-        REQUIRE(passes.size() == 2);
+        REQUIRE(passes.size() == 3);
 
         const RenderPass& mask = *passes[0];
         REQUIRE(mask.GetDraws().size() == 2);
         CHECK(mask.GetDraws()[0].Material == kMaskMaterial);
 
         const RenderPass& main = *passes[1];
-        REQUIRE(main.GetDraws().size() == 4);
-        CHECK(main.GetDraws().back().Material == kOutlineMaterial);
+        REQUIRE(main.GetDraws().size() == 3);
+        CHECK(main.Info().Target == fixture.MainPass.Target);
+
+        const RenderPass& outline = *passes[2];
+        REQUIRE(outline.GetDraws().size() == 1);
+        CHECK(outline.GetDraws()[0].Material == kOutlineMaterial);
+        CHECK(outline.Info().Target == fixture.MainPass.Target);
     }
 
     SECTION("A selected entity without a mesh of its own, or below it, adds nothing")
@@ -261,6 +266,61 @@ TEST_CASE("Outlining adds a mask pass and a full screen draw", "[scene renderer]
         fixture.World.DestroyEntity(other);
         CHECK(fixture.Record(other).size() == 1);
     }
+}
+
+TEST_CASE("Tone mapping renders the scene to an HDR target first", "[scene renderer]")
+{
+    constexpr MaterialHandle kToneMapMaterial{ 104, 1 };
+
+    Fixture fixture;
+    fixture.Subject.SetToneMapMaterial(kToneMapMaterial, 64, 64);
+    fixture.Subject.SetOutlineMaterials(kMaskMaterial, kOutlineMaterial, 64, 64);
+
+    const Entity entity = AddMesh(fixture.World, "Mesh");
+
+    SECTION("The output only gets the tone mapped picture")
+    {
+        const std::vector<const RenderPass*> passes = fixture.Record();
+        REQUIRE(passes.size() == 2);
+
+        CHECK(passes[0]->Info().Target != fixture.MainPass.Target);
+        CHECK(passes[0]->GetDraws().size() == 1);
+
+        CHECK(passes[1]->Info().Target == fixture.MainPass.Target);
+        REQUIRE(passes[1]->GetDraws().size() == 1);
+        CHECK(passes[1]->GetDraws()[0].Material == kToneMapMaterial);
+    }
+
+    SECTION("The outline goes after it")
+    {
+        const std::vector<const RenderPass*> passes = fixture.Record(entity);
+        REQUIRE(passes.size() == 4);
+
+        CHECK(passes[0]->GetDraws()[0].Material == kMaskMaterial);
+        CHECK(passes[2]->GetDraws()[0].Material == kToneMapMaterial);
+        CHECK(passes[3]->GetDraws()[0].Material == kOutlineMaterial);
+        CHECK(passes[3]->Info().Target == fixture.MainPass.Target);
+    }
+
+    SECTION("Exposure and the tone mapper reach the material")
+    {
+        fixture.Subject.SetToneMapping(2.0f, ToneMapper::None);
+        CHECK(fixture.Gpu.Materials.at(kToneMapMaterial.GetRaw()).Properties.contains("Exposure"));
+        CHECK(fixture.Gpu.Materials.at(kToneMapMaterial.GetRaw()).Properties.contains("ToneMapper"));
+    }
+}
+
+TEST_CASE("A tone map material that failed to load leaves the scene going straight to the target", "[scene renderer]")
+{
+    Fixture fixture;
+    fixture.Subject.SetToneMapMaterial(MaterialHandle::Invalid(), 64, 64);
+    CHECK(fixture.Gpu.LiveRenderTargets == 1);
+
+    AddMesh(fixture.World, "Mesh");
+
+    const std::vector<const RenderPass*> passes = fixture.Record();
+    REQUIRE(passes.size() == 1);
+    CHECK(passes[0]->Info().Target == fixture.MainPass.Target);
 }
 
 TEST_CASE("Without outline materials, selecting draws nothing extra", "[scene renderer]")
