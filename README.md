@@ -29,7 +29,8 @@ flowchart TD
     GB --> Res[GpuResourceManager]
     GB --> Ren[Renderer]
     GB --> Im[ImGuiBackend]
-    App --> AM[AssetManager]
+    App --> Mode[ProjectSessionMode]
+    Mode --> AM[AssetManager]
     AM --> Res
     Ren --> Dev
     Ren --> Res
