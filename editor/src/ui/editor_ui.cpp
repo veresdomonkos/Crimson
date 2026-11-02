@@ -73,6 +73,7 @@ namespace crimson::editor::ui
 
         ImGui::DockBuilderDockWindow("Inspector", right);
         ImGui::DockBuilderDockWindow("Shadow Map", rightBottom);
+        ImGui::DockBuilderDockWindow("Render Settings", rightBottom);
         ImGui::DockBuilderDockWindow("Stats", rightBottom);
 
         ImGui::DockBuilderFinish(dockSpace);

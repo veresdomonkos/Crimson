@@ -41,6 +41,15 @@ namespace crimson
         }
     }
 
+    void ApplyShaderPropertyDefaults(ShaderHandle shader, MaterialHandle material, ImportContext& ctx)
+    {
+        for (const auto& [name, property] : ctx.Gpu.GetShaderInterface(shader).Properties)
+        {
+            if (!property.Default.empty())
+                ApplyProperty(ctx.Gpu, material, name, property.Default);
+        }
+    }
+
     MaterialHandle CreateMaterialFromData(const MaterialData& data, ImportContext& ctx, std::string_view name)
     {
         const ShaderHandle shader = ctx.Assets.LoadShader(data.Shader);
@@ -55,6 +64,14 @@ namespace crimson
         {
             LOG_ERROR("[MaterialImporter] CreateMaterial failed for '{}'", name);
             return MaterialHandle::Invalid();
+        }
+
+        ApplyShaderPropertyDefaults(shader, material, ctx);
+
+        for (const auto& [slot, texture] : ctx.Gpu.GetShaderInterface(shader).Textures)
+        {
+            if (const TextureHandle empty = ctx.Assets.EmptySlotTexture(shader, slot))
+                ctx.Gpu.SetMaterialTexture(material, slot, empty);
         }
 
         ApplyMaterialValues(data, material, ctx);

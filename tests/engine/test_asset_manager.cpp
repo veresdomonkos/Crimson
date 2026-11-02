@@ -364,7 +364,7 @@ TEST_CASE("Materials that can't load fail cleanly", "[assets]")
         AssetManager assets(gpu, temp.Path());
         const MaterialHandle material = assets.LoadMaterial("m.mat");
         REQUIRE(material);
-        CHECK(gpu.Materials.at(material.GetRaw()).Textures.empty());
+        CHECK_FALSE(gpu.Materials.at(material.GetRaw()).Textures.contains("Albedo"));
     }
 }
 
@@ -529,7 +529,7 @@ TEST_CASE("Destroying the manager frees what it loaded, users first", "[assets]"
 
         CHECK(gpu.LiveMaterials == 1);
         CHECK(gpu.LiveShaders == 1);
-        CHECK(gpu.LiveTextures == 1);
+        CHECK(gpu.LiveTextures == 2); // with the flat normal the shader's empty slot uses
     }
 
     CHECK(gpu.NothingAlive());

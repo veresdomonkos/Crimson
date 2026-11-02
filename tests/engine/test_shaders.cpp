@@ -120,3 +120,71 @@ TEST_CASE("Shader includes look in the shader's folder, then in the engine's", "
         CHECK_FALSE(CompileHlslShader("project.hlsl", source, temp.Path()));
     }
 }
+
+TEST_CASE("Annotations are read from the comments after declarations", "[shaders]")
+{
+    const auto annotations = ParseShaderAnnotations(R"(
+// A comment @default 3 on its own line isn't about anything
+cbuffer MaterialBlock : register(b0, space2)
+{
+    float4 Color; // @default 1 0.5 0 1
+    float Roughness; // The surface's roughness. @default 0.5 @range 0 1
+    float Plain; // no tags in here
+    float Broken; // @default soon @range 1
+};
+
+Texture2D NormalMap : register(t1, space2); // @default normal
+)");
+
+    REQUIRE(annotations.contains("Color"));
+    CHECK(annotations.at("Color").Default == std::vector{ 1.0f, 0.5f, 0.0f, 1.0f });
+    CHECK_FALSE(annotations.at("Color").Range);
+
+    REQUIRE(annotations.contains("Roughness"));
+    CHECK(annotations.at("Roughness").Default == std::vector{ 0.5f });
+    CHECK(annotations.at("Roughness").Range == std::pair{ 0.0f, 1.0f });
+
+    REQUIRE(annotations.contains("NormalMap"));
+    CHECK(annotations.at("NormalMap").Texture == ShaderTextureDefault::Normal);
+
+    CHECK_FALSE(annotations.contains("Plain"));
+
+    REQUIRE(annotations.contains("Broken"));
+    CHECK(annotations.at("Broken").Default.empty());
+    CHECK_FALSE(annotations.at("Broken").Range);
+}
+
+TEST_CASE("Annotations reach the shader's interface", "[shaders]")
+{
+    const auto binary = CompileHlslShader("annotated", R"(
+#include "crimson/bindings.hlsli"
+
+cbuffer MaterialBlock : register(b0, space2)
+{
+    float4 Tint; // @default 1 1 1 1
+    float Amount; // @default 0.25 @range 0 2
+    float WrongSize; // @default 1 2
+};
+
+Texture2D Plain : register(t0, space2);
+Texture2D Bumps : register(t1, space2); // @default normal
+
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+
+float4 PSMain() : SV_Target
+{
+    return Tint * Amount * WrongSize + Plain.Sample(LinearWrap, float2(0, 0)) + Bumps.Sample(LinearWrap, float2(0, 0));
+}
+)", {});
+    REQUIRE(binary);
+
+    const auto shader = ReflectShaderInterface(*binary);
+    REQUIRE(shader);
+
+    CHECK(shader->Properties.at("Tint").Default.size() == 4);
+    CHECK(shader->Properties.at("Amount").Default == std::vector{ 0.25f });
+    CHECK(shader->Properties.at("Amount").Range == std::pair{ 0.0f, 2.0f });
+    CHECK(shader->Properties.at("WrongSize").Default.empty());
+    CHECK(shader->Textures.at("Plain").Default == ShaderTextureDefault::White);
+    CHECK(shader->Textures.at("Bumps").Default == ShaderTextureDefault::Normal);
+}

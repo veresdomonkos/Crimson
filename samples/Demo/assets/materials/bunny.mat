@@ -1,0 +1,8 @@
+{
+  "shader": "engine/shaders/main.hlsl",
+  "properties": {
+    "Color": [1.0, 0.78, 0.34, 1.0],
+    "Metallic": 1.0,
+    "Roughness": 0.35
+  }
+}

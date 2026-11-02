@@ -130,6 +130,6 @@ namespace crimson
         if (!vertex || !pixel)
             return std::nullopt;
 
-        return ShaderBinary{ std::move(*vertex), std::move(*pixel) };
+        return ShaderBinary{ std::move(*vertex), std::move(*pixel), ParseShaderAnnotations(source) };
     }
 }

@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <memory>
 #include <utility>
 
@@ -103,6 +104,56 @@ namespace crimson::tests
         return std::abs(color.r - expected.r) <= tolerance
             && std::abs(color.g - expected.g) <= tolerance
             && std::abs(color.b - expected.b) <= tolerance;
+    }
+
+    float LinearBrightness(const glm::ivec4& color)
+    {
+        const auto decode = [](int channel)
+        {
+            const float encoded = static_cast<float>(channel) / 255.0f;
+            return encoded <= 0.04045f ? encoded / 12.92f : std::pow((encoded + 0.055f) / 1.055f, 2.4f);
+        };
+
+        return (decode(color.r) + decode(color.g) + decode(color.b)) / 3.0f;
+    }
+
+    std::string MakeBmp(uint32_t width, uint32_t height, const std::vector<Rgb>& pixels)
+    {
+        const auto append = [](std::string& out, uint32_t value, int bytes)
+        {
+            for (int i = 0; i < bytes; ++i)
+                out.push_back(static_cast<char>((value >> (i * 8)) & 0xFF));
+        };
+
+        const uint32_t rowSize = (width * 3 + 3) / 4 * 4;
+
+        std::string out = "BM";
+        append(out, 54 + rowSize * height, 4);
+        append(out, 0, 4);
+        append(out, 54, 4);
+        append(out, 40, 4);
+        append(out, width, 4);
+        append(out, height, 4);
+        append(out, 1, 2);
+        append(out, 24, 2);
+        append(out, 0, 4);
+        append(out, rowSize * height, 4);
+        append(out, 0, 16);
+
+        for (uint32_t row = height; row-- > 0;)
+        {
+            for (uint32_t x = 0; x < width; ++x)
+            {
+                const Rgb& pixel = pixels[row * width + x];
+                out.push_back(static_cast<char>(pixel.B));
+                out.push_back(static_cast<char>(pixel.G));
+                out.push_back(static_cast<char>(pixel.R));
+            }
+
+            out.append(rowSize - width * 3, '\0');
+        }
+
+        return out;
     }
 
     OffscreenTarget::OffscreenTarget(uint32_t width, uint32_t height)

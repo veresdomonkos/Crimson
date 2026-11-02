@@ -13,6 +13,7 @@ add_executable(CrimsonTests
         engine/test_shaders.cpp
         engine/test_shadow_atlas.cpp
 
+        editor/test_linear_color.cpp
         editor/test_recent_projects.cpp
         editor/test_asset_edits.cpp
 )

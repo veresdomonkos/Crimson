@@ -56,50 +56,8 @@ float4 PSMain(VertexOutput input) : SV_Target
 }
 )";
 
-    struct Rgb
-    {
-        unsigned char R = 0, G = 0, B = 0;
-    };
-
-    void AppendLittleEndian(std::string& out, uint32_t value, int bytes)
-    {
-        for (int i = 0; i < bytes; ++i)
-            out.push_back(static_cast<char>((value >> (i * 8)) & 0xFF));
-    }
-
-    // An uncompressed BMP. The pixels go from the top row down, the file stores them the other way around.
-    std::string MakeBmp(uint32_t width, uint32_t height, const std::vector<Rgb>& pixels)
-    {
-        const uint32_t rowSize = (width * 3 + 3) / 4 * 4;
-
-        std::string out = "BM";
-        AppendLittleEndian(out, 54 + rowSize * height, 4);
-        AppendLittleEndian(out, 0, 4);
-        AppendLittleEndian(out, 54, 4);
-        AppendLittleEndian(out, 40, 4);
-        AppendLittleEndian(out, width, 4);
-        AppendLittleEndian(out, height, 4);
-        AppendLittleEndian(out, 1, 2);
-        AppendLittleEndian(out, 24, 2);
-        AppendLittleEndian(out, 0, 4);
-        AppendLittleEndian(out, rowSize * height, 4);
-        AppendLittleEndian(out, 0, 16);
-
-        for (uint32_t row = height; row-- > 0;)
-        {
-            for (uint32_t x = 0; x < width; ++x)
-            {
-                const Rgb& pixel = pixels[row * width + x];
-                out.push_back(static_cast<char>(pixel.B));
-                out.push_back(static_cast<char>(pixel.G));
-                out.push_back(static_cast<char>(pixel.R));
-            }
-
-            out.append(rowSize - width * 3, '\0');
-        }
-
-        return out;
-    }
+    // A lit material also reflects a little ambient light, so even pure red has some green and blue
+    constexpr int kLitTolerance = 12;
 
     // Every other pixel black and white, so it averages to gray when it is small enough
     std::string MakeCheckerboard(uint32_t size)
@@ -143,7 +101,8 @@ float4 PSMain(VertexOutput input) : SV_Target
             REQUIRE(mesh);
             REQUIRE(handle);
 
-            const RenderPassInfo pass{ .Target = target.Handle(), .ClearFlags = ClearFlags::Color | ClearFlags::Depth };
+            // In front of the quad, which faces +Z, for the lighting to see it from the front
+            const RenderPassInfo pass{ .Target = target.Handle(), .ClearFlags = ClearFlags::Color | ClearFlags::Depth, .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) };
 
             RenderOneFrame([&](FrameContext& frame) { frame.BeginRenderPass(pass).Draw(*mesh, 0, handle); }, Lighting);
 
@@ -157,7 +116,7 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
     const AssetID id = assets.FindId("mine.mat");
 
-    REQUIRE(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(255, 0, 0)));
+    REQUIRE(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(255, 0, 0), kLitTolerance));
 
     MaterialData data = *assets.GetMaterialData(id);
 
@@ -166,7 +125,7 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
         data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
 
         REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
-        CHECK(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(0, 255, 0)));
+        CHECK(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(0, 255, 0), kLitTolerance));
     }
 
     SECTION("The settings: a mesh facing away disappears when back faces are culled")
@@ -180,7 +139,7 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
             REQUIRE(mesh);
 
             const MaterialHandle handle = assets.LoadMaterial(id);
-            const RenderPassInfo pass{ .Target = Target.Handle(), .ClearFlags = ClearFlags::Color | ClearFlags::Depth };
+            const RenderPassInfo pass{ .Target = Target.Handle(), .ClearFlags = ClearFlags::Color | ClearFlags::Depth, .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) };
 
             RenderOneFrame([&](FrameContext& frame) { frame.BeginRenderPass(pass).Draw(*mesh, 0, handle); }, Lighting);
 
@@ -197,7 +156,7 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
         REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
         const glm::ivec4 frontCulling = drawAway();
 
-        CHECK(IsNear(noCulling, glm::ivec3(255, 0, 0)));
+        CHECK(IsNear(noCulling, glm::ivec3(255, 0, 0), kLitTolerance));
 
         // Which of the two hides it depends on the winding, but it can only be one of them
         CHECK(IsNear(backCulling, glm::ivec3(0, 0, 0)) != IsNear(frontCulling, glm::ivec3(0, 0, 0)));
@@ -216,19 +175,19 @@ float4 PSMain() : SV_Target { return float4(0.0, 1.0, 0.0, 1.0); }
         data.Properties.clear();
 
         REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Replaced);
-        CHECK(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(0, 255, 0)));
+        CHECK(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(0, 255, 0), kLitTolerance));
     }
 
     SECTION("Reverting to the file brings it back")
     {
         data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
         REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
-        REQUIRE(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(0, 255, 0)));
+        REQUIRE(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(0, 255, 0), kLitTolerance));
 
         const auto saved = assets.ReadMaterialFile(id);
         REQUIRE(saved);
         REQUIRE(assets.ApplyMaterial(id, *saved) == MaterialApplyResult::Updated);
-        CHECK(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(255, 0, 0)));
+        CHECK(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(255, 0, 0), kLitTolerance));
     }
 }
 
@@ -240,27 +199,27 @@ TEST_CASE_METHOD(Fixture, "A material's color map multiplies its color", "[asset
     AssetManager assets(*Gpu().GPUResources, Project.Path());
     const AssetID id = assets.FindId("white.mat");
 
-    REQUIRE(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 255)));
+    REQUIRE(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 255), kLitTolerance));
 
     MaterialData data = *assets.GetMaterialData(id);
     data.Textures["ColorMap"] = assets.FindId("blue.bmp");
     REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
 
-    CHECK(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(0, 0, 255)));
+    CHECK(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(0, 0, 255), kLitTolerance));
 
     SECTION("Clearing it goes back to white")
     {
         data.Textures.clear();
         REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
 
-        CHECK(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 255)));
+        CHECK(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 255), kLitTolerance));
     }
 
     SECTION("Deleting the texture goes back to white too")
     {
         REQUIRE(assets.Delete(assets.FindId("blue.bmp")));
 
-        CHECK(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 255)));
+        CHECK(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 255), kLitTolerance));
     }
 }
 

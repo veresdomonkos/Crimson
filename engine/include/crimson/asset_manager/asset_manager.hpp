@@ -68,6 +68,9 @@ namespace crimson
         [[nodiscard]] TextureHandle CreateTexturePreview(AssetID id) const;
         void DestroyTexturePreview(TextureHandle preview) const { m_gpuResources.DestroyTexture(preview); }
 
+        // What a material's texture slot uses when nothing is assigned to it. Invalid means the backend's white texture.
+        [[nodiscard]] TextureHandle EmptySlotTexture(ShaderHandle shader, const std::string& slot);
+
         // Looks at the folder again: new files appear, files moved along with their meta keep their id,
         // and the assets whose files are gone are removed. Returns the ids of those.
         std::vector<AssetID> Refresh();
@@ -119,5 +122,7 @@ namespace crimson
 
         std::unordered_map<AssetID, Entry> m_assets;
         std::unordered_map<std::string, AssetID> m_idsByPath;
+
+        TextureHandle m_flatNormal; // made when a shader first needs it
     };
 }

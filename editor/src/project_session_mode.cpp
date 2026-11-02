@@ -12,6 +12,7 @@
 #include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 #include "crimson_editor/ui/inspector_panel.hpp"
+#include "crimson_editor/ui/render_settings_panel.hpp"
 #include "crimson_editor/ui/scene_viewport_panel.hpp"
 #include "crimson_editor/ui/stats_panel.hpp"
 #include "crimson_editor/ui/viewport_panel.hpp"
@@ -111,7 +112,7 @@ namespace crimson::editor
             pyramid.GetComponent<TransformComponent>().Position = glm::vec3(-1.5f, kFloorHeight, 0.0f);
 
         // The bunny's file is in its own units and not centered, so fit it to the floor
-        if (const Entity bunny = CreateMeshEntity("Bunny", "meshes/stanford-bunny.obj", "materials/pyramid.mat"))
+        if (const Entity bunny = CreateMeshEntity("Bunny", "meshes/stanford-bunny.obj", "materials/bunny.mat"))
         {
             const MeshBounds& bounds = bunny.GetComponent<MeshRendererComponent>().Resolved.Bounds;
             const float bunnyScale = kBunnyHeight / std::max(bounds.Max.y - bounds.Min.y, 0.0001f);
@@ -124,16 +125,16 @@ namespace crimson::editor
 
         const Entity lights = m_scene.CreateEntity("Lights");
 
-        addLight("Sun", lights, { .Type = LightType::Directional, .Color = glm::vec3(1.0f), .Intensity = 0.5f, .CastsShadow = true },
+        addLight("Sun", lights, { .Type = LightType::Directional, .Color = glm::vec3(1.0f), .Intensity = 2.5f, .CastsShadow = true },
             glm::vec3(0.0f, 8.0f, 0.0f), glm::vec3(-0.5f, -1.0f, -0.3f));
 
-        addLight("Orange Point", lights, { .Type = LightType::Point, .Color = glm::vec3(1.0f, 0.5f, 0.2f), .Intensity = 1.5f, .Range = 8.0f, .CastsShadow = true },
+        addLight("Orange Point", lights, { .Type = LightType::Point, .Color = glm::vec3(1.0f, 0.5f, 0.2f), .Intensity = 30.0f, .Range = 12.0f, .CastsShadow = true },
             glm::vec3(2.0f, 3.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 
-        addLight("Red Point", lights, { .Type = LightType::Point, .Color = glm::vec3(0.8f, 0.1f, 0.2f), .Intensity = 1.5f, .Range = 8.0f },
+        addLight("Red Point", lights, { .Type = LightType::Point, .Color = glm::vec3(0.8f, 0.1f, 0.2f), .Intensity = 30.0f, .Range = 12.0f },
             glm::vec3(-2.0f, 3.0f, 0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
 
-        addLight("Blue Spot", lights, { .Type = LightType::Spot, .Color = glm::vec3(0.2f, 0.5f, 1.0f), .Intensity = 2.5f, .Range = 12.0f, .InnerConeDegrees = 20.0f, .OuterConeDegrees = 35.0f, .CastsShadow = true },
+        addLight("Blue Spot", lights, { .Type = LightType::Spot, .Color = glm::vec3(0.2f, 0.5f, 1.0f), .Intensity = 60.0f, .Range = 16.0f, .InnerConeDegrees = 20.0f, .OuterConeDegrees = 35.0f, .CastsShadow = true },
             glm::vec3(0.0f, 4.0f, 3.0f), glm::vec3(0.0f, -1.0f, -0.8f));
 
         m_lighting.AmbientColor = glm::vec3(0.05f);
@@ -153,6 +154,7 @@ namespace crimson::editor
         m_ui->AddPanel<ui::ConsolePanel>();
         m_ui->AddPanel<ui::HierarchyPanel>(m_context);
         m_ui->AddPanel<ui::InspectorPanel>(m_context);
+        m_ui->AddPanel<ui::RenderSettingsPanel>(m_context, *m_sceneRenderer, m_lighting);
         m_ui->AddPanel<ui::StatsPanel>(m_frameStats, m_services.RendererType);
     }
 
@@ -294,7 +296,7 @@ namespace crimson::editor
         RenderPassInfo info{
             .Target = m_mainTarget,
             .ClearFlags = ClearFlags::Color | ClearFlags::Depth,
-            .ClearColor = glm::vec4(0.1f, 0.1f, 0.15f, 1.0f),
+            .ClearColor = glm::vec4(0.02f, 0.02f, 0.035f, 1.0f),
             .ViewProj = m_camera.GetViewProj(),
             .CameraPosition = m_camera.GetPosition()
         };

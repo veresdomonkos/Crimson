@@ -1,0 +1,39 @@
+#include "crimson_editor/ui/render_settings_panel.hpp"
+
+#include <array>
+
+#include <imgui.h>
+
+#include "crimson_editor/ui/linear_color.hpp"
+
+namespace crimson::editor::ui
+{
+    void RenderSettingsPanel::OnImGui()
+    {
+        ImGui::SetNextWindowSize(ImVec2(260.0f, 0.0f), ImGuiCond_FirstUseEver);
+        ImGui::Begin("Render Settings");
+
+        constexpr std::array kToneMapperNames = { "ACES", "None" };
+
+        bool changed = ImGui::SliderFloat("Exposure", &m_exposure, 0.05f, 16.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+
+        int toneMapper = static_cast<int>(m_toneMapper);
+        if (ImGui::Combo("Tone Mapper", &toneMapper, kToneMapperNames.data(), static_cast<int>(kToneMapperNames.size())))
+        {
+            m_toneMapper = static_cast<ToneMapper>(toneMapper);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            m_context.Deferred.emplace_back([this, exposure = m_exposure, mapper = m_toneMapper]
+            {
+                m_renderer.SetToneMapping(exposure, mapper);
+            });
+        }
+
+        LinearColorEdit("Ambient", &m_lighting.AmbientColor.x, 3);
+
+        ImGui::End();
+    }
+}

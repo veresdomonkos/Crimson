@@ -82,6 +82,27 @@ namespace crimson
             for (auto& [id, entry] : m_assets)
                 if (entry.Info.Type == type)
                     Unload(entry);
+
+        if (m_flatNormal)
+            m_gpuResources.DestroyTexture(m_flatNormal);
+    }
+
+    TextureHandle AssetManager::EmptySlotTexture(ShaderHandle shader, const std::string& slot)
+    {
+        const auto& textures = m_gpuResources.GetShaderInterface(shader).Textures;
+        const auto it = textures.find(slot);
+
+        if (it == textures.end() || it->second.Default != ShaderTextureDefault::Normal)
+            return TextureHandle::Invalid();
+
+        if (!m_flatNormal)
+        {
+            // Pointing straight out of the surface
+            constexpr std::array<unsigned char, 4> pixel = { 128, 128, 255, 255 };
+            m_flatNormal = m_gpuResources.CreateTexture({ .Width = 1, .Height = 1, .Format = TextureFormat::RGBA8, .Usage = TextureUsage::Sampled }, pixel.data());
+        }
+
+        return m_flatNormal;
     }
 
     void AssetManager::AddImporter(std::unique_ptr<AssetImporter> importer)
@@ -415,7 +436,7 @@ namespace crimson
             {
                 if (isRemoved(texture))
                 {
-                    m_gpuResources.SetMaterialTexture(material, slot, TextureHandle::Invalid());
+                    m_gpuResources.SetMaterialTexture(material, slot, EmptySlotTexture(LoadShader(data->Shader), slot));
                     updated.Textures.erase(slot);
                 }
             }
@@ -627,6 +648,10 @@ namespace crimson
         }
 
         // Only what changed: replacing a texture has to wait for the GPU, and a dragged color slider gets here every frame
+        // The defaults first, for a property that is no longer in the data to go back to its default
+        const ShaderHandle shader = LoadShader(data.Shader);
+        ApplyShaderPropertyDefaults(shader, current, ctx);
+
         MaterialData values = data;
         values.Textures.clear();
         ApplyMaterialValues(values, current, ctx);
@@ -644,7 +669,7 @@ namespace crimson
         for (const auto& [slot, texture] : currentData->Textures)
         {
             if (!data.Textures.contains(slot))
-                m_gpuResources.SetMaterialTexture(current, slot, TextureHandle::Invalid());
+                m_gpuResources.SetMaterialTexture(current, slot, EmptySlotTexture(shader, slot));
         }
 
         entry.Material = data;
