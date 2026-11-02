@@ -72,6 +72,7 @@ set(ENGINE_IMPLEMENTATION
         src/platform/opengl/spirv_to_glsl.hpp
         src/platform/opengl/spirv_to_glsl.cpp
         src/shader/hlsl_compiler.cpp
+        src/shader/shader_annotations.cpp
         src/shader/shader_reflection.hpp
         src/shader/shader_reflection.cpp
         include/crimson/renderer/texture.hpp

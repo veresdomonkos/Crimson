@@ -57,6 +57,7 @@ namespace crimson::opengl::utils
         switch (format)
         {
             case TextureFormat::RGBA8:           return GL_RGBA8;
+            case TextureFormat::RGBA8Srgb:       return GL_SRGB8_ALPHA8;
             case TextureFormat::RGB8:            return GL_RGB8;
             case TextureFormat::R8:              return GL_R8;
             case TextureFormat::RGBA16F:         return GL_RGBA16F;

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -222,7 +223,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
         CHECK_FALSE(Gpu.Materials.at(texturedHandle.GetRaw()).Textures.contains("ColorMap"));
         CHECK(assets.LoadMaterial(textured) == texturedHandle);
         CHECK(assets.GetMaterialData(textured)->Textures.empty());
-        CHECK(Gpu.LiveTextures == 0);
+        CHECK(Gpu.LiveTextures == 1); // only the flat normal the shader's empty slot uses
     }
 
     SECTION("A shader: the material is unloaded before it")
@@ -455,7 +456,7 @@ TEST_CASE_METHOD(Fixture, "Reimporting a texture", "[asset editing]")
 
         const TextureHandle after = assets.LoadTexture(id);
         CHECK(after != before);
-        CHECK(Gpu.LiveTextures == 1);
+        CHECK(Gpu.LiveTextures == 2); // with the flat normal the shader's empty slot uses
         CHECK(Gpu.Materials.at(material.GetRaw()).Textures.at("ColorMap") == after);
     }
 
@@ -484,4 +485,82 @@ TEST_CASE_METHOD(Fixture, "Mipmaps follow the setting", "[asset editing]")
     CHECK(assets.GetInfo(id)->Settings.at("generateMips") == true);
     REQUIRE(assets.LoadTexture(id));
     CHECK(Gpu.LastTextureInfo.MipLevels == 1);
+}
+
+TEST_CASE("A material starts from what its shader declares", "[asset editing]")
+{
+    const TempFolder temp;
+    temp.Write("image.bmp", MakeImage());
+    temp.Write("annotated.hlsl", R"(
+#include "crimson/bindings.hlsli"
+
+cbuffer MaterialBlock : register(b0, space2)
+{
+    float Amount; // @default 0.25
+    float Other; // @default 0.75
+};
+
+Texture2D Bumps : register(t0, space2); // @default normal
+
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain() : SV_Target { return Amount * Other * Bumps.Sample(LinearWrap, float2(0, 0)); }
+)");
+    temp.Write("mine.mat", R"({ "shader": "annotated.hlsl", "properties": { "Other": 0.5 } })");
+
+    FakeGpuResourceManager gpu;
+
+    {
+        AssetManager assets(gpu, temp.Path());
+        const AssetID id = assets.FindId("mine.mat");
+        const MaterialHandle handle = assets.LoadMaterial(id);
+        REQUIRE(handle);
+
+        const auto propertyOf = [&](const char* name)
+        {
+            const std::vector<std::byte>& bytes = gpu.Materials.at(handle.GetRaw()).Properties.at(name);
+            REQUIRE(bytes.size() == sizeof(float));
+
+            float value = 0.0f;
+            std::memcpy(&value, bytes.data(), sizeof(float));
+            return value;
+        };
+
+        CHECK(propertyOf("Amount") == 0.25f);
+        CHECK(propertyOf("Other") == 0.5f);
+
+        const TextureHandle flatNormal = gpu.Materials.at(handle.GetRaw()).Textures.at("Bumps");
+        CHECK(flatNormal);
+
+        SECTION("Assigning a texture and clearing it again goes back to the flat normal")
+        {
+            MaterialData data = *assets.GetMaterialData(id);
+            data.Textures["Bumps"] = assets.FindId("image.bmp");
+            REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(gpu.Materials.at(handle.GetRaw()).Textures.at("Bumps") != flatNormal);
+
+            data.Textures.clear();
+            REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(gpu.Materials.at(handle.GetRaw()).Textures.at("Bumps") == flatNormal);
+        }
+
+        SECTION("Removing a property from the data goes back to its default")
+        {
+            MaterialData data = *assets.GetMaterialData(id);
+            data.Properties.erase("Other");
+            REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(propertyOf("Other") == 0.75f);
+        }
+
+        SECTION("Deleting the assigned texture goes back to the flat normal too")
+        {
+            MaterialData data = *assets.GetMaterialData(id);
+            data.Textures["Bumps"] = assets.FindId("image.bmp");
+            REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+
+            REQUIRE(assets.Delete(assets.FindId("image.bmp")));
+            CHECK(gpu.Materials.at(handle.GetRaw()).Textures.at("Bumps") == flatNormal);
+        }
+    }
+
+    CHECK(gpu.NothingAlive());
 }

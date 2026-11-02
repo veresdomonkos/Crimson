@@ -14,9 +14,17 @@
 #include <crimson/asset_manager/importers/texture_importer.hpp>
 
 #include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/linear_color.hpp"
 
 namespace crimson::editor::ui
 {
+    // Whether a texture slot's name says it holds values rather than colors
+    static bool HoldsData(const std::string& slot)
+    {
+        constexpr std::array kDataWords = { "Normal", "Metallic", "Roughness", "Occlusion" };
+        return std::ranges::any_of(kDataWords, [&](const char* word) { return slot.find(word) != std::string::npos; });
+    }
+
     template <typename T>
     static std::vector<std::pair<std::string, T>> SortedByName(const std::unordered_map<std::string, T>& map)
     {
@@ -215,17 +223,22 @@ namespace crimson::editor::ui
 
             if (const auto it = data.Properties.find(name); it != data.Properties.end())
                 std::copy_n(it->second.begin(), std::min(count, it->second.size()), values.begin());
+            else
+                std::ranges::copy(property.Default, values.begin());
 
             const bool isColor = name.find("Color") != std::string::npos;
             bool edited = false;
 
             switch (count)
             {
-                case 1: edited = ImGui::DragFloat(name.c_str(), values.data(), 0.01f); break;
+                case 1:
+                    edited = property.Range
+                        ? ImGui::SliderFloat(name.c_str(), values.data(), property.Range->first, property.Range->second)
+                        : ImGui::DragFloat(name.c_str(), values.data(), 0.01f);
+                    break;
                 case 2: edited = ImGui::DragFloat2(name.c_str(), values.data(), 0.01f); break;
-                // Only the swatch, with the numbers in its popup, as four fields don't fit a narrow panel
-                case 3: edited = isColor ? ImGui::ColorEdit3(name.c_str(), values.data(), ImGuiColorEditFlags_NoInputs) : ImGui::DragFloat3(name.c_str(), values.data(), 0.01f); break;
-                case 4: edited = isColor ? ImGui::ColorEdit4(name.c_str(), values.data(), ImGuiColorEditFlags_NoInputs) : ImGui::DragFloat4(name.c_str(), values.data(), 0.01f); break;
+                case 3: edited = isColor ? LinearColorEdit(name.c_str(), values.data(), 3) : ImGui::DragFloat3(name.c_str(), values.data(), 0.01f); break;
+                case 4: edited = isColor ? LinearColorEdit(name.c_str(), values.data(), 4) : ImGui::DragFloat4(name.c_str(), values.data(), 0.01f); break;
                 default: break;
             }
 
@@ -291,6 +304,9 @@ namespace crimson::editor::ui
                 changed = true;
             }
 
+            if (currentInfo && HoldsData(name) && currentInfo->Settings.value("srgb", true))
+                ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "This holds data, turn sRGB off on the texture");
+
             ImGui::PopID();
         }
     }
@@ -338,6 +354,12 @@ namespace crimson::editor::ui
 
         ImGui::SeparatorText("Import Settings");
         ImGui::BeginDisabled(info.ReadOnly);
+
+        bool srgb = m_textureSettings.value("srgb", true);
+        if (ImGui::Checkbox("sRGB", &srgb))
+            m_textureSettings["srgb"] = srgb;
+
+        ImGui::SetItemTooltip("On for colors. Off for data, like normal, roughness and occlusion maps.");
 
         bool generateMips = m_textureSettings.value("generateMips", false);
         if (ImGui::Checkbox("Generate Mips", &generateMips))

@@ -25,6 +25,10 @@ add_library(EditorCore STATIC
         include/crimson_editor/frame_stats.hpp
         include/crimson_editor/ui/stats_panel.hpp
         src/ui/stats_panel.cpp
+        include/crimson_editor/ui/render_settings_panel.hpp
+        src/ui/render_settings_panel.cpp
+        include/crimson_editor/ui/linear_color.hpp
+        src/ui/linear_color.cpp
         include/crimson_editor/ui/editor_ui.hpp
         src/ui/editor_ui.cpp
         include/crimson_editor/ui/editor_theme.hpp

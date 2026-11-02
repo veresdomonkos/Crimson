@@ -46,6 +46,18 @@ namespace crimson::tests
 
     [[nodiscard]] bool IsNear(const glm::ivec4& color, const glm::ivec3& expected, int tolerance = 3);
 
+    // The average of a pixel's channels as linear light, for comparing how much light there is
+    // in an sRGB encoded image, where twice the value isn't twice the light
+    [[nodiscard]] float LinearBrightness(const glm::ivec4& color);
+
+    struct Rgb
+    {
+        unsigned char R = 0, G = 0, B = 0;
+    };
+
+    // An uncompressed BMP. The pixels go from the top row down, the file stores them the other way around.
+    [[nodiscard]] std::string MakeBmp(uint32_t width, uint32_t height, const std::vector<Rgb>& pixels);
+
     // A color and depth target to render into and read back
     class OffscreenTarget
     {

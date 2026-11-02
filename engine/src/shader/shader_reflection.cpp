@@ -180,6 +180,26 @@ namespace crimson
         if (!ReflectStage(binary.Vertex, true, result) || !ReflectStage(binary.Pixel, false, result))
             return std::nullopt;
 
+        for (const auto& [name, annotation] : binary.Annotations)
+        {
+            if (const auto texture = result.Textures.find(name); texture != result.Textures.end())
+            {
+                texture->second.Default = annotation.Texture;
+                continue;
+            }
+
+            const auto property = result.Properties.find(name);
+            if (property == result.Properties.end())
+                continue;
+
+            property->second.Range = annotation.Range;
+
+            if (annotation.Default.size() * sizeof(float) == property->second.Size)
+                property->second.Default = annotation.Default;
+            else if (!annotation.Default.empty())
+                LOG_WARN("[Shader] The default of '{}' has {} values, which doesn't fit its {} bytes", name, annotation.Default.size(), property->second.Size);
+        }
+
         return result;
     }
 }

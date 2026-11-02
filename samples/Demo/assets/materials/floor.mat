@@ -1,6 +1,7 @@
 {
   "shader": "engine/shaders/main.hlsl",
   "properties": {
-    "Color": [0.7, 0.7, 0.7, 1.0]
+    "Color": [0.4, 0.4, 0.4, 1.0],
+    "Roughness": 0.8
   }
 }

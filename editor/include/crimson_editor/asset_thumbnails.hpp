@@ -27,6 +27,8 @@ namespace crimson::editor
             ImTextureID Id = 0;
         };
 
+        void Destroy(const Thumbnail& thumbnail);
+
         AssetManager& m_assets;
         ImGuiBackend& m_imgui;
         std::unordered_map<AssetID, Thumbnail> m_thumbnails;

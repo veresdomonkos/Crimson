@@ -10,6 +10,7 @@
 #include <crimson/scene/scene_renderer.hpp>
 
 #include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/linear_color.hpp"
 
 namespace crimson::editor::ui
 {
@@ -155,7 +156,7 @@ namespace crimson::editor::ui
             if (ImGui::Combo("Type", &type, kTypeNames.data(), static_cast<int>(kTypeNames.size())))
                 light->Type = static_cast<LightType>(type);
 
-            ImGui::ColorEdit3("Color", &light->Color.x);
+            LinearColorEdit("Color", &light->Color.x, 3);
             ImGui::DragFloat("Intensity", &light->Intensity, 0.01f, 0.0f, 1000.0f);
 
             if (light->Type != LightType::Directional)

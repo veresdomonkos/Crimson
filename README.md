@@ -14,6 +14,7 @@ Crimson is a small, data-driven real-time rendering engine written in modern C++
 - **HLSL shaders** - compiled in-process by glslang, which is linked statically, to SPIR-V. Vulkan uses the SPIR-V directly and SPIRV-Cross translates it to GLSL for OpenGL.
 - **Standard blocks and reflection** - frame, view and material resources are grouped by how often they change. Material properties and textures are discovered with SPIRV-Reflect, and the standard blocks are checked against the engine's structs.
 - **Lighting** - any number of directional, point and spot lights in a GPU buffer (glTF `KHR_lights_punctual`-style). Any light can cast shadows through a shared shadow atlas with PCF filtering.
+- **HDR and PBR** - the scene renders in linear light to a floating-point target and is tone mapped for display, with metallic-roughness materials using the same slots as glTF.
 - **Per-object transforms** - each draw indexes a per-frame buffer of object transforms.
 - **Entity component system** - scenes are built on [EnTT](https://github.com/skypjack/entt) behind `Scene` and `Entity` wrappers, with a parent/child hierarchy.
 - **Projects** - a project manager to create and open projects, each with its own `assets/` folder.
@@ -101,13 +102,49 @@ A material shader declares only its own resources:
 ```hlsl
 #include "crimson/lighting.hlsli"
 
-cbuffer MaterialBlock : register(b0, space2) { float4 Color; };
-Texture2D Albedo : register(t0, space2);
+cbuffer MaterialBlock : register(b0, space2)
+{
+    float4 Color; // @default 1 1 1 1
+    float Roughness; // @default 0.5 @range 0 1
+};
 
-// VSMain uses GetObjectData() and ViewProj, PSMain uses ComputeLighting() and Albedo.Sample(LinearWrap, uv)
+Texture2D Albedo : register(t0, space2);
+Texture2D Bumps : register(t1, space2); // @default normal
+
+// VSMain uses GetObjectData() and ViewProj, PSMain fills in a Surface for ComputeLighting() and uses Albedo.Sample(LinearWrap, uv)
 ```
 
 Materials share the samplers in `space0` and can't declare their own. A shader fails to import, with an error in the console, if it uses an unknown space or a standard resource whose type or size doesn't match the engine. Vertex inputs take their locations from their order in the input struct.
+
+The comments are annotations, and a shader declares what its materials start with this way. `@default` sets the value of a property that a material doesn't set, and `@range` gives it a slider in the Inspector. A property without a default starts at zero. An empty texture slot samples white, or a flat normal with `@default normal`.
+
+### Rendering
+
+`SceneRenderer` renders in linear light. With `SetToneMapMaterial` set, a frame goes through these passes:
+
+1. Shadows
+2. Outline mask, if something is selected
+3. The scene, into its own RGBA16F target with a depth buffer. Values can go well above 1.
+4. Tone mapping, into the target the caller gave it: exposure, then ACES (or only clamping), then the sRGB encoding
+5. Outline, in display colors, so it stays the color it was set to
+
+`engine/shaders/main.hlsl` is the default lit shader: metallic-roughness PBR with a Cook-Torrance GGX specular and a Lambert diffuse.
+
+| Property | Default | |
+|:---------|:--------|:--|
+| `Color` | white | linear, multiplied with `ColorMap` |
+| `Metallic`, `Roughness` | 0, 0.5 | multiplied with `MetallicRoughnessMap` (blue and green), as in glTF |
+| `NormalStrength` | 1 | scales `NormalMap`, with green pointing up in the image (the OpenGL convention, which glTF uses too) |
+| `OcclusionStrength` | 1 | how much `OcclusionMap` (red) darkens ambient light |
+| `EmissiveColor`, `EmissiveStrength` | black, 1 | linear, multiplied with `EmissiveMap` |
+
+**Colors in `.mat` files and lights are linear.** The Inspector's color swatches convert them to show what they look like on screen.
+
+**A texture's `srgb` setting** is on by default, which is right for `ColorMap` and `EmissiveMap`. Turn it off for maps that hold data (normal, metallic-roughness, occlusion), and the Inspector warns when one of those slots has a texture with it on.
+
+**Light intensities are physical quantities**, as in glTF: illuminance for directional lights and candela for point and spot lights, falling off with the square of the distance and reaching zero at `Range`. There is no image-based lighting yet, so `AmbientColor` counts as a uniform environment. Metals reflect that, so they look flat until there is an environment map.
+
+Normal maps don't need tangents in the mesh, as the shader works out the directions from how position and UV change between pixels. A mesh without UVs stays flat.
 
 ### Shadows
 
@@ -136,7 +173,7 @@ scene.SetParent(light, {}); // back to the top level, it stays where it is in th
 
 Every entity has the first three, and the others are optional. Meshes and renderers share one component because there is only one kind of renderer so far. It can be split when something else needs a mesh, such as skinned meshes.
 
-`SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLightingData`, gives every active renderer an object transform, and records the shadow passes and the main pass. It can outline an entity and its children: their meshes are drawn into a mask, and a pass over the whole screen colors the pixels next to it. The color comes from `engine/materials/outline.mat`.
+`SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLightingData`, gives every active renderer an object transform, and records the passes under [Rendering](#rendering). It can outline an entity and its children: their meshes are drawn into a mask, and a pass over the whole screen colors the pixels next to it. The color comes from `engine/materials/outline.mat`.
 
 ### Asset pipeline
 
@@ -173,8 +210,9 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 - **Inspector** - shows the selected entity or asset, as only one thing is selected at a time.
   - **Entity:** name, active flag and components, with mesh and material pickers. **Add Component** adds a component, right-clicking a component's header removes it.
   - **Material:** shader, render mode, culling, and whatever properties and textures its shader declares. Edits show right away and only reach the file on **Save**, or go away on **Revert**. **File > Save All** or `Ctrl+S` saves everything, and closing with unsaved changes asks first.
-  - **Texture:** preview, size, and import settings for mipmaps and flipping.
+  - **Texture:** preview, size, and import settings for sRGB, mipmaps and flipping.
   - **Mesh and shader:** read-only details.
+- **Render Settings** - exposure, tone mapper and ambient light. These last until the project closes, as scenes can't be saved yet.
 - **Assets** - browses the project's files and the engine's read-only ones, with a folder tree, a grid and search. Click selects an asset, right-click creates, renames or deletes, and dragging moves an asset to a folder, assigns it in the Inspector, or drops it in the Scene view: a mesh makes a new entity, a material goes on the entity under the mouse. Files changed outside the editor appear when it regains focus.
 - **Console**
 - **Stats** - FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts.

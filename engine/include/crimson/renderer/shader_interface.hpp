@@ -1,18 +1,38 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "crimson/renderer/shader_property_info.hpp"
 
 namespace crimson
 {
+    // What an empty texture slot samples
+    enum class ShaderTextureDefault
+    {
+        White,
+        Normal // a flat normal map
+    };
+
+    // What a comment after a material property or texture declares, like Unity's Properties block:
+    //   float Roughness; // @default 0.5 @range 0 1
+    //   Texture2D NormalMap : register(t1, space2); // @default normal
+    struct ShaderAnnotation
+    {
+        std::vector<float> Default;
+        std::optional<std::pair<float, float>> Range;
+        ShaderTextureDefault Texture = ShaderTextureDefault::White;
+    };
+
     struct ShaderBinary
     {
         std::vector<uint32_t> Vertex;
         std::vector<uint32_t> Pixel;
+        std::unordered_map<std::string, ShaderAnnotation> Annotations;
     };
 
     struct ShaderMaterialTexture
@@ -20,6 +40,7 @@ namespace crimson
         uint32_t Binding = 0;
         bool Vertex = false;
         bool Pixel = false;
+        ShaderTextureDefault Default = ShaderTextureDefault::White;
     };
 
     // What a shader's material space contains

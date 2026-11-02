@@ -1,0 +1,8 @@
+{
+  "shader": "engine/shaders/tonemap.hlsl",
+  "cull": "none",
+  "properties": {
+    "Exposure": 1.0,
+    "ToneMapper": 0.0
+  }
+}
