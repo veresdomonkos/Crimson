@@ -278,11 +278,8 @@ namespace crimson::editor::ui
 
         ImGui::NewLine();
 
-        // The rest of the panel: clicking clears the selection
-        const ImVec2 available = ImGui::GetContentRegionAvail();
-        ImGui::InvisibleButton("##GridBackground", ImVec2(std::max(available.x, 1.0f), std::max(available.y, 1.0f)));
-
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+        // Anywhere in the grid that isn't a tile: clicking clears the selection
+        if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
             m_context.SelectAsset({});
 
         DrawBackgroundMenu();
@@ -393,6 +390,21 @@ namespace crimson::editor::ui
         if (!ImGui::BeginPopupContextItem("##FolderMenu"))
             return;
 
+        // New things go where the folder is, so that is where the grid shows them
+        if (ImGui::MenuItem("New Material"))
+        {
+            m_currentFolder = folder;
+            OpenDialog(Dialog::NewMaterial, "New Material");
+        }
+
+        if (ImGui::MenuItem("New Folder"))
+        {
+            m_currentFolder = folder;
+            OpenDialog(Dialog::NewFolder, "New Folder");
+        }
+
+        ImGui::Separator();
+
         if (ImGui::MenuItem("Rename"))
         {
             m_dialogFolder = folder;
@@ -410,7 +422,9 @@ namespace crimson::editor::ui
 
     void AssetBrowserPanel::DrawBackgroundMenu()
     {
-        if (IsEngineFolder(m_currentFolder) || !ImGui::BeginPopupContextItem("##BackgroundMenu"))
+        constexpr ImGuiPopupFlags kFlags = ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems;
+
+        if (IsEngineFolder(m_currentFolder) || !ImGui::BeginPopupContextWindow("##BackgroundMenu", kFlags))
             return;
 
         if (ImGui::MenuItem("New Material"))
@@ -432,15 +446,32 @@ namespace crimson::editor::ui
 
     void AssetBrowserPanel::DrawDialogs()
     {
-        static constexpr const char* kPopup = "Assets##Dialog";
+        // The part after ### is the popup's id, so the title can say what it is doing
+        static constexpr const char* kPopupId = "###AssetDialog";
 
         if (m_openDialog)
         {
-            ImGui::OpenPopup(kPopup);
+            ImGui::OpenPopup(kPopupId);
             m_openDialog = false;
         }
 
-        if (!ImGui::BeginPopupModal(kPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        const auto getTitle = [this]
+        {
+            switch (m_dialog)
+            {
+                case Dialog::NewFolder:    return "New Folder###AssetDialog";
+                case Dialog::NewMaterial:  return "New Material###AssetDialog";
+                case Dialog::RenameAsset:
+                case Dialog::RenameFolder: return "Rename###AssetDialog";
+                case Dialog::DeleteAsset:
+                case Dialog::DeleteFolder: return "Delete###AssetDialog";
+                case Dialog::None:         break;
+            }
+
+            return kPopupId;
+        };
+
+        if (!ImGui::BeginPopupModal(getTitle(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
             return;
 
         const bool deleting = m_dialog == Dialog::DeleteAsset || m_dialog == Dialog::DeleteFolder;
