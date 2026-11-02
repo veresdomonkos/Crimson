@@ -114,6 +114,167 @@ TEST_CASE_METHOD(Fixture, "A saved reference survives its file being renamed", "
     CHECK(read->Textures.at("ColorMap") == texture);
 }
 
+TEST_CASE_METHOD(Fixture, "Moving a texture updates the materials referencing it", "[asset editing]")
+{
+    Temp.Write("old.bmp", MakeImage());
+    const fs::path file = Temp.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "textures": { "ColorMap": "old.bmp" } })");
+    AssetManager assets(Gpu, Temp.Path());
+
+    const AssetID texture = assets.FindId("old.bmp");
+
+    SECTION("A reference by path alone")
+    {
+        REQUIRE(assets.Rename(texture, "folder/new.bmp"));
+
+        const std::string text = ReadFile(file);
+        CHECK(text.find("folder/new.bmp") != std::string::npos);
+        CHECK(text.find(texture.ToString()) != std::string::npos);
+        CHECK(text.find("old.bmp") == std::string::npos);
+
+        AssetManager reopened(Gpu, Temp.Path());
+        const auto read = reopened.ReadMaterialFile(reopened.FindId("mine.mat"));
+        REQUIRE(read);
+        CHECK(read->Textures.at("ColorMap") == texture);
+    }
+
+    SECTION("A reference with an id gets the new path too")
+    {
+        const AssetID material = assets.FindId("mine.mat");
+        REQUIRE(assets.SaveMaterial(material, *assets.GetMaterialData(material)));
+        REQUIRE(ReadFile(file).find("\"old.bmp\"") != std::string::npos);
+
+        REQUIRE(assets.Rename(texture, "folder/new.bmp"));
+
+        const std::string text = ReadFile(file);
+        CHECK(text.find("folder/new.bmp") != std::string::npos);
+        CHECK(text.find("old.bmp") == std::string::npos);
+    }
+
+    SECTION("Moving it again follows it")
+    {
+        REQUIRE(assets.Rename(texture, "a.bmp"));
+        REQUIRE(assets.Rename(texture, "b.bmp"));
+
+        const std::string text = ReadFile(file);
+        CHECK(text.find("b.bmp") != std::string::npos);
+        CHECK(text.find("a.bmp") == std::string::npos);
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "Moving a shader updates the materials referencing it", "[asset editing]")
+{
+    Temp.Write("old.hlsl", "");
+    const fs::path file = Temp.Write("mine.mat", R"({ "shader": "old.hlsl" })");
+    AssetManager assets(Gpu, Temp.Path());
+
+    const AssetID shader = assets.FindId("old.hlsl");
+    REQUIRE(assets.Rename(shader, "shaders/new.hlsl"));
+
+    AssetManager reopened(Gpu, Temp.Path());
+    const auto read = reopened.ReadMaterialFile(reopened.FindId("mine.mat"));
+    REQUIRE(read);
+    CHECK(read->Shader == shader);
+}
+
+TEST_CASE_METHOD(Fixture, "A renamed folder keeps the references inside it working", "[asset editing]")
+{
+    Temp.Write("sponza/textures/arch.bmp", MakeImage());
+    Temp.Write("sponza/materials/arch.mat", R"({ "shader": "engine/shaders/main.hlsl", "textures": { "ColorMap": "sponza/textures/arch.bmp" } })");
+    AssetManager assets(Gpu, Temp.Path());
+
+    const AssetID texture = assets.FindId("sponza/textures/arch.bmp");
+
+    fs::rename(Temp.Path() / "sponza", Temp.Path() / "renamed");
+    CHECK(assets.Refresh().empty());
+
+    AssetManager reopened(Gpu, Temp.Path());
+    const auto read = reopened.ReadMaterialFile(reopened.FindId("renamed/materials/arch.mat"));
+    REQUIRE(read);
+    CHECK(read->Textures.at("ColorMap") == texture);
+}
+
+TEST_CASE_METHOD(Fixture, "A file moved outside the editor updates the materials referencing it", "[asset editing]")
+{
+    const fs::path image = Temp.Write("old.bmp", MakeImage());
+    Temp.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "textures": { "ColorMap": "old.bmp" } })");
+    AssetManager assets(Gpu, Temp.Path());
+
+    const AssetID texture = assets.FindId("old.bmp");
+
+    fs::create_directories(Temp.Path() / "folder");
+    fs::rename(image, Temp.Path() / "folder/new.bmp");
+    fs::rename(meta::MetaPathFor(image), meta::MetaPathFor(Temp.Path() / "folder/new.bmp"));
+    CHECK(assets.Refresh().empty());
+
+    AssetManager reopened(Gpu, Temp.Path());
+    const auto read = reopened.ReadMaterialFile(reopened.FindId("mine.mat"));
+    REQUIRE(read);
+    CHECK(read->Textures.at("ColorMap") == texture);
+}
+
+TEST_CASE_METHOD(Fixture, "Moving a file leaves everything else in materials alone", "[asset editing]")
+{
+    Temp.Write("old.bmp", MakeImage());
+    Temp.Write("other.bmp", MakeImage());
+
+    SECTION("Files with no reference to it stay exactly as they were")
+    {
+        constexpr std::string_view kOther = R"({ "shader": "engine/shaders/main.hlsl", "textures": { "ColorMap": "other.bmp" } })";
+        constexpr std::string_view kBroken = "{ not json";
+
+        const fs::path other = Temp.Write("other.mat", kOther);
+        const fs::path broken = Temp.Write("broken.mat", kBroken);
+        AssetManager assets(Gpu, Temp.Path());
+
+        REQUIRE(assets.Rename(assets.FindId("old.bmp"), "new.bmp"));
+
+        CHECK(ReadFile(other) == kOther);
+        CHECK(ReadFile(broken) == kBroken);
+    }
+
+    SECTION("A rewritten file only changes the reference")
+    {
+        const fs::path file = Temp.Write("mine.mat", R"({
+            "shader": "engine/shaders/main.hlsl",
+            "properties": { "Roughness": 0.8 },
+            "textures": { "ColorMap": "old.bmp", "NormalMap": "other.bmp", "Gone": "no/such.bmp" }
+        })");
+        AssetManager assets(Gpu, Temp.Path());
+
+        REQUIRE(assets.Rename(assets.FindId("old.bmp"), "new.bmp"));
+
+        const std::string text = ReadFile(file);
+        CHECK(text.find("new.bmp") != std::string::npos);
+        CHECK(text.find("Roughness") != std::string::npos);
+        CHECK(text.find("\"engine/shaders/main.hlsl\"") != std::string::npos);
+        CHECK(text.find("\"other.bmp\"") != std::string::npos);
+        CHECK(text.find("no/such.bmp") != std::string::npos);
+        CHECK(text.find("renderMode") == std::string::npos);
+        CHECK(text.find("cull") == std::string::npos);
+    }
+
+    SECTION("Unsaved changes stay unsaved")
+    {
+        Temp.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "properties": { "Roughness": 0.8 }, "textures": { "ColorMap": "old.bmp" } })");
+        AssetManager assets(Gpu, Temp.Path());
+        const AssetID material = assets.FindId("mine.mat");
+
+        REQUIRE(assets.LoadMaterial(material));
+
+        MaterialData edited = *assets.GetMaterialData(material);
+        edited.Properties["Roughness"] = { 0.2f };
+        REQUIRE(assets.ApplyMaterial(material, edited) != MaterialApplyResult::Failed);
+
+        REQUIRE(assets.Rename(assets.FindId("old.bmp"), "new.bmp"));
+
+        CHECK(*assets.GetMaterialData(material) == edited);
+
+        const auto read = assets.ReadMaterialFile(material);
+        REQUIRE(read);
+        CHECK(read->Properties.at("Roughness") == std::vector{ 0.8f });
+    }
+}
+
 TEST_CASE_METHOD(Fixture, "Refreshing finds what changed on disk", "[asset editing]")
 {
     Temp.Write("stays.obj", kTriangleObj);

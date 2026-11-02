@@ -394,8 +394,20 @@ namespace crimson
         return info && !info->ReadOnly ? m_root / fs::path(info->Path) : fs::path();
     }
 
+    // What a .mat file can point to
+    static bool IsUsedByMaterials(AssetType type)
+    {
+        return type == AssetType::Texture || type == AssetType::Shader;
+    }
+
     std::vector<AssetID> AssetManager::Refresh()
     {
+        std::unordered_map<std::string, AssetID> moved;
+
+        for (const auto& [id, entry] : m_assets)
+            if (!entry.Info.ReadOnly && IsUsedByMaterials(entry.Info.Type))
+                moved.emplace(entry.Info.Path, id);
+
         std::unordered_set<AssetID> seen;
         Scan(seen);
 
@@ -406,7 +418,42 @@ namespace crimson
                 removed.push_back(id);
 
         RemoveAssets(removed);
+
+        // Only now, as a renamed folder's materials don't know where they are until the scan has been past them
+        std::erase_if(moved, [this](const auto& asset)
+        {
+            const AssetInfo* info = GetInfo(asset.second);
+            return !info || info->Path == asset.first;
+        });
+
+        UpdateReferencesTo(moved);
         return removed;
+    }
+
+    void AssetManager::UpdateReferencesTo(const std::unordered_map<std::string, AssetID>& moved)
+    {
+        if (moved.empty())
+            return;
+
+        for (const auto& [id, entry] : m_assets)
+        {
+            if (entry.Info.Type != AssetType::Material || entry.Info.ReadOnly)
+                continue;
+
+            const fs::path file = m_root / fs::path(entry.Info.Path);
+            const std::optional<std::string> text = AssetSource{ entry.Info, file, nullptr }.Read();
+            if (!text)
+                continue;
+
+            const std::optional<std::string> updated = UpdateMaterialReferences(*text, moved, *this);
+            if (!updated)
+                continue;
+
+            if (std::ofstream stream(file, std::ios::binary); !(stream << *updated))
+                LOG_ERROR("[Assets] Can't write {}", entry.Info.Path);
+            else
+                LOG_INFO("[Assets] Updated the references in {}", entry.Info.Path);
+        }
     }
 
     void AssetManager::RemoveAssets(std::span<const AssetID> ids)
@@ -545,9 +592,14 @@ namespace crimson
         if (error)
             LOG_WARN("[Assets] {} lost its meta file: {}", newPath, error.message());
 
-        m_idsByPath.erase(entry.Info.Path);
-        entry.Info.Path = std::string(newPath);
+        const std::string oldPath = std::exchange(entry.Info.Path, std::string(newPath));
+
+        m_idsByPath.erase(oldPath);
         m_idsByPath[entry.Info.Path] = id;
+
+        if (IsUsedByMaterials(entry.Info.Type))
+            UpdateReferencesTo({ { oldPath, id } });
+
         return true;
     }
 

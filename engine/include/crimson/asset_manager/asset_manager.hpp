@@ -109,6 +109,7 @@ namespace crimson
         void Scan(std::unordered_set<AssetID>& seen);
         void RegisterFile(const std::filesystem::path& file, std::unordered_set<AssetID>& seen);
         void RemoveAssets(std::span<const AssetID> ids);
+        void UpdateReferencesTo(const std::unordered_map<std::string, AssetID>& moved); // old path to id
 
         const LoadedAsset& Load(AssetID id);
         AssetID FindIdOrWarn(std::string_view path) const;

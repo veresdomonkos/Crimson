@@ -3,6 +3,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "crimson/asset_manager/asset_id.hpp"
@@ -28,4 +29,8 @@ namespace crimson
 
     // References are written with both id and path, so they survive either one changing
     [[nodiscard]] std::string WriteMaterialData(const MaterialData& data, const AssetManager& assets);
+
+    // Points a .mat file's references to assets that moved (old path to id) at where they are now, and leaves the rest
+    // of it as it is. Gives the new text, or nothing if no reference moved.
+    [[nodiscard]] std::optional<std::string> UpdateMaterialReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets);
 }
