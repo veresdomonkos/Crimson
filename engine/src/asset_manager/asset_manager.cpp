@@ -11,13 +11,29 @@
 #include "crimson/asset_manager/importers/shader_importer.hpp"
 #include "crimson/asset_manager/importers/texture_importer.hpp"
 #include "crimson/asset_manager/meta_file.hpp"
+#include "crimson/core/engine_resources.hpp"
 #include "crimson/core/log.hpp"
 
 namespace fs = std::filesystem;
 
 namespace crimson
 {
-    static constexpr std::string_view kDefaultMaterialPath = "materials/default.mat";
+    static constexpr std::string_view kEnginePathPrefix = "engine/";
+    static constexpr std::string_view kDefaultMaterialPath = "engine/materials/default.mat";
+
+    // FNV-1a. An engine resource has no meta to store an id in, and scenes must find it again in any project.
+    static AssetID EngineResourceId(std::string_view path)
+    {
+        uint64_t hash = 0xcbf29ce484222325ull;
+
+        for (const unsigned char c : path)
+        {
+            hash ^= c;
+            hash *= 0x100000001b3ull;
+        }
+
+        return AssetID{ hash };
+    }
 
     static std::string NormalizeExt(const fs::path& p)
     {
@@ -28,6 +44,9 @@ namespace crimson
 
     std::optional<std::string> AssetSource::Read() const
     {
+        if (Embedded)
+            return std::string(Embedded->Text());
+
         std::ifstream file(File, std::ios::binary);
         if (!file)
         {
@@ -46,6 +65,7 @@ namespace crimson
         AddImporter(std::make_unique<MaterialImporter>());
         AddImporter(std::make_unique<MeshImporter>());
 
+        RegisterEngineResources();
         Scan();
     }
 
@@ -66,6 +86,27 @@ namespace crimson
             m_importersByExtension[std::string(ext)] = importer.get();
 
         m_importers.push_back(std::move(importer));
+    }
+
+    void AssetManager::RegisterEngineResources()
+    {
+        for (const EmbeddedFile& file : GetEngineResources())
+        {
+            // Shader includes have no importer, the shader compiler finds those itself
+            const auto importer = m_importersByExtension.find(NormalizeExt(file.Path));
+            if (importer == m_importersByExtension.end())
+                continue;
+
+            AssetInfo info;
+            info.Path = std::string(kEnginePathPrefix) + std::string(file.Path);
+            info.Id = EngineResourceId(info.Path);
+            info.Type = importer->second->Type();
+            info.Settings = importer->second->DefaultSettings();
+
+            const AssetID id = info.Id;
+            m_idsByPath[info.Path] = id;
+            m_assets.emplace(id, Entry{ .Info = std::move(info), .Importer = importer->second, .Embedded = &file });
+        }
     }
 
     void AssetManager::Scan()
@@ -104,6 +145,12 @@ namespace crimson
             return;
 
         std::string path = fs::relative(file, m_root).generic_string();
+
+        if (path.starts_with(kEnginePathPrefix))
+        {
+            LOG_WARN("[Assets] Skipped {}: the engine/ folder is reserved for the engine's own assets", path);
+            return;
+        }
 
         const auto importer = m_importersByExtension.find(extension);
         if (importer == m_importersByExtension.end())
@@ -199,7 +246,7 @@ namespace crimson
             return entry.Loaded;
 
         ImportContext ctx{ m_gpuResources, *this };
-        const AssetSource source{ entry.Info, m_root / fs::path(entry.Info.Path) };
+        const AssetSource source{ entry.Info, entry.Embedded ? fs::path() : m_root / fs::path(entry.Info.Path), entry.Embedded };
 
         entry.Loaded = entry.Importer->Load(source, ctx);
         entry.Failed = std::holds_alternative<std::monostate>(entry.Loaded);

@@ -49,7 +49,7 @@ endif()
 # A custom target runs on every build, so editing only a shader still reaches the output directory
 add_custom_target(EditorAssets ALL
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/assets"
+        "${CMAKE_SOURCE_DIR}/samples/Demo/assets"
         "$<TARGET_FILE_DIR:Editor>/assets"
         COMMENT "Copying assets to output directory"
 )

@@ -6,6 +6,7 @@
 #include <string_view>
 #include <variant>
 #include "crimson/asset_manager/asset_types.hpp"
+#include "crimson/core/embedded_resource.hpp"
 #include "crimson/renderer/mesh.hpp"
 #include "crimson/renderer/resource_manager.hpp"
 
@@ -19,11 +20,13 @@ namespace crimson
         AssetManager&       Assets;
     };
 
-    // The asset an importer is loading. Importers get its bytes from here instead of opening the file.
+    // The asset an importer is loading. Importers get its bytes from here instead of opening the file,
+    // as an engine resource has no file.
     struct AssetSource
     {
         const AssetInfo& Info;
-        std::filesystem::path File;
+        std::filesystem::path File; // empty for an engine resource
+        const EmbeddedFile* Embedded = nullptr;
 
         // Logs when it fails
         [[nodiscard]] std::optional<std::string> Read() const;

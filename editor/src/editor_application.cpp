@@ -121,8 +121,8 @@ namespace crimson::editor
 
         m_lighting.AmbientColor = glm::vec3(0.05f);
 
-        m_sceneRenderer->SetShadowMaterial(m_assetManager->LoadMaterial("materials/shadow.mat"));
-        m_sceneRenderer->SetOutlineMaterials(m_assetManager->LoadMaterial("materials/outline_mask.mat"), m_assetManager->LoadMaterial("materials/outline.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetShadowMaterial(m_assetManager->LoadMaterial("engine/materials/shadow.mat"));
+        m_sceneRenderer->SetOutlineMaterials(m_assetManager->LoadMaterial("engine/materials/outline_mask.mat"), m_assetManager->LoadMaterial("engine/materials/outline.mat"), kMainTargetWidth, kMainTargetHeight);
     }
 
     void EditorApplication::SetupUI()

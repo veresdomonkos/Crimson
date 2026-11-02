@@ -1,5 +1,5 @@
 {
-  "shader": "shaders/main.hlsl",
+  "shader": "engine/shaders/main.hlsl",
   "properties": {
     "Color": [0.8, 0.2, 0.2, 1.0]
   }

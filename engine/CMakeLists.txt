@@ -5,6 +5,7 @@ set(ENGINE_PUBLIC_HEADERS
 		include/crimson/core/window.hpp
 		include/crimson/core/events.hpp
 		include/crimson/core/embedded_resource.hpp
+		include/crimson/core/engine_resources.hpp
         include/crimson/renderer/render_commands.hpp
         include/crimson/core/log.hpp
         include/crimson/core/input.hpp
@@ -111,6 +112,8 @@ set_target_properties(Engine PROPERTIES
 )
 
 target_include_directories(Engine PUBLIC include PRIVATE src)
+
+crimson_embed_resources(Engine DIRECTORY resources NAMESPACE crimson FUNCTION GetEngineResources)
 
 # vulkan_raii.hpp is very large, so only the Vulkan backend pays for it
 set(ENGINE_VULKAN_SOURCES ${ENGINE_IMPLEMENTATION})

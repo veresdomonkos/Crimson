@@ -11,6 +11,7 @@
 namespace crimson
 {
     // Knows every asset under one folder and loads them on first use. Destroying it frees what it loaded.
+    // The engine's own shaders and materials are always available too, read-only, under "engine/".
     //
     // Asset paths are relative to the folder, with forward slashes. A load that fails returns an invalid
     // handle or null, logs once and isn't tried again. An invalid id does the same without logging, so a
@@ -45,11 +46,13 @@ namespace crimson
         {
             AssetInfo Info;
             AssetImporter* Importer = nullptr;
+            const EmbeddedFile* Embedded = nullptr;
             LoadedAsset Loaded;
             bool Failed = false;
         };
 
         void AddImporter(std::unique_ptr<AssetImporter> importer);
+        void RegisterEngineResources();
         void Scan();
         void RegisterFile(const std::filesystem::path& file);
 

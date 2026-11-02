@@ -9,13 +9,15 @@
 #include <glslang/Public/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>
 
+#include "crimson/core/engine_resources.hpp"
 #include "crimson/core/log.hpp"
 
 namespace crimson
 {
     namespace
     {
-        // Includes resolve relative to the shader's folder
+        // Includes resolve relative to the shader's folder, then to the engine's shaders.
+        // A shader without a folder only sees the engine's.
         class ShaderIncluder final : public glslang::TShader::Includer
         {
         public:
@@ -23,15 +25,21 @@ namespace crimson
 
             IncludeResult* includeLocal(const char* headerName, const char*, size_t) override
             {
-                std::ifstream stream(m_directory / headerName, std::ios::binary);
-                if (!stream)
-                    return nullptr;
+                if (!m_directory.empty())
+                {
+                    if (std::ifstream stream(m_directory / headerName, std::ios::binary); stream)
+                    {
+                        std::stringstream contents;
+                        contents << stream.rdbuf();
+                        return MakeResult(headerName, std::move(contents).str());
+                    }
+                }
 
-                std::stringstream contents;
-                contents << stream.rdbuf();
+                const std::string enginePath = std::string("shaders/") + headerName;
+                if (const EmbeddedFile* file = FindEmbeddedFile(GetEngineResources(), enginePath))
+                    return MakeResult(headerName, std::string(file->Text()));
 
-                auto* source = new std::string(std::move(contents).str());
-                return new IncludeResult(headerName, source->data(), source->size(), source);
+                return nullptr;
             }
 
             IncludeResult* includeSystem(const char* headerName, const char* includerName, size_t depth) override
@@ -49,6 +57,12 @@ namespace crimson
             }
 
         private:
+            static IncludeResult* MakeResult(const char* headerName, std::string contents)
+            {
+                auto* source = new std::string(std::move(contents));
+                return new IncludeResult(headerName, source->data(), source->size(), source);
+            }
+
             std::filesystem::path m_directory;
         };
 
