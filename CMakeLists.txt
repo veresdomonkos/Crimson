@@ -73,5 +73,7 @@ add_subdirectory(external/tracy)
 #vulkan memory allocator
 add_subdirectory(external/VulkanMemoryAllocator)
 
+include(cmake/EmbedResources.cmake)
+
 add_subdirectory(engine)
 add_subdirectory(editor)

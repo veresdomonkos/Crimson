@@ -4,6 +4,7 @@ set(ENGINE_PUBLIC_HEADERS
 		include/crimson/core/core.hpp
 		include/crimson/core/window.hpp
 		include/crimson/core/events.hpp
+		include/crimson/core/embedded_resource.hpp
         include/crimson/renderer/render_commands.hpp
         include/crimson/core/log.hpp
         include/crimson/core/input.hpp

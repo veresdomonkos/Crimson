@@ -16,6 +16,7 @@
 #include "crimson/asset_manager/importers/texture_importer.hpp"
 #include "crimson_editor/ui/asset_browser_panel.hpp"
 #include "crimson_editor/ui/console_panel.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 #include "crimson_editor/ui/inspector_panel.hpp"
 #include "crimson_editor/ui/scene_viewport_panel.hpp"
@@ -33,6 +34,7 @@ namespace crimson::editor
     {
         m_window          = Window::Create(rendererType, WindowData{ "Crimson Editor", 1280, 720, BIND_FN(OnEvent) });
         m_graphicsBackend = GraphicsBackend::Create(rendererType, *m_window);
+        ui::ApplyEditorTheme();
         m_ui              = std::make_unique<ui::EditorUI>(*m_graphicsBackend->Imgui);
 	    m_assetManager    = std::make_unique<AssetManager>(*m_graphicsBackend->GPUResources, "assets");
 	    m_assetManager->RegisterImporter<TextureImporter>();

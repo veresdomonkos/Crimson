@@ -15,6 +15,9 @@ add_executable(Editor
         src/ui/stats_panel.cpp
         include/crimson_editor/ui/editor_ui.hpp
         src/ui/editor_ui.cpp
+        include/crimson_editor/ui/editor_theme.hpp
+        src/ui/editor_theme.cpp
+        include/crimson_editor/editor_resources.hpp
         include/crimson_editor/editor_context.hpp
         include/crimson_editor/ui/console_panel.hpp
         include/crimson_editor/ui/hierarchy_panel.hpp
@@ -26,6 +29,8 @@ add_executable(Editor
 )
 
 target_include_directories(Editor PUBLIC include)
+
+crimson_embed_resources(Editor DIRECTORY resources NAMESPACE crimson::editor FUNCTION GetEditorResources)
 
 target_link_libraries(Editor
         PRIVATE

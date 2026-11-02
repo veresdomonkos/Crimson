@@ -25,7 +25,6 @@ namespace crimson::editor::ui
 
         void Draw(const NativeFrameHandles& handles);
     private:
-        void ApplyEditorStyle();
         void DrawMainMenu();
         void DrawDockSpace();
         void BuildDefaultLayout(ImGuiID dockSpace, const ImVec2& size);
