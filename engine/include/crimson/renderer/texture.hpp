@@ -10,6 +10,7 @@ namespace crimson
     enum class TextureFormat
     {
         RGBA8,
+        RGBA8Srgb, // stored sRGB encoded, sampling gives linear values
         RGB8,
         R8,
         RGBA16F,

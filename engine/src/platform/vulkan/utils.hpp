@@ -11,6 +11,7 @@ namespace crimson::vulkan::utils
         switch (format)
         {
             case TextureFormat::RGBA8:           return vk::Format::eR8G8B8A8Unorm;
+            case TextureFormat::RGBA8Srgb:       return vk::Format::eR8G8B8A8Srgb;
             case TextureFormat::RGB8:            return vk::Format::eR8G8B8Unorm;
             case TextureFormat::R8:              return vk::Format::eR8Unorm;
             case TextureFormat::RGBA16F:         return vk::Format::eR16G16B16A16Sfloat;
@@ -38,6 +39,7 @@ namespace crimson::vulkan::utils
             case TextureFormat::R8:      return 1;
             case TextureFormat::RGB8:    return 3;
             case TextureFormat::RGBA8:   return 4;
+            case TextureFormat::RGBA8Srgb: return 4;
             case TextureFormat::RGBA16F: return 8;
             case TextureFormat::RGBA32F: return 16;
             default:                     return 4;

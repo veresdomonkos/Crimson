@@ -558,6 +558,23 @@ namespace crimson
         return true;
     }
 
+    TextureHandle AssetManager::CreateTexturePreview(AssetID id) const
+    {
+        const auto it = m_assets.find(id);
+        if (it == m_assets.end() || it->second.Info.Type != AssetType::Texture)
+            return TextureHandle::Invalid();
+
+        const Entry& entry = it->second;
+        const AssetSource source{ entry.Info, entry.Embedded ? fs::path() : m_root / fs::path(entry.Info.Path), entry.Embedded };
+
+        const std::optional<std::string> file = source.Read();
+        if (!file)
+            return TextureHandle::Invalid();
+
+        const TextureLoadOptions options{ .GenerateMips = true, .FlipY = entry.Info.Settings.value("flipY", false) };
+        return CreateTextureFromMemory(m_gpuResources, std::as_bytes(std::span(*file)), options);
+    }
+
     std::optional<MaterialData> AssetManager::ReadMaterialFile(AssetID id) const
     {
         const auto it = m_assets.find(id);

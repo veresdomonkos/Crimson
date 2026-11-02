@@ -511,6 +511,13 @@ namespace crimson::vulkan
         m_device.WaitIdle();
 
         const VulkanTexture& texture = m_textures.Get(handle);
+
+        if (texture.Format != vk::Format::eR8G8B8A8Unorm && texture.Format != vk::Format::eR8G8B8A8Srgb)
+        {
+            LOG_ERROR("[Vulkan] Only RGBA8 textures can be read back");
+            return {};
+        }
+
         const vk::DeviceSize size = static_cast<vk::DeviceSize>(texture.Width) * texture.Height * kBytesPerPixel;
 
         AllocatedBuffer staging = CreateAllocatedBuffer(m_device.GetAllocator(), size, vk::BufferUsageFlagBits::eTransferDst, BufferMemory::HostReadable);

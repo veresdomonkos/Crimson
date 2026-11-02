@@ -36,7 +36,7 @@ namespace crimson
         TextureInfo info{};
         info.Width     = static_cast<uint32_t>(w);
         info.Height    = static_cast<uint32_t>(h);
-        info.Format    = TextureFormat::RGBA8;
+        info.Format    = options.Srgb ? TextureFormat::RGBA8Srgb : TextureFormat::RGBA8;
         info.Usage     = TextureUsage::Sampled;
         info.MipLevels = options.GenerateMips ? static_cast<uint32_t>(std::bit_width(static_cast<uint32_t>(std::max(w, h)))) : 1;
 
@@ -64,7 +64,8 @@ namespace crimson
 
         const TextureLoadOptions options{
             .GenerateMips = source.Info.Settings.value("generateMips", false),
-            .FlipY = source.Info.Settings.value("flipY", false)
+            .FlipY = source.Info.Settings.value("flipY", false),
+            .Srgb = source.Info.Settings.value("srgb", true)
         };
 
         const TextureHandle handle = CreateTextureFromMemory(ctx.Gpu, std::as_bytes(std::span(*file)), options);

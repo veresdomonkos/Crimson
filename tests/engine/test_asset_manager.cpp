@@ -476,6 +476,43 @@ TEST_CASE("Images decode from memory", "[assets]")
     }
 }
 
+TEST_CASE("A texture's srgb setting picks its format", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("image.bmp", MakeImage());
+
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+    const AssetID id = assets.FindId("image.bmp");
+
+    REQUIRE(assets.LoadTexture(id));
+    CHECK(gpu.LastTextureInfo.Format == TextureFormat::RGBA8Srgb);
+
+    SECTION("Turning it off")
+    {
+        REQUIRE(assets.ReimportTexture(id, { { "srgb", false } }));
+        CHECK(gpu.LastTextureInfo.Format == TextureFormat::RGBA8);
+    }
+
+    SECTION("A preview shows what is stored, and belongs to the caller")
+    {
+        const int before = gpu.LiveTextures;
+
+        const TextureHandle preview = assets.CreateTexturePreview(id);
+        REQUIRE(preview);
+        CHECK(gpu.LastTextureInfo.Format == TextureFormat::RGBA8);
+        CHECK(gpu.LiveTextures == before + 1);
+
+        assets.DestroyTexturePreview(preview);
+        CHECK(gpu.LiveTextures == before);
+    }
+
+    SECTION("Only textures have a preview")
+    {
+        CHECK_FALSE(assets.CreateTexturePreview(assets.FindId("engine/materials/default.mat")));
+    }
+}
+
 TEST_CASE("Destroying the manager frees what it loaded, users first", "[assets]")
 {
     const TempFolder temp;

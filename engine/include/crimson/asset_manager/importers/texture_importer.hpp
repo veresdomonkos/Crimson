@@ -14,6 +14,7 @@ namespace crimson
     {
         bool GenerateMips = false;
         bool FlipY = false;
+        bool Srgb = false; // for colors, data like normal maps has to stay linear
     };
 
     // Decodes an image file held in memory, for images that don't come from an asset folder.

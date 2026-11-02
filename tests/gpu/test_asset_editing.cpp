@@ -23,6 +23,39 @@ namespace
         "vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nvn 0 0 1\n"
         "f 1/1/1 2/2/1 3/3/1 4/4/1\n";
 
+    // Shows a texture as it comes out of the sampler, with no lighting
+    constexpr std::string_view kUnlitShader = R"(
+#include "crimson/bindings.hlsli"
+
+Texture2D Picture : register(t0, space2);
+
+struct VertexInput
+{
+    float3 Position : POSITION;
+    float3 Normal : NORMAL;
+    float2 UV : TEXCOORD0;
+};
+
+struct VertexOutput
+{
+    float4 ClipPosition : SV_Position;
+    float2 UV : TEXCOORD0;
+};
+
+VertexOutput VSMain(VertexInput input)
+{
+    VertexOutput output;
+    output.ClipPosition = mul(ViewProj, mul(GetObjectData().Transform, float4(input.Position, 1.0)));
+    output.UV = input.UV;
+    return output;
+}
+
+float4 PSMain(VertexOutput input) : SV_Target
+{
+    return Picture.Sample(PointClamp, input.UV);
+}
+)";
+
     struct Rgb
     {
         unsigned char R = 0, G = 0, B = 0;
@@ -314,4 +347,24 @@ TEST_CASE_METHOD(Fixture, "Flip Y turns the picture upside down", "[asset editin
     CHECK(topBefore != bottomBefore);
     CHECK(IsNear(flipped.AtClip(0.0f, 0.9f), glm::ivec3(bottomBefore), 2));
     CHECK(IsNear(flipped.AtClip(0.0f, -0.9f), glm::ivec3(topBefore), 2));
+}
+
+TEST_CASE_METHOD(Fixture, "An sRGB texture is decoded to linear when sampled", "[asset editing]")
+{
+    // 188 is the sRGB encoding of 0.5
+    Project.Write("gray.bmp", MakeBmp(1, 1, { Rgb{ 188, 188, 188 } }));
+    Project.Write("unlit.hlsl", kUnlitShader);
+    Project.Write("unlit.mat", R"({ "shader": "unlit.hlsl", "cull": "none", "textures": { "Picture": "gray.bmp" } })");
+
+    AssetManager assets(*Gpu().GPUResources, Project.Path());
+
+    CHECK(IsNear(Draw(assets, Target, "unlit.mat").AtClip(0.0f, 0.0f), glm::ivec3(127, 127, 127), 2));
+
+    SECTION("Not when it is turned off")
+    {
+        REQUIRE(assets.ReimportTexture(assets.FindId("gray.bmp"), { { "srgb", false } }));
+        CHECK(IsNear(Draw(assets, Target, "unlit.mat").AtClip(0.0f, 0.0f), glm::ivec3(188, 188, 188), 2));
+    }
+
+    Gpu().Device->WaitIdle();
 }

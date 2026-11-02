@@ -63,6 +63,11 @@ namespace crimson
         MaterialHandle LoadMaterial(std::string_view path);
         const Mesh* LoadMesh(std::string_view path);
 
+        // A separate copy of a texture for showing as it is stored, as UI that isn't sRGB encoded would show an sRGB
+        // texture too dark. The caller owns it, and gives it back to DestroyTexturePreview.
+        [[nodiscard]] TextureHandle CreateTexturePreview(AssetID id) const;
+        void DestroyTexturePreview(TextureHandle preview) const { m_gpuResources.DestroyTexture(preview); }
+
         // Looks at the folder again: new files appear, files moved along with their meta keep their id,
         // and the assets whose files are gone are removed. Returns the ids of those.
         std::vector<AssetID> Refresh();

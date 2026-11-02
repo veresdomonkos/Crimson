@@ -413,6 +413,12 @@ namespace crimson::opengl
     {
         const OpenGLTexture& tex = m_textures.Get(handle);
 
+        if (tex.InternalFormat != GL_RGBA8 && tex.InternalFormat != GL_SRGB8_ALPHA8)
+        {
+            LOG_ERROR("[OpenGL] Only RGBA8 textures can be read back");
+            return {};
+        }
+
         std::vector<std::byte> pixels(static_cast<size_t>(tex.Width) * tex.Height * 4);
         glGetTextureImage(tex.GLHandle, 0, GL_RGBA, GL_UNSIGNED_BYTE, static_cast<GLsizei>(pixels.size()), pixels.data());
         return pixels;

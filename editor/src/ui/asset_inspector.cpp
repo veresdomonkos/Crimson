@@ -339,6 +339,12 @@ namespace crimson::editor::ui
         ImGui::SeparatorText("Import Settings");
         ImGui::BeginDisabled(info.ReadOnly);
 
+        bool srgb = m_textureSettings.value("srgb", true);
+        if (ImGui::Checkbox("sRGB", &srgb))
+            m_textureSettings["srgb"] = srgb;
+
+        ImGui::SetItemTooltip("On for colors. Off for data, like normal, roughness and occlusion maps.");
+
         bool generateMips = m_textureSettings.value("generateMips", false);
         if (ImGui::Checkbox("Generate Mips", &generateMips))
             m_textureSettings["generateMips"] = generateMips;
