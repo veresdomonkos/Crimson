@@ -134,7 +134,7 @@ The comments are annotations, and a shader declares what its materials start wit
 |:---------|:--------|:--|
 | `Color` | white | linear, multiplied with `ColorMap` |
 | `Metallic`, `Roughness` | 0, 0.5 | multiplied with `MetallicRoughnessMap` (blue and green), as in glTF |
-| `NormalStrength` | 1 | scales `NormalMap`, with green pointing along +V |
+| `NormalStrength` | 1 | scales `NormalMap`, with green pointing up in the image (the OpenGL convention, which glTF uses too) |
 | `OcclusionStrength` | 1 | how much `OcclusionMap` (red) darkens ambient light |
 | `EmissiveColor`, `EmissiveStrength` | black, 1 | linear, multiplied with `EmissiveMap` |
 

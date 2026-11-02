@@ -492,6 +492,19 @@ TEST_CASE_METHOD(MaterialFixture, "A normal map bends the light the same way on 
         CHECK(right > left * 3.0f);
     }
 
+    SECTION("Leaning up in the image, it faces a light above")
+    {
+        // The mesh's V is flipped on import, so the top of the image is at the top of the wall
+        WriteDataTexture("lean_up.bmp", Rgb{ 128, 218, 218 });
+        AddWall(R"({ "Roughness": 1 })", R"({ "NormalMap": "lean_up.bmp" })");
+
+        const float above = render(glm::vec3(0.0f, -1.0f, -1.0f));
+        const float below = render(glm::vec3(0.0f, 1.0f, -1.0f));
+
+        CAPTURE(above, below);
+        CHECK(above > below * 3.0f);
+    }
+
     SECTION("Without UVs there is nothing to go by, and it stays flat")
     {
         WriteDataTexture("lean.bmp", Rgb{ 218, 128, 218 });

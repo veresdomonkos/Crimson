@@ -72,7 +72,9 @@ float3 ApplyNormalMap(float3 normal, float3 worldPosition, float2 uv)
 
     // The determinant's sign has to stay, as the backends rasterize with Y going opposite ways
     const float invScale = sign(determinant) / sqrt(scale);
-    return normalize(tangent * invScale * mapped.x + bitangent * invScale * mapped.y + normal * mapped.z);
+
+    // Green points up in the image, and V goes down it, as the first row of an image is at V = 0
+    return normalize(tangent * invScale * mapped.x - bitangent * invScale * mapped.y + normal * mapped.z);
 }
 
 float4 PSMain(VertexOutput input) : SV_Target
