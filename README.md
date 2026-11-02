@@ -192,6 +192,8 @@ The engine's own shaders and materials live in `engine/resources/` and are bundl
 
 The asset manager can also change what it has while running: `Refresh` looks at the folder again, `CreateMaterial`, `Rename` and `Delete` change files, `ApplyMaterial` shows new values on a material, and `ReimportTexture` applies new import settings. A file moved along with its `.meta` keeps its id. Anything that changes GPU resources has to run between frames, which is why panels queue these in `EditorContext::Deferred`.
 
+A mesh's material slots fill themselves in: an empty slot uses `materials/<slot name>.mat` next to the mesh if that file exists, and the default material if not. For an `.obj`, the slot names are the material names in its `.mtl`. The `.mtl`'s values and textures aren't imported, so those `.mat` files are made by hand.
+
 `.mat` files can also set `"renderMode"` (`"opaque"` or `"transparent"`) and `"cull"` (`"back"`, `"front"` or `"none"`), which default to opaque and back. Transparent materials are alpha blended using the alpha the shader outputs, don't write depth, and draw after opaque ones in the order they were submitted.
 
 ### Editor

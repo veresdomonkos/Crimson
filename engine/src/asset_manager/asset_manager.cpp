@@ -579,6 +579,21 @@ namespace crimson
         return true;
     }
 
+    AssetID AssetManager::FindSlotMaterial(AssetID mesh, std::string_view slot) const
+    {
+        const AssetInfo* info = GetInfo(mesh);
+        if (!info || info->Type != AssetType::Mesh)
+            return {};
+
+        const size_t folderEnd = info->Path.rfind('/');
+        const std::string folder = folderEnd == std::string::npos ? std::string{} : info->Path.substr(0, folderEnd + 1);
+
+        const AssetID material = FindId(folder + "materials/" + std::string(slot) + ".mat");
+        const AssetInfo* materialInfo = GetInfo(material);
+
+        return materialInfo && materialInfo->Type == AssetType::Material ? material : AssetID{};
+    }
+
     TextureHandle AssetManager::CreateTexturePreview(AssetID id) const
     {
         const auto it = m_assets.find(id);

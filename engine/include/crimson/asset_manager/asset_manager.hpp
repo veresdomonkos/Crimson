@@ -50,6 +50,9 @@ namespace crimson
 
         [[nodiscard]] AssetID DefaultMaterial() const;
 
+        // The material made for one of a mesh's slots: materials/<slot>.mat, next to the mesh. Invalid if there is none.
+        [[nodiscard]] AssetID FindSlotMaterial(AssetID mesh, std::string_view slot) const;
+
         // What a loaded shader's materials can set
         [[nodiscard]] const ShaderInterface& GetShaderInterface(ShaderHandle shader) const { return m_gpuResources.GetShaderInterface(shader); }
 

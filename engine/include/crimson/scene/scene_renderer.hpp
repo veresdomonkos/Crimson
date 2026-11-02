@@ -14,7 +14,7 @@ namespace crimson
     class Scene;
 
     // Loads the renderer's mesh and materials into Resolved and sizes MaterialAssets to the mesh's slots.
-    // Empty slots get the default material.
+    // Empty slots get the material made for them (AssetManager::FindSlotMaterial), or else the default one.
     void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets);
 
     // How the linear HDR scene is fitted into what a display can show
