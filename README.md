@@ -14,6 +14,7 @@ Crimson is a small, data-driven real-time rendering engine written in modern C++
 - **HLSL shaders** - compiled in-process by glslang, which is linked statically, to SPIR-V. Vulkan uses the SPIR-V directly and SPIRV-Cross translates it to GLSL for OpenGL.
 - **Standard blocks and reflection** - frame, view and material resources are grouped by how often they change. Material properties and textures are discovered with SPIRV-Reflect, and the standard blocks are checked against the engine's structs.
 - **Lighting** - any number of directional, point and spot lights in a GPU buffer (glTF `KHR_lights_punctual`-style). Any light can cast shadows through a shared shadow atlas with PCF filtering.
+- **HDR and PBR** - the scene renders in linear light to a floating-point target and is tone mapped for display, with metallic-roughness materials using the same slots as glTF.
 - **Per-object transforms** - each draw indexes a per-frame buffer of object transforms.
 - **Entity component system** - scenes are built on [EnTT](https://github.com/skypjack/entt) behind `Scene` and `Entity` wrappers, with a parent/child hierarchy.
 - **Projects** - a project manager to create and open projects, each with its own `assets/` folder.
