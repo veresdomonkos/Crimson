@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the older run pointless
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-mingw:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Check out, with the submodules
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      # Git LFS bandwidth is metered, and the demo meshes are 26 MB that nothing here reads.
+      # Only the files embedded into the executable are needed to build.
+      - name: Download the embedded files from Git LFS
+        shell: pwsh
+        run: git lfs pull --include="editor/resources/**"
+
+      - name: Install the toolchain
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          pacboy: >-
+            toolchain:p
+            cmake:p
+            ninja:p
+            ccache:p
+            vulkan-headers:p
+            vulkan-loader:p
+
+      # A fresh build takes minutes, most of it third party code that never changes
+      - name: Restore the compiler cache
+        uses: actions/cache@v6
+        with:
+          path: .ccache
+          key: ccache-mingw-debug-${{ github.sha }}
+          restore-keys: ccache-mingw-debug-
+
+      - name: Configure
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+        run: >-
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          -DCMAKE_C_COMPILER_LAUNCHER=ccache
+
+      - name: Build
+        env:
+          CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_SLOPPINESS: pch_defines,time_macros
+          CCACHE_MAXSIZE: 1G
+        run: cmake --build build --target Editor CrimsonTests
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
