@@ -25,6 +25,9 @@ namespace crimson
         [[nodiscard]] const std::string& Name() const { return m_name; }
         [[nodiscard]] const std::filesystem::path& Root() const { return m_root; }
         [[nodiscard]] std::filesystem::path AssetsDir() const { return m_root / "assets"; }
+
+        // What the engine makes for the project itself, which can always be made again
+        [[nodiscard]] std::filesystem::path DataDir() const { return m_root / ".crimson"; }
     private:
         Project(std::string name, std::filesystem::path root) : m_name(std::move(name)), m_root(std::move(root)) {}
 

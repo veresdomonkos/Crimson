@@ -2,6 +2,7 @@
 
 #include <crimson/core/log.hpp>
 #include <crimson/core/profiler.hpp>
+#include <crimson/project/shader_includes.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 #include <algorithm>
 #include <utility>
@@ -35,6 +36,9 @@ namespace crimson::editor
                      .OpenScene = [this](AssetID id) { OpenScene(id); } }
     {
         LOG_INFO("[Editor] Opening project '{}' at {}", m_project.Name(), m_project.Root().string());
+
+        // For code editors to find the engine's shader headers, which may have changed since the project was last open
+        ExportShaderIncludes(m_project);
 
         m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer);
         m_ui = std::make_unique<ui::EditorUI>(
