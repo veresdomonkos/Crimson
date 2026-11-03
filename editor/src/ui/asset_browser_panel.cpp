@@ -407,6 +407,12 @@ namespace crimson::editor::ui
             OpenDialog(Dialog::NewScene, "New Scene");
         }
 
+        if (ImGui::MenuItem("New Shader"))
+        {
+            m_currentFolder = folder;
+            OpenDialog(Dialog::NewShader, "New Shader");
+        }
+
         if (ImGui::MenuItem("New Folder"))
         {
             m_currentFolder = folder;
@@ -443,6 +449,9 @@ namespace crimson::editor::ui
         if (ImGui::MenuItem("New Scene"))
             OpenDialog(Dialog::NewScene, "New Scene");
 
+        if (ImGui::MenuItem("New Shader"))
+            OpenDialog(Dialog::NewShader, "New Shader");
+
         if (ImGui::MenuItem("New Folder"))
             OpenDialog(Dialog::NewFolder, "New Folder");
 
@@ -475,6 +484,7 @@ namespace crimson::editor::ui
                 case Dialog::NewFolder:    return "New Folder###AssetDialog";
                 case Dialog::NewMaterial:  return "New Material###AssetDialog";
                 case Dialog::NewScene:     return "New Scene###AssetDialog";
+                case Dialog::NewShader:    return "New Shader###AssetDialog";
                 case Dialog::RenameAsset:
                 case Dialog::RenameFolder: return "Rename###AssetDialog";
                 case Dialog::DeleteAsset:
@@ -570,6 +580,14 @@ namespace crimson::editor::ui
                 refreshAfter([this, path = JoinToCurrent(name + ".scene")]
                 {
                     if (const AssetID id = m_context.Assets.CreateScene(path))
+                        m_context.SelectAsset(id);
+                });
+                break;
+
+            case Dialog::NewShader:
+                refreshAfter([this, path = JoinToCurrent(name + ".hlsl")]
+                {
+                    if (const AssetID id = m_context.Assets.CreateShader(path))
                         m_context.SelectAsset(id);
                 });
                 break;

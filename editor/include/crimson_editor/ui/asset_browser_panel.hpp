@@ -37,6 +37,7 @@ namespace crimson::editor::ui
             NewFolder,
             NewMaterial,
             NewScene,
+            NewShader,
             RenameAsset,
             RenameFolder,
             DeleteAsset,

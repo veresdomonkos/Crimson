@@ -3,16 +3,48 @@
 #include <catch2/matchers/catch_matchers_string.hpp>
 
 #include <filesystem>
+#include <fstream>
+#include <iterator>
+#include <string>
+#include <string_view>
 
+#include <nlohmann/json.hpp>
+
+#include <crimson/core/engine_resources.hpp>
 #include <crimson/project/project.hpp>
+#include <crimson/project/shader_includes.hpp>
 
 #include "support/temp_folder.hpp"
+
+#ifdef _WIN32
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #include <windows.h>
+#endif
 
 using namespace crimson;
 using crimson::tests::TempFolder;
 using Catch::Matchers::ContainsSubstring;
 
 namespace fs = std::filesystem;
+
+namespace
+{
+    std::string ReadFile(const fs::path& file)
+    {
+        std::ifstream stream(file, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+    }
+
+    void WriteFile(const fs::path& file, std::string_view text)
+    {
+        std::ofstream(file, std::ios::binary) << text;
+    }
+}
 
 TEST_CASE("Creating a project makes the folder, the file and the assets folder", "[project]")
 {
@@ -139,4 +171,85 @@ TEST_CASE("Creating a project validates its name", "[project]")
 
     CHECK_FALSE(Project::Create(temp.Path(), "../escape"));
     CHECK_FALSE(fs::exists(temp.Path().parent_path() / "escape"));
+}
+
+TEST_CASE("Projects get copies of the engine's shader headers for code editors", "[project]")
+{
+    const TempFolder temp;
+    const auto project = Project::Create(temp.Path(), "Game");
+    REQUIRE(project);
+
+    const fs::path folder = project->DataDir() / "shader_includes";
+    const fs::path config = project->Root() / "shadertoolsconfig.json";
+
+    const auto readConfig = [&] { return nlohmann::json::parse(ReadFile(config)); };
+
+    SECTION("The headers, and the config pointing at them")
+    {
+        ExportShaderIncludes(*project);
+
+        const EmbeddedFile* bindings = FindEmbeddedFile(GetEngineResources(), "shaders/crimson/bindings.hlsli");
+        REQUIRE(bindings);
+        CHECK(ReadFile(folder / "crimson/bindings.hlsli") == bindings->Text());
+        CHECK(fs::exists(folder / "crimson/lighting.hlsli"));
+
+        // Shaders are assets, not headers
+        CHECK_FALSE(fs::exists(folder / "main.hlsl"));
+
+        CHECK(readConfig().at("hlsl.additionalIncludeDirectories") == nlohmann::json::array({ ".crimson/shader_includes" }));
+    }
+
+    SECTION("Out of date and leftover copies are fixed, and the config isn't added to twice")
+    {
+        ExportShaderIncludes(*project);
+        WriteFile(folder / "crimson/bindings.hlsli", "changed");
+        WriteFile(folder / "crimson/gone.hlsli", "no longer in the engine");
+
+        ExportShaderIncludes(*project);
+
+        CHECK(ReadFile(folder / "crimson/bindings.hlsli") != "changed");
+        CHECK_FALSE(fs::exists(folder / "crimson/gone.hlsli"));
+        CHECK(readConfig().at("hlsl.additionalIncludeDirectories").size() == 1);
+    }
+
+    SECTION("A config the user made keeps what is in it")
+    {
+        WriteFile(config, R"({ "hlsl.preprocessorDefinitions": { "MINE": "1" }, "hlsl.additionalIncludeDirectories": [ "mine" ] })");
+
+        ExportShaderIncludes(*project);
+
+        const nlohmann::json json = readConfig();
+        CHECK(json.at("hlsl.preprocessorDefinitions").at("MINE") == "1");
+        CHECK(json.at("hlsl.additionalIncludeDirectories") == nlohmann::json::array({ "mine", ".crimson/shader_includes" }));
+    }
+
+    SECTION("A config that isn't JSON is left alone")
+    {
+        WriteFile(config, "not json");
+
+        ExportShaderIncludes(*project);
+
+        CHECK(ReadFile(config) == "not json");
+        CHECK(fs::exists(folder / "crimson/bindings.hlsli"));
+    }
+}
+
+TEST_CASE("The data folder is made when needed, and hidden on Windows", "[project]")
+{
+    const TempFolder temp;
+    const auto project = Project::Create(temp.Path(), "Game");
+    REQUIRE(project);
+
+    CHECK_FALSE(fs::exists(project->DataDir()));
+    REQUIRE(project->EnsureDataDir());
+    CHECK(fs::is_directory(project->DataDir()));
+
+#ifdef _WIN32
+    const DWORD attributes = GetFileAttributesW(project->DataDir().c_str());
+    REQUIRE(attributes != INVALID_FILE_ATTRIBUTES);
+    CHECK((attributes & FILE_ATTRIBUTE_HIDDEN) != 0);
+#endif
+
+    // Again on a folder that is already there
+    CHECK(project->EnsureDataDir());
 }

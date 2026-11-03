@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -435,6 +436,38 @@ TEST_CASE_METHOD(Fixture, "New materials", "[asset editing]")
     }
 }
 
+TEST_CASE_METHOD(Fixture, "New shaders", "[asset editing]")
+{
+    Temp.Write("taken.hlsl", "// mine");
+    AssetManager assets(Gpu, Temp.Path());
+
+    SECTION("Compile right away, with properties to set")
+    {
+        const AssetID id = assets.CreateShader("folder/new.hlsl");
+
+        REQUIRE(id);
+        CHECK(fs::exists(Temp.Path() / "folder/new.hlsl.meta"));
+        CHECK(assets.GetInfo(id)->Type == AssetType::Shader);
+
+        const ShaderHandle shader = assets.LoadShader(id);
+        REQUIRE(shader);
+
+        const ShaderInterface& shaderInterface = assets.GetShaderInterface(shader);
+        CHECK(shaderInterface.Properties.contains("Color"));
+        CHECK(shaderInterface.Properties.contains("Roughness"));
+        CHECK(shaderInterface.Textures.contains("ColorMap"));
+    }
+
+    SECTION("Refuse bad places")
+    {
+        CHECK_FALSE(assets.CreateShader("taken.hlsl"));
+        CHECK_FALSE(assets.CreateShader("engine/mine.hlsl"));
+        CHECK_FALSE(assets.CreateShader("wrong.mat"));
+
+        CHECK(ReadFile(Temp.Path() / "taken.hlsl") == "// mine");
+    }
+}
+
 TEST_CASE_METHOD(Fixture, "Renaming moves the file and its meta", "[asset editing]")
 {
     Temp.Write("a.obj", kTriangleObj);
@@ -724,4 +757,140 @@ float4 PSMain() : SV_Target { return Amount * Other * Bumps.Sample(LinearWrap, f
     }
 
     CHECK(gpu.NothingAlive());
+}
+
+namespace
+{
+    constexpr std::string_view kShaderHeader = R"(
+#include "crimson/bindings.hlsli"
+#include "helper.hlsli"
+
+cbuffer MaterialBlock : register(b0, space2)
+{
+    float Amount; // @default 0.25
+)";
+
+    constexpr std::string_view kShaderFooter = R"(
+};
+
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain() : SV_Target { return Amount * HELPER_VALUE; }
+)";
+
+    // The file times can be too coarse to tell two quick saves apart, so the change is made to look later.
+    // Saves in a row have to be pushed different amounts, or they end up at the same time again.
+    void Touch(const fs::path& file, std::chrono::seconds ahead = std::chrono::seconds(2))
+    {
+        fs::last_write_time(file, fs::last_write_time(file) + ahead);
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "Changed shaders are reloaded along with their materials", "[asset editing]")
+{
+    const fs::path shaderFile = Temp.Write("mine.hlsl", std::string(kShaderHeader) + std::string(kShaderFooter));
+    const fs::path helperFile = Temp.Write("helper.hlsli", "#define HELPER_VALUE 1.0\n");
+    Temp.Write("mine.mat", R"({ "shader": "mine.hlsl", "properties": { "Amount": 0.5 } })");
+    Temp.Write("unused.hlsl", std::string(kShaderHeader) + std::string(kShaderFooter));
+
+    {
+        AssetManager assets(Gpu, Temp.Path());
+
+        const AssetID shader = assets.FindId("mine.hlsl");
+        const AssetID material = assets.FindId("mine.mat");
+
+        const MaterialHandle before = assets.LoadMaterial(material);
+        const ShaderHandle shaderBefore = assets.LoadShader(shader);
+        REQUIRE(before);
+
+        SECTION("Nothing changed, nothing happens")
+        {
+            CHECK(assets.ReloadChangedShaders().empty());
+            CHECK(assets.LoadMaterial(material) == before);
+        }
+
+        SECTION("Editing the shader recreates its materials, keeping their values")
+        {
+            Temp.Write("mine.hlsl", std::string(kShaderHeader) + "    float Extra; // @default 3\n" + std::string(kShaderFooter));
+            Touch(shaderFile);
+
+            const std::vector<AssetID> reloaded = assets.ReloadChangedShaders();
+            CHECK(reloaded.size() == 2);
+            CHECK(Contains(reloaded, shader));
+            CHECK(Contains(reloaded, material));
+
+            const ShaderHandle shaderAfter = assets.LoadShader(shader);
+            const MaterialHandle after = assets.LoadMaterial(material);
+            CHECK(shaderAfter != shaderBefore);
+            CHECK(after != before);
+            CHECK(Gpu.Materials.at(after.GetRaw()).Shader == shaderAfter);
+            CHECK(assets.GetShaderInterface(shaderAfter).Properties.contains("Extra"));
+            CHECK(Gpu.LiveShaders == 1);
+            CHECK(Gpu.LiveMaterials == 1);
+
+            const std::vector<std::byte>& amount = Gpu.Materials.at(after.GetRaw()).Properties.at("Amount");
+            float value = 0.0f;
+            std::memcpy(&value, amount.data(), sizeof(float));
+            CHECK(value == 0.5f);
+
+            CHECK(assets.ReloadChangedShaders().empty());
+        }
+
+        SECTION("Unsaved material edits survive it")
+        {
+            MaterialData data = *assets.GetMaterialData(material);
+            data.Properties["Amount"] = { 0.125f };
+            REQUIRE(assets.ApplyMaterial(material, data) == MaterialApplyResult::Updated);
+
+            Touch(shaderFile);
+            REQUIRE_FALSE(assets.ReloadChangedShaders().empty());
+
+            CHECK(assets.GetMaterialData(material)->Properties.at("Amount") == std::vector{ 0.125f });
+        }
+
+        SECTION("Editing a file it includes counts too")
+        {
+            Temp.Write("helper.hlsli", "#define HELPER_VALUE 2.0\n");
+            Touch(helperFile);
+
+            CHECK(Contains(assets.ReloadChangedShaders(), shader));
+        }
+
+        SECTION("A broken edit keeps the old version, and fixing it reloads")
+        {
+            Temp.Write("mine.hlsl", "this does not compile");
+            Touch(shaderFile);
+
+            CHECK(assets.ReloadChangedShaders().empty());
+            CHECK(assets.LoadShader(shader) == shaderBefore);
+            CHECK(assets.LoadMaterial(material) == before);
+
+            // Not tried again until it changes again
+            CHECK(assets.ReloadChangedShaders().empty());
+
+            Temp.Write("mine.hlsl", std::string(kShaderHeader) + std::string(kShaderFooter));
+            Touch(shaderFile, std::chrono::seconds(4));
+
+            CHECK(Contains(assets.ReloadChangedShaders(), material));
+        }
+    }
+
+    CHECK(Gpu.NothingAlive());
+}
+
+TEST_CASE_METHOD(Fixture, "A shader that failed to load works once it is fixed", "[asset editing]")
+{
+    const fs::path shaderFile = Temp.Write("mine.hlsl", "this does not compile");
+    Temp.Write("helper.hlsli", "#define HELPER_VALUE 1.0\n");
+    Temp.Write("mine.mat", R"({ "shader": "mine.hlsl" })");
+
+    AssetManager assets(Gpu, Temp.Path());
+    const AssetID material = assets.FindId("mine.mat");
+
+    REQUIRE_FALSE(assets.LoadMaterial(material));
+
+    Temp.Write("mine.hlsl", std::string(kShaderHeader) + std::string(kShaderFooter));
+    Touch(shaderFile);
+
+    CHECK(Contains(assets.ReloadChangedShaders(), assets.FindId("mine.hlsl")));
+    CHECK(assets.LoadMaterial(material));
 }

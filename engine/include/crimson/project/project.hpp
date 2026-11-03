@@ -25,6 +25,13 @@ namespace crimson
         [[nodiscard]] const std::string& Name() const { return m_name; }
         [[nodiscard]] const std::filesystem::path& Root() const { return m_root; }
         [[nodiscard]] std::filesystem::path AssetsDir() const { return m_root / "assets"; }
+
+        // What the engine makes for the project itself, which can always be made again
+        [[nodiscard]] std::filesystem::path DataDir() const { return m_root / ".crimson"; }
+
+        // Creates the data folder if it isn't there yet. On Windows it is also hidden, as the dot only hides it elsewhere.
+        // Returns false if it can't be created.
+        bool EnsureDataDir() const;
     private:
         Project(std::string name, std::filesystem::path root) : m_name(std::move(name)), m_root(std::move(root)) {}
 

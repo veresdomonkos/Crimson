@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -118,6 +119,28 @@ TEST_CASE("Shader includes look in the shader's folder, then in the engine's", "
         temp.Write("crimson/bindings.hlsli", "this is not the engine's file");
         const std::string source = "#include \"crimson/bindings.hlsli\"\n" + std::string(kMinimalShader);
         CHECK_FALSE(CompileHlslShader("project.hlsl", source, temp.Path()));
+    }
+}
+
+TEST_CASE("A compile lists the files it included from the shader's folder", "[shaders]")
+{
+    const TempFolder temp;
+    const std::filesystem::path helper = temp.Write("helper.hlsli", "#include \"crimson/lighting.hlsli\"\n");
+
+    std::vector<std::filesystem::path> included;
+
+    SECTION("Not the engine's")
+    {
+        const std::string source = "#include \"helper.hlsli\"\n" + std::string(kMinimalShader);
+        REQUIRE(CompileHlslShader("project.hlsl", source, temp.Path(), &included));
+        CHECK(included == std::vector{ helper });
+    }
+
+    SECTION("Even when it fails, as fixing an included file can fix it")
+    {
+        const std::string source = "#include \"helper.hlsli\"\nthis does not compile";
+        REQUIRE_FALSE(CompileHlslShader("project.hlsl", source, temp.Path(), &included));
+        CHECK(included == std::vector{ helper });
     }
 }
 

@@ -53,6 +53,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/scene/scene_serializer.hpp
         include/crimson/scene/tone_mapper.hpp
         include/crimson/project/project.hpp
+        include/crimson/project/shader_includes.hpp
 )
 
 set(ENGINE_IMPLEMENTATION
@@ -112,6 +113,7 @@ set(ENGINE_IMPLEMENTATION
         src/scene/scene_renderer.cpp
         src/scene/scene_serializer.cpp
         src/project/project.cpp
+        src/project/shader_includes.cpp
 )
 
 add_library(Engine STATIC

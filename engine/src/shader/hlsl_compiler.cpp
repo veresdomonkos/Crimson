@@ -1,5 +1,6 @@
 #include "crimson/renderer/shader_compiler.hpp"
 
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -17,18 +18,24 @@ namespace crimson
     namespace
     {
         // Includes resolve relative to the shader's folder, then to the engine's shaders.
-        // A shader without a folder only sees the engine's.
+        // A shader without a folder only sees the engine's. The files read from the folder are added to included.
         class ShaderIncluder final : public glslang::TShader::Includer
         {
         public:
-            explicit ShaderIncluder(std::filesystem::path directory) : m_directory(std::move(directory)) {}
+            ShaderIncluder(std::filesystem::path directory, std::vector<std::filesystem::path>& included)
+                : m_directory(std::move(directory)), m_included(included) {}
 
             IncludeResult* includeLocal(const char* headerName, const char*, size_t) override
             {
                 if (!m_directory.empty())
                 {
-                    if (std::ifstream stream(m_directory / headerName, std::ios::binary); stream)
+                    const std::filesystem::path file = m_directory / headerName;
+
+                    if (std::ifstream stream(file, std::ios::binary); stream)
                     {
+                        if (std::ranges::find(m_included, file) == m_included.end())
+                            m_included.push_back(file);
+
                         std::stringstream contents;
                         contents << stream.rdbuf();
                         return MakeResult(headerName, std::move(contents).str());
@@ -64,6 +71,7 @@ namespace crimson
             }
 
             std::filesystem::path m_directory;
+            std::vector<std::filesystem::path>& m_included;
         };
 
         void InitializeGlslang()
@@ -72,7 +80,7 @@ namespace crimson
             [[maybe_unused]] static const bool initialized = glslang::InitializeProcess();
         }
 
-        std::optional<std::vector<uint32_t>> CompileStage(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, EShLanguage stage, const char* entryPoint)
+        std::optional<std::vector<uint32_t>> CompileStage(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<std::filesystem::path>& included, EShLanguage stage, const char* entryPoint)
         {
             const char* sourceData = source.data();
             const int sourceLength = static_cast<int>(source.size());
@@ -97,7 +105,7 @@ namespace crimson
             shader.setShiftBinding(glslang::EResImage, kStorageBindingShift);
             shader.setShiftBinding(glslang::EResUav, kStorageBindingShift);
 
-            ShaderIncluder includer(includeDirectory);
+            ShaderIncluder includer(includeDirectory, included);
 
             if (!shader.parse(GetDefaultResources(), kDefaultVersion, false, kMessages, includer))
             {
@@ -120,12 +128,16 @@ namespace crimson
         }
     }
 
-    std::optional<ShaderBinary> CompileHlslShader(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory)
+    std::optional<ShaderBinary> CompileHlslShader(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<std::filesystem::path>* includedFiles)
     {
         InitializeGlslang();
 
-        auto vertex = CompileStage(name, source, includeDirectory, EShLangVertex, "VSMain");
-        auto pixel = CompileStage(name, source, includeDirectory, EShLangFragment, "PSMain");
+        std::vector<std::filesystem::path> included;
+        auto vertex = CompileStage(name, source, includeDirectory, included, EShLangVertex, "VSMain");
+        auto pixel = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSMain");
+
+        if (includedFiles)
+            *includedFiles = std::move(included);
 
         if (!vertex || !pixel)
             return std::nullopt;
