@@ -16,7 +16,7 @@ namespace crimson
         return nlohmann::json::object();
     }
 
-    LoadedAsset ShaderImporter::Load(const AssetSource& source, ImportContext& ctx)
+    std::optional<ShaderHandle> ShaderImporter::Load(const AssetSource& source, ImportContext& ctx)
     {
         const auto text = source.Read();
         if (!text)
@@ -39,9 +39,8 @@ namespace crimson
         return handle;
     }
 
-    void ShaderImporter::Unload(const LoadedAsset& asset, GpuResourceManager& gpu)
+    void ShaderImporter::Unload(ShaderHandle& shader, GpuResourceManager& gpu)
     {
-        if (const auto* shader = std::get_if<ShaderHandle>(&asset))
-            gpu.DestroyShader(*shader);
+        gpu.DestroyShader(shader);
     }
 }

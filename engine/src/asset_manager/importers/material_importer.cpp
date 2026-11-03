@@ -92,7 +92,7 @@ namespace crimson
         return nlohmann::json::object();
     }
 
-    LoadedAsset MaterialImporter::Load(const AssetSource& source, ImportContext& ctx)
+    std::optional<MaterialHandle> MaterialImporter::Load(const AssetSource& source, ImportContext& ctx)
     {
         const auto text = source.Read();
         if (!text)
@@ -109,9 +109,8 @@ namespace crimson
         return material;
     }
 
-    void MaterialImporter::Unload(const LoadedAsset& asset, GpuResourceManager& gpu)
+    void MaterialImporter::Unload(MaterialHandle& material, GpuResourceManager& gpu)
     {
-        if (const auto* material = std::get_if<MaterialHandle>(&asset))
-            gpu.DestroyMaterial(*material);
+        gpu.DestroyMaterial(material);
     }
 }

@@ -28,7 +28,7 @@ namespace crimson
         return { { "flipV", true } };
     }
 
-    LoadedAsset MeshImporter::Load(const AssetSource& source, ImportContext& ctx)
+    std::optional<Mesh> MeshImporter::Load(const AssetSource& source, ImportContext& ctx)
     {
         const std::string& name = source.Info.Path;
 
@@ -184,12 +184,9 @@ namespace crimson
         return mesh;
     }
 
-    void MeshImporter::Unload(const LoadedAsset& asset, GpuResourceManager& gpu)
+    void MeshImporter::Unload(Mesh& mesh, GpuResourceManager& gpu)
     {
-        if (const auto* mesh = std::get_if<Mesh>(&asset))
-        {
-            gpu.DestroyVertexBuffer(mesh->VB);
-            gpu.DestroyIndexBuffer(mesh->IB);
-        }
+        gpu.DestroyVertexBuffer(mesh.VB);
+        gpu.DestroyIndexBuffer(mesh.IB);
     }
 }

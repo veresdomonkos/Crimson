@@ -15,14 +15,13 @@ namespace crimson
     // The name is what errors report. Errors go to the log and give an invalid handle.
     [[nodiscard]] MaterialHandle CreateMaterialFromData(const MaterialData& data, ImportContext& ctx, std::string_view name);
 
-    class MaterialImporter final : public AssetImporter
+    class MaterialImporter final : public AssetImporter<AssetType::Material>
     {
     public:
-        AssetType Type() const override { return AssetType::Material; }
         std::span<const std::string_view> Extensions() const override;
         nlohmann::json DefaultSettings() const override;
 
-        LoadedAsset Load(const AssetSource&, ImportContext&) override;
-        void Unload(const LoadedAsset&, GpuResourceManager&) override;
+        std::optional<MaterialHandle> Load(const AssetSource&, ImportContext&) override;
+        void Unload(MaterialHandle&, GpuResourceManager&) override;
     };
 }

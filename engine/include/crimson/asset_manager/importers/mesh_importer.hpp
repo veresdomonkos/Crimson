@@ -3,14 +3,13 @@
 
 namespace crimson
 {
-    class MeshImporter final : public AssetImporter
+    class MeshImporter final : public AssetImporter<AssetType::Mesh>
     {
     public:
-        AssetType Type() const override { return AssetType::Mesh; }
         std::span<const std::string_view> Extensions() const override;
         nlohmann::json DefaultSettings() const override;
 
-        LoadedAsset Load(const AssetSource&, ImportContext&) override;
-        void Unload(const LoadedAsset&, GpuResourceManager&) override;
+        std::optional<Mesh> Load(const AssetSource&, ImportContext&) override;
+        void Unload(Mesh&, GpuResourceManager&) override;
     };
 }

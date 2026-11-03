@@ -4,7 +4,6 @@
 #include <span>
 #include <string>
 #include <string_view>
-#include <variant>
 #include <vector>
 #include "crimson/asset_manager/asset_types.hpp"
 #include "crimson/core/embedded_resource.hpp"
@@ -14,6 +13,19 @@
 namespace crimson
 {
     class AssetManager;
+
+    // What loading each type of asset gives. Scenes have none, as they are read with ReadSceneFile instead.
+    template <AssetType T> struct AssetTraits;
+    template <> struct AssetTraits<AssetType::Texture>  { using Loaded = TextureHandle;  using Result = TextureHandle; };
+    template <> struct AssetTraits<AssetType::Shader>   { using Loaded = ShaderHandle;   using Result = ShaderHandle; };
+    template <> struct AssetTraits<AssetType::Material> { using Loaded = MaterialHandle; using Result = MaterialHandle; };
+    template <> struct AssetTraits<AssetType::Mesh>     { using Loaded = Mesh;           using Result = const Mesh*; }; // valid as long as the manager
+
+    template <AssetType T>
+    using LoadedAsset = typename AssetTraits<T>::Loaded;
+
+    template <AssetType T>
+    using LoadResult = typename AssetTraits<T>::Result;
 
     struct ImportContext
     {
@@ -34,18 +46,25 @@ namespace crimson
         [[nodiscard]] std::optional<std::string> Read() const;
     };
 
-    using LoadedAsset = std::variant<std::monostate, TextureHandle, ShaderHandle, MaterialHandle, Mesh>;
-
-    class AssetImporter
+    // What makes files of some extensions into assets of a type
+    class AssetImporterBase
     {
     public:
-        virtual ~AssetImporter() = default;
+        virtual ~AssetImporterBase() = default;
 
         [[nodiscard]] virtual AssetType Type() const = 0;
         [[nodiscard]] virtual std::span<const std::string_view> Extensions() const = 0;
         [[nodiscard]] virtual nlohmann::json DefaultSettings() const = 0;
+    };
 
-        virtual LoadedAsset Load(const AssetSource& source, ImportContext& ctx) = 0;
-        virtual void Unload(const LoadedAsset& asset, GpuResourceManager& gpu) = 0;
+    // One that also loads them. Errors go to the log and give nothing.
+    template <AssetType T>
+    class AssetImporter : public AssetImporterBase
+    {
+    public:
+        [[nodiscard]] AssetType Type() const final { return T; }
+
+        virtual std::optional<LoadedAsset<T>> Load(const AssetSource& source, ImportContext& ctx) = 0;
+        virtual void Unload(LoadedAsset<T>& asset, GpuResourceManager& gpu) = 0;
     };
 }

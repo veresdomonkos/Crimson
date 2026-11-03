@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <random>
@@ -33,6 +34,7 @@ namespace crimson
     };
 
     enum class AssetType : uint8_t { None, Texture, Mesh, Shader, Material, Scene };
+    inline constexpr size_t kAssetTypeCount = static_cast<size_t>(AssetType::Scene) + 1;
 
     // An AssetID known to be of one type, so code wanting a shader can't be given a texture by mistake.
     // Only AssetManager makes one from an AssetID, after checking the type. Forgetting the type is always fine.

@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -36,15 +37,9 @@ namespace crimson
         std::string Path;
         bool PathOnly = false; // written by hand without a guid, so its id was made up from the path
     };
-    // What loading each type of asset gives. Scenes have none, as they are read with ReadSceneFile instead.
-    template <AssetType T> struct AssetTraits;
-    template <> struct AssetTraits<AssetType::Texture>  { using Loaded = TextureHandle;  using Result = TextureHandle; };
-    template <> struct AssetTraits<AssetType::Shader>   { using Loaded = ShaderHandle;   using Result = ShaderHandle; };
-    template <> struct AssetTraits<AssetType::Material> { using Loaded = MaterialHandle; using Result = MaterialHandle; };
-    template <> struct AssetTraits<AssetType::Mesh>     { using Loaded = Mesh;           using Result = const Mesh*; }; // valid as long as the manager
 
-    template <AssetType T>
-    using LoadResult = typename AssetTraits<T>::Result;
+    class AssetStoreBase;
+    template <AssetType T> class AssetStore;
 
     // Knows every asset under one folder and loads them on first use. Destroying it frees what it loaded.
     // The engine's own shaders and materials are always available too, read-only, under "engine/".
@@ -152,21 +147,15 @@ namespace crimson
         // shaders and materials that were replaced, whose handles have to be gotten again.
         std::vector<AssetID> ReloadChangedShaders();
     private:
-        struct Entry
+        // What is known about every asset, loaded or not. What it loads as is in its type's store.
+        struct Record
         {
             AssetInfo Info;
-            AssetImporter* Importer = nullptr;
+            AssetImporterBase* Importer = nullptr;
             const EmbeddedFile* Embedded = nullptr;
-            LoadedAsset Loaded;
-            bool Failed = false;
-            std::optional<MaterialData> Material; // what a material is using, read from its file when first needed
-
-            // For a project's shader: when its file and the files it included last changed, as of its last load
-            std::filesystem::file_time_type FileTime;
-            std::vector<std::pair<std::filesystem::path, std::filesystem::file_time_type>> Dependencies;
         };
 
-        void AddImporter(std::unique_ptr<AssetImporter> importer);
+        void AddImporter(std::unique_ptr<AssetImporterBase> importer);
         void RegisterEngineResources();
         void Scan(std::unordered_set<AssetID>& seen);
         void RegisterFile(const std::filesystem::path& file, std::unordered_set<AssetID>& seen);
@@ -174,9 +163,18 @@ namespace crimson
         void UpdateReferencesTo(const std::unordered_map<std::string, AssetID>& moved); // old path to id
         AssetID CreateAssetFile(std::string_view path, std::string_view extension, const std::string& contents);
 
-        const LoadedAsset& LoadEntry(AssetID id);
-        LoadedAsset Import(Entry& entry);
-        std::vector<AssetID> ReloadShader(AssetID id, Entry& entry);
+        template <AssetType T>
+        AssetStore<T>& Store();
+
+        // Where an asset of a type keeps what it loaded. Null if there is no such asset of that type.
+        template <AssetType T>
+        typename AssetStore<T>::Slot* SlotFor(AssetID id);
+
+        template <AssetType T>
+        std::optional<LoadedAsset<T>> Import(const Record& record, typename AssetStore<T>::Slot& slot);
+
+        std::vector<AssetID> ReloadShader(AssetID id, const Record& record);
+        [[nodiscard]] AssetSource SourceOf(const Record& record) const;
         AssetID FindIdOrWarn(std::string_view path) const;
 
         template <AssetType T>
@@ -190,22 +188,21 @@ namespace crimson
         }
 
         void WarnWrongType(std::string_view path, AssetType wanted) const;
-        void Unload(Entry& entry);
-
-        template <typename T>
-        const T* LoadAs(AssetID id);
 
         GpuResourceManager& m_gpuResources;
         std::filesystem::path m_root;
 
-        std::vector<std::unique_ptr<AssetImporter>> m_importers;
-        std::unordered_map<std::string, AssetImporter*> m_importersByExtension;
+        std::vector<std::unique_ptr<AssetImporterBase>> m_importers;
+        std::unordered_map<std::string, AssetImporterBase*> m_importersByExtension;
 
-        std::unordered_map<AssetID, Entry> m_assets;
+        std::unordered_map<AssetID, Record> m_assets;
         std::unordered_map<std::string, AssetID> m_idsByPath;
         std::unordered_map<std::string, AssetID> m_renamedPaths; // an engine asset's old path to its id
         std::unordered_map<AssetID, AssetID> m_renamedIds; // the id made from an engine asset's old path to its id
         mutable std::unordered_map<AssetID, MissingAssetRef> m_missing;
+
+        // One per type that loads, by AssetType. Scenes have none.
+        std::array<std::unique_ptr<AssetStoreBase>, kAssetTypeCount> m_stores;
 
         TextureHandle m_flatNormal; // made when a shader first needs it
     };
