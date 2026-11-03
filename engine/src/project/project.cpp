@@ -8,6 +8,16 @@
 
 #include <nlohmann/json.hpp>
 
+#ifdef _WIN32
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #include <windows.h>
+#endif
+
 namespace fs = std::filesystem;
 
 namespace crimson
@@ -67,6 +77,25 @@ namespace crimson
             return std::unexpected("Can't write the project file in " + root.string());
 
         return Project(name, std::move(root));
+    }
+
+    bool Project::EnsureDataDir() const
+    {
+        const fs::path folder = DataDir();
+
+        std::error_code error;
+        fs::create_directories(folder, error);
+        if (error)
+            return false;
+
+#ifdef _WIN32
+        // Also for a folder made before it was hidden
+        const DWORD attributes = GetFileAttributesW(folder.c_str());
+        if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_HIDDEN))
+            SetFileAttributesW(folder.c_str(), attributes | FILE_ATTRIBUTE_HIDDEN);
+#endif
+
+        return true;
     }
 
     std::string Project::ValidateName(std::string_view name)

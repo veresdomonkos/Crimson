@@ -16,6 +16,16 @@
 
 #include "support/temp_folder.hpp"
 
+#ifdef _WIN32
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #include <windows.h>
+#endif
+
 using namespace crimson;
 using crimson::tests::TempFolder;
 using Catch::Matchers::ContainsSubstring;
@@ -169,7 +179,7 @@ TEST_CASE("Projects get copies of the engine's shader headers for code editors",
     const auto project = Project::Create(temp.Path(), "Game");
     REQUIRE(project);
 
-    const fs::path folder = project->DataDir() / "shader-includes";
+    const fs::path folder = project->DataDir() / "shader_includes";
     const fs::path config = project->Root() / "shadertoolsconfig.json";
 
     const auto readConfig = [&] { return nlohmann::json::parse(ReadFile(config)); };
@@ -186,7 +196,7 @@ TEST_CASE("Projects get copies of the engine's shader headers for code editors",
         // Shaders are assets, not headers
         CHECK_FALSE(fs::exists(folder / "main.hlsl"));
 
-        CHECK(readConfig().at("hlsl.additionalIncludeDirectories") == nlohmann::json::array({ ".crimson/shader-includes" }));
+        CHECK(readConfig().at("hlsl.additionalIncludeDirectories") == nlohmann::json::array({ ".crimson/shader_includes" }));
     }
 
     SECTION("Out of date and leftover copies are fixed, and the config isn't added to twice")
@@ -210,7 +220,7 @@ TEST_CASE("Projects get copies of the engine's shader headers for code editors",
 
         const nlohmann::json json = readConfig();
         CHECK(json.at("hlsl.preprocessorDefinitions").at("MINE") == "1");
-        CHECK(json.at("hlsl.additionalIncludeDirectories") == nlohmann::json::array({ "mine", ".crimson/shader-includes" }));
+        CHECK(json.at("hlsl.additionalIncludeDirectories") == nlohmann::json::array({ "mine", ".crimson/shader_includes" }));
     }
 
     SECTION("A config that isn't JSON is left alone")
@@ -222,4 +232,24 @@ TEST_CASE("Projects get copies of the engine's shader headers for code editors",
         CHECK(ReadFile(config) == "not json");
         CHECK(fs::exists(folder / "crimson/bindings.hlsli"));
     }
+}
+
+TEST_CASE("The data folder is made when needed, and hidden on Windows", "[project]")
+{
+    const TempFolder temp;
+    const auto project = Project::Create(temp.Path(), "Game");
+    REQUIRE(project);
+
+    CHECK_FALSE(fs::exists(project->DataDir()));
+    REQUIRE(project->EnsureDataDir());
+    CHECK(fs::is_directory(project->DataDir()));
+
+#ifdef _WIN32
+    const DWORD attributes = GetFileAttributesW(project->DataDir().c_str());
+    REQUIRE(attributes != INVALID_FILE_ATTRIBUTES);
+    CHECK((attributes & FILE_ATTRIBUTE_HIDDEN) != 0);
+#endif
+
+    // Again on a folder that is already there
+    CHECK(project->EnsureDataDir());
 }

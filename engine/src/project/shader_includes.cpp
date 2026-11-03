@@ -18,7 +18,7 @@ namespace fs = std::filesystem;
 namespace crimson
 {
     static constexpr std::string_view kShaderFolder = "shaders/";
-    static constexpr std::string_view kIncludesFolder = "shader-includes";
+    static constexpr std::string_view kIncludesFolder = "shader_includes";
     static constexpr std::string_view kConfigFileName = "shadertoolsconfig.json";
     static constexpr std::string_view kIncludeDirectoriesKey = "hlsl.additionalIncludeDirectories";
 
@@ -97,6 +97,12 @@ namespace crimson
 
     void ExportShaderIncludes(const Project& project)
     {
+        if (!project.EnsureDataDir())
+        {
+            LOG_WARN("[Project] Can't create {}", project.DataDir().string());
+            return;
+        }
+
         const fs::path folder = project.DataDir() / kIncludesFolder;
         std::set<fs::path> current;
 
