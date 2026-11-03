@@ -80,9 +80,9 @@ namespace crimson::editor::ui
 
     void SceneViewportPanel::HandleAssetDrop(const ImVec2& position, const ImVec2& size)
     {
-        const AssetID mesh = AcceptAssetOnLastItem(m_context.Assets, AssetType::Mesh);
-        const AssetID material = AcceptAssetOnLastItem(m_context.Assets, AssetType::Material);
-        const AssetID scene = AcceptAssetOnLastItem(m_context.Assets, AssetType::Scene);
+        const MeshID mesh = AcceptAssetOnLastItem<AssetType::Mesh>(m_context.Assets);
+        const MaterialID material = AcceptAssetOnLastItem<AssetType::Material>(m_context.Assets);
+        const SceneID scene = AcceptAssetOnLastItem<AssetType::Scene>(m_context.Assets);
 
         if (!mesh && !material && !scene)
             return;
@@ -104,7 +104,7 @@ namespace crimson::editor::ui
         });
     }
 
-    void SceneViewportPanel::CreateEntityFromMesh(AssetID mesh, const glm::vec3& origin, const glm::vec3& direction)
+    void SceneViewportPanel::CreateEntityFromMesh(MeshID mesh, const glm::vec3& origin, const glm::vec3& direction)
     {
         const AssetInfo* info = m_context.Assets.GetInfo(mesh);
         if (!info)
@@ -120,7 +120,7 @@ namespace crimson::editor::ui
         m_context.SelectEntity(entity);
     }
 
-    void SceneViewportPanel::CreateInstanceOfScene(AssetID scene, const glm::vec3& origin, const glm::vec3& direction)
+    void SceneViewportPanel::CreateInstanceOfScene(SceneID scene, const glm::vec3& origin, const glm::vec3& direction)
     {
         const Entity entity = CreateSceneInstance(scene, m_context.ActiveScene, {}, m_context.Assets, m_context.ActiveSceneAsset);
         if (!entity)
@@ -130,7 +130,7 @@ namespace crimson::editor::ui
         m_context.SelectEntity(entity);
     }
 
-    void SceneViewportPanel::AssignMaterialToEntity(AssetID material, const glm::vec3& origin, const glm::vec3& direction)
+    void SceneViewportPanel::AssignMaterialToEntity(MaterialID material, const glm::vec3& origin, const glm::vec3& direction)
     {
         const Entity entity = m_context.ActiveScene.Raycast(origin, direction);
         if (!entity || entity.HasComponent<InstancedComponent>())

@@ -16,6 +16,10 @@ namespace crimson
     // (made up from the path if it had none), and AssetManager remembers how it was written, for WriteAssetRef.
     [[nodiscard]] AssetID ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context);
 
+    // The same, for a reference that has to be of one type. One to another type of asset counts as missing, with a warning.
+    template <AssetType T>
+    [[nodiscard]] TypedAssetID<T> ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context);
+
     [[nodiscard]] nlohmann::ordered_json WriteAssetRef(const AssetManager& assets, AssetID id);
 
     // Points a reference to an asset that moved (old path to id) at where it is now. Returns whether it changed.

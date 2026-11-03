@@ -91,6 +91,24 @@ namespace crimson
         return guid || !path.empty() ? RememberMissing(assets, guid, std::move(path), context) : AssetID{};
     }
 
+    template <AssetType T>
+    TypedAssetID<T> ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
+    {
+        const AssetID id = ResolveAssetRef(assets, ref, context);
+        const TypedAssetID<T> typed = assets.As<T>(id);
+
+        if (id && !typed)
+            LOG_WARN("[Assets] {}: {} isn't a {}", context, assets.GetInfo(id)->Path, ToString(T));
+
+        return typed;
+    }
+
+    template TextureID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
+    template MeshID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
+    template ShaderID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
+    template MaterialID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
+    template SceneID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
+
     nlohmann::ordered_json WriteAssetRef(const AssetManager& assets, AssetID id)
     {
         if (const AssetInfo* info = assets.GetInfo(id))

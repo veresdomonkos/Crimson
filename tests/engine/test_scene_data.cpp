@@ -49,7 +49,7 @@ namespace
 
         void Open(AssetManager& assets, std::string_view path, Scene& scene) const
         {
-            const AssetID id = assets.FindId(path);
+            const SceneID id = assets.Find<AssetType::Scene>(path);
             const auto data = assets.ReadSceneFile(id);
             REQUIRE(data);
             InstantiateScene(*data, scene, {}, assets, id);
@@ -77,8 +77,8 @@ TEST_CASE_METHOD(Fixture, "A scene survives being saved and loaded", "[scene dat
 
     const Entity mesh = scene.CreateEntity("Mesh");
     auto& renderer = mesh.AddComponent<MeshRendererComponent>();
-    renderer.MeshAsset = assets.FindId("meshes/thing.obj");
-    renderer.MaterialAssets = { assets.FindId("materials/thing.mat") };
+    renderer.MeshAsset = assets.Find<AssetType::Mesh>("meshes/thing.obj");
+    renderer.MaterialAssets = { assets.Find<AssetType::Material>("materials/thing.mat") };
     renderer.CastsShadows = false;
     ResolveMeshRenderer(renderer, assets);
 
@@ -124,7 +124,7 @@ TEST_CASE_METHOD(Fixture, "Scene files written by hand work", "[scene data]")
     CHECK(data->Roots[0].Id);
     CHECK(data->Roots[0].Active);
     CHECK(data->Roots[0].Scale == glm::vec3(1.0f));
-    CHECK(data->Roots[0].MeshRenderer->Mesh == assets.FindId("thing.obj"));
+    CHECK(data->Roots[0].MeshRenderer->Mesh == assets.Find<AssetType::Mesh>("thing.obj"));
 }
 
 TEST_CASE_METHOD(Fixture, "A broken scene file doesn't load", "[scene data]")
@@ -146,7 +146,7 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
 
     Scene scene;
     auto& renderer = scene.CreateEntity("Mesh").AddComponent<MeshRendererComponent>();
-    renderer.MeshAsset = assets.FindId("thing.obj");
+    renderer.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
     ResolveMeshRenderer(renderer, assets);
     REQUIRE(renderer.MaterialAssets[0] == assets.DefaultMaterial());
 
@@ -161,7 +161,7 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
     InstantiateScene(*ParseSceneData(WriteSceneData(data, assets), assets, "test"), loaded, {}, assets, {});
 
     const Entity entity = loaded.GetEntity(loaded.GetRoots()[0]);
-    CHECK(entity.GetComponent<MeshRendererComponent>().MaterialAssets[0] == assets.FindId("materials/Paint.mat"));
+    CHECK(entity.GetComponent<MeshRendererComponent>().MaterialAssets[0] == assets.Find<AssetType::Material>("materials/Paint.mat"));
 }
 
 TEST_CASE_METHOD(Fixture, "A slot on the default material finds one made for it, and a chosen one stays", "[scene data]")
@@ -173,13 +173,13 @@ TEST_CASE_METHOD(Fixture, "A slot on the default material finds one made for it,
 
     Scene scene;
     auto& onDefault = scene.CreateEntity("Default").AddComponent<MeshRendererComponent>();
-    onDefault.MeshAsset = assets.FindId("thing.obj");
+    onDefault.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
     ResolveMeshRenderer(onDefault, assets);
     REQUIRE(onDefault.MaterialAssets[0] == assets.DefaultMaterial());
 
     auto& chosen = scene.CreateEntity("Chosen").AddComponent<MeshRendererComponent>();
-    chosen.MeshAsset = assets.FindId("thing.obj");
-    chosen.MaterialAssets = { assets.FindId("other.mat") };
+    chosen.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
+    chosen.MaterialAssets = { assets.Find<AssetType::Material>("other.mat") };
     ResolveMeshRenderer(chosen, assets);
 
     // As the editor's Create Materials from .mtl does
@@ -208,7 +208,7 @@ TEST_CASE_METHOD(Fixture, "An instance's entities come from its scene", "[scene 
     SECTION("It holds the source's roots, which can't be changed")
     {
         CHECK(root.GetComponent<NameComponent>().Name == "Here");
-        CHECK(root.GetComponent<SceneInstanceComponent>().Scene == assets.FindId("crate.scene"));
+        CHECK(root.GetComponent<SceneInstanceComponent>().Scene == assets.Find<AssetType::Scene>("crate.scene"));
         CHECK_FALSE(root.HasComponent<InstancedComponent>());
 
         const auto& children = root.GetComponent<RelationshipComponent>().Children;
@@ -231,7 +231,7 @@ TEST_CASE_METHOD(Fixture, "An instance's entities come from its scene", "[scene 
 
         REQUIRE(data.Roots.size() == 1);
         CHECK(data.Roots[0].Position == glm::vec3(9.0f));
-        CHECK(data.Roots[0].Instance == assets.FindId("crate.scene"));
+        CHECK(data.Roots[0].Instance == assets.Find<AssetType::Scene>("crate.scene"));
         CHECK(data.Roots[0].Children.empty());
     }
 
@@ -263,14 +263,14 @@ TEST_CASE_METHOD(Fixture, "A new instance is named after its file and placed und
 
     Scene scene;
     const Entity parent = scene.CreateEntity("Parent");
-    const Entity instance = CreateSceneInstance(assets.FindId("props/crate.scene"), scene, parent, assets, {});
+    const Entity instance = CreateSceneInstance(assets.Find<AssetType::Scene>("props/crate.scene"), scene, parent, assets, {});
 
     REQUIRE(instance);
     CHECK(instance.GetComponent<NameComponent>().Name == "crate");
     CHECK(instance.GetComponent<RelationshipComponent>().Parent == parent.GetHandle());
     CHECK(instance.GetComponent<RelationshipComponent>().Children.size() == 1);
 
-    CHECK_FALSE(CreateSceneInstance(AssetID::Generate(), scene, {}, assets, {}));
+    CHECK_FALSE(CreateSceneInstance(SceneID{}, scene, {}, assets, {}));
 }
 
 TEST_CASE_METHOD(Fixture, "A scene containing itself doesn't go on forever", "[scene data]")
@@ -307,8 +307,8 @@ TEST_CASE_METHOD(Fixture, "A scene containing itself doesn't go on forever", "[s
         Temp.Write("uses_host.scene", SceneWith(InstanceOf("Host", "host.scene")));
         assets.Refresh();
 
-        const AssetID host = assets.FindId("host.scene");
-        const AssetID usesHost = assets.FindId("uses_host.scene");
+        const SceneID host = assets.Find<AssetType::Scene>("host.scene");
+        const SceneID usesHost = assets.Find<AssetType::Scene>("uses_host.scene");
 
         CHECK(SceneUses(usesHost, host, assets));
         CHECK_FALSE(SceneUses(host, usesHost, assets));
@@ -333,7 +333,7 @@ TEST_CASE_METHOD(Fixture, "An instance whose source can't be used stays an entit
         Open(assets, "level.scene", scene);
 
         REQUIRE(scene.GetRoots().size() == 1);
-        CHECK(CaptureScene(scene, {}, assets).Roots[0].Instance == assets.FindId("broken.scene"));
+        CHECK(CaptureScene(scene, {}, assets).Roots[0].Instance == assets.Find<AssetType::Scene>("broken.scene"));
     }
 
     SECTION("A missing file keeps the reference too")
@@ -369,7 +369,7 @@ TEST_CASE_METHOD(Fixture, "A scene keeps its references to missing files", "[sce
         AssetManager assets(Gpu, Temp.Path());
         Scene scene;
         Open(assets, "level.scene", scene);
-        REQUIRE(assets.SaveScene(assets.FindId("level.scene"), CaptureScene(scene, {}, assets)));
+        REQUIRE(assets.SaveScene(assets.Find<AssetType::Scene>("level.scene"), CaptureScene(scene, {}, assets)));
     }
 
     const std::string saved = ReadFile(levelFile);
@@ -396,7 +396,7 @@ TEST_CASE_METHOD(Fixture, "A scene keeps its references to missing files", "[sce
         CHECK(assets.GetMissing(captured.Roots[0].MeshRenderer->Materials.at(0))->Path == "thing.mat");
         CHECK(assets.GetMissing(captured.Roots[1].Instance)->Path == "crate.scene");
 
-        REQUIRE(assets.SaveScene(assets.FindId("level.scene"), captured));
+        REQUIRE(assets.SaveScene(assets.Find<AssetType::Scene>("level.scene"), captured));
         CHECK(ReadFile(levelFile) == saved);
     }
 
@@ -429,7 +429,7 @@ TEST_CASE_METHOD(Fixture, "A missing material stays in its slot, with the defaul
 
     const auto& renderer = scene.GetEntity(scene.GetRoots()[0]).GetComponent<MeshRendererComponent>();
     CHECK(assets.IsMissing(renderer.MaterialAssets.at(0)));
-    CHECK(renderer.Resolved.Materials.at(0) == assets.LoadMaterial(assets.DefaultMaterial()));
+    CHECK(renderer.Resolved.Materials.at(0) == assets.Load(assets.DefaultMaterial()));
     CHECK(CaptureScene(scene, {}, assets) == *data);
 }
 
@@ -437,7 +437,7 @@ TEST_CASE_METHOD(Fixture, "Scenes are assets", "[scene data]")
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    const AssetID id = assets.CreateScene("scenes/new.scene");
+    const SceneID id = assets.CreateScene("scenes/new.scene");
     REQUIRE(id);
     CHECK(assets.GetInfo(id)->Type == AssetType::Scene);
     CHECK(assets.List(AssetType::Scene).size() == 1);
@@ -461,7 +461,7 @@ TEST_CASE_METHOD(Fixture, "Scenes are assets", "[scene data]")
 
         CHECK(assets.ReadSceneFile(id)->Environment.Exposure == 3.0f);
         CHECK_FALSE(fs::exists(Temp.Path() / "scenes/new.scene.saving"));
-        CHECK(AssetManager(Gpu, Temp.Path()).FindId("scenes/new.scene") == id);
+        CHECK(AssetManager(Gpu, Temp.Path()).Find<AssetType::Scene>("scenes/new.scene") == id);
     }
 
     SECTION("Deleting removes it")
@@ -469,12 +469,6 @@ TEST_CASE_METHOD(Fixture, "Scenes are assets", "[scene data]")
         REQUIRE(assets.Delete(id));
         CHECK_FALSE(assets.GetInfo(id));
         CHECK(assets.List(AssetType::Scene).empty());
-    }
-
-    SECTION("Other types aren't scenes")
-    {
-        CHECK_FALSE(assets.ReadSceneFile(assets.DefaultMaterial()));
-        CHECK_FALSE(assets.SaveScene(assets.DefaultMaterial(), {}));
     }
 }
 
@@ -495,9 +489,9 @@ TEST_CASE_METHOD(Fixture, "Moving a file updates the scenes referencing it", "[s
 
     AssetManager assets(Gpu, Temp.Path());
 
-    const AssetID mesh = assets.FindId("old.obj");
-    const AssetID material = assets.FindId("old.mat");
-    const AssetID source = assets.FindId("old.scene");
+    const MeshID mesh = assets.Find<AssetType::Mesh>("old.obj");
+    const MaterialID material = assets.Find<AssetType::Material>("old.mat");
+    const SceneID source = assets.Find<AssetType::Scene>("old.scene");
 
     REQUIRE(assets.Rename(mesh, "folder/new.obj"));
     REQUIRE(assets.Rename(material, "folder/new.mat"));
@@ -506,7 +500,7 @@ TEST_CASE_METHOD(Fixture, "Moving a file updates the scenes referencing it", "[s
     CHECK(ReadFile(unrelated) == other);
 
     AssetManager reopened(Gpu, Temp.Path());
-    const auto data = reopened.ReadSceneFile(reopened.FindId("level.scene"));
+    const auto data = reopened.ReadSceneFile(reopened.Find<AssetType::Scene>("level.scene"));
 
     REQUIRE(data);
     CHECK(data->Roots[0].MeshRenderer->Mesh == mesh);
@@ -521,13 +515,13 @@ TEST_CASE_METHOD(Fixture, "A renamed folder keeps a scene's references working",
     Temp.Write("props/crate.scene", SceneWith(R"({ "meshRenderer": { "mesh": "props/crate.obj" } })"));
     AssetManager assets(Gpu, Temp.Path());
 
-    const AssetID mesh = assets.FindId("props/crate.obj");
+    const MeshID mesh = assets.Find<AssetType::Mesh>("props/crate.obj");
 
     fs::rename(Temp.Path() / "props", Temp.Path() / "renamed");
     CHECK(assets.Refresh().empty());
 
     AssetManager reopened(Gpu, Temp.Path());
-    const auto data = reopened.ReadSceneFile(reopened.FindId("renamed/crate.scene"));
+    const auto data = reopened.ReadSceneFile(reopened.Find<AssetType::Scene>("renamed/crate.scene"));
 
     REQUIRE(data);
     CHECK(data->Roots[0].MeshRenderer->Mesh == mesh);

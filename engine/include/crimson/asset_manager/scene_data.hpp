@@ -27,8 +27,8 @@ namespace crimson
 
     struct SceneMeshRenderer
     {
-        AssetID Mesh;
-        std::vector<AssetID> Materials; // an empty slot fills itself when the scene is loaded
+        MeshID Mesh;
+        std::vector<MaterialID> Materials; // an empty slot fills itself when the scene is loaded
         bool CastsShadows = true;
 
         bool operator==(const SceneMeshRenderer&) const = default;
@@ -46,7 +46,7 @@ namespace crimson
 
         std::optional<LightComponent> Light;
         std::optional<SceneMeshRenderer> MeshRenderer;
-        AssetID Instance;
+        SceneID Instance;
         std::vector<SceneNode> Children;
 
         bool operator==(const SceneNode&) const;

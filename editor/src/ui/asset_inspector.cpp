@@ -71,11 +71,12 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawScene(const AssetInfo& info)
     {
-        const bool open = info.Id == m_context.ActiveSceneAsset;
+        const SceneID scene = m_context.Assets.As<AssetType::Scene>(info.Id);
+        const bool open = scene == m_context.ActiveSceneAsset;
 
         ImGui::BeginDisabled(open);
         if (ImGui::Button(open ? "Open Already" : "Open", ImVec2(-1.0f, 0.0f)))
-            m_context.OpenScene(info.Id);
+            m_context.OpenScene(scene);
         ImGui::EndDisabled();
 
         ImGui::TextDisabled("Drag it into the Scene view to use it in another scene");
@@ -85,7 +86,7 @@ namespace crimson::editor::ui
     {
         const std::string name = std::filesystem::path(info.Path).filename().string();
 
-        ImGui::TextUnformatted(m_context.Edits.IsDirty(info.Id) ? (name + " *").c_str() : name.c_str());
+        ImGui::TextUnformatted(m_context.Edits.IsDirty(m_context.Assets.As<AssetType::Material>(info.Id)) ? (name + " *").c_str() : name.c_str());
         ImGui::TextDisabled("%.*s", static_cast<int>(ToString(info.Type).size()), ToString(info.Type).data());
 
         if (info.ReadOnly)
@@ -101,8 +102,9 @@ namespace crimson::editor::ui
     void AssetInspector::DrawMaterial(const AssetInfo& info)
     {
         AssetEdits& edits = m_context.Edits;
+        const MaterialID id = m_context.Assets.As<AssetType::Material>(info.Id);
 
-        const MaterialData* current = edits.GetMaterial(info.Id);
+        const MaterialData* current = edits.GetMaterial(id);
         if (!current)
         {
             ImGui::TextDisabled("This material can't be read, see the console");
@@ -116,7 +118,7 @@ namespace crimson::editor::ui
 
         DrawMaterialSettings(data, changed);
 
-        const ShaderHandle shader = m_context.Assets.LoadShader(data.Shader);
+        const ShaderHandle shader = m_context.Assets.Load(data.Shader);
 
         if (shader)
         {
@@ -132,7 +134,7 @@ namespace crimson::editor::ui
         ImGui::EndDisabled();
 
         if (changed)
-            edits.SetMaterial(info.Id, data);
+            edits.SetMaterial(id, data);
 
         if (info.ReadOnly)
             return;
@@ -140,15 +142,15 @@ namespace crimson::editor::ui
         ImGui::Spacing();
         ImGui::Separator();
 
-        const bool dirty = edits.IsDirty(info.Id);
+        const bool dirty = edits.IsDirty(id);
         ImGui::BeginDisabled(!dirty);
 
         if (ImGui::Button("Save"))
-            edits.Save(info.Id);
+            edits.Save(id);
 
         ImGui::SameLine();
         if (ImGui::Button("Revert"))
-            edits.Revert(info.Id);
+            edits.Revert(id);
 
         ImGui::EndDisabled();
     }
@@ -170,11 +172,11 @@ namespace crimson::editor::ui
 
                 if (ImGui::Selectable(shader->Path.c_str(), shader->Id == data.Shader) && shader->Id != data.Shader)
                 {
-                    data.Shader = shader->Id;
+                    data.Shader = assets.As<AssetType::Shader>(shader->Id);
                     changed = true;
 
                     // What the new shader doesn't have would stay in the file forever
-                    if (const ShaderHandle handle = m_context.Assets.LoadShader(shader->Id))
+                    if (const ShaderHandle handle = m_context.Assets.Load(data.Shader))
                     {
                         const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(handle);
                         std::erase_if(data.Properties, [&](const auto& item) { return !shaderInterface.Properties.contains(item.first); });
@@ -186,7 +188,7 @@ namespace crimson::editor::ui
             ImGui::EndCombo();
         }
 
-        if (const AssetID dropped = AcceptAssetOnLastItem(assets, AssetType::Shader); dropped && dropped != data.Shader)
+        if (const ShaderID dropped = AcceptAssetOnLastItem<AssetType::Shader>(assets); dropped && dropped != data.Shader)
         {
             data.Shader = dropped;
             changed = true;
@@ -299,7 +301,7 @@ namespace crimson::editor::ui
             props::BeginRow(name.c_str());
 
             const auto used = data.Textures.find(name);
-            const AssetID current = used != data.Textures.end() ? used->second : AssetID{};
+            const TextureID current = used != data.Textures.end() ? used->second : TextureID{};
 
             // Not for a missing one, as the empty thumbnail would be kept after the file is back
             if (const ImTextureID preview = current && !assets.IsMissing(current) ? m_context.Thumbnails.Get(current) : ImTextureID{ 0 })
@@ -312,7 +314,7 @@ namespace crimson::editor::ui
             ImGui::SetNextItemWidth(-FLT_MIN);
 
             const AssetInfo* currentInfo = assets.GetInfo(current);
-            AssetID picked = current;
+            TextureID picked = current;
 
             if (BeginAssetCombo("##Texture", assets, current))
             {
@@ -322,13 +324,13 @@ namespace crimson::editor::ui
                 for (const AssetInfo* candidate : assets.List(AssetType::Texture))
                 {
                     if (ImGui::Selectable(candidate->Path.c_str(), candidate->Id == current))
-                        picked = candidate->Id;
+                        picked = assets.As<AssetType::Texture>(candidate->Id);
                 }
 
                 ImGui::EndCombo();
             }
 
-            if (const AssetID dropped = AcceptAssetOnLastItem(assets, AssetType::Texture))
+            if (const TextureID dropped = AcceptAssetOnLastItem<AssetType::Texture>(assets))
                 picked = dropped;
 
             props::ResetTarget();
@@ -383,7 +385,7 @@ namespace crimson::editor::ui
             ? static_cast<float>(m_textureSize->first) / static_cast<float>(m_textureSize->second)
             : 1.0f;
 
-        if (const ImTextureID preview = m_context.Thumbnails.Get(info.Id))
+        if (const ImTextureID preview = m_context.Thumbnails.Get(m_context.Assets.As<AssetType::Texture>(info.Id)))
             ImGui::Image(preview, ImVec2(available, available / aspect));
         else
             ImGui::TextDisabled("This image can't be read, see the console");
@@ -438,7 +440,7 @@ namespace crimson::editor::ui
 
         if (ImGui::Button("Apply"))
         {
-            m_context.Deferred.emplace_back([this, id = info.Id, settings = m_textureSettings]
+            m_context.Deferred.emplace_back([this, id = m_context.Assets.As<AssetType::Texture>(info.Id), settings = m_textureSettings]
             {
                 // Its id is about to stop working, and the next draw gets a new one
                 m_context.Thumbnails.Release(id);
@@ -455,16 +457,18 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawMesh(const AssetInfo& info)
     {
-        if (!m_context.Assets.IsLoaded(info.Id))
+        const MeshID id = m_context.Assets.As<AssetType::Mesh>(info.Id);
+
+        if (!m_context.Assets.IsLoaded(id))
         {
             // It can take seconds, so only when asked
             if (ImGui::Button("Load to see details"))
-                m_context.Deferred.emplace_back([this, id = info.Id] { m_context.Assets.LoadMesh(id); });
+                m_context.Deferred.emplace_back([this, id] { m_context.Assets.Load(id); });
 
             return;
         }
 
-        const Mesh* mesh = m_context.Assets.LoadMesh(info.Id);
+        const Mesh* mesh = m_context.Assets.Load(id);
         if (!mesh)
         {
             ImGui::TextDisabled("This mesh can't be read, see the console");
@@ -499,7 +503,7 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawShader(const AssetInfo& info)
     {
-        const ShaderHandle shader = m_context.Assets.LoadShader(info.Id);
+        const ShaderHandle shader = m_context.Assets.Load(m_context.Assets.As<AssetType::Shader>(info.Id));
         if (!shader)
         {
             ImGui::TextDisabled("This shader doesn't compile, see the console");

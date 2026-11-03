@@ -18,7 +18,7 @@ namespace crimson::editor
         AssetThumbnails& operator=(const AssetThumbnails&) = delete;
 
         // Gives 0 if the texture can't be loaded
-        [[nodiscard]] ImTextureID Get(AssetID id);
+        [[nodiscard]] ImTextureID Get(TextureID id);
         void Release(AssetID id);
     private:
         struct Thumbnail

@@ -419,12 +419,12 @@ float4 PSMain(VertexOutput input) : SV_Target
         return it != m_assets.end() && !std::holds_alternative<std::monostate>(it->second.Loaded);
     }
 
-    AssetID AssetManager::DefaultMaterial() const
+    MaterialID AssetManager::DefaultMaterial() const
     {
-        return FindId(kDefaultMaterialPath);
+        return Find<AssetType::Material>(kDefaultMaterialPath);
     }
 
-    const LoadedAsset& AssetManager::Load(AssetID id)
+    const LoadedAsset& AssetManager::LoadEntry(AssetID id)
     {
         static const LoadedAsset kEmpty{};
 
@@ -472,7 +472,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     template <typename T>
     const T* AssetManager::LoadAs(AssetID id)
     {
-        const LoadedAsset& asset = Load(id);
+        const LoadedAsset& asset = LoadEntry(id);
 
         if (const T* resource = std::get_if<T>(&asset))
             return resource;
@@ -482,34 +482,6 @@ float4 PSMain(VertexOutput input) : SV_Target
 
         return nullptr;
     }
-
-    TextureHandle AssetManager::LoadTexture(AssetID id)
-    {
-        const auto* texture = LoadAs<TextureHandle>(id);
-        return texture ? *texture : TextureHandle::Invalid();
-    }
-
-    ShaderHandle AssetManager::LoadShader(AssetID id)
-    {
-        const auto* shader = LoadAs<ShaderHandle>(id);
-        return shader ? *shader : ShaderHandle::Invalid();
-    }
-
-    MaterialHandle AssetManager::LoadMaterial(AssetID id)
-    {
-        const auto* material = LoadAs<MaterialHandle>(id);
-        return material ? *material : MaterialHandle::Invalid();
-    }
-
-    const Mesh* AssetManager::LoadMesh(AssetID id)
-    {
-        return LoadAs<Mesh>(id);
-    }
-
-    TextureHandle AssetManager::LoadTexture(std::string_view path) { return LoadTexture(FindIdOrWarn(path)); }
-    ShaderHandle AssetManager::LoadShader(std::string_view path) { return LoadShader(FindIdOrWarn(path)); }
-    MaterialHandle AssetManager::LoadMaterial(std::string_view path) { return LoadMaterial(FindIdOrWarn(path)); }
-    const Mesh* AssetManager::LoadMesh(std::string_view path) { return LoadMesh(FindIdOrWarn(path)); }
 
     template <AssetType T>
     LoadResult<T> AssetManager::Load(TypedAssetID<T> id)
@@ -619,7 +591,7 @@ float4 PSMain(VertexOutput input) : SV_Target
             if (entry.Info.Type != AssetType::Material || isRemoved(id) || std::holds_alternative<std::monostate>(entry.Loaded))
                 continue;
 
-            const MaterialData* data = GetMaterialData(id);
+            const MaterialData* data = GetMaterialData(MaterialID(id));
             if (!data)
                 continue;
 
@@ -635,7 +607,7 @@ float4 PSMain(VertexOutput input) : SV_Target
             for (const auto& [slot, texture] : data->Textures)
             {
                 if (isRemoved(texture))
-                    m_gpuResources.SetMaterialTexture(material, slot, EmptySlotTexture(LoadShader(data->Shader), slot));
+                    m_gpuResources.SetMaterialTexture(material, slot, EmptySlotTexture(Load(data->Shader), slot));
             }
         }
 
@@ -665,16 +637,16 @@ float4 PSMain(VertexOutput input) : SV_Target
         return std::ranges::none_of(parsed, [](const fs::path& part) { return part == ".."; });
     }
 
-    AssetID AssetManager::CreateMaterial(std::string_view path)
+    MaterialID AssetManager::CreateMaterial(std::string_view path)
     {
         MaterialData data;
-        data.Shader = FindId(kDefaultShaderPath);
+        data.Shader = Find<AssetType::Shader>(kDefaultShaderPath);
         data.Properties["Color"] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-        return CreateAssetFile(path, ".mat", WriteMaterialData(data, *this));
+        return As<AssetType::Material>(CreateAssetFile(path, ".mat", WriteMaterialData(data, *this)));
     }
 
-    AssetID AssetManager::CreateScene(std::string_view path)
+    SceneID AssetManager::CreateScene(std::string_view path)
     {
         SceneNode sun;
         sun.Id = AssetID::Generate();
@@ -686,12 +658,12 @@ float4 PSMain(VertexOutput input) : SV_Target
         SceneData data;
         data.Roots.push_back(std::move(sun));
 
-        return CreateAssetFile(path, ".scene", WriteSceneData(data, *this));
+        return As<AssetType::Scene>(CreateAssetFile(path, ".scene", WriteSceneData(data, *this)));
     }
 
-    AssetID AssetManager::CreateShader(std::string_view path)
+    ShaderID AssetManager::CreateShader(std::string_view path)
     {
-        return CreateAssetFile(path, ".hlsl", std::string(kNewShaderSource));
+        return As<AssetType::Shader>(CreateAssetFile(path, ".hlsl", std::string(kNewShaderSource)));
     }
 
     // The folder an asset is in, with a slash at the end, or empty at the top
@@ -707,7 +679,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         return FolderOf(meshPath) + "materials/" + std::string(slot) + ".mat";
     }
 
-    SlotMaterials AssetManager::CreateSlotMaterials(AssetID mesh)
+    SlotMaterials AssetManager::CreateSlotMaterials(MeshID mesh)
     {
         SlotMaterials result;
 
@@ -720,7 +692,7 @@ float4 PSMain(VertexOutput input) : SV_Target
 
         // Copied, as creating files adds assets, which can move the info
         const std::string meshPath = info->Path;
-        std::vector<AssetID> dataTextures;
+        std::vector<TextureID> dataTextures;
 
         for (const tinyobj::material_t& mtl : ReadMtlMaterials(m_root / fs::path(meshPath)))
         {
@@ -735,7 +707,7 @@ float4 PSMain(VertexOutput input) : SV_Target
 
             MtlMaterial material = MaterialFromMtl(mtl, FolderOf(meshPath), *this);
 
-            if (const AssetID created = CreateAssetFile(path, ".mat", WriteMaterialData(material.Data, *this)))
+            if (const MaterialID created = As<AssetType::Material>(CreateAssetFile(path, ".mat", WriteMaterialData(material.Data, *this))))
             {
                 result.Created.push_back(created);
                 std::ranges::move(material.DataTextures, std::back_inserter(dataTextures));
@@ -743,7 +715,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         }
 
         // Normal maps hold directions, which sRGB decoding would bend
-        for (const AssetID texture : dataTextures)
+        for (const TextureID texture : dataTextures)
         {
             const AssetInfo* textureInfo = GetInfo(texture);
             if (!textureInfo || textureInfo->ReadOnly || !textureInfo->Settings.value("srgb", true))
@@ -868,19 +840,16 @@ float4 PSMain(VertexOutput input) : SV_Target
         return true;
     }
 
-    AssetID AssetManager::FindSlotMaterial(AssetID mesh, std::string_view slot) const
+    MaterialID AssetManager::FindSlotMaterial(MeshID mesh, std::string_view slot) const
     {
         const AssetInfo* info = GetInfo(mesh);
         if (!info || info->Type != AssetType::Mesh)
             return {};
 
-        const AssetID material = FindId(SlotMaterialPath(info->Path, slot));
-        const AssetInfo* materialInfo = GetInfo(material);
-
-        return materialInfo && materialInfo->Type == AssetType::Material ? material : AssetID{};
+        return Find<AssetType::Material>(SlotMaterialPath(info->Path, slot));
     }
 
-    TextureHandle AssetManager::CreateTexturePreview(AssetID id) const
+    TextureHandle AssetManager::CreateTexturePreview(TextureID id) const
     {
         const auto it = m_assets.find(id);
         if (it == m_assets.end() || it->second.Info.Type != AssetType::Texture)
@@ -897,7 +866,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         return CreateTextureFromMemory(m_gpuResources, std::as_bytes(std::span(*file)), options);
     }
 
-    std::optional<MaterialData> AssetManager::ReadMaterialFile(AssetID id) const
+    std::optional<MaterialData> AssetManager::ReadMaterialFile(MaterialID id) const
     {
         const auto it = m_assets.find(id);
         if (it == m_assets.end() || it->second.Info.Type != AssetType::Material)
@@ -910,7 +879,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         return text ? ParseMaterialData(*text, *this, entry.Info.Path) : std::nullopt;
     }
 
-    std::optional<SceneData> AssetManager::ReadSceneFile(AssetID id) const
+    std::optional<SceneData> AssetManager::ReadSceneFile(SceneID id) const
     {
         const auto it = m_assets.find(id);
         if (it == m_assets.end() || it->second.Info.Type != AssetType::Scene)
@@ -923,7 +892,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         return text ? ParseSceneData(*text, *this, entry.Info.Path) : std::nullopt;
     }
 
-    const MaterialData* AssetManager::GetMaterialData(AssetID id)
+    const MaterialData* AssetManager::GetMaterialData(MaterialID id)
     {
         const auto it = m_assets.find(id);
         if (it == m_assets.end() || it->second.Info.Type != AssetType::Material)
@@ -935,13 +904,13 @@ float4 PSMain(VertexOutput input) : SV_Target
         return it->second.Material ? &*it->second.Material : nullptr;
     }
 
-    MaterialApplyResult AssetManager::ApplyMaterial(AssetID id, const MaterialData& data)
+    MaterialApplyResult AssetManager::ApplyMaterial(MaterialID id, const MaterialData& data)
     {
         const auto it = m_assets.find(id);
         if (it == m_assets.end() || it->second.Info.Type != AssetType::Material || it->second.Info.ReadOnly)
             return MaterialApplyResult::Failed;
 
-        const MaterialHandle current = LoadMaterial(id);
+        const MaterialHandle current = Load(id);
         const MaterialData* currentData = GetMaterialData(id);
 
         Entry& entry = it->second;
@@ -963,7 +932,7 @@ float4 PSMain(VertexOutput input) : SV_Target
 
         // Only what changed: replacing a texture has to wait for the GPU, and a dragged color slider gets here every frame
         // The defaults first, for a property that is no longer in the data to go back to its default
-        const ShaderHandle shader = LoadShader(data.Shader);
+        const ShaderHandle shader = Load(data.Shader);
         ApplyShaderPropertyDefaults(shader, current, ctx);
 
         MaterialData values = data;
@@ -976,7 +945,7 @@ float4 PSMain(VertexOutput input) : SV_Target
             if (previous != currentData->Textures.end() && previous->second == texture)
                 continue;
 
-            if (const TextureHandle handle = LoadTexture(texture))
+            if (const TextureHandle handle = Load(texture))
                 m_gpuResources.SetMaterialTexture(current, slot, handle);
         }
 
@@ -990,7 +959,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         return MaterialApplyResult::Updated;
     }
 
-    bool AssetManager::SaveMaterial(AssetID id, const MaterialData& data)
+    bool AssetManager::SaveMaterial(MaterialID id, const MaterialData& data)
     {
         const auto it = m_assets.find(id);
         if (it == m_assets.end() || it->second.Info.Type != AssetType::Material || it->second.Info.ReadOnly)
@@ -1010,7 +979,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         return true;
     }
 
-    bool AssetManager::SaveScene(AssetID id, const SceneData& data)
+    bool AssetManager::SaveScene(SceneID id, const SceneData& data)
     {
         const auto it = m_assets.find(id);
         if (it == m_assets.end() || it->second.Info.Type != AssetType::Scene)
@@ -1049,7 +1018,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         return true;
     }
 
-    bool AssetManager::ReimportTexture(AssetID id, nlohmann::json settings)
+    bool AssetManager::ReimportTexture(TextureID id, nlohmann::json settings)
     {
         const auto it = m_assets.find(id);
         if (it == m_assets.end() || it->second.Info.Type != AssetType::Texture || it->second.Info.ReadOnly)
@@ -1090,7 +1059,7 @@ float4 PSMain(VertexOutput input) : SV_Target
             if (material.Info.Type != AssetType::Material || std::holds_alternative<std::monostate>(material.Loaded))
                 continue;
 
-            const MaterialData* data = GetMaterialData(materialId);
+            const MaterialData* data = GetMaterialData(MaterialID(materialId));
             if (!data)
                 continue;
 
@@ -1157,7 +1126,7 @@ float4 PSMain(VertexOutput input) : SV_Target
                 continue;
 
             // What the material is using, unsaved edits included
-            const MaterialData* data = GetMaterialData(materialId);
+            const MaterialData* data = GetMaterialData(MaterialID(materialId));
             if (!data || data->Shader != id)
                 continue;
 

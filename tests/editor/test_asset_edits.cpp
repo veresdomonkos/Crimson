@@ -30,7 +30,7 @@ namespace
         std::filesystem::path File = Temp.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "properties": { "Color": [1, 0, 0, 1] } })");
         AssetManager Assets{ Gpu, Temp.Path() };
         AssetEdits Edits{ Assets };
-        AssetID Id = Assets.FindId("mine.mat");
+        MaterialID Id = Assets.Find<AssetType::Material>("mine.mat");
 
         MaterialData MakeChanged()
         {
@@ -109,7 +109,7 @@ TEST_CASE_METHOD(Fixture, "An edit is unsaved until it is saved", "[asset edits]
 
 TEST_CASE_METHOD(Fixture, "Edits reach the GPU when they are applied", "[asset edits]")
 {
-    const MaterialHandle handle = Assets.LoadMaterial(Id);
+    const MaterialHandle handle = Assets.Load(Id);
     REQUIRE(handle);
 
     MaterialData changed = MakeChanged();
@@ -140,7 +140,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     Assets.Refresh();
 
     MaterialData changed = *Edits.GetMaterial(Id);
-    changed.Shader = Assets.FindId("own.hlsl");
+    changed.Shader = Assets.Find<AssetType::Shader>("own.hlsl");
     Edits.SetMaterial(Id, changed);
 
     CHECK(Edits.Apply());
@@ -155,18 +155,18 @@ TEST_CASE_METHOD(Fixture, "An edit that can't be shown is undone", "[asset edits
     Assets.Refresh();
 
     MaterialData changed = *Edits.GetMaterial(Id);
-    changed.Shader = Assets.FindId("broken.hlsl");
+    changed.Shader = Assets.Find<AssetType::Shader>("broken.hlsl");
     Edits.SetMaterial(Id, changed);
 
     CHECK_FALSE(Edits.Apply());
 
-    CHECK(Edits.GetMaterial(Id)->Shader == Assets.FindId("engine/shaders/S_Lit.hlsl"));
+    CHECK(Edits.GetMaterial(Id)->Shader == Assets.Find<AssetType::Shader>("engine/shaders/S_Lit.hlsl"));
     CHECK_FALSE(Edits.IsDirty(Id));
 }
 
 TEST_CASE_METHOD(Fixture, "Engine materials can't be edited", "[asset edits]")
 {
-    const AssetID engine = Assets.DefaultMaterial();
+    const MaterialID engine = Assets.DefaultMaterial();
 
     MaterialData changed = *Edits.GetMaterial(engine);
     changed.Settings.Cull = CullMode::None;

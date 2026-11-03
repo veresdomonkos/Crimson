@@ -26,7 +26,7 @@ namespace crimson
     // What CreateSlotMaterials did
     struct SlotMaterials
     {
-        std::vector<AssetID> Created;
+        std::vector<MaterialID> Created;
         size_t Kept = 0; // slots that had a material already, which is left as it is
     };
 
@@ -101,27 +101,17 @@ namespace crimson
         template <AssetType T>
         LoadResult<T> Load(std::string_view path) { return Load(FindOrWarn<T>(path)); }
 
-        [[nodiscard]] AssetID DefaultMaterial() const;
+        [[nodiscard]] MaterialID DefaultMaterial() const;
 
         // The material made for one of a mesh's slots: materials/<slot>.mat, next to the mesh. Invalid if there is none.
-        [[nodiscard]] AssetID FindSlotMaterial(AssetID mesh, std::string_view slot) const;
+        [[nodiscard]] MaterialID FindSlotMaterial(MeshID mesh, std::string_view slot) const;
 
         // What a loaded shader's materials can set
         [[nodiscard]] const ShaderInterface& GetShaderInterface(ShaderHandle shader) const { return m_gpuResources.GetShaderInterface(shader); }
 
-        TextureHandle LoadTexture(AssetID id);
-        ShaderHandle LoadShader(AssetID id);
-        MaterialHandle LoadMaterial(AssetID id);
-        const Mesh* LoadMesh(AssetID id); // stays valid as long as the manager
-
-        TextureHandle LoadTexture(std::string_view path);
-        ShaderHandle LoadShader(std::string_view path);
-        MaterialHandle LoadMaterial(std::string_view path);
-        const Mesh* LoadMesh(std::string_view path);
-
         // A separate copy of a texture for showing as it is stored, as UI that isn't sRGB encoded would show an sRGB
         // texture too dark. The caller owns it, and gives it back to DestroyTexturePreview.
-        [[nodiscard]] TextureHandle CreateTexturePreview(AssetID id) const;
+        [[nodiscard]] TextureHandle CreateTexturePreview(TextureID id) const;
         void DestroyTexturePreview(TextureHandle preview) const { m_gpuResources.DestroyTexture(preview); }
 
         // What a material's texture slot uses when nothing is assigned to it. Invalid means the backend's white texture.
@@ -132,30 +122,30 @@ namespace crimson
         std::vector<AssetID> Refresh();
 
         // These report failures in the log. Engine assets can't be changed, and project assets can't go under "engine/".
-        AssetID CreateMaterial(std::string_view path);
-        AssetID CreateScene(std::string_view path); // with a light, for it not to start out black
-        AssetID CreateShader(std::string_view path); // a simple lit one, to start from
+        MaterialID CreateMaterial(std::string_view path);
+        SceneID CreateScene(std::string_view path); // with a light, for it not to start out black
+        ShaderID CreateShader(std::string_view path); // a simple lit one, to start from
 
         // Makes the material each slot of an .obj looks for, materials/<slot>.mat next to it, from its .mtl: colors,
         // textures and shininess on the default shader, with sRGB turned off on its normal maps. A slot that has one
         // already keeps it, so running it again changes nothing.
-        SlotMaterials CreateSlotMaterials(AssetID mesh);
+        SlotMaterials CreateSlotMaterials(MeshID mesh);
         bool Rename(AssetID id, std::string_view newPath);
         bool Delete(AssetID id);
 
         // What the material is using right now, which edits may have made different from its file
-        [[nodiscard]] const MaterialData* GetMaterialData(AssetID id);
-        [[nodiscard]] std::optional<MaterialData> ReadMaterialFile(AssetID id) const;
+        [[nodiscard]] const MaterialData* GetMaterialData(MaterialID id);
+        [[nodiscard]] std::optional<MaterialData> ReadMaterialFile(MaterialID id) const;
 
         // Shows the data on the material, leaving its file alone
-        MaterialApplyResult ApplyMaterial(AssetID id, const MaterialData& data);
-        bool SaveMaterial(AssetID id, const MaterialData& data);
+        MaterialApplyResult ApplyMaterial(MaterialID id, const MaterialData& data);
+        bool SaveMaterial(MaterialID id, const MaterialData& data);
 
-        [[nodiscard]] std::optional<SceneData> ReadSceneFile(AssetID id) const;
-        bool SaveScene(AssetID id, const SceneData& data);
+        [[nodiscard]] std::optional<SceneData> ReadSceneFile(SceneID id) const;
+        bool SaveScene(SceneID id, const SceneData& data);
 
         // Stores the settings in the texture's meta file, and if it is loaded, recreates it for the materials using it
-        bool ReimportTexture(AssetID id, nlohmann::json settings);
+        bool ReimportTexture(TextureID id, nlohmann::json settings);
 
         // Compiles the project's shaders again whose file or included files changed since they were loaded, and
         // recreates their materials. One that no longer compiles keeps the old version. Returns the ids of the
@@ -184,7 +174,7 @@ namespace crimson
         void UpdateReferencesTo(const std::unordered_map<std::string, AssetID>& moved); // old path to id
         AssetID CreateAssetFile(std::string_view path, std::string_view extension, const std::string& contents);
 
-        const LoadedAsset& Load(AssetID id);
+        const LoadedAsset& LoadEntry(AssetID id);
         LoadedAsset Import(Entry& entry);
         std::vector<AssetID> ReloadShader(AssetID id, Entry& entry);
         AssetID FindIdOrWarn(std::string_view path) const;

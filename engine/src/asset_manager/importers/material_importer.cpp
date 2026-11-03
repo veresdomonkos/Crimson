@@ -29,7 +29,7 @@ namespace crimson
 
         for (const auto& [slot, id] : data.Textures)
         {
-            const TextureHandle texture = ctx.Assets.LoadTexture(id);
+            const TextureHandle texture = ctx.Assets.Load(id);
 
             // A missing one has been warned about when it was read
             if (!texture)
@@ -55,7 +55,7 @@ namespace crimson
 
     MaterialHandle CreateMaterialFromData(const MaterialData& data, ImportContext& ctx, std::string_view name)
     {
-        const ShaderHandle shader = ctx.Assets.LoadShader(data.Shader);
+        const ShaderHandle shader = ctx.Assets.Load(data.Shader);
         if (!shader)
         {
             LOG_ERROR("[MaterialImporter] '{}': shader not found or failed to load", name);

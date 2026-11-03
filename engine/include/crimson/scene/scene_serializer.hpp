@@ -11,13 +11,13 @@ namespace crimson
 
     // Creates the data's entities under the parent, and expands the instances. The owner is the scene being created,
     // if it has a file, so that a scene containing itself stops instead of going on forever.
-    void InstantiateScene(const SceneData& data, Scene& scene, Entity parent, AssetManager& assets, AssetID owner);
+    void InstantiateScene(const SceneData& data, Scene& scene, Entity parent, AssetManager& assets, SceneID owner);
 
     // A new instance of a scene, named after its file. Invalid if the source uses the owner, as that would be a loop.
-    Entity CreateSceneInstance(AssetID source, Scene& scene, Entity parent, AssetManager& assets, AssetID owner);
+    Entity CreateSceneInstance(SceneID source, Scene& scene, Entity parent, AssetManager& assets, SceneID owner);
 
     // Whether a scene has an instance of another one, at any depth, or is that one
-    [[nodiscard]] bool SceneUses(AssetID scene, AssetID used, const AssetManager& assets);
+    [[nodiscard]] bool SceneUses(SceneID scene, SceneID used, const AssetManager& assets);
 
     // Its source went away, so what came from it goes too. The entity keeps the reference, for the instance to be back
     // when the source is and the scene is opened again.

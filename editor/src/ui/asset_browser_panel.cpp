@@ -513,8 +513,8 @@ namespace crimson::editor::ui
 
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         {
-            if (item.Type == AssetType::Scene)
-                m_context.OpenScene(item.Id);
+            if (const SceneID scene = m_context.Assets.As<AssetType::Scene>(item.Id))
+                m_context.OpenScene(scene);
             else if (editedOutside && !file.empty())
                 openOutside();
         }
@@ -530,7 +530,7 @@ namespace crimson::editor::ui
         // Only pictures that are on screen get loaded
         ImTextureID picture = 0;
         if (item.Type == AssetType::Texture && ImGui::IsItemVisible())
-            picture = m_context.Thumbnails.Get(item.Id);
+            picture = m_context.Thumbnails.Get(m_context.Assets.As<AssetType::Texture>(item.Id));
 
         if (picture)
         {
@@ -544,7 +544,8 @@ namespace crimson::editor::ui
             DrawTileIcon(drawList, tile.IconMin, tile.IconMax, AssetIcon(item.Type), theme::AssetColor(item.Type));
         }
 
-        const std::string name = m_context.Edits.IsDirty(item.Id) ? "* " + item.Name : item.Name;
+        const bool dirty = item.Type == AssetType::Material && m_context.Edits.IsDirty(m_context.Assets.As<AssetType::Material>(item.Id));
+        const std::string name = dirty ? "* " + item.Name : item.Name;
         DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(item.ReadOnly ? ImGuiCol_TextDisabled : ImGuiCol_Text));
 
         if (ImGui::BeginPopupContextItem("##AssetMenu"))
@@ -586,7 +587,7 @@ namespace crimson::editor::ui
                 {
                     m_context.Deferred.emplace_back([this, id = item.Id]
                     {
-                        if (m_context.Assets.CreateSlotMaterials(id).Created.empty())
+                        if (m_context.Assets.CreateSlotMaterials(m_context.Assets.As<AssetType::Mesh>(id)).Created.empty())
                             return;
 
                         ++m_context.AssetsVersion;

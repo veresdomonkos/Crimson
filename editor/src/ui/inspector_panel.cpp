@@ -40,13 +40,14 @@ namespace crimson::editor::ui
     }
 
     // Returns true when another asset was picked
-    static bool DrawAssetCombo(const char* label, const AssetManager& assets, AssetType type, AssetID& current)
+    template <AssetType T>
+    static bool DrawAssetCombo(const char* label, const AssetManager& assets, TypedAssetID<T>& current)
     {
         bool changed = false;
 
         if (BeginAssetCombo(label, assets, current))
         {
-            for (const AssetInfo* info : assets.List(type))
+            for (const AssetInfo* info : assets.List(T))
             {
                 if (IsInternal(*info))
                     continue;
@@ -56,14 +57,14 @@ namespace crimson::editor::ui
                 if (ImGui::Selectable(info->Path.c_str(), selected))
                 {
                     changed = !selected;
-                    current = info->Id;
+                    current = assets.As<T>(info->Id);
                 }
             }
 
             ImGui::EndCombo();
         }
 
-        if (const AssetID dropped = AcceptAssetOnLastItem(assets, type); dropped && dropped != current)
+        if (const TypedAssetID<T> dropped = AcceptAssetOnLastItem<T>(assets); dropped && dropped != current)
         {
             current = dropped;
             changed = true;
@@ -215,7 +216,7 @@ namespace crimson::editor::ui
             if (props::BeginTable("##MeshRenderer"))
             {
                 props::BeginRow("Mesh");
-                changed |= DrawAssetCombo("##Asset", m_context.Assets, AssetType::Mesh, renderer->MeshAsset);
+                changed |= DrawAssetCombo("##Asset", m_context.Assets, renderer->MeshAsset);
                 props::EndRow(false);
 
                 for (size_t slot = 0; slot < renderer->MaterialAssets.size(); ++slot)
@@ -227,8 +228,8 @@ namespace crimson::editor::ui
                     // Without one of its own, a slot goes back to the material that fits it, or the default one
                     ImGui::PushID(static_cast<int>(slot));
                     props::BeginRow(label.c_str());
-                    AssetID& material = renderer->MaterialAssets[slot];
-                    changed |= DrawAssetCombo("##Asset", m_context.Assets, AssetType::Material, material);
+                    MaterialID& material = renderer->MaterialAssets[slot];
+                    changed |= DrawAssetCombo("##Asset", m_context.Assets, material);
                     props::ResetTarget();
 
                     if (props::EndRow(true) && material)
