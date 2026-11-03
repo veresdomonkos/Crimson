@@ -22,7 +22,7 @@ namespace crimson
         if (!text)
             return {};
 
-        const auto binary = CompileHlslShader(source.Info.Path, *text, source.File.parent_path());
+        const auto binary = CompileHlslShader(source.Info.Path, *text, source.File.parent_path(), &ctx.Dependencies);
         if (!binary)
         {
             LOG_ERROR("[ShaderImporter] Compilation failed for '{}'", source.Info.Path);

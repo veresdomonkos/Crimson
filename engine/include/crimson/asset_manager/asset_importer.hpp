@@ -5,6 +5,7 @@
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 #include "crimson/asset_manager/asset_types.hpp"
 #include "crimson/core/embedded_resource.hpp"
 #include "crimson/renderer/mesh.hpp"
@@ -18,6 +19,7 @@ namespace crimson
     {
         GpuResourceManager& Gpu;
         AssetManager&       Assets;
+        std::vector<std::filesystem::path> Dependencies{}; // other files the asset was made from, for reloading it when they change
     };
 
     // The asset an importer is loading. Importers get its bytes from here instead of opening the file,
