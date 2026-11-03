@@ -82,6 +82,7 @@ namespace crimson
         // These report failures in the log. Engine assets can't be changed, and project assets can't go under "engine/".
         AssetID CreateMaterial(std::string_view path);
         AssetID CreateScene(std::string_view path); // with a light, for it not to start out black
+        AssetID CreateShader(std::string_view path); // a simple lit one, to start from
         bool Rename(AssetID id, std::string_view newPath);
         bool Delete(AssetID id);
 

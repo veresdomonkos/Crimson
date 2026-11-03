@@ -25,6 +25,66 @@ namespace crimson
     static constexpr std::string_view kDefaultMaterialPath = "engine/materials/default.mat";
     static constexpr std::string_view kDefaultShaderPath = "engine/shaders/main.hlsl";
 
+    // What a new shader starts as: lit like the default one, with fewer slots, to have something to change
+    static constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space2,
+// and its textures in space2 too. A comment like "@default 0.5 @range 0 1" sets how a property starts.
+#include "crimson/lighting.hlsli"
+
+cbuffer MaterialBlock : register(b0, space2)
+{
+    float4 Color; // @default 1 1 1 1
+    float Metallic; // @default 0 @range 0 1
+    float Roughness; // @default 0.5 @range 0 1
+};
+
+Texture2D ColorMap : register(t0, space2);
+
+struct VertexInput
+{
+    float3 Position : POSITION;
+    float3 Normal : NORMAL;
+    float2 UV : TEXCOORD0;
+};
+
+struct VertexOutput
+{
+    float4 ClipPosition : SV_Position;
+    float3 Normal : NORMAL;
+    float3 WorldPosition : WORLDPOSITION;
+    float2 UV : TEXCOORD0;
+};
+
+VertexOutput VSMain(VertexInput input)
+{
+    const ObjectData object = GetObjectData();
+    const float4 worldPosition = mul(object.Transform, float4(input.Position, 1.0));
+
+    VertexOutput output;
+    output.ClipPosition = mul(ViewProj, worldPosition);
+    output.Normal = mul((float3x3)object.NormalMatrix, input.Normal);
+    output.WorldPosition = worldPosition.xyz;
+    output.UV = input.UV;
+    return output;
+}
+
+float4 PSMain(VertexOutput input) : SV_Target
+{
+    const float4 base = Color * ColorMap.Sample(LinearWrap, input.UV);
+    const float3 normal = normalize(input.Normal);
+
+    Surface surface;
+    surface.WorldPosition = input.WorldPosition;
+    surface.Normal = normal;
+    surface.GeometricNormal = normal;
+    surface.Albedo = base.rgb;
+    surface.Metallic = Metallic;
+    surface.Roughness = Roughness;
+    surface.Occlusion = 1.0;
+
+    return float4(ComputeLighting(surface), base.a);
+}
+)";
+
     // FNV-1a. An engine resource has no meta to store an id in, and scenes must find it again in any project.
     static AssetID EngineResourceId(std::string_view path)
     {
@@ -538,6 +598,11 @@ namespace crimson
         data.Roots.push_back(std::move(sun));
 
         return CreateAssetFile(path, ".scene", WriteSceneData(data, *this));
+    }
+
+    AssetID AssetManager::CreateShader(std::string_view path)
+    {
+        return CreateAssetFile(path, ".hlsl", std::string(kNewShaderSource));
     }
 
     AssetID AssetManager::CreateAssetFile(std::string_view path, std::string_view extension, const std::string& contents)

@@ -435,6 +435,38 @@ TEST_CASE_METHOD(Fixture, "New materials", "[asset editing]")
     }
 }
 
+TEST_CASE_METHOD(Fixture, "New shaders", "[asset editing]")
+{
+    Temp.Write("taken.hlsl", "// mine");
+    AssetManager assets(Gpu, Temp.Path());
+
+    SECTION("Compile right away, with properties to set")
+    {
+        const AssetID id = assets.CreateShader("folder/new.hlsl");
+
+        REQUIRE(id);
+        CHECK(fs::exists(Temp.Path() / "folder/new.hlsl.meta"));
+        CHECK(assets.GetInfo(id)->Type == AssetType::Shader);
+
+        const ShaderHandle shader = assets.LoadShader(id);
+        REQUIRE(shader);
+
+        const ShaderInterface& shaderInterface = assets.GetShaderInterface(shader);
+        CHECK(shaderInterface.Properties.contains("Color"));
+        CHECK(shaderInterface.Properties.contains("Roughness"));
+        CHECK(shaderInterface.Textures.contains("ColorMap"));
+    }
+
+    SECTION("Refuse bad places")
+    {
+        CHECK_FALSE(assets.CreateShader("taken.hlsl"));
+        CHECK_FALSE(assets.CreateShader("engine/mine.hlsl"));
+        CHECK_FALSE(assets.CreateShader("wrong.mat"));
+
+        CHECK(ReadFile(Temp.Path() / "taken.hlsl") == "// mine");
+    }
+}
+
 TEST_CASE_METHOD(Fixture, "Renaming moves the file and its meta", "[asset editing]")
 {
     Temp.Write("a.obj", kTriangleObj);
