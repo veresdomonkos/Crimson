@@ -361,6 +361,18 @@ namespace crimson::editor
             m_context.SceneChanged = IsSceneChanged();
         }
 
+        // Often enough for a shader saved in another program to show up about right away
+        constexpr float kShaderCheckSeconds = 0.5f;
+
+        m_sinceShaderCheck += deltaTime;
+        if (m_sinceShaderCheck >= kShaderCheckSeconds)
+        {
+            m_sinceShaderCheck = 0.0f;
+
+            if (!m_assetManager->ReloadChangedShaders().empty())
+                ResolveAllMeshRenderers();
+        }
+
         m_cameraController->Update(deltaTime);
         HandleShortcuts();
     }

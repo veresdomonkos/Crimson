@@ -386,16 +386,36 @@ float4 PSMain(VertexOutput input) : SV_Target
         if (entry.Failed || !std::holds_alternative<std::monostate>(entry.Loaded))
             return entry.Loaded;
 
-        ImportContext ctx{ m_gpuResources, *this };
-        const AssetSource source{ entry.Info, entry.Embedded ? fs::path() : m_root / fs::path(entry.Info.Path), entry.Embedded };
-
-        entry.Loaded = entry.Importer->Load(source, ctx);
+        entry.Loaded = Import(entry);
         entry.Failed = std::holds_alternative<std::monostate>(entry.Loaded);
 
         if (entry.Failed)
             LOG_ERROR("[Assets] Failed to load {}", entry.Info.Path);
 
         return entry.Loaded;
+    }
+
+    LoadedAsset AssetManager::Import(Entry& entry)
+    {
+        ImportContext ctx{ m_gpuResources, *this };
+        const AssetSource source{ entry.Info, entry.Embedded ? fs::path() : m_root / fs::path(entry.Info.Path), entry.Embedded };
+
+        // Before the import, for a save during it to count as a change
+        std::error_code error;
+        if (!entry.Embedded)
+            entry.FileTime = fs::last_write_time(source.File, error);
+
+        LoadedAsset loaded = entry.Importer->Load(source, ctx);
+
+        entry.Dependencies.clear();
+
+        for (fs::path& dependency : ctx.Dependencies)
+        {
+            const fs::file_time_type time = fs::last_write_time(dependency, error);
+            entry.Dependencies.emplace_back(std::move(dependency), time);
+        }
+
+        return loaded;
     }
 
     template <typename T>
@@ -952,5 +972,86 @@ float4 PSMain(VertexOutput input) : SV_Target
         entry.Importer->Unload(entry.Loaded, m_gpuResources);
         entry.Loaded = std::move(replacement);
         return true;
+    }
+
+    // A file that can't be looked at counts as unchanged, as it may be in the middle of being saved
+    static bool HasChanged(const fs::path& file, fs::file_time_type time)
+    {
+        std::error_code error;
+        const fs::file_time_type now = fs::last_write_time(file, error);
+        return !error && now != time;
+    }
+
+    std::vector<AssetID> AssetManager::ReloadChangedShaders()
+    {
+        std::vector<AssetID> reloaded;
+
+        for (auto& [id, entry] : m_assets)
+        {
+            // One that was never loaded gets the new version when it is
+            const bool tried = entry.Failed || !std::holds_alternative<std::monostate>(entry.Loaded);
+            if (entry.Info.Type != AssetType::Shader || entry.Info.ReadOnly || !tried)
+                continue;
+
+            const bool changed = HasChanged(m_root / fs::path(entry.Info.Path), entry.FileTime)
+                || std::ranges::any_of(entry.Dependencies, [](const auto& dependency) { return HasChanged(dependency.first, dependency.second); });
+
+            if (changed)
+                std::ranges::move(ReloadShader(id, entry), std::back_inserter(reloaded));
+        }
+
+        return reloaded;
+    }
+
+    std::vector<AssetID> AssetManager::ReloadShader(AssetID id, Entry& entry)
+    {
+        LoadedAsset replacement = Import(entry);
+
+        if (std::holds_alternative<std::monostate>(replacement))
+        {
+            LOG_ERROR("[Assets] {} changed but doesn't compile, so the last version that did stays", entry.Info.Path);
+            return {};
+        }
+
+        // In place before the materials are made again, as they get their shader from here
+        const LoadedAsset previous = std::exchange(entry.Loaded, std::move(replacement));
+        entry.Failed = false;
+
+        std::vector<AssetID> reloaded = { id };
+        ImportContext ctx{ m_gpuResources, *this };
+
+        for (auto& [materialId, material] : m_assets)
+        {
+            const bool tried = material.Failed || !std::holds_alternative<std::monostate>(material.Loaded);
+            if (material.Info.Type != AssetType::Material || !tried)
+                continue;
+
+            // What the material is using, unsaved edits included
+            const MaterialData* data = GetMaterialData(materialId);
+            if (!data || data->Shader != id)
+                continue;
+
+            // It may have failed because of the shader, so it gets another go on its next load
+            if (material.Failed)
+            {
+                material.Failed = false;
+                continue;
+            }
+
+            const MaterialHandle recreated = CreateMaterialFromData(*data, ctx, material.Info.Path);
+
+            // The old one can't stay, as its shader is about to go
+            material.Importer->Unload(material.Loaded, m_gpuResources);
+            material.Loaded = recreated ? LoadedAsset(recreated) : LoadedAsset();
+            material.Failed = !recreated;
+
+            reloaded.push_back(materialId);
+        }
+
+        if (!std::holds_alternative<std::monostate>(previous))
+            entry.Importer->Unload(previous, m_gpuResources);
+
+        LOG_INFO("[Assets] Reloaded {}", entry.Info.Path);
+        return reloaded;
     }
 }

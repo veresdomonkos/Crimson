@@ -7,6 +7,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include "crimson/asset_manager/asset_importer.hpp"
@@ -29,7 +30,8 @@ namespace crimson
     // handle or null, logs once and isn't tried again. An invalid id does the same without logging, so a
     // component's empty asset slot needs no check.
     //
-    // What changes or removes GPU resources has to run between frames: Refresh, Delete, ApplyMaterial and ReimportTexture.
+    // What changes or removes GPU resources has to run between frames: Refresh, Delete, ApplyMaterial, ReimportTexture
+    // and ReloadChangedShaders.
     // Handles that were copied elsewhere stop working when these remove what they refer to.
     class AssetManager
     {
@@ -99,6 +101,11 @@ namespace crimson
 
         // Stores the settings in the texture's meta file, and if it is loaded, recreates it for the materials using it
         bool ReimportTexture(AssetID id, nlohmann::json settings);
+
+        // Compiles the project's shaders again whose file or included files changed since they were loaded, and
+        // recreates their materials. One that no longer compiles keeps the old version. Returns the ids of the
+        // shaders and materials that were replaced, whose handles have to be gotten again.
+        std::vector<AssetID> ReloadChangedShaders();
     private:
         struct Entry
         {
@@ -108,6 +115,10 @@ namespace crimson
             LoadedAsset Loaded;
             bool Failed = false;
             std::optional<MaterialData> Material; // what a material is using, read from its file when first needed
+
+            // For a project's shader: when its file and the files it included last changed, as of its last load
+            std::filesystem::file_time_type FileTime;
+            std::vector<std::pair<std::filesystem::path, std::filesystem::file_time_type>> Dependencies;
         };
 
         void AddImporter(std::unique_ptr<AssetImporter> importer);
@@ -119,6 +130,8 @@ namespace crimson
         AssetID CreateAssetFile(std::string_view path, std::string_view extension, const std::string& contents);
 
         const LoadedAsset& Load(AssetID id);
+        LoadedAsset Import(Entry& entry);
+        std::vector<AssetID> ReloadShader(AssetID id, Entry& entry);
         AssetID FindIdOrWarn(std::string_view path) const;
         void Unload(Entry& entry);
 

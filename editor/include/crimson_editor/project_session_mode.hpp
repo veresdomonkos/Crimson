@@ -89,6 +89,7 @@ namespace crimson::editor
         SceneData m_savedScene;
         SceneEnvironment m_environment;
         float m_sinceSceneCheck = 0.0f;
+        float m_sinceShaderCheck = 0.0f;
 
         // Light
         FrameLightingData m_lighting;
