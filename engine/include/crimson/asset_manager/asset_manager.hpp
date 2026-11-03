@@ -36,6 +36,15 @@ namespace crimson
         std::string Path;
         bool PathOnly = false; // written by hand without a guid, so its id was made up from the path
     };
+    // What loading each type of asset gives. Scenes have none, as they are read with ReadSceneFile instead.
+    template <AssetType T> struct AssetTraits;
+    template <> struct AssetTraits<AssetType::Texture>  { using Loaded = TextureHandle;  using Result = TextureHandle; };
+    template <> struct AssetTraits<AssetType::Shader>   { using Loaded = ShaderHandle;   using Result = ShaderHandle; };
+    template <> struct AssetTraits<AssetType::Material> { using Loaded = MaterialHandle; using Result = MaterialHandle; };
+    template <> struct AssetTraits<AssetType::Mesh>     { using Loaded = Mesh;           using Result = const Mesh*; }; // valid as long as the manager
+
+    template <AssetType T>
+    using LoadResult = typename AssetTraits<T>::Result;
 
     // Knows every asset under one folder and loads them on first use. Destroying it frees what it loaded.
     // The engine's own shaders and materials are always available too, read-only, under "engine/".
@@ -73,6 +82,24 @@ namespace crimson
         [[nodiscard]] bool IsMissing(AssetID id) const { return id && !GetInfo(id); }
         [[nodiscard]] const MissingAssetRef* GetMissing(AssetID id) const; // null unless IsMissing
         bool RememberMissing(AssetID id, MissingAssetRef ref) const; // whether it is new, for a warning only the first time
+        // The id with its type, or an empty one if there is no such asset or it is of another type
+        template <AssetType T>
+        [[nodiscard]] TypedAssetID<T> As(AssetID id) const
+        {
+            const AssetInfo* info = GetInfo(id);
+            return info && info->Type == T ? TypedAssetID<T>(id) : TypedAssetID<T>();
+        }
+
+        template <AssetType T>
+        [[nodiscard]] TypedAssetID<T> Find(std::string_view path) const { return As<T>(FindId(path)); }
+
+        // An invalid handle or null if it can't be loaded
+        template <AssetType T>
+        LoadResult<T> Load(TypedAssetID<T> id);
+
+        // A shortcut for code that knows its asset's path, which warns if nothing of that type is there
+        template <AssetType T>
+        LoadResult<T> Load(std::string_view path) { return Load(FindOrWarn<T>(path)); }
 
         [[nodiscard]] AssetID DefaultMaterial() const;
 
@@ -161,6 +188,18 @@ namespace crimson
         LoadedAsset Import(Entry& entry);
         std::vector<AssetID> ReloadShader(AssetID id, Entry& entry);
         AssetID FindIdOrWarn(std::string_view path) const;
+
+        template <AssetType T>
+        TypedAssetID<T> FindOrWarn(std::string_view path) const
+        {
+            const AssetID id = FindIdOrWarn(path);
+            const TypedAssetID<T> typed = As<T>(id);
+            if (id && !typed)
+                WarnWrongType(path, T);
+            return typed;
+        }
+
+        void WarnWrongType(std::string_view path, AssetType wanted) const;
         void Unload(Entry& entry);
 
         template <typename T>

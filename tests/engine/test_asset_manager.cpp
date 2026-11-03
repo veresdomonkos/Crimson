@@ -439,6 +439,44 @@ TEST_CASE("Empty and mistyped requests get nothing", "[assets]")
     }
 }
 
+TEST_CASE("Typed ids only come from assets of their type", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("tri.obj", kTriangleObj);
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    const AssetID untyped = assets.FindId("tri.obj");
+    const MeshID mesh = assets.Find<AssetType::Mesh>("tri.obj");
+
+    CHECK(mesh);
+    CHECK(mesh == assets.As<AssetType::Mesh>(untyped));
+    CHECK(static_cast<AssetID>(mesh) == untyped);
+    CHECK(assets.Load(mesh) != nullptr);
+    CHECK(assets.Load<AssetType::Mesh>("tri.obj") == assets.Load(mesh));
+
+    SECTION("Another type gives an empty id")
+    {
+        CHECK_FALSE(assets.As<AssetType::Texture>(untyped));
+        CHECK_FALSE(assets.Find<AssetType::Material>("tri.obj"));
+        CHECK_FALSE(assets.Load<AssetType::Material>("tri.obj"));
+    }
+
+    SECTION("So does an id or path that doesn't exist")
+    {
+        CHECK_FALSE(assets.As<AssetType::Mesh>(AssetID{ 1234 }));
+        CHECK_FALSE(assets.Find<AssetType::Mesh>("no/such.obj"));
+        CHECK(assets.Load(MeshID{}) == nullptr);
+    }
+
+    SECTION("Engine assets have types too")
+    {
+        const ShaderID shader = assets.Find<AssetType::Shader>("engine/shaders/main.hlsl");
+        REQUIRE(shader);
+        CHECK(assets.Load(shader));
+    }
+}
+
 TEST_CASE("Meshes load their geometry, bounds and material slots", "[assets]")
 {
     const TempFolder temp;

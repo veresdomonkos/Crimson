@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iterator>
 #include <system_error>
+#include <type_traits>
 #include <typeinfo>
 #include <utility>
 #include <glm/gtc/quaternion.hpp>
@@ -509,6 +510,28 @@ float4 PSMain(VertexOutput input) : SV_Target
     ShaderHandle AssetManager::LoadShader(std::string_view path) { return LoadShader(FindIdOrWarn(path)); }
     MaterialHandle AssetManager::LoadMaterial(std::string_view path) { return LoadMaterial(FindIdOrWarn(path)); }
     const Mesh* AssetManager::LoadMesh(std::string_view path) { return LoadMesh(FindIdOrWarn(path)); }
+
+    template <AssetType T>
+    LoadResult<T> AssetManager::Load(TypedAssetID<T> id)
+    {
+        using Loaded = typename AssetTraits<T>::Loaded;
+        const Loaded* loaded = LoadAs<Loaded>(id);
+
+        if constexpr (std::is_pointer_v<LoadResult<T>>)
+            return loaded;
+        else
+            return loaded ? *loaded : Loaded::Invalid();
+    }
+
+    template TextureHandle AssetManager::Load(TextureID);
+    template ShaderHandle AssetManager::Load(ShaderID);
+    template MaterialHandle AssetManager::Load(MaterialID);
+    template const Mesh* AssetManager::Load(MeshID);
+
+    void AssetManager::WarnWrongType(std::string_view path, AssetType wanted) const
+    {
+        LOG_WARN("[Assets] '{}' isn't a {}", path, ToString(wanted));
+    }
 
     void AssetManager::Unload(Entry& entry)
     {
