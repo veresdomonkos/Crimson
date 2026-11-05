@@ -145,12 +145,23 @@ namespace crimson::editor::ui
 
     void SceneViewportPanel::HandleShortcuts()
     {
-        if (ImGui::GetIO().WantTextInput)
+        const ImGuiIO& io = ImGui::GetIO();
+
+        // While flying, the same keys move the camera, and with Ctrl they are other shortcuts
+        if (io.WantTextInput || io.KeyCtrl || ImGui::IsMouseDown(ImGuiMouseButton_Right))
             return;
 
-        if (ImGui::IsKeyPressed(ImGuiKey_1, false)) m_operation = ImGuizmo::TRANSLATE;
-        if (ImGui::IsKeyPressed(ImGuiKey_2, false)) m_operation = ImGuizmo::ROTATE;
-        if (ImGui::IsKeyPressed(ImGuiKey_3, false)) m_operation = ImGuizmo::SCALE;
+        if (IsFocused() || IsHovered())
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_W, false)) m_operation = ImGuizmo::TRANSLATE;
+            if (ImGui::IsKeyPressed(ImGuiKey_E, false)) m_operation = ImGuizmo::ROTATE;
+            if (ImGui::IsKeyPressed(ImGuiKey_R, false)) m_operation = ImGuizmo::SCALE;
+        }
+
+        // What is inside an instance can't be changed here
+        const Entity selected = m_context.Selected;
+        if (IsFocused() && selected && !selected.HasComponent<InstancedComponent>() && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+            m_context.Deferred.emplace_back([this, selected] { m_context.ActiveScene.DestroyEntity(selected); });
     }
 
     void SceneViewportPanel::DrawToolbar(const ImVec2& position)
@@ -159,7 +170,7 @@ namespace crimson::editor::ui
 
         ImGui::SetCursorScreenPos(ImVec2(position.x + kMargin, position.y + kMargin));
 
-        const auto operationButton = [this](const char* label, ImGuizmo::OPERATION operation)
+        const auto operationButton = [this](const char* label, const char* shortcut, ImGuizmo::OPERATION operation)
         {
             const bool active = m_operation == operation;
 
@@ -169,15 +180,17 @@ namespace crimson::editor::ui
             if (ImGui::Button(label))
                 m_operation = operation;
 
+            ImGui::SetItemTooltip("%s (%s)", label, shortcut);
+
             if (active)
                 ImGui::PopStyleColor();
 
             ImGui::SameLine();
         };
 
-        operationButton("Move", ImGuizmo::TRANSLATE);
-        operationButton("Rotate", ImGuizmo::ROTATE);
-        operationButton("Scale", ImGuizmo::SCALE);
+        operationButton("Move", "W", ImGuizmo::TRANSLATE);
+        operationButton("Rotate", "E", ImGuizmo::ROTATE);
+        operationButton("Scale", "R", ImGuizmo::SCALE);
 
         if (ImGui::Button(m_mode == ImGuizmo::LOCAL ? "Local" : "World"))
             m_mode = m_mode == ImGuizmo::LOCAL ? ImGuizmo::WORLD : ImGuizmo::LOCAL;

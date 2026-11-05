@@ -64,7 +64,7 @@ namespace crimson::editor
             case Gesture::Pan:   UpdatePan(); break;
             case Gesture::Orbit: UpdateOrbit(); break;
             case Gesture::Zoom:  UpdateZoom(); break;
-            case Gesture::None:  UpdateWithoutGesture(deltaTime); break;
+            case Gesture::None:  UpdateWithoutGesture(); break;
         }
     }
 
@@ -137,15 +137,12 @@ namespace crimson::editor
         Dolly((mouse.x - mouse.y) * kZoomSensitivity * m_pivotDistance);
     }
 
-    void SceneCameraController::UpdateWithoutGesture(float deltaTime)
+    // The move keys only fly while the right mouse button is held, which leaves W, E and R for the gizmo tools
+    void SceneCameraController::UpdateWithoutGesture()
     {
         const float wheel = ImGui::GetIO().MouseWheel;
         if (wheel != 0.0f && m_viewport.IsHovered())
             Dolly(wheel * kDollyStep * m_pivotDistance);
-
-        // The move keys belong to the scene while its panel is focused, and are left alone otherwise
-        if (m_viewport.IsFocused() && !ImGui::GetIO().WantTextInput)
-            MoveWithKeys(deltaTime);
     }
 
     void SceneCameraController::MoveWithKeys(float deltaTime)
