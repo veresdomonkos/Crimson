@@ -28,7 +28,8 @@ namespace crimson
     // What a new shader starts as: lit like the default one, with fewer slots, to have something to change
     static constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space2,
 // and its textures in space2 too. A comment like "@default 0.5 @range 0 1" sets how a property starts.
-// Time and DeltaTime, in seconds, come from crimson/bindings.hlsli.
+// Time and DeltaTime, in seconds, come from crimson/bindings.hlsli. crimson/lighting.hlsli also brings
+// crimson/math.hlsli (PI, TAU, EPSILON, ...) and crimson/transforms.hlsli (ObjectToWorldPosition, WorldToClip, ...).
 #include "crimson/lighting.hlsli"
 
 cbuffer MaterialBlock : register(b0, space2)
@@ -57,13 +58,12 @@ struct VertexOutput
 
 VertexOutput VSMain(VertexInput input)
 {
-    const ObjectData object = GetObjectData();
-    const float4 worldPosition = mul(object.Transform, float4(input.Position, 1.0));
+    const float3 worldPosition = ObjectToWorldPosition(input.Position);
 
     VertexOutput output;
-    output.ClipPosition = mul(ViewProj, worldPosition);
-    output.Normal = mul((float3x3)object.NormalMatrix, input.Normal);
-    output.WorldPosition = worldPosition.xyz;
+    output.ClipPosition = WorldToClip(worldPosition);
+    output.Normal = ObjectToWorldNormal(input.Normal);
+    output.WorldPosition = worldPosition;
     output.UV = input.UV;
     return output;
 }

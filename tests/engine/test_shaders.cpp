@@ -211,3 +211,40 @@ float4 PSMain() : SV_Target
     CHECK(shader->Textures.at("Plain").Default == ShaderTextureDefault::White);
     CHECK(shader->Textures.at("Bumps").Default == ShaderTextureDefault::Normal);
 }
+
+TEST_CASE("Shaders can use the math constants and the space helpers", "[shaders]")
+{
+    constexpr std::string_view kShader = R"(
+#include "crimson/transforms.hlsli"
+
+struct VertexOutput
+{
+    float4 ClipPosition : SV_Position;
+    float3 Value : VALUE;
+};
+
+VertexOutput VSMain(float3 position : POSITION, float3 normal : NORMAL)
+{
+    const float3 world = ObjectToWorldPosition(position);
+
+    VertexOutput output;
+    output.ClipPosition = ObjectToClip(position) + WorldToClip(world) * EPSILON;
+    output.Value = WorldToObjectPosition(world) + WorldToObjectDirection(ObjectToWorldDirection(normal))
+        + ObjectToWorldNormal(normal) + ObjectWorldPosition();
+    return output;
+}
+
+float4 PSMain(VertexOutput input) : SV_Target
+{
+    return float4(input.Value * (PI + TAU + HALF_PI + INV_PI + E), 1.0);
+}
+)";
+
+    const auto binary = CompileHlslShader("helpers.hlsl", std::string(kShader), {});
+    REQUIRE(binary);
+    CHECK(ReflectShaderInterface(*binary));
+
+    std::vector<opengl::GlslTextureUnit> units;
+    CHECK(opengl::TranslateSpirvToGlsl(binary->Vertex, units));
+    CHECK(opengl::TranslateSpirvToGlsl(binary->Pixel, units));
+}

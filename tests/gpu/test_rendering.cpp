@@ -381,3 +381,55 @@ float4 PSMain() : SV_Target { return float4(DeltaTime >= 0.02 ? 1.0 : 0.0, Time 
 
     CHECK(IsNear(image.AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 0)));
 }
+
+TEST_CASE_METHOD(Fixture, "Going from an object into the world and back gives the same point", "[rendering]")
+{
+    // The quad covers the target whatever the transform is, which only goes into the helpers. Red means each
+    // vertex came back to where it started, and had moved in the world.
+    Project.Write("round_trip.hlsl", R"(
+#include "crimson/transforms.hlsli"
+
+struct VertexOutput
+{
+    float4 ClipPosition : SV_Position;
+    float Correct : CORRECT;
+};
+
+VertexOutput VSMain(float3 position : POSITION)
+{
+    const float3 world = ObjectToWorldPosition(position);
+    const float3 direction = float3(0.3, -0.4, 0.5);
+
+    const bool positionBack = length(WorldToObjectPosition(world) - position) < 0.001;
+    const bool directionBack = length(WorldToObjectDirection(ObjectToWorldDirection(direction)) - direction) < 0.001;
+    const bool moved = length(world - position) > 0.1;
+
+    VertexOutput output;
+    output.ClipPosition = float4(position, 1.0);
+    output.Correct = positionBack && directionBack && moved ? 1.0 : 0.0;
+    return output;
+}
+
+float4 PSMain(VertexOutput input) : SV_Target { return float4(input.Correct, 0.0, 0.0, 1.0); }
+)");
+    Project.Write("round_trip.mat", R"({ "shader": "round_trip.hlsl", "cull": "none" })");
+    Project.Write("full.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
+
+    AssetManager assets(*Gpu().GPUResources, Project.Path());
+    const Mesh* mesh = assets.LoadMesh("full.obj");
+    const MaterialHandle material = assets.LoadMaterial("round_trip.mat");
+    REQUIRE(mesh);
+    REQUIRE(material);
+
+    glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 2.0f, -3.0f));
+    transform = glm::rotate(transform, 0.7f, glm::normalize(glm::vec3(0.0f, 1.0f, 1.0f)));
+    transform = glm::scale(transform, glm::vec3(2.0f, 0.5f, 3.0f));
+
+    RenderOneFrame([&](FrameContext& frame)
+    {
+        const ObjectId object = frame.AddObject(transform);
+        frame.BeginRenderPass(Pass()).Draw(*mesh, object, material);
+    });
+
+    CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kRed));
+}

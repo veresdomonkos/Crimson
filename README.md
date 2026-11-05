@@ -89,7 +89,7 @@ Shaders are HLSL, with a `VSMain` and a `PSMain` in one `.hlsl` file:
                            -> SPIRV-Cross -> GLSL 4.5 -> OpenGL
 ```
 
-Resources are grouped by how often they change. `crimson/bindings.hlsli` declares the standard ones, so shaders include it instead of restating them. Includes resolve relative to the shader's folder, then to the engine's shaders. glslang's HLSL support is around Shader Model 5, so Shader Model 6 features such as wave ops and mesh shaders aren't available.
+Resources are grouped by how often they change. `crimson/bindings.hlsli` declares the standard ones, so shaders include it instead of restating them. `crimson/math.hlsli` has constants such as `PI`, `TAU` and `EPSILON`, `crimson/transforms.hlsli` moves positions, directions and normals between object, world and clip space (`ObjectToWorldPosition`, `WorldToObjectPosition`, `WorldToClip`, ...), and `crimson/lighting.hlsli` includes both. Includes resolve relative to the shader's folder, then to the engine's shaders. glslang's HLSL support is around Shader Model 5, so Shader Model 6 features such as wave ops and mesh shaders aren't available.
 
 | Space | Scope | Resources |
 |:------|:------|:----------|

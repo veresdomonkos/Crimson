@@ -36,13 +36,12 @@ struct VertexOutput
 
 VertexOutput VSMain(VertexInput input)
 {
-    const ObjectData object = GetObjectData();
-    const float4 worldPosition = mul(object.Transform, float4(input.Position, 1.0));
+    const float3 worldPosition = ObjectToWorldPosition(input.Position);
 
     VertexOutput output;
-    output.ClipPosition = mul(ViewProj, worldPosition);
-    output.Normal = mul((float3x3)object.NormalMatrix, input.Normal);
-    output.WorldPosition = worldPosition.xyz;
+    output.ClipPosition = WorldToClip(worldPosition);
+    output.Normal = ObjectToWorldNormal(input.Normal);
+    output.WorldPosition = worldPosition;
     output.UV = input.UV;
     return output;
 }
