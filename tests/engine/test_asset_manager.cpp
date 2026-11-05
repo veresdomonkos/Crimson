@@ -100,7 +100,50 @@ TEST_CASE("A folder that doesn't exist gives just the engine's assets", "[assets
     AssetManager assets(gpu, temp.Path() / "nothing");
 
     CHECK(assets.FindId("engine/materials/default.mat"));
-    CHECK(assets.List(AssetType::Mesh).empty());
+    CHECK(std::ranges::all_of(assets.List(AssetType::Mesh), [](const AssetInfo* info) { return info->ReadOnly && info->Path.starts_with("engine/"); }));
+}
+
+TEST_CASE("The engine's built-in meshes load, at the size they are meant to be", "[assets]")
+{
+    const TempFolder temp;
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    struct Expected
+    {
+        const char* Path;
+        glm::vec3 Min;
+        glm::vec3 Max;
+    };
+
+    const std::array kMeshes = {
+        Expected{ "engine/meshes/cube.obj",     { -0.5f, -0.5f, -0.5f }, { 0.5f, 0.5f, 0.5f } },
+        Expected{ "engine/meshes/sphere.obj",   { -0.5f, -0.5f, -0.5f }, { 0.5f, 0.5f, 0.5f } },
+        Expected{ "engine/meshes/cylinder.obj", { -0.5f, -1.0f, -0.5f }, { 0.5f, 1.0f, 0.5f } },
+        Expected{ "engine/meshes/capsule.obj",  { -0.5f, -1.0f, -0.5f }, { 0.5f, 1.0f, 0.5f } },
+        Expected{ "engine/meshes/plane.obj",    { -5.0f,  0.0f, -5.0f }, { 5.0f, 0.0f, 5.0f } },
+        Expected{ "engine/meshes/quad.obj",     { -0.5f, -0.5f,  0.0f }, { 0.5f, 0.5f, 0.0f } },
+    };
+
+    const auto near = [](const glm::vec3& a, const glm::vec3& b) { return glm::all(glm::lessThan(glm::abs(a - b), glm::vec3(1e-4f))); };
+
+    for (const Expected& expected : kMeshes)
+    {
+        CAPTURE(expected.Path);
+
+        const AssetID id = assets.FindId(expected.Path);
+        REQUIRE(id);
+        CHECK(assets.GetInfo(id)->ReadOnly);
+
+        const Mesh* mesh = assets.LoadMesh(id);
+        REQUIRE(mesh);
+        CHECK(mesh->SubMeshes.size() == 1);
+        CHECK(mesh->MaterialSlots.size() == 1);
+        CHECK(near(mesh->Bounds.Min, expected.Min));
+        CHECK(near(mesh->Bounds.Max, expected.Max));
+    }
+
+    CHECK(assets.List(AssetType::Mesh).size() == kMeshes.size());
 }
 
 TEST_CASE("An asset keeps its id through its meta file", "[assets]")
@@ -189,9 +232,13 @@ TEST_CASE("Listing is sorted by path and filtered by type", "[assets]")
 
     AssetManager assets(gpu, temp.Path());
 
+    // The engine's own meshes are listed too, but only the project's are under test here
     std::vector<std::string> paths;
     for (const AssetInfo* info : assets.List(AssetType::Mesh))
-        paths.push_back(info->Path);
+    {
+        if (!info->ReadOnly)
+            paths.push_back(info->Path);
+    }
 
     CHECK(paths == std::vector<std::string>{ "a.obj", "m/b.obj", "z.obj" });
 }

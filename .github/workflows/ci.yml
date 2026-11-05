@@ -49,7 +49,7 @@ jobs:
 
       - name: Download the Git LFS files
         shell: pwsh
-        run: git lfs pull --include="editor/resources/**,samples/**"
+        run: git lfs pull --include="editor/resources/**,engine/resources/**,samples/**"
 
       # MSYS2's Vulkan library is named libvulkan-1.dll, which wouldn't be on a user's machine.
       # The SDK's is vulkan-1.dll, which graphics drivers install.
@@ -149,7 +149,7 @@ jobs:
           submodules: recursive
 
       - name: Download the embedded files from Git LFS
-        run: git lfs pull --include="editor/resources/**"
+        run: git lfs pull --include="editor/resources/**,engine/resources/**"
 
       - name: Install the toolchain
         run: |
@@ -262,7 +262,7 @@ jobs:
           submodules: recursive
 
       - name: Download the embedded files from Git LFS
-        run: git lfs pull --include="editor/resources/**"
+        run: git lfs pull --include="editor/resources/**,engine/resources/**"
 
       - name: Install the toolchain
         run: |
