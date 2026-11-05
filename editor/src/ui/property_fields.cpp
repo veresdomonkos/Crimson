@@ -144,17 +144,20 @@ namespace crimson::editor::ui::props
 
             ImGui::PushID(i);
 
-            ImGui::SetNextItemWidth(fieldWidth);
+            // Which axis it is, as a thin stripe of the gizmo's color right before the field. It has its own space, so
+            // a long number never runs under it, and it is only drawn, so it can't be clicked by accident.
+            const ImVec2 stripeMin = ImGui::GetCursorScreenPos();
+            const ImVec2 stripeMax(stripeMin.x + stripeWidth, stripeMin.y + ImGui::GetFrameHeight());
+            ImGui::GetWindowDrawList()->AddRectFilled(stripeMin, stripeMax, ImGui::GetColorU32(kColors[i]),
+                ImGui::GetStyle().FrameRounding, ImDrawFlags_RoundCornersLeft);
+
+            ImGui::Dummy(ImVec2(stripeWidth, ImGui::GetFrameHeight()));
+            ImGui::SameLine(0.0f, 0.0f);
+
+            ImGui::SetNextItemWidth(std::max(1.0f, fieldWidth - stripeWidth));
             changed |= ImGui::DragFloat("##Value", &values[i], speed, 0.0f, 0.0f, "%.3f");
             ResetTarget();
             ImGui::SetItemTooltip("%s", kAxes[i]);
-
-            // Which axis it is, as a thin stripe of the gizmo's color down the field's left edge. It is only drawn,
-            // so it can't be clicked by accident, and the number keeps nearly all of the width.
-            const ImVec2 min = ImGui::GetItemRectMin();
-            const ImVec2 max = ImGui::GetItemRectMax();
-            ImGui::GetWindowDrawList()->AddRectFilled(min, ImVec2(min.x + stripeWidth, max.y), ImGui::GetColorU32(kColors[i]),
-                ImGui::GetStyle().FrameRounding, ImDrawFlags_RoundCornersLeft);
 
             ImGui::PopID();
         }
