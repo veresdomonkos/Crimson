@@ -1,7 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <chrono>
 #include <string>
+#include <thread>
 
 #include <fmt/format.h>
 
@@ -353,4 +355,29 @@ TEST_CASE("The back buffer survives a window resize", "[rendering]")
     RenderOneFrame([&](FrameContext& frame) { frame.BeginRenderPass(fixture.Pass()); });
 
     CHECK(IsNear(fixture.Target.Read().At(0, 0), kBlack));
+}
+
+TEST_CASE_METHOD(Fixture, "Shaders get the time and the time since the frame before", "[rendering]")
+{
+    // Red when some time has passed since the frame before, green when the time is at least that much
+    Project.Write("timed.hlsl", R"(
+#include "crimson/bindings.hlsli"
+
+float4 VSMain(float3 position : POSITION) : SV_Position
+{
+    return mul(ViewProj, mul(GetObjectData().Transform, float4(position, 1.0)));
+}
+
+float4 PSMain() : SV_Target { return float4(DeltaTime >= 0.02 ? 1.0 : 0.0, Time >= DeltaTime ? 1.0 : 0.0, 0.0, 1.0); }
+)");
+    Project.Write("timed.mat", R"({ "shader": "timed.hlsl", "cull": "none" })");
+    Project.Write("full.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
+
+    AssetManager assets(*Gpu().GPUResources, Project.Path());
+
+    RenderMesh(assets, "full.obj", "timed.mat");
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    const Image image = RenderMesh(assets, "full.obj", "timed.mat");
+
+    CHECK(IsNear(image.AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 0)));
 }

@@ -54,7 +54,7 @@ namespace crimson::opengl
 
         m_stats = {};
 
-        m_gpuData.Build(lighting);
+        m_gpuData.Build(lighting, m_clock.Tick(std::chrono::steady_clock::now()));
 
         glNamedBufferSubData(m_frameUBO, 0, sizeof(FrameBlock), &m_gpuData.Block);
         UploadStorageBuffer(m_lightsBuffer, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes(), sizeof(GpuLight));

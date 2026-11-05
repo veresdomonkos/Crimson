@@ -1,11 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
 #include <vector>
 
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <crimson/renderer/draw_sort.hpp>
 #include <crimson/renderer/frame_context.hpp>
+#include <crimson/renderer/frame_data.hpp>
 
 using namespace crimson;
 
@@ -190,4 +192,25 @@ TEST_CASE("Transparent draws come after opaque ones, in the order they were subm
     const std::vector<DrawInfo> draws = { MakeDraw(2), MakeDraw(1), MakeDraw(0), MakeDraw(2) };
 
     CHECK(DrawOrder(draws, materials) == std::vector<uint32_t>{ 2, 0, 1, 3 });
+}
+
+TEST_CASE("The frame clock starts at 0 and counts the time between frames", "[frame]")
+{
+    using namespace std::chrono_literals;
+
+    FrameClock clock;
+    const auto start = std::chrono::steady_clock::now();
+
+    CHECK(clock.Tick(start) == FrameTime{ 0.0f, 0.0f });
+    CHECK(clock.Tick(start + 500ms) == FrameTime{ 0.5f, 0.5f });
+    CHECK(clock.Tick(start + 750ms) == FrameTime{ 0.75f, 0.25f });
+}
+
+TEST_CASE("The frame block carries the frame's time", "[frame]")
+{
+    FrameGpuData data;
+    data.Build(FrameLightingData{}, FrameTime{ 2.5f, 0.125f });
+
+    CHECK(data.Block.Time == 2.5f);
+    CHECK(data.Block.DeltaTime == 0.125f);
 }

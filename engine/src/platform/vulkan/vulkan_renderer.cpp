@@ -544,7 +544,7 @@ namespace crimson::vulkan
             (void)device.waitForFences(*sync.InFlightFence, VK_TRUE, UINT64_MAX);
         }
 
-        m_gpuData.Build(lighting);
+        m_gpuData.Build(lighting, m_clock.Tick(std::chrono::steady_clock::now()));
 
         FrameResources& resources = m_frameResources[m_currentFrameIndex];
 

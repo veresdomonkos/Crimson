@@ -28,6 +28,7 @@ namespace crimson
     // What a new shader starts as: lit like the default one, with fewer slots, to have something to change
     static constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space2,
 // and its textures in space2 too. A comment like "@default 0.5 @range 0 1" sets how a property starts.
+// Time and DeltaTime, in seconds, come from crimson/bindings.hlsli.
 #include "crimson/lighting.hlsli"
 
 cbuffer MaterialBlock : register(b0, space2)

@@ -41,7 +41,8 @@ cbuffer FrameBlock : register(b0, space0)
     float4 AmbientColor;
     uint LightCount;
     uint ShadowCount;
-    uint2 FramePad;
+    float Time;      // seconds since the first frame
+    float DeltaTime; // seconds since the frame before
 };
 
 StructuredBuffer<GpuLight> Lights : register(t0, space0);
