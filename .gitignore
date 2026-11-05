@@ -40,6 +40,8 @@ cmake-build-*/
 *.lib
 *.pdb
 *.obj
+# Not compiler output: the engine's built-in meshes
+!engine/resources/meshes/*.obj
 *.o
 *.a
 *.ilk

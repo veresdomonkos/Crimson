@@ -3,3 +3,6 @@
 *.obj filter=lfs diff=lfs merge=lfs -text
 *.jpg filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text
+
+# The engine's built-in meshes are small and generated, and have to be in every clone and CI checkout
+engine/resources/meshes/*.obj -filter !diff !merge text

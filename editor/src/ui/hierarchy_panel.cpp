@@ -6,9 +6,27 @@
 
 #include <imgui.h>
 
+#include <crimson/scene/scene_renderer.hpp>
+
 namespace crimson::editor::ui
 {
     static constexpr const char* kEntityPayload = "CRIMSON_ENTITY";
+
+    // The engine's built-in meshes, in engine/resources/meshes
+    struct BuiltInMesh
+    {
+        const char* Name;
+        const char* Path;
+    };
+
+    static constexpr BuiltInMesh kBuiltInMeshes[] = {
+        { "Cube",     "engine/meshes/cube.obj" },
+        { "Sphere",   "engine/meshes/sphere.obj" },
+        { "Cylinder", "engine/meshes/cylinder.obj" },
+        { "Capsule",  "engine/meshes/capsule.obj" },
+        { "Plane",    "engine/meshes/plane.obj" },
+        { "Quad",     "engine/meshes/quad.obj" },
+    };
 
     void HierarchyPanel::OnImGui()
     {
@@ -235,6 +253,27 @@ namespace crimson::editor::ui
 
         if (ImGui::MenuItem("Create Empty"))
             create("Entity", nullptr);
+
+        if (ImGui::BeginMenu("Create 3D Object"))
+        {
+            for (const BuiltInMesh& mesh : kBuiltInMeshes)
+            {
+                const AssetID id = m_context.Assets.FindId(mesh.Path);
+
+                // The default material fills the mesh's one slot when it is resolved
+                if (ImGui::MenuItem(mesh.Name, nullptr, false, static_cast<bool>(id)))
+                {
+                    create(mesh.Name, [this, id](Entity entity)
+                    {
+                        auto& renderer = entity.AddComponent<MeshRendererComponent>();
+                        renderer.MeshAsset = id;
+                        ResolveMeshRenderer(renderer, m_context.Assets);
+                    });
+                }
+            }
+
+            ImGui::EndMenu();
+        }
 
         if (ImGui::BeginMenu("Create Light"))
         {
