@@ -32,6 +32,12 @@ namespace crimson::editor::ui
         inline constexpr ImVec4 Folder    = ImVec4(0.67f, 0.55f, 0.27f, 1.00f);
         inline constexpr ImVec4 FolderTab = ImVec4(0.59f, 0.47f, 0.22f, 1.00f);
 
+        // The tags in front of X, Y, Z and W fields, in the gizmo's colors
+        inline constexpr ImVec4 AxisX = ImVec4(0.80f, 0.27f, 0.27f, 1.00f);
+        inline constexpr ImVec4 AxisY = ImVec4(0.35f, 0.65f, 0.27f, 1.00f);
+        inline constexpr ImVec4 AxisZ = ImVec4(0.27f, 0.45f, 0.85f, 1.00f);
+        inline constexpr ImVec4 AxisW = ImVec4(0.45f, 0.45f, 0.48f, 1.00f);
+
         // Behind images and render targets, where nothing is drawn yet
         inline constexpr ImVec4 Backdrop = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
 
