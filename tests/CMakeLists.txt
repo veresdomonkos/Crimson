@@ -42,6 +42,7 @@ add_executable(CrimsonGpuTests
         gpu/test_lighting.cpp
         gpu/test_asset_editing.cpp
         gpu/test_editor.cpp
+        gpu/test_input.cpp
 )
 
 target_include_directories(CrimsonGpuTests PRIVATE .)
