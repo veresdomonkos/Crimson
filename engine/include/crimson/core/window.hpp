@@ -36,6 +36,9 @@ namespace crimson
 
 	    [[nodiscard]] virtual bool IsFocused() const = 0;
 
+	    // How much bigger than at 100% things should be drawn, from the monitor's scaling, such as 1.5 at 150%
+	    [[nodiscard]] virtual float GetContentScale() const = 0;
+
 	    virtual void* GetNativeHandle() const = 0;
 
 	    static Unique<Window> Create(RendererAPIType rendererAPI, WindowData data);

@@ -14,6 +14,7 @@
 #include <crimson/asset_manager/importers/texture_importer.hpp>
 
 #include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/linear_color.hpp"
 
 namespace crimson::editor::ui
@@ -224,7 +225,7 @@ namespace crimson::editor::ui
         if (properties.empty())
             return;
 
-        ImGui::SeparatorText("Properties");
+        theme::SectionTitle("Properties");
 
         for (const auto& [name, property] : properties)
         {
@@ -268,7 +269,7 @@ namespace crimson::editor::ui
         if (shader.Textures.empty())
             return;
 
-        ImGui::SeparatorText("Textures");
+        theme::SectionTitle("Textures");
 
         const AssetManager& assets = m_context.Assets;
         const float previewSize = ImGui::GetFrameHeight() * 1.5f;
@@ -318,7 +319,7 @@ namespace crimson::editor::ui
             }
 
             if (currentInfo && HoldsData(name) && currentInfo->Settings.value("srgb", true))
-                ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "This holds data, turn sRGB off on the texture");
+                ImGui::TextColored(theme::Warning, "This holds data, turn sRGB off on the texture");
 
             ImGui::PopID();
         }
@@ -365,7 +366,7 @@ namespace crimson::editor::ui
 
         DrawAssetNameColumn("File", FormatFileSize(m_textureFileSize));
 
-        ImGui::SeparatorText("Import Settings");
+        theme::SectionTitle("Import Settings");
         ImGui::BeginDisabled(info.ReadOnly);
 
         bool srgb = m_textureSettings.value("srgb", true);
@@ -439,7 +440,7 @@ namespace crimson::editor::ui
         ImGui::Text("Min %.2f, %.2f, %.2f", mesh->Bounds.Min.x, mesh->Bounds.Min.y, mesh->Bounds.Min.z);
         ImGui::Text("Max %.2f, %.2f, %.2f", mesh->Bounds.Max.x, mesh->Bounds.Max.y, mesh->Bounds.Max.z);
 
-        ImGui::SeparatorText("Material Slots");
+        theme::SectionTitle("Material Slots");
 
         for (const std::string& slot : mesh->MaterialSlots)
             ImGui::BulletText("%s", slot.c_str());
@@ -456,12 +457,12 @@ namespace crimson::editor::ui
 
         const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(shader);
 
-        ImGui::SeparatorText("Properties");
+        theme::SectionTitle("Properties");
 
         for (const auto& [name, property] : SortedByName(shaderInterface.Properties))
             ImGui::BulletText("%s (%zu bytes)", name.c_str(), property.Size);
 
-        ImGui::SeparatorText("Textures");
+        theme::SectionTitle("Textures");
 
         for (const auto& [name, texture] : SortedByName(shaderInterface.Textures))
             ImGui::BulletText("%s", name.c_str());

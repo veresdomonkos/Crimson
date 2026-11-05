@@ -1,5 +1,6 @@
 // viewport_panel.cpp
 #include "crimson_editor/ui/viewport_panel.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
 
 namespace crimson::editor::ui
 {
@@ -20,7 +21,7 @@ namespace crimson::editor::ui
         if (avail.x > 1.0f && avail.y > 1.0f)
         {
             ImGui::GetWindowDrawList()->AddRectFilled(
-                origin, ImVec2(origin.x + avail.x, origin.y + avail.y), IM_COL32(0, 0, 0, 255));
+                origin, ImVec2(origin.x + avail.x, origin.y + avail.y), ImGui::GetColorU32(theme::Backdrop));
 
             ImVec2 size = (avail.x / avail.y > m_aspect)
                 ? ImVec2(avail.y * m_aspect, avail.y)

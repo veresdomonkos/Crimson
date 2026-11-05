@@ -11,6 +11,7 @@
 #include "crimson_editor/editor_paths.hpp"
 #include "crimson_editor/file_dialog.hpp"
 #include "crimson_editor/recent_projects.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
 
 namespace fs = std::filesystem;
 
@@ -18,7 +19,6 @@ namespace crimson::editor
 {
     static constexpr const char* kNewProjectPopup = "New Project";
     static constexpr const char* kLogoIcon = "icons/crimson.png";
-    static constexpr ImVec4 kErrorColor = ImVec4(1.0f, 0.4f, 0.4f, 1.0f);
 
     ProjectManagerMode::ProjectManagerMode(EditorServices& services, std::string error)
         : m_services(services), m_error(std::move(error))
@@ -116,7 +116,7 @@ namespace crimson::editor
 
         if (!m_error.empty())
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, kErrorColor);
+            ImGui::PushStyleColor(ImGuiCol_Text, ui::theme::Error);
             ImGui::TextWrapped("%s", m_error.c_str());
             ImGui::PopStyleColor();
         }
@@ -159,7 +159,7 @@ namespace crimson::editor
             drawList->AddText(namePosition, ImGui::GetColorU32(ImGuiCol_Text), project.Name.c_str());
 
             if (project.Missing)
-                drawList->AddText(pathPosition, ImGui::GetColorU32(kErrorColor), ("Missing: " + project.PathText).c_str());
+                drawList->AddText(pathPosition, ImGui::GetColorU32(ui::theme::Error), ("Missing: " + project.PathText).c_str());
             else
                 drawList->AddText(pathPosition, ImGui::GetColorU32(ImGuiCol_TextDisabled), project.PathText.c_str());
 
@@ -255,7 +255,7 @@ namespace crimson::editor
         }
         else
         {
-            ImGui::TextColored(kErrorColor, "%s", m_newProblem.c_str());
+            ImGui::TextColored(ui::theme::Error, "%s", m_newProblem.c_str());
         }
 
         ImGui::Spacing();
