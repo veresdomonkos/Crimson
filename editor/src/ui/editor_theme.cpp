@@ -32,17 +32,25 @@ namespace crimson::editor::ui
             return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(const_cast<std::byte*>(file->Data.data()), static_cast<int>(file->Data.size()), kFontSize, &config);
         }
 
+        // Unicode's private use area. Inter has glyphs of its own there, which would cover the icons at the same codepoints.
+        constexpr ImWchar kPrivateUseArea[] = { 0xE000, 0xF8FF, 0 };
+
         // Text, with the icons merged in, so text and icons mix in one string
         ImFont* AddTextFont(const char* path)
         {
-            ImFont* font = AddEmbeddedFont(path, ImFontConfig{});
+            ImFontConfig text;
+            text.GlyphExcludeRanges = kPrivateUseArea;
+
+            ImFont* font = AddEmbeddedFont(path, text);
             if (!font)
                 return nullptr;
 
-            // Icons take the same width as each other, so labels after them line up
+            // Icons take the same width as each other, so labels after them line up. They are nearly as tall as the
+            // whole font and stand on the baseline, so they go down a little to be centered on the text.
             ImFontConfig icons;
             icons.MergeMode = true;
             icons.GlyphMinAdvanceX = kFontSize;
+            icons.GlyphOffset = ImVec2(0.0f, 2.0f);
             AddEmbeddedFont("fonts/lucide.ttf", icons);
 
             return font;

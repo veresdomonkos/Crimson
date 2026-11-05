@@ -48,13 +48,37 @@ namespace crimson::editor::ui
     }
 
     // A name centered under its tile, and cut off if it would run into the next one
+    // A name centered under its tile, shortened with "..." if it is wider than the tile. The tooltip has the whole name.
     static void DrawClippedText(ImDrawList* drawList, const ImVec2& position, float width, const char* text, ImU32 color)
     {
-        const float textWidth = ImGui::CalcTextSize(text).x;
+        static constexpr const char* kEllipsis = "...";
+
+        std::string shown = text;
+        if (ImGui::CalcTextSize(shown.c_str()).x > width)
+        {
+            const float ellipsisWidth = ImGui::CalcTextSize(kEllipsis).x;
+
+            // Whole UTF-8 characters come off the end, never half of one: continuation bytes, then the byte they follow
+            while (!shown.empty() && ImGui::CalcTextSize(shown.c_str()).x + ellipsisWidth > width)
+            {
+                while (!shown.empty())
+                {
+                    const auto byte = static_cast<unsigned char>(shown.back());
+                    shown.pop_back();
+
+                    if ((byte & 0xC0) != 0x80)
+                        break;
+                }
+            }
+
+            shown += kEllipsis;
+        }
+
+        const float textWidth = ImGui::CalcTextSize(shown.c_str()).x;
         const ImVec2 start(position.x + std::max((width - textWidth) * 0.5f, 0.0f), position.y);
         const ImVec4 clip(position.x, position.y, position.x + width, position.y + ImGui::GetTextLineHeight());
 
-        drawList->AddText(nullptr, 0.0f, start, color, text, nullptr, 0.0f, &clip);
+        drawList->AddText(nullptr, 0.0f, start, color, shown.c_str(), nullptr, 0.0f, &clip);
     }
 
     void AssetBrowserPanel::Rebuild()
