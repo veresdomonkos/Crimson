@@ -57,11 +57,19 @@ namespace crimson::editor::ui
         }
 
         if (m_context.Selected && !m_context.Selected.HasComponent<InstancedComponent>() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)
-            && !ImGui::GetIO().WantTextInput && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+            && !ImGui::GetIO().WantTextInput)
         {
             const Entity selected = m_context.Selected;
-            m_deferred.emplace_back([this, selected] { m_context.ActiveScene.DestroyEntity(selected); });
+
+            if (ImGui::IsKeyPressed(ImGuiKey_Delete, false))
+                m_deferred.emplace_back([this, selected] { m_context.ActiveScene.DestroyEntity(selected); });
+            else if (ImGui::IsKeyPressed(ImGuiKey_F2, false))
+                BeginRename(selected);
         }
+
+        // The entity may have gone while its name was being edited
+        if (m_renaming != entt::null && !scene.GetRegistry().valid(m_renaming))
+            m_renaming = entt::null;
 
         ImGui::End();
 
@@ -83,8 +91,8 @@ namespace crimson::editor::ui
         const bool readOnly = entity.HasComponent<InstancedComponent>();
         const bool isInstance = entity.HasComponent<SceneInstanceComponent>();
 
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick
-            | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
+        // Double-clicking renames, so only the arrow opens and closes
+        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
 
         if (relationship.Children.empty())
             flags |= ImGuiTreeNodeFlags_Leaf;
@@ -97,13 +105,19 @@ namespace crimson::editor::ui
             ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
 
         ImGui::PushID(static_cast<int>(entt::to_integral(handle)));
-        const bool open = ImGui::TreeNodeEx("##Entity", flags, isInstance ? "%s [scene]" : "%s", name.Name.c_str());
+        const bool renaming = handle == m_renaming;
+        const bool open = renaming
+            ? ImGui::TreeNodeEx("##Entity", flags, "%s", "")
+            : ImGui::TreeNodeEx("##Entity", flags, isInstance ? "%s [scene]" : "%s", name.Name.c_str());
 
         if (dimmed)
             ImGui::PopStyleColor();
 
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
             m_context.SelectEntity(entity);
+
+        if (!readOnly && !renaming && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+            BeginRename(entity);
 
         if (!readOnly && ImGui::BeginDragDropSource())
         {
@@ -131,11 +145,17 @@ namespace crimson::editor::ui
                 ImGui::Separator();
             }
 
-            if (ImGui::MenuItem("Delete"))
+            if (ImGui::MenuItem("Rename", "F2"))
+                BeginRename(entity);
+
+            if (ImGui::MenuItem("Delete", "Delete"))
                 m_deferred.emplace_back([this, entity] { m_context.ActiveScene.DestroyEntity(entity); });
 
             ImGui::EndPopup();
         }
+
+        if (renaming)
+            DrawRenameField(entity);
 
         if (open)
         {
@@ -146,6 +166,49 @@ namespace crimson::editor::ui
         }
 
         ImGui::PopID();
+    }
+
+    void HierarchyPanel::BeginRename(Entity entity)
+    {
+        const std::string& name = entity.GetComponent<NameComponent>().Name;
+
+        m_renameBuffer.fill('\0');
+        std::copy_n(name.begin(), std::min(name.size(), m_renameBuffer.size() - 1), m_renameBuffer.begin());
+
+        m_renaming = entity.GetHandle();
+        m_focusRename = true;
+    }
+
+    // Enter or clicking away keeps the new name, Escape keeps the old one
+    void HierarchyPanel::DrawRenameField(Entity entity)
+    {
+        ImGui::SameLine();
+        ImGui::SetNextItemWidth(-FLT_MIN);
+
+        if (m_focusRename)
+        {
+            ImGui::SetKeyboardFocusHere();
+            m_focusRename = false;
+        }
+
+        const bool entered = ImGui::InputText("##Rename", m_renameBuffer.data(), m_renameBuffer.size(),
+            ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue);
+
+        if (!entered && !ImGui::IsItemDeactivated())
+            return;
+
+        m_renaming = entt::null;
+
+        if (!entered && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            return;
+
+        // A name of only spaces would leave nothing to click in the tree
+        std::string name(m_renameBuffer.data());
+        name.erase(0, name.find_first_not_of(" \t"));
+        name.erase(name.find_last_not_of(" \t") + 1);
+
+        if (!name.empty())
+            m_deferred.emplace_back([entity, name = std::move(name)] { entity.GetComponent<NameComponent>().Name = name; });
     }
 
     void HierarchyPanel::DrawCreateMenu(Entity parent)
