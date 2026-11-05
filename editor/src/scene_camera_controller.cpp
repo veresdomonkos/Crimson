@@ -159,6 +159,10 @@ namespace crimson::editor
         if (m_input.IsKeyDown(Key::E)) direction += m_camera.GetUp();
         if (m_input.IsKeyDown(Key::Q)) direction -= m_camera.GetUp();
 
+        // Two keys at once would otherwise add up to a faster diagonal
+        if (glm::length(direction) > 0.0f)
+            direction = glm::normalize(direction);
+
         m_camera.Move(direction * GetKeySpeed() * deltaTime);
     }
 
