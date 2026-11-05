@@ -22,5 +22,6 @@ namespace crimson
         RenderStats m_stats;
         RenderStats m_lastStats;
         FrameGpuData m_gpuData;
+        FrameClock m_clock;
     };
 }

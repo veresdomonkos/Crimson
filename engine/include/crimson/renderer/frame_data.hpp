@@ -1,6 +1,10 @@
 #pragma once
-#include <glm/glm.hpp>
+#include <chrono>
+#include <optional>
 #include <vector>
+
+#include <glm/glm.hpp>
+
 #include "light.hpp"
 #include "core.hpp"
 
@@ -12,7 +16,8 @@ namespace crimson
         glm::vec4 AmbientColor{0.0f};
         uint32_t LightCount = 0;
         uint32_t ShadowCount = 0;
-        uint32_t Pad[2]{};
+        float Time = 0.0f;      // seconds since the first frame
+        float DeltaTime = 0.0f; // seconds since the frame before
     };
     static_assert(sizeof(FrameBlock) == 32);
 
@@ -55,15 +60,49 @@ namespace crimson
         std::vector<ShadowView> Shadows;
     };
 
-    // The lighting data in the form it is uploaded, the vectors keep their capacity between frames
+    struct FrameTime
+    {
+        float Time = 0.0f;
+        float DeltaTime = 0.0f;
+
+        bool operator==(const FrameTime&) const = default;
+    };
+
+    // Measures the time shaders see. The first frame is at 0, with no time since a frame before it.
+    class FrameClock
+    {
+    public:
+        FrameTime Tick(std::chrono::steady_clock::time_point now)
+        {
+            if (!m_start)
+            {
+                m_start = now;
+                m_previous = now;
+            }
+
+            const FrameTime time{ Seconds(now - *m_start), Seconds(now - m_previous) };
+            m_previous = now;
+            return time;
+        }
+    private:
+        static float Seconds(std::chrono::steady_clock::duration duration) { return std::chrono::duration<float>(duration).count(); }
+
+        std::optional<std::chrono::steady_clock::time_point> m_start;
+        std::chrono::steady_clock::time_point m_previous;
+    };
+
+    // The frame's lighting and time in the form they are uploaded, the vectors keep their capacity between frames
     struct FrameGpuData
     {
         FrameBlock Block;
         std::vector<GpuLight> Lights;
         std::vector<GpuShadow> Shadows;
 
-        void Build(const FrameLightingData& lighting)
+        void Build(const FrameLightingData& lighting, FrameTime time)
         {
+            Block.Time = time.Time;
+            Block.DeltaTime = time.DeltaTime;
+
             Lights.clear();
             for (const Light& light : lighting.Lights)
                 Lights.push_back(light.ToGpuLight());

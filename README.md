@@ -93,7 +93,7 @@ Resources are grouped by how often they change. `crimson/bindings.hlsli` declare
 
 | Space | Scope | Resources |
 |:------|:------|:----------|
-| `space0` | per frame | `FrameBlock`, `Lights`, `Shadows`, `Objects`, `ShadowAtlas` and the samplers `LinearWrap`, `LinearClamp`, `PointClamp`, `ShadowCompare` |
+| `space0` | per frame | `FrameBlock` (`AmbientColor`, `Time` and `DeltaTime` in seconds), `Lights`, `Shadows`, `Objects`, `ShadowAtlas` and the samplers `LinearWrap`, `LinearClamp`, `PointClamp`, `ShadowCompare` |
 | `space1` | per pass | `ViewBlock` (`ViewProj`, `CameraPosition`) |
 | `space2` | per material, **optional** | one constant buffer (`b0`) and any textures (`t0` and up), both looked up by name |
 | push constant | per draw | `DrawData` (`ObjectIndex`) |
