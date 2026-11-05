@@ -4,6 +4,7 @@
 #include "crimson/bindings.hlsli"
 #include "crimson/brdf.hlsli"
 #include "crimson/shadows.hlsli"
+#include "crimson/transforms.hlsli"
 
 static const uint LIGHT_DIRECTIONAL = 0;
 static const uint LIGHT_POINT = 1;

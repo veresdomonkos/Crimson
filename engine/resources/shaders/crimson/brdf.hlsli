@@ -1,14 +1,14 @@
 #ifndef CRIMSON_BRDF_HLSLI
 #define CRIMSON_BRDF_HLSLI
 
-static const float PI = 3.14159265359;
+#include "crimson/math.hlsli"
 
 // How much of the surface's microfacets face the half vector
 float DistributionGGX(float NdotH, float alpha)
 {
     const float alpha2 = alpha * alpha;
     const float denominator = NdotH * NdotH * (alpha2 - 1.0) + 1.0;
-    return alpha2 / max(PI * denominator * denominator, 0.000001);
+    return alpha2 / max(PI * denominator * denominator, EPSILON);
 }
 
 // Smith's height-correlated masking and shadowing, already divided by 4 * NdotL * NdotV
