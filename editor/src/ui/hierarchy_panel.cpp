@@ -8,6 +8,9 @@
 
 #include <crimson/scene/scene_renderer.hpp>
 
+#include "crimson_editor/ui/editor_theme.hpp"
+#include "crimson_editor/ui/icons.hpp"
+
 namespace crimson::editor::ui
 {
     static constexpr const char* kEntityPayload = "CRIMSON_ENTITY";
@@ -27,6 +30,28 @@ namespace crimson::editor::ui
         { "Plane",    "engine/meshes/plane.obj" },
         { "Quad",     "engine/meshes/quad.obj" },
     };
+
+    // What kind of entity it is, at a glance
+    static const char* EntityIcon(Entity entity)
+    {
+        if (entity.HasComponent<SceneInstanceComponent>())
+            return kIconSceneInstance;
+
+        if (const auto* light = entity.TryGetComponent<LightComponent>())
+        {
+            switch (light->Type)
+            {
+                case LightType::Directional: return kIconDirectionalLight;
+                case LightType::Point:       return kIconPointLight;
+                case LightType::Spot:        return kIconSpotLight;
+            }
+        }
+
+        if (entity.HasComponent<MeshRendererComponent>())
+            return kIconMesh;
+
+        return kIconEntity;
+    }
 
     void HierarchyPanel::OnImGui()
     {
@@ -49,6 +74,9 @@ namespace crimson::editor::ui
 
         for (const entt::entity root : scene.GetRoots())
             DrawEntity(root);
+
+        if (scene.GetRoots().empty())
+            theme::EmptyHint("Right-click to create an entity, or drop a mesh into the Scene view");
 
         // The rest of the panel: clicking clears the selection, dropping makes a root
         const ImVec2 available = ImGui::GetContentRegionAvail();
@@ -125,8 +153,8 @@ namespace crimson::editor::ui
         ImGui::PushID(static_cast<int>(entt::to_integral(handle)));
         const bool renaming = handle == m_renaming;
         const bool open = renaming
-            ? ImGui::TreeNodeEx("##Entity", flags, "%s", "")
-            : ImGui::TreeNodeEx("##Entity", flags, isInstance ? "%s [scene]" : "%s", name.Name.c_str());
+            ? ImGui::TreeNodeEx("##Entity", flags, "%s", EntityIcon(entity))
+            : ImGui::TreeNodeEx("##Entity", flags, isInstance ? "%s  %s [scene]" : "%s  %s", EntityIcon(entity), name.Name.c_str());
 
         if (dimmed)
             ImGui::PopStyleColor();

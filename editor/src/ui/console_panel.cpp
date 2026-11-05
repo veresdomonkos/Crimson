@@ -1,4 +1,5 @@
 #include "crimson_editor/ui/console_panel.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
 
 #include <chrono>
 #include <ctime>
@@ -81,17 +82,17 @@ namespace crimson::editor::ui
 
         ImGui::SameLine(ImGui::GetWindowWidth() - 260.0f);
 
-        ImGui::PushStyleColor(ImGuiCol_Button, m_ShowInfo ? ImVec4(0.2f, 0.4f, 0.2f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, m_ShowInfo ? theme::ToggleInfo : theme::ToggleOff);
         if (ImGui::Button(infoLabel)) m_ShowInfo = !m_ShowInfo;
         ImGui::PopStyleColor();
 
         ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Button, m_ShowWarnings ? ImVec4(0.5f, 0.4f, 0.1f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, m_ShowWarnings ? theme::ToggleWarning : theme::ToggleOff);
         if (ImGui::Button(warnLabel)) m_ShowWarnings = !m_ShowWarnings;
         ImGui::PopStyleColor();
 
         ImGui::SameLine();
-        ImGui::PushStyleColor(ImGuiCol_Button, m_ShowErrors ? ImVec4(0.5f, 0.1f, 0.1f, 1.0f) : ImVec4(0.2f, 0.2f, 0.2f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_Button, m_ShowErrors ? theme::ToggleError : theme::ToggleOff);
         if (ImGui::Button(errLabel)) m_ShowErrors = !m_ShowErrors;
         ImGui::PopStyleColor();
 
@@ -152,9 +153,9 @@ namespace crimson::editor::ui
                     ImVec4 textColor;
                     switch (log.Level)
                     {
-                        case LogLevel::Info:    textColor = ImVec4(0.9f, 0.9f, 0.9f, 1.0f); break;
-                        case LogLevel::Warn: textColor = ImVec4(1.0f, 0.8f, 0.2f, 1.0f); break;
-                        case LogLevel::Error:   textColor = ImVec4(1.0f, 0.3f, 0.3f, 1.0f); break;
+                        case LogLevel::Info:    textColor = theme::Text; break;
+                        case LogLevel::Warn: textColor = theme::Warning; break;
+                        case LogLevel::Error:   textColor = theme::Error; break;
                     }
 
                     std::string lineText = log.Timestamp + " " + log.Message;

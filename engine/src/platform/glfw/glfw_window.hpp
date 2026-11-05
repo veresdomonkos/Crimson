@@ -21,6 +21,12 @@ namespace crimson::glfw
 	    void Maximize() override { glfwMaximizeWindow(m_handle); }
 	    void Restore() override { glfwRestoreWindow(m_handle); }
 	    [[nodiscard]] bool IsFocused() const override { return glfwGetWindowAttrib(m_handle, GLFW_FOCUSED) == GLFW_TRUE; }
+	    [[nodiscard]] float GetContentScale() const override
+	    {
+	        float x = 1.0f, y = 1.0f;
+	        glfwGetWindowContentScale(m_handle, &x, &y);
+	        return x > 0.0f ? x : 1.0f;
+	    }
 
 	    void* GetNativeHandle() const override { return m_handle; }
 	private:

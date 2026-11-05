@@ -1,4 +1,5 @@
 #include "crimson_editor/ui/stats_panel.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
 #include <imgui.h>
 
 namespace crimson::editor::ui
@@ -16,7 +17,7 @@ namespace crimson::editor::ui
         ImGui::Text("%s | %s", m_api == RendererAPIType::Vulkan ? "Vulkan" : "OpenGL", buildType);
 
 #ifndef NDEBUG
-        ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.2f, 1.0f), "Debug build, timings are not representative");
+        ImGui::TextColored(theme::Warning, "Debug build, timings are not representative");
 #endif
 
         ImGui::Separator();

@@ -48,7 +48,7 @@ namespace crimson::editor
         });
 
         ImGui::GetIO().IniFilename = m_imguiIniPath.c_str();
-        ui::ApplyEditorTheme();
+        ui::ApplyEditorTheme(m_window->GetContentScale());
 
         m_lastTime = glfwGetTime();
 
