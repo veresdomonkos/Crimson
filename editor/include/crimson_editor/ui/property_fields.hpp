@@ -5,7 +5,7 @@ namespace crimson::editor::ui::props
 {
     // The Inspector's rows: a label in a column on the left, and the value filling the rest of the row. Every field
     // takes what it resets to, or nothing if it can't be reset. Right-clicking a row's label or its value offers
-    // "Reset to default", and clicking an axis tag resets that axis alone.
+    // "Reset to default". Vector fields mark their axes with a thin colored stripe, which is only drawn.
     //
     //   if (props::BeginTable("Transform"))
     //   {

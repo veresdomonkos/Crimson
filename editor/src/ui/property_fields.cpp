@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cfloat>
+#include <cmath>
 
 #include <imgui.h>
 
@@ -21,11 +22,6 @@ namespace crimson::editor::ui::props
         bool RightClickedLastItem()
         {
             return ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && ImGui::IsMouseReleased(ImGuiMouseButton_Right);
-        }
-
-        ImVec4 Lighter(const ImVec4& color, float amount)
-        {
-            return ImVec4(std::min(color.x + amount, 1.0f), std::min(color.y + amount, 1.0f), std::min(color.z + amount, 1.0f), color.w);
         }
 
         // Picking the reset only does something if the value isn't at its default already
@@ -128,7 +124,7 @@ namespace crimson::editor::ui::props
 
     bool Floats(const char* label, float* values, int count, float speed, const float* reset)
     {
-        static constexpr std::array kTags = { "X", "Y", "Z", "W" };
+        static constexpr std::array kAxes = { "X", "Y", "Z", "W" };
         static constexpr std::array kColors = { theme::AxisX, theme::AxisY, theme::AxisZ, theme::AxisW };
 
         count = std::clamp(count, 1, 4);
@@ -136,8 +132,8 @@ namespace crimson::editor::ui::props
         BeginRow(label);
 
         const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
-        const float tagWidth = ImGui::GetFrameHeight();
-        const float fieldWidth = std::max(1.0f, (ImGui::GetContentRegionAvail().x - spacing * static_cast<float>(count - 1)) / static_cast<float>(count) - tagWidth);
+        const float fieldWidth = std::max(1.0f, (ImGui::GetContentRegionAvail().x - spacing * static_cast<float>(count - 1)) / static_cast<float>(count));
+        const float stripeWidth = std::max(2.0f, std::round(ImGui::GetFontSize() * 0.16f));
 
         bool changed = false;
 
@@ -148,28 +144,17 @@ namespace crimson::editor::ui::props
 
             ImGui::PushID(i);
 
-            // The tag is a button: clicking it puts that axis back
-            ImGui::PushStyleColor(ImGuiCol_Button, kColors[i]);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, Lighter(kColors[i], 0.1f));
-            ImGui::PushStyleColor(ImGuiCol_ButtonActive, Lighter(kColors[i], 0.2f));
-
-            if (ImGui::Button(kTags[i], ImVec2(tagWidth, 0.0f)) && reset && values[i] != reset[i])
-            {
-                values[i] = reset[i];
-                changed = true;
-            }
-
-            ImGui::PopStyleColor(3);
-
-            if (reset)
-                ImGui::SetItemTooltip("Click to reset %s", kTags[i]);
-
-            ResetTarget();
-
-            ImGui::SameLine(0.0f, 0.0f);
             ImGui::SetNextItemWidth(fieldWidth);
             changed |= ImGui::DragFloat("##Value", &values[i], speed, 0.0f, 0.0f, "%.3f");
             ResetTarget();
+            ImGui::SetItemTooltip("%s", kAxes[i]);
+
+            // Which axis it is, as a thin stripe of the gizmo's color down the field's left edge. It is only drawn,
+            // so it can't be clicked by accident, and the number keeps nearly all of the width.
+            const ImVec2 min = ImGui::GetItemRectMin();
+            const ImVec2 max = ImGui::GetItemRectMax();
+            ImGui::GetWindowDrawList()->AddRectFilled(min, ImVec2(min.x + stripeWidth, max.y), ImGui::GetColorU32(kColors[i]),
+                ImGui::GetStyle().FrameRounding, ImDrawFlags_RoundCornersLeft);
 
             ImGui::PopID();
         }
