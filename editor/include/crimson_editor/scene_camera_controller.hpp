@@ -31,7 +31,7 @@ namespace crimson::editor
         void UpdatePan();
         void UpdateOrbit();
         void UpdateZoom();
-        void UpdateWithoutGesture(float deltaTime);
+        void UpdateWithoutGesture();
         void MoveWithKeys(float deltaTime);
 
         // Moves along the view direction, pushing the pivot ahead when getting close to it
