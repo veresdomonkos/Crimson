@@ -1,6 +1,7 @@
 #include "crimson_editor/ui/asset_browser_panel.hpp"
 
 #include <algorithm>
+#include <cfloat>
 #include <filesystem>
 #include <set>
 #include <system_error>
@@ -9,6 +10,8 @@
 #include <crimson/project/project.hpp>
 
 #include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
+#include "crimson_editor/ui/icons.hpp"
 
 namespace fs = std::filesystem;
 
@@ -33,17 +36,15 @@ namespace crimson::editor::ui
         return folder == kEngineFolder || folder.starts_with(std::string(kEngineFolder) + "/");
     }
 
-    static ImU32 GetTileColor(AssetType type)
+    // An icon filling a tile, centered in it
+    static void DrawTileIcon(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, const char* icon, const ImVec4& color)
     {
-        switch (type)
-        {
-            case AssetType::Material: return IM_COL32(150, 60, 70, 255);
-            case AssetType::Mesh:     return IM_COL32(60, 110, 150, 255);
-            case AssetType::Shader:   return IM_COL32(95, 75, 150, 255);
-            case AssetType::Texture:  return IM_COL32(60, 130, 90, 255);
-            case AssetType::Scene:    return IM_COL32(170, 105, 50, 255);
-            default:                  return IM_COL32(90, 90, 90, 255);
-        }
+        const float size = (max.y - min.y) * 0.7f;
+        ImFont* font = ImGui::GetFont();
+
+        const ImVec2 iconSize = font->CalcTextSizeA(size, FLT_MAX, 0.0f, icon);
+        const ImVec2 position((min.x + max.x - iconSize.x) * 0.5f, (min.y + max.y - iconSize.y) * 0.5f);
+        drawList->AddText(font, size, position, ImGui::GetColorU32(color), icon);
     }
 
     // A name centered under its tile, and cut off if it would run into the next one
@@ -217,7 +218,7 @@ namespace crimson::editor::ui
             if (folder == m_currentFolder)
                 flags |= ImGuiTreeNodeFlags_Selected;
 
-            const bool open = ImGui::TreeNodeEx(folder.c_str(), flags, "%s", NameOf(folder).c_str());
+            const bool open = ImGui::TreeNodeEx(folder.c_str(), flags, "%s  %s", folder == m_currentFolder ? kIconFolderOpen : kIconFolder, NameOf(folder).c_str());
 
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                 m_currentFolder = folder;
@@ -299,9 +300,8 @@ namespace crimson::editor::ui
         const ImVec2 min = ImGui::GetItemRectMin();
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
-        const float pad = tileSize * 0.15f;
-        drawList->AddRectFilled(ImVec2(min.x + pad, min.y + pad * 1.6f), ImVec2(min.x + tileSize - pad, min.y + tileSize - pad), IM_COL32(170, 140, 70, 255), 3.0f);
-        drawList->AddRectFilled(ImVec2(min.x + pad, min.y + pad), ImVec2(min.x + tileSize * 0.5f, min.y + pad * 1.8f), IM_COL32(150, 120, 55, 255), 3.0f);
+        const float pad = tileSize * 0.1f;
+        DrawTileIcon(drawList, ImVec2(min.x + pad, min.y + pad), ImVec2(min.x + tileSize - pad, min.y + tileSize - pad), kIconFolder, theme::Folder);
 
         const std::string name = NameOf(folder);
         DrawClippedText(drawList, ImVec2(min.x + 2.0f, min.y + tileSize), tileSize - 4.0f, name.c_str(), ImGui::GetColorU32(ImGuiCol_Text));
@@ -357,13 +357,7 @@ namespace crimson::editor::ui
         }
         else
         {
-            drawList->AddRectFilled(tileMin, tileMax, GetTileColor(item.Type), 4.0f);
-
-            const std::string_view label = ToString(item.Type);
-            const ImVec2 labelSize = ImGui::CalcTextSize(label.data(), label.data() + label.size());
-
-            drawList->AddText(ImVec2((tileMin.x + tileMax.x - labelSize.x) * 0.5f, (tileMin.y + tileMax.y - labelSize.y) * 0.5f),
-                IM_COL32(255, 255, 255, 220), label.data(), label.data() + label.size());
+            DrawTileIcon(drawList, tileMin, tileMax, AssetIcon(item.Type), theme::AssetColor(item.Type));
         }
 
         const std::string name = m_context.Edits.IsDirty(item.Id) ? "* " + item.Name : item.Name;

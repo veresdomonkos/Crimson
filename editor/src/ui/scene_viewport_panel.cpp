@@ -8,6 +8,7 @@
 #include <crimson/scene/scene_serializer.hpp>
 
 #include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/icons.hpp"
 
 namespace crimson::editor::ui
 {
@@ -170,17 +171,19 @@ namespace crimson::editor::ui
 
         ImGui::SetCursorScreenPos(ImVec2(position.x + kMargin, position.y + kMargin));
 
-        const auto operationButton = [this](const char* label, const char* shortcut, ImGuizmo::OPERATION operation)
+        const auto operationButton = [this](const char* icon, const char* name, const char* shortcut, ImGuizmo::OPERATION operation)
         {
             const bool active = m_operation == operation;
 
             if (active)
                 ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
 
-            if (ImGui::Button(label))
+            ImGui::PushID(name);
+            if (ImGui::Button(icon))
                 m_operation = operation;
+            ImGui::PopID();
 
-            ImGui::SetItemTooltip("%s (%s)", label, shortcut);
+            ImGui::SetItemTooltip("%s (%s)", name, shortcut);
 
             if (active)
                 ImGui::PopStyleColor();
@@ -188,12 +191,15 @@ namespace crimson::editor::ui
             ImGui::SameLine();
         };
 
-        operationButton("Move", "W", ImGuizmo::TRANSLATE);
-        operationButton("Rotate", "E", ImGuizmo::ROTATE);
-        operationButton("Scale", "R", ImGuizmo::SCALE);
+        operationButton(kIconMove, "Move", "W", ImGuizmo::TRANSLATE);
+        operationButton(kIconRotate, "Rotate", "E", ImGuizmo::ROTATE);
+        operationButton(kIconScale, "Scale", "R", ImGuizmo::SCALE);
 
-        if (ImGui::Button(m_mode == ImGuizmo::LOCAL ? "Local" : "World"))
-            m_mode = m_mode == ImGuizmo::LOCAL ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+        const bool local = m_mode == ImGuizmo::LOCAL;
+        if (ImGui::Button(local ? kIconLocalSpace : kIconWorldSpace))
+            m_mode = local ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+
+        ImGui::SetItemTooltip(local ? "Local axes, click for world axes" : "World axes, click for local axes");
     }
 
     void SceneViewportPanel::DrawGizmo(const ImVec2& position, const ImVec2& size)

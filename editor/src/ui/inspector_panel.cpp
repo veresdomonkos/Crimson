@@ -10,16 +10,23 @@
 #include <crimson/scene/scene_renderer.hpp>
 
 #include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
+#include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/linear_color.hpp"
 
 namespace crimson::editor::ui
 {
     // A collapsible section. Returns true while it is open, and needs EndComponentSection then.
-    static bool BeginComponentSection(const char* label, bool removable, bool& removed)
+    static bool BeginComponentSection(const char* icon, const char* label, bool removable, bool& removed)
     {
         constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_Framed;
 
-        const bool open = ImGui::TreeNodeEx(label, flags);
+        // The id is the label alone, so the section stays open or closed if its icon changes
+        bool open = false;
+        {
+            const theme::ScopedBold bold;
+            open = ImGui::TreeNodeEx(label, flags, "%s  %s", icon, label);
+        }
 
         if (removable && ImGui::BeginPopupContextItem())
         {
@@ -100,7 +107,7 @@ namespace crimson::editor::ui
         }
         else
         {
-            ImGui::TextDisabled("Nothing selected");
+            theme::EmptyHint("Select an entity in the Hierarchy or the Scene view, or an asset in the Assets panel");
         }
 
         ImGui::End();
@@ -124,7 +131,7 @@ namespace crimson::editor::ui
     void InspectorPanel::DrawTransform(Entity entity)
     {
         bool removed = false;
-        if (!BeginComponentSection("Transform", false, removed))
+        if (!BeginComponentSection(kIconTransform, "Transform", false, removed))
             return;
 
         auto& transform = entity.GetComponent<TransformComponent>();
@@ -157,7 +164,8 @@ namespace crimson::editor::ui
             return;
 
         bool removed = false;
-        if (BeginComponentSection("Light", true, removed))
+        const char* icon = light->Type == LightType::Directional ? kIconDirectionalLight : light->Type == LightType::Spot ? kIconSpotLight : kIconPointLight;
+        if (BeginComponentSection(icon, "Light", true, removed))
         {
             constexpr std::array kTypeNames = { "Directional", "Point", "Spot" };
 
@@ -193,7 +201,7 @@ namespace crimson::editor::ui
             return;
 
         bool removed = false;
-        if (BeginComponentSection("Mesh Renderer", true, removed))
+        if (BeginComponentSection(kIconMesh, "Mesh Renderer", true, removed))
         {
             bool changed = DrawAssetCombo("Mesh", m_context.Assets, AssetType::Mesh, renderer->MeshAsset);
 
