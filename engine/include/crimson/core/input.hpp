@@ -32,12 +32,16 @@ namespace crimson
         // How far the mouse moved since the last Update, in pixels
         [[nodiscard]] glm::vec2 GetMouseDelta() const { return m_mouseDelta; }
 
-        // A locked cursor is hidden and can keep moving forever, without stopping at the edge of the screen
+        // A locked cursor is hidden and stays where it was locked, while the mouse can keep moving forever without
+        // stopping at the edge of the screen
         void SetCursorLocked(bool locked);
+        [[nodiscard]] bool IsCursorLocked() const { return m_locked; }
     private:
         void* m_window;
         glm::dvec2 m_mousePosition{0.0};
+        glm::dvec2 m_lockedAt{0.0};
         glm::vec2 m_mouseDelta{0.0f};
         bool m_skipNextDelta = true;
+        bool m_locked = false;
     };
 }

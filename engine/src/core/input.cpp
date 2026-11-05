@@ -53,6 +53,14 @@ namespace crimson
         m_mouseDelta = m_skipNextDelta ? glm::vec2(0.0f) : glm::vec2(position - m_mousePosition);
         m_mousePosition = position;
         m_skipNextDelta = false;
+
+        // A hidden cursor still moves, and the UI would see it hovering and clicking whatever it went over.
+        // Putting it back each frame keeps it where it was locked, while the movement still counts.
+        if (m_locked)
+        {
+            glfwSetCursorPos(static_cast<GLFWwindow*>(m_window), m_lockedAt.x, m_lockedAt.y);
+            m_mousePosition = m_lockedAt;
+        }
     }
 
     bool Input::IsKeyDown(Key key) const
@@ -69,8 +77,14 @@ namespace crimson
     {
         auto* window = static_cast<GLFWwindow*>(m_window);
 
+        if (locked == m_locked)
+            return;
+
+        m_locked = locked;
+
         if (locked)
         {
+            glfwGetCursorPos(window, &m_lockedAt.x, &m_lockedAt.y);
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
             if (glfwRawMouseMotionSupported())
@@ -82,6 +96,9 @@ namespace crimson
                 glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
 
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+
+            // Back where the gesture started, which the mode change alone doesn't do on every platform
+            glfwSetCursorPos(window, m_lockedAt.x, m_lockedAt.y);
         }
 
         // The cursor position jumps when the mode changes, which isn't the mouse moving
