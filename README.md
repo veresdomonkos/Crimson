@@ -233,7 +233,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 
 - **Viewport** - displays a render target texture (scene, shadow map, ...). The Scene view has a [ImGuizmo](https://github.com/CedricGuillemet/ImGuizmo) gizmo on the selected entity, with a toolbar for its operation and for local or world axes.
 - **Hierarchy** - the entity tree. Click to select, drag onto an entity to reparent or onto the empty area to make a root, right-click to create (an empty entity, a light, or a built-in mesh under **Create 3D Object**), rename or delete, `F2` or double-clicking renames the selection in place, and `Delete` deletes it.
-- **Inspector** - shows the selected entity or asset, as only one thing is selected at a time.
+- **Inspector** - shows the selected entity or asset, as only one thing is selected at a time. Labels sit in a column on the left, and right-clicking a field or its label offers **Reset to default**: a component's own default, a material property's `@default` from its shader, or no texture. A thin red, green or blue stripe on the left of a number says which axis it is. The rows come from `crimson_editor/ui/property_fields.hpp`, for every panel to share.
   - **Entity:** name, active flag and components, with mesh and material pickers. **Add Component** adds a component, right-clicking a component's header removes it.
   - **Material:** shader, render mode, culling, and whatever properties and textures its shader declares. Edits show right away and only reach the file on **Save**, or go away on **Revert**. **File > Save All** or `Ctrl+S` saves everything, and closing with unsaved changes asks first.
   - **Texture:** preview, size, and import settings for sRGB, mipmaps and flipping.

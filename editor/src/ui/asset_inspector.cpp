@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <array>
+#include <cfloat>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -15,7 +17,7 @@
 
 #include "crimson_editor/ui/asset_drag.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
-#include "crimson_editor/ui/linear_color.hpp"
+#include "crimson_editor/ui/property_fields.hpp"
 
 namespace crimson::editor::ui
 {
@@ -32,13 +34,6 @@ namespace crimson::editor::ui
         std::vector<std::pair<std::string, T>> items(map.begin(), map.end());
         std::ranges::sort(items, {}, [](const auto& item) { return item.first; });
         return items;
-    }
-
-    static void DrawAssetNameColumn(const char* label, const std::string& value)
-    {
-        ImGui::TextDisabled("%s", label);
-        ImGui::SameLine();
-        ImGui::TextUnformatted(value.c_str());
     }
 
     static std::string FormatFileSize(std::uintmax_t bytes)
@@ -63,9 +58,6 @@ namespace crimson::editor::ui
 
         DrawHeader(*info);
 
-        // Fields fill the panel, leaving room for their labels
-        ImGui::PushItemWidth(-ImGui::GetFontSize() * 6.0f);
-
         switch (info->Type)
         {
             case AssetType::Material: DrawMaterial(*info); break;
@@ -75,8 +67,6 @@ namespace crimson::editor::ui
             case AssetType::Scene:    DrawScene(*info); break;
             default: break;
         }
-
-        ImGui::PopItemWidth();
     }
 
     void AssetInspector::DrawScene(const AssetInfo& info)
@@ -165,11 +155,15 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawMaterialSettings(MaterialData& data, bool& changed)
     {
+        if (!props::BeginTable("##MaterialSettings"))
+            return;
+
         const AssetManager& assets = m_context.Assets;
 
         const AssetInfo* currentShader = assets.GetInfo(data.Shader);
 
-        if (ImGui::BeginCombo("Shader", currentShader ? currentShader->Path.c_str() : "None"))
+        props::BeginRow("Shader");
+        if (ImGui::BeginCombo("##Shader", currentShader ? currentShader->Path.c_str() : "None"))
         {
             for (const AssetInfo* shader : assets.List(AssetType::Shader))
             {
@@ -197,23 +191,31 @@ namespace crimson::editor::ui
             changed = true;
         }
 
+        props::EndRow(false);
+
+        static const MaterialSettings kDefaults;
+
         constexpr std::array kRenderModes = { "Opaque", "Transparent" };
+        const int defaultRenderMode = static_cast<int>(kDefaults.RenderMode);
         int renderMode = static_cast<int>(data.Settings.RenderMode);
 
-        if (ImGui::Combo("Render Mode", &renderMode, kRenderModes.data(), static_cast<int>(kRenderModes.size())))
+        if (props::Combo("Render Mode", renderMode, kRenderModes.data(), static_cast<int>(kRenderModes.size()), &defaultRenderMode))
         {
             data.Settings.RenderMode = static_cast<MaterialRenderMode>(renderMode);
             changed = true;
         }
 
         constexpr std::array kCullModes = { "None", "Back", "Front" };
+        const int defaultCull = static_cast<int>(kDefaults.Cull);
         int cull = static_cast<int>(data.Settings.Cull);
 
-        if (ImGui::Combo("Cull", &cull, kCullModes.data(), static_cast<int>(kCullModes.size())))
+        if (props::Combo("Cull", cull, kCullModes.data(), static_cast<int>(kCullModes.size()), &defaultCull))
         {
             data.Settings.Cull = static_cast<CullMode>(cull);
             changed = true;
         }
+
+        props::EndTable();
     }
 
     void AssetInspector::DrawMaterialProperties(const ShaderInterface& shader, MaterialData& data, bool& changed)
@@ -227,41 +229,55 @@ namespace crimson::editor::ui
 
         theme::SectionTitle("Properties");
 
+        if (!props::BeginTable("##MaterialProperties"))
+            return;
+
         for (const auto& [name, property] : properties)
         {
             const std::size_t count = property.Size / sizeof(float);
             if (count < 1 || count > 4)
                 continue;
 
-            std::array<float, 4> values{};
+            // What the shader starts the property at, which a reset goes back to
+            std::array<float, 4> defaults{};
+            std::copy_n(property.Default.begin(), std::min(count, property.Default.size()), defaults.begin());
 
+            std::array<float, 4> values = defaults;
             if (const auto it = data.Properties.find(name); it != data.Properties.end())
                 std::copy_n(it->second.begin(), std::min(count, it->second.size()), values.begin());
-            else
-                std::ranges::copy(property.Default, values.begin());
 
             const bool isColor = name.find("Color") != std::string::npos;
+            const int channels = static_cast<int>(count);
             bool edited = false;
 
-            switch (count)
+            if (count == 1)
             {
-                case 1:
-                    edited = property.Range
-                        ? ImGui::SliderFloat(name.c_str(), values.data(), property.Range->first, property.Range->second)
-                        : ImGui::DragFloat(name.c_str(), values.data(), 0.01f);
-                    break;
-                case 2: edited = ImGui::DragFloat2(name.c_str(), values.data(), 0.01f); break;
-                case 3: edited = isColor ? LinearColorEdit(name.c_str(), values.data(), 3) : ImGui::DragFloat3(name.c_str(), values.data(), 0.01f); break;
-                case 4: edited = isColor ? LinearColorEdit(name.c_str(), values.data(), 4) : ImGui::DragFloat4(name.c_str(), values.data(), 0.01f); break;
-                default: break;
+                edited = property.Range
+                    ? props::Slider(name.c_str(), values[0], property.Range->first, property.Range->second, &defaults[0])
+                    : props::Float(name.c_str(), values[0], 0.01f, 0.0f, 0.0f, &defaults[0]);
+            }
+            else if (isColor && count >= 3)
+            {
+                edited = props::Color(name.c_str(), values.data(), channels, defaults.data());
+            }
+            else
+            {
+                edited = props::Floats(name.c_str(), values.data(), channels, 0.01f, defaults.data());
             }
 
-            if (edited)
-            {
-                data.Properties[name] = std::vector<float>(values.begin(), values.begin() + static_cast<std::ptrdiff_t>(count));
-                changed = true;
-            }
+            if (!edited)
+                continue;
+
+            // A value back at the shader's default isn't the material's own anymore, so the file doesn't keep it
+            if (std::equal(values.begin(), values.begin() + channels, defaults.begin()))
+                data.Properties.erase(name);
+            else
+                data.Properties[name] = std::vector<float>(values.begin(), values.begin() + channels);
+
+            changed = true;
         }
+
+        props::EndTable();
     }
 
     void AssetInspector::DrawMaterialTextures(const ShaderInterface& shader, MaterialData& data, bool& changed)
@@ -271,12 +287,15 @@ namespace crimson::editor::ui
 
         theme::SectionTitle("Textures");
 
+        if (!props::BeginTable("##MaterialTextures"))
+            return;
+
         const AssetManager& assets = m_context.Assets;
-        const float previewSize = ImGui::GetFrameHeight() * 1.5f;
+        const float previewSize = ImGui::GetFrameHeight();
 
         for (const auto& [name, texture] : SortedByName(shader.Textures))
         {
-            ImGui::PushID(name.c_str());
+            props::BeginRow(name.c_str());
 
             const auto used = data.Textures.find(name);
             const AssetID current = used != data.Textures.end() ? used->second : AssetID{};
@@ -286,12 +305,14 @@ namespace crimson::editor::ui
             else
                 ImGui::Dummy(ImVec2(previewSize, previewSize));
 
-            ImGui::SameLine();
+            props::ResetTarget();
+            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+            ImGui::SetNextItemWidth(-FLT_MIN);
 
             const AssetInfo* currentInfo = assets.GetInfo(current);
             AssetID picked = current;
 
-            if (ImGui::BeginCombo(name.c_str(), currentInfo ? currentInfo->Path.c_str() : "None"))
+            if (ImGui::BeginCombo("##Texture", currentInfo ? currentInfo->Path.c_str() : "None"))
             {
                 if (ImGui::Selectable("None", !current))
                     picked = {};
@@ -308,6 +329,15 @@ namespace crimson::editor::ui
             if (const AssetID dropped = AcceptAssetOnLastItem(assets, AssetType::Texture))
                 picked = dropped;
 
+            props::ResetTarget();
+
+            if (currentInfo && HoldsData(name) && currentInfo->Settings.value("srgb", true))
+                ImGui::TextColored(theme::Warning, "This holds data, turn sRGB off on the texture");
+
+            // Reset leaves the slot empty, for the shader's own default texture
+            if (props::EndRow(static_cast<bool>(current)))
+                picked = {};
+
             if (picked != current)
             {
                 if (picked)
@@ -317,12 +347,9 @@ namespace crimson::editor::ui
 
                 changed = true;
             }
-
-            if (currentInfo && HoldsData(name) && currentInfo->Settings.value("srgb", true))
-                ImGui::TextColored(theme::Warning, "This holds data, turn sRGB off on the texture");
-
-            ImGui::PopID();
         }
+
+        props::EndTable();
     }
 
     void AssetInspector::ShowTexture(const AssetInfo& info)
@@ -361,27 +388,40 @@ namespace crimson::editor::ui
 
         ImGui::Spacing();
 
-        if (m_textureSize)
-            DrawAssetNameColumn("Size", std::to_string(m_textureSize->first) + " x " + std::to_string(m_textureSize->second));
+        if (props::BeginTable("##TextureDetails"))
+        {
+            if (m_textureSize)
+                props::Text("Size", (std::to_string(m_textureSize->first) + " x " + std::to_string(m_textureSize->second)).c_str());
 
-        DrawAssetNameColumn("File", FormatFileSize(m_textureFileSize));
+            props::Text("File", FormatFileSize(m_textureFileSize).c_str());
+            props::EndTable();
+        }
 
         theme::SectionTitle("Import Settings");
         ImGui::BeginDisabled(info.ReadOnly);
 
-        bool srgb = m_textureSettings.value("srgb", true);
-        if (ImGui::Checkbox("sRGB", &srgb))
-            m_textureSettings["srgb"] = srgb;
+        // What a texture is imported with when it has no settings of its own
+        static const nlohmann::json kDefaults = TextureImporter().DefaultSettings();
 
-        ImGui::SetItemTooltip("On for colors. Off for data, like normal, roughness and occlusion maps.");
+        const auto setting = [this](const char* label, const char* key, const char* tooltip)
+        {
+            const bool reset = kDefaults.value(key, false);
+            bool value = m_textureSettings.value(key, reset);
 
-        bool generateMips = m_textureSettings.value("generateMips", false);
-        if (ImGui::Checkbox("Generate Mips", &generateMips))
-            m_textureSettings["generateMips"] = generateMips;
+            if (props::Checkbox(label, value, &reset))
+                m_textureSettings[key] = value;
 
-        bool flipY = m_textureSettings.value("flipY", false);
-        if (ImGui::Checkbox("Flip Y", &flipY))
-            m_textureSettings["flipY"] = flipY;
+            if (tooltip)
+                ImGui::SetItemTooltip("%s", tooltip);
+        };
+
+        if (props::BeginTable("##ImportSettings"))
+        {
+            setting("sRGB", "srgb", "On for colors. Off for data, like normal, roughness and occlusion maps.");
+            setting("Generate Mips", "generateMips", nullptr);
+            setting("Flip Y", "flipY", nullptr);
+            props::EndTable();
+        }
 
         ImGui::EndDisabled();
 
@@ -433,12 +473,21 @@ namespace crimson::editor::ui
         for (const SubMesh& subMesh : mesh->SubMeshes)
             indices += subMesh.IndexCount;
 
-        DrawAssetNameColumn("Triangles", std::to_string(indices / 3));
-        DrawAssetNameColumn("Sub-meshes", std::to_string(mesh->SubMeshes.size()));
+        if (props::BeginTable("##MeshDetails"))
+        {
+            const auto vector = [](const glm::vec3& v)
+            {
+                std::array<char, 64> text{};
+                std::snprintf(text.data(), text.size(), "%.2f, %.2f, %.2f", v.x, v.y, v.z);
+                return std::string(text.data());
+            };
 
-        ImGui::TextDisabled("Bounds");
-        ImGui::Text("Min %.2f, %.2f, %.2f", mesh->Bounds.Min.x, mesh->Bounds.Min.y, mesh->Bounds.Min.z);
-        ImGui::Text("Max %.2f, %.2f, %.2f", mesh->Bounds.Max.x, mesh->Bounds.Max.y, mesh->Bounds.Max.z);
+            props::Text("Triangles", std::to_string(indices / 3).c_str());
+            props::Text("Sub-meshes", std::to_string(mesh->SubMeshes.size()).c_str());
+            props::Text("Bounds Min", vector(mesh->Bounds.Min).c_str());
+            props::Text("Bounds Max", vector(mesh->Bounds.Max).c_str());
+            props::EndTable();
+        }
 
         theme::SectionTitle("Material Slots");
 

@@ -12,7 +12,7 @@
 #include "crimson_editor/ui/asset_drag.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
-#include "crimson_editor/ui/linear_color.hpp"
+#include "crimson_editor/ui/property_fields.hpp"
 
 namespace crimson::editor::ui
 {
@@ -89,13 +89,9 @@ namespace crimson::editor::ui
             ImGui::BeginDisabled(entity.HasComponent<InstancedComponent>());
 
             DrawHeader(entity);
-
-            // Fields fill the panel, leaving room for their labels
-            ImGui::PushItemWidth(-ImGui::GetFontSize() * 4.5f);
             DrawTransform(entity);
             DrawLight(entity);
             DrawMeshRenderer(entity);
-            ImGui::PopItemWidth();
 
             // An instance's own components wouldn't be saved
             if (!entity.HasComponent<SceneInstanceComponent>())
@@ -134,26 +130,32 @@ namespace crimson::editor::ui
         if (!BeginComponentSection(kIconTransform, "Transform", false, removed))
             return;
 
+        static const TransformComponent kDefaults;
         auto& transform = entity.GetComponent<TransformComponent>();
 
-        ImGui::DragFloat3("Position", &transform.Position.x, 0.05f);
-        ImGui::DragFloat3("Rotation", &transform.RotationDegrees.x, 0.5f);
-
-        const glm::vec3 previousScale = transform.Scale;
-        if (ImGui::DragFloat3("Scale", &transform.Scale.x, 0.01f) && m_uniformScale)
+        if (props::BeginTable("##Transform"))
         {
-            // The axis being dragged sets the ratio for the others
-            for (int axis = 0; axis < 3; ++axis)
+            props::Vec3("Position", transform.Position, 0.05f, &kDefaults.Position);
+            props::Vec3("Rotation", transform.RotationDegrees, 0.5f, &kDefaults.RotationDegrees);
+
+            const glm::vec3 previousScale = transform.Scale;
+            if (props::Vec3("Scale", transform.Scale, 0.01f, &kDefaults.Scale) && m_uniformScale)
             {
-                if (transform.Scale[axis] != previousScale[axis] && previousScale[axis] != 0.0f)
+                // The axis that changed sets the ratio for the others
+                for (int axis = 0; axis < 3; ++axis)
                 {
-                    transform.Scale = previousScale * (transform.Scale[axis] / previousScale[axis]);
-                    break;
+                    if (transform.Scale[axis] != previousScale[axis] && previousScale[axis] != 0.0f)
+                    {
+                        transform.Scale = previousScale * (transform.Scale[axis] / previousScale[axis]);
+                        break;
+                    }
                 }
             }
+
+            props::Checkbox("Uniform Scale", m_uniformScale);
+            props::EndTable();
         }
 
-        ImGui::Checkbox("Uniform Scale", &m_uniformScale);
         ImGui::TreePop();
     }
 
@@ -167,26 +169,33 @@ namespace crimson::editor::ui
         const char* icon = light->Type == LightType::Directional ? kIconDirectionalLight : light->Type == LightType::Spot ? kIconSpotLight : kIconPointLight;
         if (BeginComponentSection(icon, "Light", true, removed))
         {
+            static const LightComponent kDefaults;
             constexpr std::array kTypeNames = { "Directional", "Point", "Spot" };
 
-            int type = static_cast<int>(light->Type);
-            if (ImGui::Combo("Type", &type, kTypeNames.data(), static_cast<int>(kTypeNames.size())))
-                light->Type = static_cast<LightType>(type);
-
-            LinearColorEdit("Color", &light->Color.x, 3);
-            ImGui::DragFloat("Intensity", &light->Intensity, 0.01f, 0.0f, 1000.0f);
-
-            if (light->Type != LightType::Directional)
-                ImGui::DragFloat("Range", &light->Range, 0.05f, 0.01f, 10000.0f);
-
-            if (light->Type == LightType::Spot)
+            if (props::BeginTable("##Light"))
             {
-                ImGui::DragFloat("Outer Cone", &light->OuterConeDegrees, 0.25f, 1.0f, 89.0f);
-                ImGui::DragFloat("Inner Cone", &light->InnerConeDegrees, 0.25f, 0.0f, light->OuterConeDegrees);
-                light->InnerConeDegrees = std::min(light->InnerConeDegrees, light->OuterConeDegrees);
+                const int defaultType = static_cast<int>(kDefaults.Type);
+                int type = static_cast<int>(light->Type);
+                if (props::Combo("Type", type, kTypeNames.data(), static_cast<int>(kTypeNames.size()), &defaultType))
+                    light->Type = static_cast<LightType>(type);
+
+                props::Color("Color", &light->Color.x, 3, &kDefaults.Color.x);
+                props::Float("Intensity", light->Intensity, 0.01f, 0.0f, 1000.0f, &kDefaults.Intensity);
+
+                if (light->Type != LightType::Directional)
+                    props::Float("Range", light->Range, 0.05f, 0.01f, 10000.0f, &kDefaults.Range);
+
+                if (light->Type == LightType::Spot)
+                {
+                    props::Float("Outer Cone", light->OuterConeDegrees, 0.25f, 1.0f, 89.0f, &kDefaults.OuterConeDegrees);
+                    props::Float("Inner Cone", light->InnerConeDegrees, 0.25f, 0.0f, light->OuterConeDegrees, &kDefaults.InnerConeDegrees);
+                    light->InnerConeDegrees = std::min(light->InnerConeDegrees, light->OuterConeDegrees);
+                }
+
+                props::Checkbox("Casts Shadow", light->CastsShadow, &kDefaults.CastsShadow);
+                props::EndTable();
             }
 
-            ImGui::Checkbox("Casts Shadow", &light->CastsShadow);
             ImGui::TreePop();
         }
 
@@ -203,20 +212,41 @@ namespace crimson::editor::ui
         bool removed = false;
         if (BeginComponentSection(kIconMesh, "Mesh Renderer", true, removed))
         {
-            bool changed = DrawAssetCombo("Mesh", m_context.Assets, AssetType::Mesh, renderer->MeshAsset);
+            static const MeshRendererComponent kDefaults;
+            bool changed = false;
 
-            for (size_t slot = 0; slot < renderer->MaterialAssets.size(); ++slot)
+            if (props::BeginTable("##MeshRenderer"))
             {
-                const std::string label = slot < renderer->Resolved.MaterialSlots.size()
-                    ? renderer->Resolved.MaterialSlots[slot]
-                    : "Material " + std::to_string(slot);
+                props::BeginRow("Mesh");
+                changed |= DrawAssetCombo("##Asset", m_context.Assets, AssetType::Mesh, renderer->MeshAsset);
+                props::EndRow(false);
 
-                ImGui::PushID(static_cast<int>(slot));
-                changed |= DrawAssetCombo(label.c_str(), m_context.Assets, AssetType::Material, renderer->MaterialAssets[slot]);
-                ImGui::PopID();
+                for (size_t slot = 0; slot < renderer->MaterialAssets.size(); ++slot)
+                {
+                    const std::string label = slot < renderer->Resolved.MaterialSlots.size()
+                        ? renderer->Resolved.MaterialSlots[slot]
+                        : "Material " + std::to_string(slot);
+
+                    // Without one of its own, a slot goes back to the material that fits it, or the default one
+                    ImGui::PushID(static_cast<int>(slot));
+                    props::BeginRow(label.c_str());
+                    AssetID& material = renderer->MaterialAssets[slot];
+                    changed |= DrawAssetCombo("##Asset", m_context.Assets, AssetType::Material, material);
+                    props::ResetTarget();
+
+                    if (props::EndRow(true) && material)
+                    {
+                        material = {};
+                        changed = true;
+                    }
+
+                    ImGui::PopID();
+                }
+
+                props::Checkbox("Casts Shadows", renderer->CastsShadows, &kDefaults.CastsShadows);
+                props::EndTable();
             }
 
-            ImGui::Checkbox("Casts Shadows", &renderer->CastsShadows);
             ImGui::TreePop();
 
             if (changed)

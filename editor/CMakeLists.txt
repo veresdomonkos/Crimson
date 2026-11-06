@@ -29,6 +29,8 @@ add_library(EditorCore STATIC
         src/ui/render_settings_panel.cpp
         include/crimson_editor/ui/linear_color.hpp
         src/ui/linear_color.cpp
+        include/crimson_editor/ui/property_fields.hpp
+        src/ui/property_fields.cpp
         include/crimson_editor/ui/editor_ui.hpp
         src/ui/editor_ui.cpp
         include/crimson_editor/ui/editor_theme.hpp
