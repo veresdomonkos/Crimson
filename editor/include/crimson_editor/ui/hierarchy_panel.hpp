@@ -1,7 +1,10 @@
 #pragma once
 #include <array>
 #include <functional>
+#include <unordered_set>
 #include <vector>
+
+#include <imgui.h>
 
 #include "crimson_editor/editor_context.hpp"
 #include "panel.hpp"
@@ -13,11 +16,17 @@ namespace crimson::editor::ui
     public:
         explicit HierarchyPanel(EditorContext& context) : m_context(context) {}
         void OnImGui() override;
+
+        // The Edit and Create menus, which do what the tree's shortcuts and right-click menu do
+        void OnMainMenuBar() override;
     private:
+        void DrawSearch();
+        bool CollectMatches(entt::entity handle);
         void DrawEntity(entt::entity handle);
         void DrawCreateMenu(Entity parent);
         void BeginRename(Entity entity);
         void DrawRenameField(Entity entity);
+        void DeleteEntity(Entity entity);
     private:
         EditorContext& m_context;
 
@@ -28,5 +37,9 @@ namespace crimson::editor::ui
         entt::entity m_renaming = entt::null;
         std::array<char, 256> m_renameBuffer{};
         bool m_focusRename = false;
+
+        // While searching, what matches and what has a match under it, as only those are shown
+        ImGuiTextFilter m_filter;
+        std::unordered_set<entt::entity> m_shown;
     };
 }

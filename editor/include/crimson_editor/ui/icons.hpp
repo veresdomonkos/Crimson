@@ -27,6 +27,10 @@ namespace crimson::editor::ui
     inline constexpr const char* kIconWorldSpace = "\xEE\x83\xA8"; // globe, U+E0E8
     inline constexpr const char* kIconTransform = "\xEE\x8B\xA5"; // move-3d, U+E2E5
     inline constexpr const char* kIconSearch = "\xEE\x85\x91"; // search, U+E151
+    inline constexpr const char* kIconError = "\xEE\x81\xB7"; // circle-alert, U+E077
+    inline constexpr const char* kIconWarning = "\xEE\x86\x93"; // triangle-alert, U+E193
+    inline constexpr const char* kIconSuccess = "\xEE\x88\xA6"; // circle-check, U+E226
+    inline constexpr const char* kIconInfo = "\xEE\x83\xB9"; // info, U+E0F9
 
     inline const char* AssetIcon(AssetType type)
     {

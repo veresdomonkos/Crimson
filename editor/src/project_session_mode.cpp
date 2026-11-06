@@ -234,18 +234,23 @@ namespace crimson::editor
         }
 
         SceneData current = CaptureScene(m_scene, m_environment, *m_assetManager);
-        if (current == m_savedScene)
-            return saved;
 
-        if (m_assetManager->SaveScene(m_context.ActiveSceneAsset, current))
+        if (current != m_savedScene)
         {
-            m_savedScene = std::move(current);
-            m_context.SceneChanged = false;
+            if (m_assetManager->SaveScene(m_context.ActiveSceneAsset, current))
+            {
+                m_savedScene = std::move(current);
+                m_context.SceneChanged = false;
+            }
+            else
+            {
+                saved = false;
+            }
         }
-        else
-        {
-            saved = false;
-        }
+
+        // What went wrong is already in the Console, and on screen, as each failure logs an error
+        if (saved)
+            m_ui->GetNotifications().Push(ui::Notifications::Kind::Success, "Saved");
 
         return saved;
     }

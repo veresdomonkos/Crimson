@@ -1,6 +1,7 @@
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 
 #include <algorithm>
+#include <cfloat>
 #include <filesystem>
 #include <string>
 
@@ -70,13 +71,25 @@ namespace crimson::editor::ui
             ImGui::TextDisabled("No scene is open, this won't be saved");
         }
 
+        DrawSearch();
         ImGui::Separator();
+
+        const bool searching = m_filter.IsActive();
+        m_shown.clear();
+
+        if (searching)
+        {
+            for (const entt::entity root : scene.GetRoots())
+                CollectMatches(root);
+        }
 
         for (const entt::entity root : scene.GetRoots())
             DrawEntity(root);
 
         if (scene.GetRoots().empty())
             theme::EmptyHint("Right-click to create an entity, or drop a mesh into the Scene view");
+        else if (searching && m_shown.empty())
+            theme::EmptyHint("No entity has that in its name");
 
         // The rest of the panel: clicking clears the selection, dropping makes a root
         const ImVec2 available = ImGui::GetContentRegionAvail();
@@ -108,7 +121,7 @@ namespace crimson::editor::ui
             const Entity selected = m_context.Selected;
 
             if (ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-                m_deferred.emplace_back([this, selected] { m_context.ActiveScene.DestroyEntity(selected); });
+                DeleteEntity(selected);
             else if (ImGui::IsKeyPressed(ImGuiKey_F2, false))
                 BeginRename(selected);
         }
@@ -125,13 +138,80 @@ namespace crimson::editor::ui
         m_deferred.clear();
     }
 
+    void HierarchyPanel::OnMainMenuBar()
+    {
+        // What comes from an instance's scene can only be looked at
+        const Entity selected = m_context.Selected;
+        const bool editable = selected && !selected.HasComponent<InstancedComponent>();
+
+        if (ImGui::BeginMenu("Edit"))
+        {
+            if (ImGui::MenuItem("Rename", "F2", false, editable))
+                BeginRename(selected);
+
+            if (ImGui::MenuItem("Delete", "Delete", false, editable))
+                DeleteEntity(selected);
+
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Create"))
+        {
+            DrawCreateMenu({});
+            ImGui::EndMenu();
+        }
+    }
+
+    void HierarchyPanel::DeleteEntity(Entity entity)
+    {
+        m_deferred.emplace_back([this, entity] { m_context.ActiveScene.DestroyEntity(entity); });
+    }
+
+    void HierarchyPanel::DrawSearch()
+    {
+        ImGui::SetNextItemWidth(-FLT_MIN);
+
+        const std::string hint = std::string(kIconSearch) + "  Search";
+        if (ImGui::InputTextWithHint("##Search", hint.c_str(), m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf)))
+            m_filter.Build();
+
+        // Escape leaves the box, and clears it too, as it does in most search boxes
+        if (ImGui::IsItemDeactivated() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+            m_filter.Clear();
+    }
+
+    // Marks an entity to be shown when its name matches or something under it does, and says whether it is
+    bool HierarchyPanel::CollectMatches(entt::entity handle)
+    {
+        const Entity entity = m_context.ActiveScene.GetEntity(handle);
+
+        bool shown = m_filter.PassFilter(entity.GetComponent<NameComponent>().Name.c_str());
+
+        // Every child, not only up to the first match, as each one can be shown on its own
+        for (const entt::entity child : entity.GetComponent<RelationshipComponent>().Children)
+            shown = CollectMatches(child) || shown;
+
+        if (shown)
+            m_shown.insert(handle);
+
+        return shown;
+    }
+
     void HierarchyPanel::DrawEntity(entt::entity handle)
     {
+        // A search shows only what matches and what leads to it, opened up to it
+        const bool searching = m_filter.IsActive();
+        if (searching && !m_shown.contains(handle))
+            return;
+
         Scene& scene = m_context.ActiveScene;
         const Entity entity = scene.GetEntity(handle);
 
         const auto& relationship = entity.GetComponent<RelationshipComponent>();
         const auto& name = entity.GetComponent<NameComponent>();
+
+        if (searching)
+            ImGui::SetNextItemOpen(true);
 
         // What comes from an instance's scene can only be looked at
         const bool readOnly = entity.HasComponent<InstancedComponent>();
@@ -195,7 +275,7 @@ namespace crimson::editor::ui
                 BeginRename(entity);
 
             if (ImGui::MenuItem("Delete", "Delete"))
-                m_deferred.emplace_back([this, entity] { m_context.ActiveScene.DestroyEntity(entity); });
+                DeleteEntity(entity);
 
             ImGui::EndPopup();
         }

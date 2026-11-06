@@ -25,6 +25,9 @@ namespace crimson::editor::ui
         DrawDockSpace();
         for (auto panel : m_panels)
             panel->OnImGui();
+
+        // Above the panels
+        m_notifications.Draw();
     }
 
     void EditorUI::DrawMainMenu()
@@ -42,6 +45,9 @@ namespace crimson::editor::ui
 
             ImGui::EndMenu();
         }
+
+        for (Panel* panel : m_panels)
+            panel->OnMainMenuBar();
 
         if (ImGui::BeginMenu("View"))
         {
