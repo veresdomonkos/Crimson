@@ -239,7 +239,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
   - **Texture:** preview, size, and import settings for sRGB, mipmaps and flipping.
   - **Mesh and shader:** read-only details.
 - **Render Settings** - exposure, tone mapper and ambient light, which are saved with the scene.
-- **Assets** - browses the project's files and the engine's read-only ones, with a folder tree, a grid and search. Click selects an asset, right-click creates, renames or deletes, and dragging moves an asset to a folder, assigns it in the Inspector, or drops it in the Scene view: a mesh makes a new entity, a material goes on the entity under the mouse, and a scene becomes an instance. Double-clicking a scene opens it. Files changed outside the editor appear when it regains focus.
+- **Assets** - browses the project's files and the engine's read-only ones, with a folder tree, a grid and search. Click selects an asset, right-click creates, renames or deletes, and dragging moves an asset to a folder, assigns it in the Inspector, or drops it in the Scene view: a mesh makes a new entity, a material goes on the entity under the mouse, and a scene becomes an instance. Double-clicking a scene opens it, and double-clicking a shader, texture or mesh opens it in the program the system has set up for that type of file, or on Windows asks which one to use. The right-click menu also has **Open** for those, and **Show in Explorer** (**Reveal in Finder** on macOS, **Show in File Manager** on Linux) for any project asset or folder. Materials are only edited in the Inspector. Files changed outside the editor appear when it regains focus.
 - **Console**
 - **Stats** - FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts.
 

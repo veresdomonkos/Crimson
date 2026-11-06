@@ -17,6 +17,7 @@ add_executable(CrimsonTests
         editor/test_linear_color.cpp
         editor/test_recent_projects.cpp
         editor/test_asset_edits.cpp
+        editor/test_system_shell.cpp
 )
 
 # The engine's src folder is for the parts of the backends that run without a GPU, such as GLSL translation

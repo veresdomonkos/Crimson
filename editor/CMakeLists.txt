@@ -15,6 +15,8 @@ add_library(EditorCore STATIC
         src/editor_paths.cpp
         include/crimson_editor/file_dialog.hpp
         src/file_dialog.cpp
+        include/crimson_editor/system_shell.hpp
+        src/system_shell.cpp
         include/crimson_editor/scene_camera_controller.hpp
         src/scene_camera_controller.cpp
         include/crimson_editor/ui/panel.hpp
@@ -67,6 +69,11 @@ target_link_libraries(EditorCore
         PRIVATE
             nfd
 )
+
+# Opening files in other programs and showing them in Explorer (system_shell.cpp)
+if(WIN32)
+    target_link_libraries(EditorCore PRIVATE shell32 ole32)
+endif()
 
 add_executable(Editor src/main.cpp)
 

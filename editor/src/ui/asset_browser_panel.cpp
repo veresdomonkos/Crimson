@@ -10,6 +10,7 @@
 #include <crimson/core/log.hpp>
 #include <crimson/project/project.hpp>
 
+#include "crimson_editor/system_shell.hpp"
 #include "crimson_editor/ui/asset_drag.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
@@ -35,6 +36,13 @@ namespace crimson::editor::ui
     static bool IsEngineFolder(const std::string& folder)
     {
         return folder == kEngineFolder || folder.starts_with(std::string(kEngineFolder) + "/");
+    }
+
+    // Whether an asset is edited in another program. Scenes and materials are edited in the editor, and their JSON
+    // isn't meant to be changed by hand.
+    static bool OpensOutside(AssetType type)
+    {
+        return type == AssetType::Shader || type == AssetType::Texture || type == AssetType::Mesh;
     }
 
     // The first character of a UTF-8 string, such as an icon
@@ -408,8 +416,18 @@ namespace crimson::editor::ui
         if (tile.Clicked)
             m_context.SelectAsset(item.Id);
 
-        if (item.Type == AssetType::Scene && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
-            m_context.OpenScene(item.Id);
+        // A scene opens in the editor, and what other programs edit opens in the one the system has for it. A
+        // material's editor is the Inspector, so it only gets selected.
+        const fs::path file = m_context.Assets.GetFilePath(item.Id);
+        const bool editedOutside = OpensOutside(item.Type);
+
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        {
+            if (item.Type == AssetType::Scene)
+                m_context.OpenScene(item.Id);
+            else if (editedOutside && !file.empty())
+                OpenInDefaultApp(file);
+        }
 
         if (ImGui::IsItemHovered())
             ImGui::SetTooltip("%s", item.Path.c_str());
@@ -439,8 +457,38 @@ namespace crimson::editor::ui
         const std::string name = m_context.Edits.IsDirty(item.Id) ? "* " + item.Name : item.Name;
         DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(item.ReadOnly ? ImGuiCol_TextDisabled : ImGuiCol_Text));
 
-        if (!item.ReadOnly && ImGui::BeginPopupContextItem("##AssetMenu"))
+        if (ImGui::BeginPopupContextItem("##AssetMenu"))
         {
+            // An engine asset is built into the editor, so there is no file to open or show
+            const bool onDisk = !file.empty();
+            const auto explainIfBuiltIn = [onDisk]
+            {
+                if (!onDisk && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+                    ImGui::SetTooltip("Built into the editor, so there is no file");
+            };
+
+            if (editedOutside)
+            {
+                if (ImGui::MenuItem("Open", nullptr, false, onDisk))
+                    OpenInDefaultApp(file);
+
+                explainIfBuiltIn();
+            }
+
+            if (ImGui::MenuItem(RevealInFileManagerLabel(), nullptr, false, onDisk))
+                RevealInFileManager(file);
+
+            explainIfBuiltIn();
+
+            if (item.ReadOnly)
+            {
+                ImGui::EndPopup();
+                ImGui::PopID();
+                return;
+            }
+
+            ImGui::Separator();
+
             if (ImGui::MenuItem("Rename"))
             {
                 m_dialogAsset = item.Id;
@@ -463,6 +511,11 @@ namespace crimson::editor::ui
     {
         if (!ImGui::BeginPopupContextItem("##FolderMenu"))
             return;
+
+        if (ImGui::MenuItem(RevealInFileManagerLabel()))
+            RevealInFileManager(m_context.Assets.GetRoot() / fs::path(folder));
+
+        ImGui::Separator();
 
         // New things go where the folder is, so that is where the grid shows them
         if (ImGui::MenuItem("New Material"))
@@ -512,6 +565,12 @@ namespace crimson::editor::ui
 
         if (IsEngineFolder(m_currentFolder) || !ImGui::BeginPopupContextWindow("##BackgroundMenu", kFlags))
             return;
+
+        // The folder being shown, opened in the file manager
+        if (ImGui::MenuItem(RevealInFileManagerLabel()))
+            OpenInDefaultApp(m_context.Assets.GetRoot() / fs::path(m_currentFolder));
+
+        ImGui::Separator();
 
         if (ImGui::MenuItem("New Material"))
             OpenDialog(Dialog::NewMaterial, "New Material");
