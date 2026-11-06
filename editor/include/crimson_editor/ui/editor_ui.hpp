@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <imgui.h>
+#include "crimson_editor/ui/notifications.hpp"
 #include "crimson_editor/ui/panel.hpp"
 
 namespace crimson::editor::ui
@@ -24,6 +25,9 @@ namespace crimson::editor::ui
         }
 
         void Draw();
+
+        // The messages in the corner of the window, for what the editor wants noticed
+        [[nodiscard]] Notifications& GetNotifications() { return m_notifications; }
     private:
         void DrawMainMenu();
         void DrawDockSpace();
@@ -33,5 +37,6 @@ namespace crimson::editor::ui
         std::function<void()> m_onSaveAll;
         std::function<void()> m_onCloseProject;
         bool m_resetLayout = false;
+        Notifications m_notifications;
     };
 }
