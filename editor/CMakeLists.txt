@@ -17,6 +17,10 @@ add_library(EditorCore STATIC
         src/file_dialog.cpp
         include/crimson_editor/system_shell.hpp
         src/system_shell.cpp
+        include/crimson_editor/editor_settings.hpp
+        src/editor_settings.cpp
+        include/crimson_editor/script_editor.hpp
+        src/script_editor.cpp
         include/crimson_editor/scene_camera_controller.hpp
         src/scene_camera_controller.cpp
         include/crimson_editor/ui/panel.hpp
@@ -35,6 +39,8 @@ add_library(EditorCore STATIC
         src/ui/property_fields.cpp
         include/crimson_editor/ui/notifications.hpp
         src/ui/notifications.cpp
+        include/crimson_editor/ui/preferences_panel.hpp
+        src/ui/preferences_panel.cpp
         include/crimson_editor/ui/editor_ui.hpp
         src/ui/editor_ui.cpp
         include/crimson_editor/ui/editor_theme.hpp

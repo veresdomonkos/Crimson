@@ -12,6 +12,7 @@
 
 #include "crimson_editor/app_mode.hpp"
 #include "crimson_editor/editor_icons.hpp"
+#include "crimson_editor/editor_settings.hpp"
 #include "crimson_editor/recent_projects.hpp"
 
 namespace crimson::editor
@@ -58,6 +59,7 @@ namespace crimson::editor
 	    std::unique_ptr<Input>           m_input;
 	    std::unique_ptr<EditorIcons>     m_icons;
 	    std::unique_ptr<RecentProjects>  m_recentProjects;
+	    std::unique_ptr<EditorSettings>  m_settings;
 	    std::unique_ptr<EditorServices>  m_services;
 
 	    std::unique_ptr<AppMode> m_mode;

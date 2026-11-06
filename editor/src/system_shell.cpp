@@ -1,6 +1,8 @@
 #include "crimson_editor/system_shell.hpp"
 
 #include <array>
+#include <cwctype>
+#include <system_error>
 #include <vector>
 
 #include <crimson/core/log.hpp>
@@ -55,7 +57,96 @@ namespace crimson::editor
         return uri;
     }
 
+    std::string PathToUtf8(const fs::path& path)
+    {
+        const std::u8string text = path.u8string();
+        return std::string(text.begin(), text.end());
+    }
+
+    // How CommandLineToArgvW reads a command line back: backslashes are only special in front of a quote
+    std::string QuoteWindowsArgument(const std::string& argument)
+    {
+        if (!argument.empty() && argument.find_first_of(" \t\n\v\"") == std::string::npos)
+            return argument;
+
+        std::string quoted = "\"";
+        size_t backslashes = 0;
+
+        for (const char c : argument)
+        {
+            if (c == '\\')
+            {
+                ++backslashes;
+                continue;
+            }
+
+            // Backslashes in front of a quote are doubled, and the quote gets one more to be taken as it is
+            if (c == '"')
+                quoted.append(backslashes * 2 + 1, '\\');
+            else
+                quoted.append(backslashes, '\\');
+
+            quoted += c;
+            backslashes = 0;
+        }
+
+        // Backslashes at the end come before the closing quote, so they are doubled too
+        quoted.append(backslashes * 2, '\\');
+        quoted += '"';
+        return quoted;
+    }
+
 #ifdef _WIN32
+    namespace
+    {
+        std::wstring Widen(const std::string& text)
+        {
+            if (text.empty())
+                return {};
+
+            const int length = MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), nullptr, 0);
+            std::wstring wide(static_cast<size_t>(length), L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, text.data(), static_cast<int>(text.size()), wide.data(), length);
+            return wide;
+        }
+    }
+
+    bool StartProgram(const fs::path& program, const std::vector<std::string>& arguments)
+    {
+        std::string commandLine = QuoteWindowsArgument(PathToUtf8(program));
+        for (const std::string& argument : arguments)
+            commandLine += " " + QuoteWindowsArgument(argument);
+
+        // A batch file, such as VS Code's code.cmd, only runs through cmd, which then shouldn't show a window
+        std::wstring extension = program.extension().wstring();
+        for (wchar_t& c : extension)
+            c = static_cast<wchar_t>(towlower(c));
+
+        const bool batch = extension == L".cmd" || extension == L".bat";
+        if (batch)
+            commandLine = "cmd.exe /d /s /c \"" + commandLine + "\"";
+
+        std::wstring wideCommandLine = Widen(commandLine);
+        const std::wstring application = batch ? std::wstring() : program.wstring();
+
+        STARTUPINFOW startup{};
+        startup.cb = sizeof(startup);
+        PROCESS_INFORMATION process{};
+
+        const BOOL started = CreateProcessW(batch ? nullptr : application.c_str(), wideCommandLine.data(), nullptr, nullptr, FALSE,
+            batch ? CREATE_NO_WINDOW : 0, nullptr, nullptr, &startup, &process);
+
+        if (!started)
+        {
+            LOG_ERROR("[Editor] Can't start {} (error {})", program.string(), static_cast<unsigned long>(GetLastError()));
+            return false;
+        }
+
+        CloseHandle(process.hThread);
+        CloseHandle(process.hProcess);
+        return true;
+    }
+
     bool OpenInDefaultApp(const fs::path& path)
     {
         const std::wstring file = path.wstring();
@@ -151,6 +242,24 @@ namespace crimson::editor
 
             return WIFEXITED(status) && WEXITSTATUS(status) == 0;
         }
+    }
+
+    bool StartProgram(const fs::path& program, const std::vector<std::string>& arguments)
+    {
+        std::vector<std::string> command = { PathToUtf8(program) };
+        command.insert(command.end(), arguments.begin(), arguments.end());
+
+        // Without waiting, the program not existing only shows in the child, so it is checked first
+        std::error_code error;
+        const bool found = program.has_parent_path() ? fs::exists(program, error) : true;
+
+        if (!found || !Run(command, false))
+        {
+            LOG_ERROR("[Editor] Can't start {}", program.string());
+            return false;
+        }
+
+        return true;
     }
 
     bool OpenInDefaultApp(const fs::path& path)

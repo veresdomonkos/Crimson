@@ -416,17 +416,25 @@ namespace crimson::editor::ui
         if (tile.Clicked)
             m_context.SelectAsset(item.Id);
 
-        // A scene opens in the editor, and what other programs edit opens in the one the system has for it. A
-        // material's editor is the Inspector, so it only gets selected.
+        // A scene opens in the editor. Shaders open in the script editor from the preferences, and textures and
+        // meshes in the program the system has for them. A material's editor is the Inspector, so it only gets selected.
         const fs::path file = m_context.Assets.GetFilePath(item.Id);
         const bool editedOutside = OpensOutside(item.Type);
+
+        const auto openOutside = [&]
+        {
+            if (item.Type == AssetType::Shader && m_context.OpenCodeFile)
+                m_context.OpenCodeFile(file);
+            else
+                OpenInDefaultApp(file);
+        };
 
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         {
             if (item.Type == AssetType::Scene)
                 m_context.OpenScene(item.Id);
             else if (editedOutside && !file.empty())
-                OpenInDefaultApp(file);
+                openOutside();
         }
 
         if (ImGui::IsItemHovered())
@@ -470,7 +478,7 @@ namespace crimson::editor::ui
             if (editedOutside)
             {
                 if (ImGui::MenuItem("Open", nullptr, false, onDisk))
-                    OpenInDefaultApp(file);
+                    openOutside();
 
                 explainIfBuiltIn();
             }

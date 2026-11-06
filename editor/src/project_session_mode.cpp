@@ -10,11 +10,14 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <GLFW/glfw3.h>
 
+#include "crimson_editor/editor_settings.hpp"
 #include "crimson_editor/recent_projects.hpp"
+#include "crimson_editor/script_editor.hpp"
 #include "crimson_editor/ui/asset_browser_panel.hpp"
 #include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 #include "crimson_editor/ui/inspector_panel.hpp"
+#include "crimson_editor/ui/preferences_panel.hpp"
 #include "crimson_editor/ui/render_settings_panel.hpp"
 #include "crimson_editor/ui/scene_viewport_panel.hpp"
 #include "crimson_editor/ui/stats_panel.hpp"
@@ -33,7 +36,8 @@ namespace crimson::editor
           m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, *m_services.Graphics.Imgui)),
           m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
-                     .OpenScene = [this](AssetID id) { OpenScene(id); } }
+                     .OpenScene = [this](AssetID id) { OpenScene(id); },
+                     .OpenCodeFile = [this](const std::filesystem::path& file) { OpenInScriptEditor(m_services.Settings.GetScriptEditor(), file, m_project.Root()); } }
     {
         LOG_INFO("[Editor] Opening project '{}' at {}", m_project.Name(), m_project.Root().string());
 
@@ -99,6 +103,9 @@ namespace crimson::editor
         m_ui->AddPanel<ui::InspectorPanel>(m_context);
         m_ui->AddPanel<ui::StatsPanel>(m_frameStats, m_services.RendererType);
         m_ui->AddPanel<ui::RenderSettingsPanel>(m_context, *m_sceneRenderer, m_environment);
+
+        // Last, for its Edit menu item to come after the Hierarchy's
+        m_ui->AddPanel<ui::PreferencesPanel>(m_services.Settings, m_services.AppWindow);
     }
 
     void ProjectSessionMode::RunDeferred()
