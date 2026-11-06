@@ -151,14 +151,34 @@ jobs:
       - name: Download the embedded files from Git LFS
         run: git lfs pull --include="editor/resources/**,engine/resources/**"
 
+      # The Ubuntu mirror is sometimes so slow that downloading the packages takes most of an hour, so the ones it
+      # sent before come from the cache. apt still installs them as usual, and only downloads what is newer.
+      - name: Restore the downloaded packages
+        uses: actions/cache@v6
+        with:
+          path: ~/apt-archives
+          key: apt-package-${{ github.sha }}
+          restore-keys: apt-package-
+
+      # Without the limit a stalled mirror holds the job for an hour, with it the job fails and can be run again
       - name: Install the toolchain
+        timeout-minutes: 15
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          # The runner rebuilds its man page index after every install, and nothing here reads it
+          sudo rm -f /var/lib/man-db/auto-update
+          mkdir -p ~/apt-archives/partial
+          apt="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Dir::Cache::Archives=$HOME/apt-archives -o APT::Keep-Downloaded-Packages=true"
+          $apt update
+          $apt install -y --no-install-recommends \
             cmake ninja-build ccache patchelf pkg-config file \
-            libvulkan-dev libgl-dev libgl1-mesa-dri xvfb \
+            libvulkan-dev libgl-dev libgl1-mesa-dri xvfb xauth \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev \
             libgtk-3-dev librsvg2-dev
+          # Versions that were replaced go, so the cache doesn't grow forever, and the cache step can read the rest
+          $apt autoclean
+          sudo chown -R "$USER" ~/apt-archives
 
       # This Ubuntu's Vulkan headers are too old for the engine, so they come from the SDK, and only the loader from Ubuntu
       - name: Restore the Vulkan SDK
@@ -264,15 +284,35 @@ jobs:
       - name: Download the embedded files from Git LFS
         run: git lfs pull --include="editor/resources/**,engine/resources/**"
 
+      # The Ubuntu mirror is sometimes so slow that downloading the packages takes most of an hour, so the ones it
+      # sent before come from the cache. apt still installs them as usual, and only downloads what is newer.
+      - name: Restore the downloaded packages
+        uses: actions/cache@v6
+        with:
+          path: ~/apt-archives
+          key: apt-linux-${{ matrix.flavor }}-${{ github.sha }}
+          restore-keys: apt-linux-
+
+      # Without the limit a stalled mirror holds the job for an hour, with it the job fails and can be run again
       - name: Install the toolchain
+        timeout-minutes: 15
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
+          # The runner rebuilds its man page index after every install, and nothing here reads it
+          sudo rm -f /var/lib/man-db/auto-update
+          mkdir -p ~/apt-archives/partial
+          apt="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Dir::Cache::Archives=$HOME/apt-archives -o APT::Keep-Downloaded-Packages=true"
+          $apt update
+          $apt install -y --no-install-recommends \
             cmake ninja-build ccache \
             libvulkan-dev vulkan-validationlayers mesa-vulkan-drivers \
-            libgl-dev libgl1-mesa-dri xvfb \
+            libgl-dev libgl1-mesa-dri xvfb xauth \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev \
             libgtk-3-dev
+          # Versions that were replaced go, so the cache doesn't grow forever, and the cache step can read the rest
+          $apt autoclean
+          sudo chown -R "$USER" ~/apt-archives
 
       - name: Show errors on the run's page
         run: echo "::add-matcher::.github/problem-matchers.json"
