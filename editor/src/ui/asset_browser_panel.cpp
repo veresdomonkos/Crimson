@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cfloat>
+#include <cmath>
 #include <filesystem>
 #include <set>
 #include <system_error>
@@ -36,15 +37,72 @@ namespace crimson::editor::ui
         return folder == kEngineFolder || folder.starts_with(std::string(kEngineFolder) + "/");
     }
 
-    // An icon filling a tile, centered in it
+    // The first character of a UTF-8 string, such as an icon
+    static unsigned int FirstCodepoint(const char* text)
+    {
+        const auto* bytes = reinterpret_cast<const unsigned char*>(text);
+
+        if (bytes[0] < 0x80) return bytes[0];
+        if ((bytes[0] & 0xE0) == 0xC0) return ((bytes[0] & 0x1Fu) << 6) | (bytes[1] & 0x3Fu);
+        if ((bytes[0] & 0xF0) == 0xE0) return ((bytes[0] & 0x0Fu) << 12) | ((bytes[1] & 0x3Fu) << 6) | (bytes[2] & 0x3Fu);
+        return ((bytes[0] & 0x07u) << 18) | ((bytes[1] & 0x3Fu) << 12) | ((bytes[2] & 0x3Fu) << 6) | (bytes[3] & 0x3Fu);
+    }
+
+    // An icon as big as fits in a box, centered by what it draws rather than by its place in the font, which leaves
+    // room around icons that isn't the same on every side
     static void DrawTileIcon(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, const char* icon, const ImVec4& color)
     {
-        const float size = (max.y - min.y) * 0.7f;
+        const float size = std::min(max.x - min.x, max.y - min.y);
         ImFont* font = ImGui::GetFont();
+        const ImVec2 center((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
 
-        const ImVec2 iconSize = font->CalcTextSizeA(size, FLT_MAX, 0.0f, icon);
-        const ImVec2 position((min.x + max.x - iconSize.x) * 0.5f, (min.y + max.y - iconSize.y) * 0.5f);
+        ImVec2 position;
+        if (const ImFontGlyph* glyph = font->GetFontBaked(size)->FindGlyphNoFallback(static_cast<ImWchar>(FirstCodepoint(icon))))
+        {
+            position = ImVec2(center.x - (glyph->X0 + glyph->X1) * 0.5f, center.y - (glyph->Y0 + glyph->Y1) * 0.5f);
+        }
+        else
+        {
+            const ImVec2 textSize = font->CalcTextSizeA(size, FLT_MAX, 0.0f, icon);
+            position = ImVec2(center.x - textSize.x * 0.5f, center.y - textSize.y * 0.5f);
+        }
+
         drawList->AddText(font, size, position, ImGui::GetColorU32(color), icon);
+    }
+
+    // Where a tile's parts go. Its frame is drawn here rather than by a Selectable, whose highlight reaches past the
+    // tile into the spacing around it, so the icon and the name are centered in exactly what shows as the tile.
+    struct TileLayout
+    {
+        ImVec2 IconMin;
+        ImVec2 IconMax;
+        ImVec2 LabelPosition;
+        float LabelWidth = 0.0f;
+        bool Clicked = false;
+    };
+
+    static TileLayout DrawTileFrame(const char* id, float width, bool selected)
+    {
+        const ImGuiStyle& style = ImGui::GetStyle();
+        const float pad = std::round(width * 0.08f);
+        const float iconHeight = std::round(width * 0.62f);
+        const float height = pad + iconHeight + style.ItemInnerSpacing.y + ImGui::GetTextLineHeight() + pad;
+
+        TileLayout layout;
+        layout.Clicked = ImGui::InvisibleButton(id, ImVec2(width, height));
+
+        const ImVec2 min = ImGui::GetItemRectMin();
+        const ImVec2 max = ImGui::GetItemRectMax();
+
+        const ImGuiCol background = selected ? ImGuiCol_Header : ImGui::IsItemHovered() ? ImGuiCol_HeaderHovered : ImGuiCol_COUNT;
+        if (background != ImGuiCol_COUNT)
+            ImGui::GetWindowDrawList()->AddRectFilled(min, max, ImGui::GetColorU32(background), style.FrameRounding * 2.0f);
+
+        layout.IconMin = ImVec2(min.x + pad, min.y + pad);
+        layout.IconMax = ImVec2(max.x - pad, min.y + pad + iconHeight);
+        layout.LabelPosition = ImVec2(min.x + pad * 0.5f, layout.IconMax.y + style.ItemInnerSpacing.y);
+        layout.LabelWidth = width - pad;
+        return layout;
     }
 
     // A name centered under its tile, and cut off if it would run into the next one
@@ -315,20 +373,16 @@ namespace crimson::editor::ui
     {
         ImGui::PushID(folder.c_str());
 
-        const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
-        ImGui::Selectable("##Folder", false, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(tileSize, tileSize + lineHeight));
+        const TileLayout tile = DrawTileFrame("##Folder", tileSize, false);
 
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             m_currentFolder = folder;
 
-        const ImVec2 min = ImGui::GetItemRectMin();
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-        const float pad = tileSize * 0.1f;
-        DrawTileIcon(drawList, ImVec2(min.x + pad, min.y + pad), ImVec2(min.x + tileSize - pad, min.y + tileSize - pad), kIconFolder, theme::Folder);
+        DrawTileIcon(drawList, tile.IconMin, tile.IconMax, kIconFolder, theme::Folder);
 
         const std::string name = NameOf(folder);
-        DrawClippedText(drawList, ImVec2(min.x + 2.0f, min.y + tileSize), tileSize - 4.0f, name.c_str(), ImGui::GetColorU32(ImGuiCol_Text));
+        DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(ImGuiCol_Text));
 
         if (!IsEngineFolder(folder))
         {
@@ -348,10 +402,10 @@ namespace crimson::editor::ui
     {
         ImGui::PushID(static_cast<int>(std::hash<AssetID>{}(item.Id)));
 
-        const float lineHeight = ImGui::GetTextLineHeightWithSpacing();
         const bool selected = m_context.SelectedAsset == item.Id;
 
-        if (ImGui::Selectable("##Asset", selected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(tileSize, tileSize + lineHeight)))
+        const TileLayout tile = DrawTileFrame("##Asset", tileSize, selected);
+        if (tile.Clicked)
             m_context.SelectAsset(item.Id);
 
         if (item.Type == AssetType::Scene && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -363,12 +417,7 @@ namespace crimson::editor::ui
         if (const AssetInfo* info = m_context.Assets.GetInfo(item.Id))
             DragAssetFromLastItem(*info);
 
-        const ImVec2 min = ImGui::GetItemRectMin();
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-        const float pad = tileSize * 0.1f;
-        const ImVec2 tileMin(min.x + pad, min.y + pad);
-        const ImVec2 tileMax(min.x + tileSize - pad, min.y + tileSize - pad);
 
         // Only pictures that are on screen get loaded
         ImTextureID picture = 0;
@@ -377,15 +426,18 @@ namespace crimson::editor::ui
 
         if (picture)
         {
-            drawList->AddImage(picture, tileMin, tileMax);
+            // A square picture, centered in the icon's box
+            const float side = std::min(tile.IconMax.x - tile.IconMin.x, tile.IconMax.y - tile.IconMin.y);
+            const ImVec2 center((tile.IconMin.x + tile.IconMax.x) * 0.5f, (tile.IconMin.y + tile.IconMax.y) * 0.5f);
+            drawList->AddImage(picture, ImVec2(center.x - side * 0.5f, center.y - side * 0.5f), ImVec2(center.x + side * 0.5f, center.y + side * 0.5f));
         }
         else
         {
-            DrawTileIcon(drawList, tileMin, tileMax, AssetIcon(item.Type), theme::AssetColor(item.Type));
+            DrawTileIcon(drawList, tile.IconMin, tile.IconMax, AssetIcon(item.Type), theme::AssetColor(item.Type));
         }
 
         const std::string name = m_context.Edits.IsDirty(item.Id) ? "* " + item.Name : item.Name;
-        DrawClippedText(drawList, ImVec2(min.x + 2.0f, min.y + tileSize), tileSize - 4.0f, name.c_str(), ImGui::GetColorU32(item.ReadOnly ? ImGuiCol_TextDisabled : ImGuiCol_Text));
+        DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(item.ReadOnly ? ImGuiCol_TextDisabled : ImGuiCol_Text));
 
         if (!item.ReadOnly && ImGui::BeginPopupContextItem("##AssetMenu"))
         {
