@@ -136,7 +136,8 @@ namespace crimson::editor::ui
 
         DrawLogList(logs, visible, listHeight);
 
-        if (hasSelection)
+        // Clicking in the list can change the selection, so it is checked again
+        if (m_SelectedIndex >= 0 && m_SelectedIndex < static_cast<int>(logs.size()))
             DrawDetails(logs[m_SelectedIndex]);
 
         ImGui::End();
