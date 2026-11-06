@@ -26,6 +26,10 @@ namespace crimson::editor::ui
         void Clear();
         void OnImGui() override;
     private:
+        void DrawToolbar();
+        void DrawLogList(const std::vector<LogEntry>& logs, const std::vector<int>& visible, float height);
+        void DrawDetails(const LogEntry& log);
+    private:
         uint64_t m_LogSubscription = 0;
 
         std::vector<LogEntry> m_RawLogs;
