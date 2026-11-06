@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <span>
 #include <vector>
@@ -25,6 +26,9 @@ namespace crimson::editor
 
         // Replaces the scene with that one, after asking about unsaved changes
         std::function<void(AssetID)> OpenScene;
+
+        // Opens a code file, such as a shader, in the External Script Editor from the preferences
+        std::function<void(const std::filesystem::path&)> OpenCodeFile;
 
         // The file of ActiveScene. Invalid if the scene couldn't be loaded, and then there is nothing to save to.
         AssetID ActiveSceneAsset;

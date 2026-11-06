@@ -35,6 +35,7 @@ namespace crimson::editor
         m_input           = std::make_unique<Input>(*m_window);
         m_icons           = std::make_unique<EditorIcons>(*m_graphicsBackend->GPUResources, *m_graphicsBackend->Imgui);
         m_recentProjects  = std::make_unique<RecentProjects>(configFolder / "recent_projects.json");
+        m_settings        = std::make_unique<EditorSettings>(configFolder / "settings.json");
 
         m_services = std::make_unique<EditorServices>(EditorServices{
             .AppWindow = *m_window,
@@ -43,6 +44,7 @@ namespace crimson::editor
             .RendererType = rendererType,
             .Icons = *m_icons,
             .Recents = *m_recentProjects,
+            .Settings = *m_settings,
             .OpenProject = [this](Project project) { m_requestedProject.emplace(std::move(project)); },
             .CloseProject = [this] { m_closeProjectRequested = true; }
         });

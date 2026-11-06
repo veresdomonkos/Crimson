@@ -11,6 +11,7 @@
 namespace crimson::editor
 {
     class EditorIcons;
+    class EditorSettings;
     class RecentProjects;
 
     // What the application owns for its whole run, and every mode can use
@@ -22,6 +23,7 @@ namespace crimson::editor
         RendererAPIType RendererType;
         EditorIcons& Icons;
         RecentProjects& Recents;
+        EditorSettings& Settings;
 
         // These only make a request, the mode changes after the current frame
         std::function<void(Project)> OpenProject;
