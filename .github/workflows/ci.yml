@@ -121,7 +121,7 @@ jobs:
       - name: Package
         run: |
           mkdir -p package/samples
-          cp build/editor/Editor.exe LICENSE README.md package/
+          cp build/editor/Editor.exe LICENSE THIRD_PARTY_NOTICES.md README.md package/
           cp -r samples/Demo package/samples/
 
       - name: Upload the package
@@ -233,6 +233,11 @@ jobs:
           curl -fsSLO "https://github.com/linuxdeploy/linuxdeploy/releases/download/$LINUXDEPLOY_VERSION/linuxdeploy-x86_64.AppImage"
           curl -fsSLO "https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/master/linuxdeploy-plugin-gtk.sh"
           chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
+
+          # The fonts built into the editor are shipped with their licenses, which their own licenses ask for
+          mkdir -p AppDir/usr/share/doc/crimson
+          cp LICENSE THIRD_PARTY_NOTICES.md AppDir/usr/share/doc/crimson/
+
           PATH="$PWD:$PATH" ./linuxdeploy-x86_64.AppImage \
             --appdir AppDir \
             --executable build/editor/Editor \
