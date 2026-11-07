@@ -36,6 +36,7 @@ namespace crimson
     {
         std::string Path;
         bool PathOnly = false; // written by hand without a guid, so its id was made up from the path
+        AssetType Type = AssetType::None; // what it was read as, so it keeps a typed id while its asset is away
     };
 
     class AssetStoreBase;
@@ -77,12 +78,16 @@ namespace crimson
         [[nodiscard]] bool IsMissing(AssetID id) const { return id && !GetInfo(id); }
         [[nodiscard]] const MissingAssetRef* GetMissing(AssetID id) const; // null unless IsMissing
         bool RememberMissing(AssetID id, MissingAssetRef ref) const; // whether it is new, for a warning only the first time
-        // The id with its type, or an empty one if there is no such asset or it is of another type
+        // The id with its type, or an empty one if there is no such asset or it is of another type. A missing one has the
+        // type it was read as, so a material can keep a texture that isn't there, and save it.
         template <AssetType T>
         [[nodiscard]] TypedAssetID<T> As(AssetID id) const
         {
-            const AssetInfo* info = GetInfo(id);
-            return info && info->Type == T ? TypedAssetID<T>(id) : TypedAssetID<T>();
+            if (const AssetInfo* info = GetInfo(id))
+                return info->Type == T ? TypedAssetID<T>(id) : TypedAssetID<T>();
+
+            const MissingAssetRef* missing = GetMissing(id);
+            return missing && missing->Type == T ? TypedAssetID<T>(id) : TypedAssetID<T>();
         }
 
         template <AssetType T>

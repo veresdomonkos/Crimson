@@ -611,7 +611,7 @@ float4 PSMain(VertexOutput input) : SV_Target
                 if (it == m_assets.end() || it->second.Info.Type != type)
                     continue;
 
-                RememberMissing(id, { .Path = it->second.Info.Path });
+                RememberMissing(id, { .Path = it->second.Info.Path, .Type = it->second.Info.Type });
 
                 if (AssetStoreBase* store = m_stores[static_cast<size_t>(type)].get())
                     store->Forget(id, m_gpuResources);

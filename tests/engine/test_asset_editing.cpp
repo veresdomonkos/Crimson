@@ -1091,3 +1091,41 @@ TEST_CASE_METHOD(Fixture, "Only a project's .obj can get slot materials", "[asse
     CHECK(assets.CreateSlotMaterials(assets.Find<AssetType::Mesh>("engine/meshes/SM_Cube.obj")).Created.empty());
     CHECK(assets.CreateSlotMaterials({}).Created.empty());
 }
+
+TEST_CASE_METHOD(Fixture, "A missing reference keeps the type it was read as", "[asset editing]")
+{
+    const fs::path textureFile = Temp.Write("image.bmp", MakeImage());
+    Temp.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "ColorMap": "image.bmp", "NormalMap": "no/such.bmp" } })");
+    AssetManager assets(Gpu, Temp.Path());
+
+    const MaterialID material = assets.Find<AssetType::Material>("mine.mat");
+    const TextureID gone = assets.GetMaterialData(material)->Textures.at("NormalMap");
+
+    CHECK(assets.IsMissing(gone));
+    CHECK(assets.As<AssetType::Texture>(gone) == gone);
+    CHECK_FALSE(assets.As<AssetType::Mesh>(gone));
+
+    SECTION("And so does one whose file went away")
+    {
+        const TextureID texture = assets.Find<AssetType::Texture>("image.bmp");
+        REQUIRE(assets.Load(material));
+
+        fs::remove(textureFile);
+        assets.Refresh();
+
+        CHECK(assets.IsMissing(texture));
+        CHECK(assets.As<AssetType::Texture>(texture) == texture);
+        CHECK(assets.GetMaterialData(material)->Textures.at("ColorMap") == texture);
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "A reference to an asset of the wrong type is dropped", "[asset editing]")
+{
+    Temp.Write("other.mat", kMainMaterial);
+    Temp.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "ColorMap": "other.mat" } })");
+    AssetManager assets(Gpu, Temp.Path());
+
+    const MaterialData* data = assets.GetMaterialData(assets.Find<AssetType::Material>("mine.mat"));
+    REQUIRE(data);
+    CHECK(data->Textures.empty());
+}
