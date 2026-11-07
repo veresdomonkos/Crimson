@@ -166,6 +166,10 @@ namespace crimson::editor::ui
 
         for (const AssetInfo* info : m_context.Assets.ListAll())
         {
+            // The renderer's own, which nothing else can use
+            if (IsInternal(*info))
+                continue;
+
             const std::string folder = ParentOf(info->Path);
             m_items.push_back({ info->Id, info->Type, info->Path, NameOf(info->Path), folder, info->ReadOnly });
             addFolderAndParents(folder);

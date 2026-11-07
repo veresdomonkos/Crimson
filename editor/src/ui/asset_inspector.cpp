@@ -165,6 +165,9 @@ namespace crimson::editor::ui
         {
             for (const AssetInfo* shader : assets.List(AssetType::Shader))
             {
+                if (IsInternal(*shader))
+                    continue;
+
                 if (ImGui::Selectable(shader->Path.c_str(), shader->Id == data.Shader) && shader->Id != data.Shader)
                 {
                     data.Shader = shader->Id;

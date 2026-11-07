@@ -48,6 +48,9 @@ namespace crimson::editor::ui
         {
             for (const AssetInfo* info : assets.List(type))
             {
+                if (IsInternal(*info))
+                    continue;
+
                 const bool selected = info->Id == current;
 
                 if (ImGui::Selectable(info->Path.c_str(), selected))
