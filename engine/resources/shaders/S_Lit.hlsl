@@ -11,6 +11,7 @@ cbuffer MaterialBlock : register(b0, space2)
     float OcclusionStrength; // @default 1 @range 0 1
     float3 EmissiveColor; // @default 0 0 0
     float EmissiveStrength; // @default 1
+    float AlphaCutoff; // @default 0.5 @range 0 1
 };
 
 Texture2D ColorMap : register(t0, space2);
@@ -94,5 +95,11 @@ float4 PSMain(VertexOutput input) : SV_Target
     surface.Roughness = Roughness * metallicRoughness.g;
     surface.Occlusion = lerp(1.0, occlusion, OcclusionStrength);
 
-    return float4(ComputeLighting(surface) + emissive, base.a);
+    const float3 color = ComputeLighting(surface) + emissive;
+
+    // Last, as a discarded pixel stops at once, and the normal map's derivatives need the pixels around it. Only a
+    // cutout material is given a cutoff above 0, which nothing is under.
+    clip(base.a - AlphaCutoff);
+
+    return float4(color, base.a);
 }

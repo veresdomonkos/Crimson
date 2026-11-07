@@ -5,7 +5,8 @@ namespace crimson
     enum class MaterialRenderMode
     {
         Opaque,
-        Transparent // alpha blended, depth tested but not depth written, drawn after opaque
+        Transparent, // alpha blended, depth tested but not depth written, drawn after opaque
+        Cutout       // drawn as opaque, but where the alpha is under the shader's AlphaCutoff there is nothing, in shadows too
     };
 
     enum class CullMode

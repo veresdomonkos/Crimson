@@ -198,7 +198,7 @@ namespace crimson::editor::ui
 
         static const MaterialSettings kDefaults;
 
-        constexpr std::array kRenderModes = { "Opaque", "Transparent" };
+        constexpr std::array kRenderModes = { "Opaque", "Transparent", "Cutout" };
         const int defaultRenderMode = static_cast<int>(kDefaults.RenderMode);
         int renderMode = static_cast<int>(data.Settings.RenderMode);
 

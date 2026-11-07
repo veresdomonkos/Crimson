@@ -93,7 +93,8 @@ namespace crimson
             shader.setStringsWithLengthsAndNames(&sourceData, &sourceLength, &sourceName, 1);
             shader.setEnvInput(glslang::EShSourceHlsl, stage, glslang::EShClientVulkan, kDefaultVersion);
             shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_3);
-            shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_6);
+            // Not 1.6, where discard and clip become a demote to a helper invocation, which GLSL for OpenGL can't do
+            shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_5);
             shader.setEntryPoint("main");
             shader.setSourceEntryPoint(entryPoint);
             shader.setAutoMapLocations(true);

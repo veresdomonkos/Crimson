@@ -23,6 +23,8 @@ namespace crimson
                     settings.RenderMode = MaterialRenderMode::Opaque;
                 else if (value == "transparent")
                     settings.RenderMode = MaterialRenderMode::Transparent;
+                else if (value == "cutout")
+                    settings.RenderMode = MaterialRenderMode::Cutout;
                 else
                     LOG_WARN("[MaterialImporter] '{}': unknown renderMode, using opaque", file);
             }
@@ -128,7 +130,9 @@ namespace crimson
         nlohmann::ordered_json j;
 
         j["shader"] = WriteAssetRef(assets, data.Shader);
-        j["renderMode"] = data.Settings.RenderMode == MaterialRenderMode::Transparent ? "transparent" : "opaque";
+        j["renderMode"] = data.Settings.RenderMode == MaterialRenderMode::Transparent ? "transparent"
+                        : data.Settings.RenderMode == MaterialRenderMode::Cutout ? "cutout"
+                        : "opaque";
         j["cull"] = data.Settings.Cull == CullMode::Back ? "back" : data.Settings.Cull == CullMode::Front ? "front" : "none";
 
         if (!data.Properties.empty())
