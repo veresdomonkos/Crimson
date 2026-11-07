@@ -5,6 +5,7 @@
 #include <crimson/project/shader_includes.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 #include <algorithm>
+#include <string>
 #include <utility>
 #include <vector>
 #include <glm/gtc/matrix_transform.hpp>
@@ -131,9 +132,6 @@ namespace crimson::editor
 
     void ProjectSessionMode::ForgetAssets(std::span<const AssetID> removed)
     {
-        if (removed.empty())
-            return;
-
         for (const AssetID id : removed)
         {
             m_assetEdits->Forget(id);
@@ -143,22 +141,11 @@ namespace crimson::editor
                 m_context.SelectAsset({});
         }
 
-        const auto isRemoved = [removed](AssetID id) { return std::ranges::find(removed, id) != removed.end(); };
-
-        for (auto [handle, renderer] : m_scene.GetRegistry().view<MeshRendererComponent>().each())
-        {
-            if (isRemoved(renderer.MeshAsset))
-                renderer.MeshAsset = {};
-
-            for (AssetID& material : renderer.MaterialAssets)
-            {
-                if (isRemoved(material))
-                    material = {};
-            }
-        }
-
-        // Also for materials that went away because a shader they used is gone
+        // The scene's references to what went keep its id, to be saved and to work again when it comes back, which a
+        // refresh with nothing removed can be. Also for materials that went away because a shader they used is gone.
         ResolveAllMeshRenderers();
+
+        const auto isRemoved = [removed](AssetID id) { return std::ranges::find(removed, id) != removed.end(); };
 
         if (isRemoved(m_context.ActiveSceneAsset))
         {
@@ -166,19 +153,19 @@ namespace crimson::editor
             return;
         }
 
-        std::vector<Entity> brokenInstances;
+        std::vector<Entity> emptied;
 
         for (auto [handle, instance] : m_scene.GetRegistry().view<SceneInstanceComponent>().each())
         {
             if (isRemoved(instance.Scene))
-                brokenInstances.push_back(m_scene.GetEntity(handle));
+                emptied.push_back(m_scene.GetEntity(handle));
         }
 
-        for (const Entity instance : brokenInstances)
+        for (const Entity instance : emptied)
         {
             // It can be inside of another one that just went
             if (instance)
-                BreakSceneInstance(instance, m_scene);
+                EmptySceneInstance(instance, m_scene);
         }
     }
 
@@ -202,6 +189,27 @@ namespace crimson::editor
         });
     }
 
+    // The references in a scene file to assets that aren't there, not counting what's inside its instances
+    static size_t CountMissing(const std::vector<SceneNode>& nodes, const AssetManager& assets)
+    {
+        size_t missing = 0;
+
+        for (const SceneNode& node : nodes)
+        {
+            missing += assets.IsMissing(node.Instance);
+
+            if (node.MeshRenderer)
+            {
+                missing += assets.IsMissing(node.MeshRenderer->Mesh);
+                missing += std::ranges::count_if(node.MeshRenderer->Materials, [&](AssetID material) { return assets.IsMissing(material); });
+            }
+
+            missing += CountMissing(node.Children, assets);
+        }
+
+        return missing;
+    }
+
     void ProjectSessionMode::LoadScene(AssetID id)
     {
         m_context.Selected = {};
@@ -214,6 +222,15 @@ namespace crimson::editor
             return;
 
         InstantiateScene(*data, m_scene, {}, *m_assetManager, id);
+
+        if (const size_t missing = CountMissing(data->Roots, *m_assetManager))
+        {
+            const std::string text = missing == 1
+                ? "1 asset this scene uses is missing, see the Console"
+                : std::to_string(missing) + " assets this scene uses are missing, see the Console";
+
+            m_ui->GetNotifications().Push(ui::Notifications::Kind::Warning, text);
+        }
 
         m_environment = data->Environment;
         m_sceneRenderer->SetToneMapping(m_environment.Exposure, m_environment.Mapper);

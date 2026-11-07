@@ -39,18 +39,12 @@ namespace crimson::editor::ui
         return open;
     }
 
-    static std::string GetAssetName(const AssetManager& assets, AssetID id)
-    {
-        const AssetInfo* info = assets.GetInfo(id);
-        return info ? info->Path : "None";
-    }
-
     // Returns true when another asset was picked
     static bool DrawAssetCombo(const char* label, const AssetManager& assets, AssetType type, AssetID& current)
     {
         bool changed = false;
 
-        if (ImGui::BeginCombo(label, GetAssetName(assets, current).c_str()))
+        if (BeginAssetCombo(label, assets, current))
         {
             for (const AssetInfo* info : assets.List(type))
             {
@@ -264,7 +258,15 @@ namespace crimson::editor::ui
             return;
 
         ImGui::Spacing();
-        ImGui::TextDisabled("Instance of %s", GetAssetName(m_context.Assets, instance->Scene).c_str());
+
+        if (m_context.Assets.IsMissing(instance->Scene))
+        {
+            ImGui::TextColored(theme::Warning, "Instance of %s", AssetLabel(m_context.Assets, instance->Scene).c_str());
+            ImGui::TextDisabled("It shows again once the file is back and the scene is opened again");
+            return;
+        }
+
+        ImGui::TextDisabled("Instance of %s", AssetLabel(m_context.Assets, instance->Scene).c_str());
 
         if (ImGui::Button("Open Source", ImVec2(-1.0f, 0.0f)))
             m_context.OpenScene(instance->Scene);

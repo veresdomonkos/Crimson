@@ -352,7 +352,9 @@ TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
         });
         RunFrames(App);
 
-        CHECK(Assets().GetMaterialData(material)->Textures.empty());
+        // Kept as a missing one, for it to work again if the file comes back
+        const AssetID texture = Assets().GetMaterialData(material)->Textures.at("ColorMap");
+        CHECK(Assets().IsMissing(texture));
     }
 
     SECTION("Through a refresh, when the file went away by itself")
@@ -523,7 +525,7 @@ TEST_CASE_METHOD(AssetFixture, "Deleting the only scene makes a new one", "[edit
     CHECK(IsShowing<ProjectSessionMode>(App));
 }
 
-TEST_CASE_METHOD(AssetFixture, "A scene's instances draw and go away with their source", "[editor]")
+TEST_CASE_METHOD(AssetFixture, "A scene's instances draw, and go empty without their source", "[editor]")
 {
     AssetID source;
     Entity instance;
@@ -561,7 +563,7 @@ TEST_CASE_METHOD(AssetFixture, "A scene's instances draw and go away with their 
 
     CHECK(instance);
     CHECK_FALSE(child);
-    CHECK_FALSE(instance.HasComponent<SceneInstanceComponent>());
+    CHECK(Assets().IsMissing(instance.GetComponent<SceneInstanceComponent>().Scene));
     CHECK(App.Services().Graphics.Renderer->GetStats().DrawCalls < drawCalls);
 }
 
