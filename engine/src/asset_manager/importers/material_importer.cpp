@@ -31,9 +31,12 @@ namespace crimson
         {
             const TextureHandle texture = ctx.Assets.LoadTexture(id);
 
+            // A missing one has been warned about when it was read
             if (!texture)
             {
-                LOG_WARN("[MaterialImporter] Texture '{}' failed to load", slot);
+                if (!ctx.Assets.IsMissing(id))
+                    LOG_WARN("[MaterialImporter] Texture '{}' failed to load", slot);
+
                 continue;
             }
 

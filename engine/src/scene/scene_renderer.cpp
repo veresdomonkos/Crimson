@@ -28,7 +28,8 @@ namespace crimson
             if (!asset)
                 asset = assets.DefaultMaterial();
 
-            renderer.Resolved.Materials[slot] = assets.LoadMaterial(asset);
+            // A missing one stays in the slot, to be saved, and the default stands in for it
+            renderer.Resolved.Materials[slot] = assets.LoadMaterial(assets.IsMissing(asset) ? assets.DefaultMaterial() : asset);
         }
     }
 

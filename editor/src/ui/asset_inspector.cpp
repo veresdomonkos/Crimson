@@ -160,10 +160,8 @@ namespace crimson::editor::ui
 
         const AssetManager& assets = m_context.Assets;
 
-        const AssetInfo* currentShader = assets.GetInfo(data.Shader);
-
         props::BeginRow("Shader");
-        if (ImGui::BeginCombo("##Shader", currentShader ? currentShader->Path.c_str() : "None"))
+        if (BeginAssetCombo("##Shader", assets, data.Shader))
         {
             for (const AssetInfo* shader : assets.List(AssetType::Shader))
             {
@@ -300,7 +298,8 @@ namespace crimson::editor::ui
             const auto used = data.Textures.find(name);
             const AssetID current = used != data.Textures.end() ? used->second : AssetID{};
 
-            if (const ImTextureID preview = current ? m_context.Thumbnails.Get(current) : ImTextureID{ 0 })
+            // Not for a missing one, as the empty thumbnail would be kept after the file is back
+            if (const ImTextureID preview = current && !assets.IsMissing(current) ? m_context.Thumbnails.Get(current) : ImTextureID{ 0 })
                 ImGui::Image(preview, ImVec2(previewSize, previewSize));
             else
                 ImGui::Dummy(ImVec2(previewSize, previewSize));
@@ -312,7 +311,7 @@ namespace crimson::editor::ui
             const AssetInfo* currentInfo = assets.GetInfo(current);
             AssetID picked = current;
 
-            if (ImGui::BeginCombo("##Texture", currentInfo ? currentInfo->Path.c_str() : "None"))
+            if (BeginAssetCombo("##Texture", assets, current))
             {
                 if (ImGui::Selectable("None", !current))
                     picked = {};
