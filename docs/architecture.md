@@ -172,7 +172,7 @@ The asset manager can also change what it has while running:
 - `ApplyMaterial` shows new values on a material, and `ReimportTexture` applies new import settings.
 - `ReloadChangedShaders` recompiles shaders whose file, or a file they include, changed, and remakes their materials. A shader that no longer compiles keeps its last working version.
 
-A file moved along with its `.meta` keeps its id. Moving an asset while the engine runs also updates the `.mat` and `.scene` files that reference it, even if they only name its path. A reference with only a path breaks if the file moves while nothing is running. Anything that changes GPU resources has to run between frames, which is why panels queue these in `EditorContext::Deferred`.
+A file moved along with its `.meta` keeps its id. Moving an asset while the engine runs also updates the `.mat` and `.scene` files that reference it, even if they only name its path. A reference with only a path breaks if the file moves while nothing is running. A reference to an asset that isn't there, because its file is gone or was deleted, keeps its id and path: it is saved as it was, shows as missing in the Inspector, and works again once the file is back. Opening a scene that has any warns about how many. Anything that changes GPU resources has to run between frames, which is why panels queue these in `EditorContext::Deferred`.
 
 A mesh's material slots fill themselves in: an empty slot uses `materials/<slot name>.mat` next to the mesh if that file exists, and the default material if not. For an `.obj`, the slot names are the material names in its `.mtl`. The `.mtl`'s values and textures aren't imported, so those `.mat` files are made by hand (#18).
 

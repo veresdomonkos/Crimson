@@ -23,6 +23,13 @@ namespace crimson
         Replaced  // the material has a new handle, so anything holding on to the old one has to get it again
     };
 
+    // A reference to an asset that isn't there, with what it was written as, for a save to write it back the same way
+    struct MissingAssetRef
+    {
+        std::string Path;
+        bool PathOnly = false; // written by hand without a guid, so its id was made up from the path
+    };
+
     // Knows every asset under one folder and loads them on first use. Destroying it frees what it loaded.
     // The engine's own shaders and materials are always available too, read-only, under "engine/".
     //
@@ -50,6 +57,12 @@ namespace crimson
         [[nodiscard]] const std::filesystem::path& GetRoot() const { return m_root; }
         [[nodiscard]] std::filesystem::path GetFilePath(AssetID id) const; // empty for an engine asset
         [[nodiscard]] bool IsLoaded(AssetID id) const;
+
+        // A reference that was read while its asset wasn't there keeps its id, for it to be saved and work again once the
+        // file is back. Resolving a reference is only a read of the project, so remembering one counts as const.
+        [[nodiscard]] bool IsMissing(AssetID id) const { return id && !GetInfo(id); }
+        [[nodiscard]] const MissingAssetRef* GetMissing(AssetID id) const; // null unless IsMissing
+        bool RememberMissing(AssetID id, MissingAssetRef ref) const; // whether it is new, for a warning only the first time
 
         [[nodiscard]] AssetID DefaultMaterial() const;
 
@@ -146,6 +159,7 @@ namespace crimson
 
         std::unordered_map<AssetID, Entry> m_assets;
         std::unordered_map<std::string, AssetID> m_idsByPath;
+        mutable std::unordered_map<AssetID, MissingAssetRef> m_missing;
 
         TextureHandle m_flatNormal; // made when a shader first needs it
     };

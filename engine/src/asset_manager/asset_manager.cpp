@@ -325,6 +325,20 @@ float4 PSMain(VertexOutput input) : SV_Target
         return it != m_assets.end() ? &it->second.Info : nullptr;
     }
 
+    const MissingAssetRef* AssetManager::GetMissing(AssetID id) const
+    {
+        if (!IsMissing(id))
+            return nullptr;
+
+        const auto it = m_missing.find(id);
+        return it != m_missing.end() ? &it->second : nullptr;
+    }
+
+    bool AssetManager::RememberMissing(AssetID id, MissingAssetRef ref) const
+    {
+        return id && m_missing.insert_or_assign(id, std::move(ref)).second;
+    }
+
     AssetID AssetManager::FindId(std::string_view path) const
     {
         const auto it = m_idsByPath.find(std::string(path));
@@ -557,19 +571,14 @@ float4 PSMain(VertexOutput input) : SV_Target
                 continue;
             }
 
-            MaterialData updated = *data;
+            // The texture stays in the data as a missing one, for it to work again if the file comes back
             const MaterialHandle material = std::get<MaterialHandle>(entry.Loaded);
 
             for (const auto& [slot, texture] : data->Textures)
             {
                 if (isRemoved(texture))
-                {
                     m_gpuResources.SetMaterialTexture(material, slot, EmptySlotTexture(LoadShader(data->Shader), slot));
-                    updated.Textures.erase(slot);
-                }
             }
-
-            entry.Material = std::move(updated);
         }
 
         for (const AssetType type : { AssetType::Scene, AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader })
@@ -579,6 +588,7 @@ float4 PSMain(VertexOutput input) : SV_Target
                 const auto it = m_assets.find(id);
                 if (it != m_assets.end() && it->second.Info.Type == type)
                 {
+                    RememberMissing(id, { .Path = it->second.Info.Path });
                     Unload(it->second);
                     m_idsByPath.erase(it->second.Info.Path);
                     m_assets.erase(it);

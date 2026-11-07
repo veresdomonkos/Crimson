@@ -62,7 +62,7 @@ namespace crimson
     };
 
     // Invalid JSON, a newer version or a wrongly typed field give nothing, for a broken file not to be saved over.
-    // A missing reference only leaves that field empty. The name is what errors report.
+    // A reference to an asset that isn't there keeps its id, and is written back as it was. The name is what errors report.
     [[nodiscard]] std::optional<SceneData> ParseSceneData(std::string_view text, const AssetManager& assets, std::string_view name);
 
     [[nodiscard]] std::string WriteSceneData(const SceneData& data, const AssetManager& assets);

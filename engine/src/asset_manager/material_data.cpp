@@ -114,10 +114,9 @@ namespace crimson
         {
             for (const auto& [slot, ref] : textures->items())
             {
-                if (const AssetID texture = ResolveAssetRef(assets, ref, slot))
+                // One that is missing stays, for the file not to lose it
+                if (const AssetID texture = ResolveAssetRef(assets, ref, std::string(name) + " " + slot))
                     data.Textures[slot] = texture;
-                else
-                    LOG_WARN("[MaterialImporter] '{}': texture '{}' not found", name, slot);
             }
         }
 

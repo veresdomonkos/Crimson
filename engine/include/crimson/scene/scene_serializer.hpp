@@ -19,6 +19,7 @@ namespace crimson
     // Whether a scene has an instance of another one, at any depth, or is that one
     [[nodiscard]] bool SceneUses(AssetID scene, AssetID used, const AssetManager& assets);
 
-    // Its source went away, so the entity stays as an empty one
-    void BreakSceneInstance(Entity instance, Scene& scene);
+    // Its source went away, so what came from it goes too. The entity keeps the reference, for the instance to be back
+    // when the source is and the scene is opened again.
+    void EmptySceneInstance(Entity instance, Scene& scene);
 }

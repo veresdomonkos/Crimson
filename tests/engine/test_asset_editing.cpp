@@ -91,8 +91,76 @@ TEST_CASE_METHOD(Fixture, "Materials written by hand keep working", "[asset edit
     CHECK(data->Settings == MaterialSettings{});
     CHECK(data->Properties.at("Number") == std::vector{ 2.0f });
     CHECK_FALSE(data->Properties.contains("TooLong"));
-    CHECK(data->Textures.size() == 1);
     CHECK(data->Textures.at("ColorMap") == assets.FindId("image.bmp"));
+
+    // A texture that isn't there is kept, and written back as it was
+    REQUIRE(data->Textures.contains("Gone"));
+    CHECK(assets.IsMissing(data->Textures.at("Gone")));
+    CHECK(WriteMaterialData(*data, assets).find(R"("Gone": "no/such.bmp")") != std::string::npos);
+}
+
+TEST_CASE_METHOD(Fixture, "A material keeps its references to missing files", "[asset editing]")
+{
+    const fs::path textureFile = Temp.Write("image.bmp", MakeImage());
+    const fs::path shaderFile = Temp.Write("own.hlsl", R"(
+#include "crimson/bindings.hlsli"
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+)");
+    const fs::path materialFile = Temp.Write("mine.mat", R"({ "shader": "own.hlsl", "textures": { "ColorMap": "image.bmp" } })");
+
+    AssetID texture;
+    AssetID shader;
+
+    // Saved once, for the references to have their guids
+    {
+        AssetManager assets(Gpu, Temp.Path());
+        texture = assets.FindId("image.bmp");
+        shader = assets.FindId("own.hlsl");
+
+        const AssetID material = assets.FindId("mine.mat");
+        REQUIRE(assets.SaveMaterial(material, *assets.GetMaterialData(material)));
+    }
+
+    const std::string saved = ReadFile(materialFile);
+
+    // Moved away with their meta files, as if they were missing for a while
+    std::vector<fs::path> moved;
+    for (const fs::path& file : { textureFile, shaderFile })
+    {
+        moved.push_back(file);
+        moved.push_back(meta::MetaPathFor(file));
+    }
+
+    for (const fs::path& file : moved)
+        fs::rename(file, fs::path(file) += ".away");
+
+    {
+        AssetManager assets(Gpu, Temp.Path());
+        const AssetID material = assets.FindId("mine.mat");
+
+        const MaterialData* data = assets.GetMaterialData(material);
+        REQUIRE(data);
+        CHECK(data->Shader == shader);
+        CHECK(data->Textures.at("ColorMap") == texture);
+        CHECK(assets.IsMissing(shader));
+        CHECK(assets.GetMissing(texture)->Path == "image.bmp");
+
+        REQUIRE(assets.SaveMaterial(material, *data));
+        CHECK(ReadFile(materialFile) == saved);
+    }
+
+    for (const fs::path& file : moved)
+        fs::rename(fs::path(file) += ".away", file);
+
+    {
+        AssetManager assets(Gpu, Temp.Path());
+        const AssetID material = assets.FindId("mine.mat");
+
+        CHECK(assets.LoadMaterial(material));
+        CHECK(assets.GetMaterialData(material)->Textures.at("ColorMap") == texture);
+        CHECK_FALSE(assets.IsMissing(texture));
+    }
 }
 
 TEST_CASE_METHOD(Fixture, "A saved reference survives its file being renamed", "[asset editing]")
@@ -375,17 +443,24 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     REQUIRE(texturedHandle);
     REQUIRE(assets.LoadMaterial(own));
 
-    SECTION("A texture: the slot goes back to the default")
+    SECTION("A texture: the slot goes back to the default, and the material keeps the reference")
     {
         REQUIRE(Gpu.Materials.at(texturedHandle.GetRaw()).Textures.contains("ColorMap"));
+        const AssetID texture = assets.FindId("image.bmp");
 
         fs::remove(textureFile);
         assets.Refresh();
 
         CHECK_FALSE(Gpu.Materials.at(texturedHandle.GetRaw()).Textures.contains("ColorMap"));
         CHECK(assets.LoadMaterial(textured) == texturedHandle);
-        CHECK(assets.GetMaterialData(textured)->Textures.empty());
+        CHECK(assets.GetMaterialData(textured)->Textures.at("ColorMap") == texture);
+        CHECK(assets.IsMissing(texture));
         CHECK(Gpu.LiveTextures == 1); // only the flat normal the shader's empty slot uses
+
+        // Back, next to its meta file, it is the same asset again
+        Temp.Write("image.bmp", MakeImage());
+        assets.Refresh();
+        CHECK_FALSE(assets.IsMissing(texture));
     }
 
     SECTION("A shader: the material is unloaded before it")

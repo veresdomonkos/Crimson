@@ -5,8 +5,10 @@
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/meta_file.hpp>
 #include <crimson/scene/scene_renderer.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 
@@ -216,13 +218,12 @@ TEST_CASE_METHOD(Fixture, "An instance's entities come from its scene", "[scene 
         CHECK(again.GetEntity(children[0]).GetComponent<NameComponent>().Name == "Only");
     }
 
-    SECTION("Breaking it leaves an empty entity")
+    SECTION("Emptying it leaves the entity with its reference")
     {
-        BreakSceneInstance(root, scene);
+        EmptySceneInstance(root, scene);
 
         CHECK(root.GetComponent<RelationshipComponent>().Children.empty());
-        CHECK_FALSE(root.HasComponent<SceneInstanceComponent>());
-        CHECK_FALSE(CaptureScene(scene, {}, assets).Roots[0].Instance);
+        CHECK(CaptureScene(scene, {}, assets).Roots[0].Instance == assets.FindId("crate.scene"));
     }
 }
 
@@ -306,7 +307,7 @@ TEST_CASE_METHOD(Fixture, "An instance whose source can't be used stays an entit
         CHECK(CaptureScene(scene, {}, assets).Roots[0].Instance == assets.FindId("broken.scene"));
     }
 
-    SECTION("A missing file leaves it empty")
+    SECTION("A missing file keeps the reference too")
     {
         Temp.Write("level.scene", SceneWith(InstanceOf("Crate", "gone.scene")));
         AssetManager assets(Gpu, Temp.Path());
@@ -317,8 +318,90 @@ TEST_CASE_METHOD(Fixture, "An instance whose source can't be used stays an entit
         REQUIRE(scene.GetRoots().size() == 1);
         const Entity root = scene.GetEntity(scene.GetRoots()[0]);
         CHECK(root.GetComponent<NameComponent>().Name == "Crate");
-        CHECK_FALSE(root.HasComponent<SceneInstanceComponent>());
+        REQUIRE(root.HasComponent<SceneInstanceComponent>());
+        CHECK(assets.IsMissing(root.GetComponent<SceneInstanceComponent>().Scene));
+
+        // Written by hand as a path, so it is written back that way
+        const std::string text = WriteSceneData(CaptureScene(scene, {}, assets), assets);
+        CHECK(text.find(R"("instance": "gone.scene")") != std::string::npos);
     }
+}
+
+TEST_CASE_METHOD(Fixture, "A scene keeps its references to missing files", "[scene data]")
+{
+    const fs::path meshFile = Temp.Write("thing.obj", kTriangleObj);
+    const fs::path materialFile = Temp.Write("thing.mat", kMaterial);
+    const fs::path crateFile = Temp.Write("crate.scene", SceneWith(""));
+    const fs::path levelFile = Temp.Write("level.scene", SceneWith(
+        R"({ "name": "Mesh", "meshRenderer": { "mesh": "thing.obj", "materials": [ "thing.mat" ] } }, )" + InstanceOf("Crate", "crate.scene")));
+
+    // Saved once, for the references to have their guids
+    {
+        AssetManager assets(Gpu, Temp.Path());
+        Scene scene;
+        Open(assets, "level.scene", scene);
+        REQUIRE(assets.SaveScene(assets.FindId("level.scene"), CaptureScene(scene, {}, assets)));
+    }
+
+    const std::string saved = ReadFile(levelFile);
+
+    // Moved away with their meta files, as if they were missing for a while
+    std::vector<fs::path> moved;
+    for (const fs::path& file : { meshFile, materialFile, crateFile })
+    {
+        moved.push_back(file);
+        moved.push_back(meta::MetaPathFor(file));
+    }
+
+    for (const fs::path& file : moved)
+        fs::rename(file, fs::path(file) += ".away");
+
+    {
+        AssetManager assets(Gpu, Temp.Path());
+        Scene scene;
+        Open(assets, "level.scene", scene);
+
+        const SceneData captured = CaptureScene(scene, {}, assets);
+        REQUIRE(captured.Roots.size() == 2);
+        CHECK(assets.GetMissing(captured.Roots[0].MeshRenderer->Mesh)->Path == "thing.obj");
+        CHECK(assets.GetMissing(captured.Roots[0].MeshRenderer->Materials.at(0))->Path == "thing.mat");
+        CHECK(assets.GetMissing(captured.Roots[1].Instance)->Path == "crate.scene");
+
+        REQUIRE(assets.SaveScene(assets.FindId("level.scene"), captured));
+        CHECK(ReadFile(levelFile) == saved);
+    }
+
+    for (const fs::path& file : moved)
+        fs::rename(fs::path(file) += ".away", file);
+
+    {
+        AssetManager assets(Gpu, Temp.Path());
+        Scene scene;
+        Open(assets, "level.scene", scene);
+
+        const Entity mesh = scene.GetEntity(scene.GetRoots()[0]);
+        const auto& renderer = mesh.GetComponent<MeshRendererComponent>();
+        CHECK_FALSE(renderer.Resolved.SubMeshes.empty());
+        CHECK(renderer.MaterialAssets.at(0) == assets.FindId("thing.mat"));
+        CHECK(CaptureScene(scene, {}, assets).Roots[1].Instance == assets.FindId("crate.scene"));
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "A missing material stays in its slot, with the default drawn instead", "[scene data]")
+{
+    Temp.Write("thing.obj", kTriangleObj);
+    AssetManager assets(Gpu, Temp.Path());
+
+    const auto data = ParseSceneData(SceneWith(R"({ "meshRenderer": { "mesh": "thing.obj", "materials": [ "gone.mat" ] } })"), assets, "test");
+    REQUIRE(data);
+
+    Scene scene;
+    InstantiateScene(*data, scene, {}, assets, {});
+
+    const auto& renderer = scene.GetEntity(scene.GetRoots()[0]).GetComponent<MeshRendererComponent>();
+    CHECK(assets.IsMissing(renderer.MaterialAssets.at(0)));
+    CHECK(renderer.Resolved.Materials.at(0) == assets.LoadMaterial(assets.DefaultMaterial()));
+    CHECK(CaptureScene(scene, {}, assets) == *data);
 }
 
 TEST_CASE_METHOD(Fixture, "Scenes are assets", "[scene data]")

@@ -199,13 +199,11 @@ namespace crimson
         return false;
     }
 
-    void BreakSceneInstance(Entity instance, Scene& scene)
+    void EmptySceneInstance(Entity instance, Scene& scene)
     {
         // Each child removes itself from this list, so it needs a copy
         const std::vector<entt::entity> children = instance.GetComponent<RelationshipComponent>().Children;
         for (const entt::entity child : children)
             scene.DestroyEntity(scene.GetEntity(child));
-
-        instance.RemoveComponent<SceneInstanceComponent>();
     }
 }
