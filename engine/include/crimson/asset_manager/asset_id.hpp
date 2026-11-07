@@ -51,6 +51,10 @@ namespace crimson
         explicit operator bool() const { return static_cast<bool>(m_id); }
         bool operator==(const TypedAssetID&) const = default;
 
+        // Both would turn into AssetIDs and compare, though a texture is never a mesh
+        template <AssetType U> requires (U != T)
+        bool operator==(const TypedAssetID<U>&) const = delete;
+
         [[nodiscard]] std::string ToString() const { return m_id.ToString(); }
     private:
         friend class AssetManager;
