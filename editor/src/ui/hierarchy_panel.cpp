@@ -366,7 +366,7 @@ namespace crimson::editor::ui
         {
             for (const BuiltInMesh& mesh : kBuiltInMeshes)
             {
-                const AssetID id = m_context.Assets.FindId(mesh.Path);
+                const MeshID id = m_context.Assets.Find<AssetType::Mesh>(mesh.Path);
 
                 // The default material fills the mesh's one slot when it is resolved
                 if (ImGui::MenuItem(mesh.Name, nullptr, false, static_cast<bool>(id)))

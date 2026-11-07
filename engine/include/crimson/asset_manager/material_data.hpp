@@ -16,10 +16,10 @@ namespace crimson
     // What a .mat file says. It is separate from the GPU's material, so it can be read, edited and written back.
     struct MaterialData
     {
-        AssetID Shader;
+        ShaderID Shader;
         MaterialSettings Settings;
         std::map<std::string, std::vector<float>> Properties; // 1 to 4 values each
-        std::map<std::string, AssetID> Textures;
+        std::map<std::string, TextureID> Textures;
 
         bool operator==(const MaterialData&) const = default;
     };

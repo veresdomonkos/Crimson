@@ -14,17 +14,17 @@ namespace crimson::editor
         explicit AssetEdits(AssetManager& assets) : m_assets(assets) {}
 
         // The material as it is being edited. Null if it can't be read.
-        [[nodiscard]] const MaterialData* GetMaterial(AssetID id);
-        void SetMaterial(AssetID id, const MaterialData& data);
+        [[nodiscard]] const MaterialData* GetMaterial(MaterialID id);
+        void SetMaterial(MaterialID id, const MaterialData& data);
 
-        [[nodiscard]] bool IsDirty(AssetID id) const;
+        [[nodiscard]] bool IsDirty(MaterialID id) const;
         [[nodiscard]] bool HasUnsavedChanges() const;
 
-        bool Save(AssetID id);
+        bool Save(MaterialID id);
         bool SaveAll();
-        void Revert(AssetID id);
+        void Revert(MaterialID id);
         void DiscardAll();
-        void Forget(AssetID id);
+        void Forget(AssetID id); // any asset, as it is called for whatever was removed
 
         // Shows the edits made since the last call. Returns true if a material got a new handle, which happens when
         // its shader changes, so whatever holds the old one has to get it again. An edit that can't be shown is undone.
@@ -37,9 +37,9 @@ namespace crimson::editor
             bool Pending = false;
         };
 
-        Edit* GetOrCreateEdit(AssetID id);
+        Edit* GetOrCreateEdit(MaterialID id);
 
         AssetManager& m_assets;
-        std::unordered_map<AssetID, Edit> m_edits;
+        std::unordered_map<MaterialID, Edit> m_edits;
     };
 }

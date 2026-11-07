@@ -164,7 +164,9 @@ Hand-written references can be plain paths. Saving writes both the id and the pa
 | `MeshImporter` | `Mesh` (vertex/index buffers + materials, e.g. `.obj`) |
 | `SceneImporter` | `.scene` files, read by the editor rather than loaded to the GPU |
 
-Assets are addressed by a path relative to `assets/`, or by `AssetID`, and load on first use (`LoadMaterial`, `LoadMesh`, ...). A load that fails is logged once and gives an invalid handle or null. A file's id lives in the `.meta` written next to it, so those belong in version control.
+Assets are addressed by a path relative to `assets/`, or by `AssetID`, and load on first use with `Load`. A load that fails is logged once and gives an invalid handle or null. A file's id lives in the `.meta` written next to it, so those belong in version control.
+
+Where the type is known, ids carry it: `TextureID`, `MeshID`, `ShaderID`, `MaterialID` and `SceneID` are `TypedAssetID<T>`, so a material's shader can't be given a texture, and ids of different types don't compare. Only the asset manager makes one, after checking the type, with `As<T>(id)` or `Find<T>(path)`. One turns back into a plain `AssetID` by itself, which is what the selection, drag and drop and the removed assets use. `Load(id)` gives what that type loads as, and `Load<T>(path)` is the shortcut for code that knows the path. A reference that is missing keeps the type it was read as, so it stays typed until its file is back. Each type keeps what it loaded in its own `AssetStore<T>` (`engine/src/asset_manager/asset_store.hpp`), with what only that type needs, such as a material's data or a shader's file times.
 
 The asset manager can also change what it has while running:
 - `Refresh` looks at the folder again.

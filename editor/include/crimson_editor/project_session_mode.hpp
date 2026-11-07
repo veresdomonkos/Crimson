@@ -59,9 +59,9 @@ namespace crimson::editor
 
         // --- The open scene ---
         // The preferred one if it exists, then the first there is, and if there are none it makes one
-        [[nodiscard]] AssetID ChooseScene(AssetID preferred);
-        void OpenScene(AssetID id);
-        void LoadScene(AssetID id);
+        [[nodiscard]] SceneID ChooseScene(AssetID preferred);
+        void OpenScene(SceneID id);
+        void LoadScene(SceneID id);
 
         // --- Utils ---
         [[nodiscard]] GpuResourceManager& GpuResources() { return *m_services.Graphics.GPUResources; }

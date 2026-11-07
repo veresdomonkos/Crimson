@@ -32,7 +32,7 @@ namespace crimson
     struct MtlMaterial
     {
         MaterialData Data;
-        std::vector<AssetID> DataTextures; // the textures it uses that hold values rather than colors, which need sRGB off
+        std::vector<TextureID> DataTextures; // the textures it uses that hold values rather than colors, which need sRGB off
     };
 
     // An .mtl material as one on the default lit shader. Its texture paths are relative to meshFolder, the asset folder of

@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -26,7 +27,7 @@ namespace crimson
     // What CreateSlotMaterials did
     struct SlotMaterials
     {
-        std::vector<AssetID> Created;
+        std::vector<MaterialID> Created;
         size_t Kept = 0; // slots that had a material already, which is left as it is
     };
 
@@ -35,7 +36,11 @@ namespace crimson
     {
         std::string Path;
         bool PathOnly = false; // written by hand without a guid, so its id was made up from the path
+        AssetType Type = AssetType::None; // what it was read as, so it keeps a typed id while its asset is away
     };
+
+    class AssetStoreBase;
+    template <AssetType T> class AssetStore;
 
     // Knows every asset under one folder and loads them on first use. Destroying it frees what it loaded.
     // The engine's own shaders and materials are always available too, read-only, under "engine/".
@@ -73,28 +78,40 @@ namespace crimson
         [[nodiscard]] bool IsMissing(AssetID id) const { return id && !GetInfo(id); }
         [[nodiscard]] const MissingAssetRef* GetMissing(AssetID id) const; // null unless IsMissing
         bool RememberMissing(AssetID id, MissingAssetRef ref) const; // whether it is new, for a warning only the first time
+        // The id with its type, or an empty one if there is no such asset or it is of another type. A missing one has the
+        // type it was read as, so a material can keep a texture that isn't there, and save it.
+        template <AssetType T>
+        [[nodiscard]] TypedAssetID<T> As(AssetID id) const
+        {
+            if (const AssetInfo* info = GetInfo(id))
+                return info->Type == T ? TypedAssetID<T>(id) : TypedAssetID<T>();
 
-        [[nodiscard]] AssetID DefaultMaterial() const;
+            const MissingAssetRef* missing = GetMissing(id);
+            return missing && missing->Type == T ? TypedAssetID<T>(id) : TypedAssetID<T>();
+        }
+
+        template <AssetType T>
+        [[nodiscard]] TypedAssetID<T> Find(std::string_view path) const { return As<T>(FindId(path)); }
+
+        // An invalid handle or null if it can't be loaded
+        template <AssetType T>
+        LoadResult<T> Load(TypedAssetID<T> id);
+
+        // A shortcut for code that knows its asset's path, which warns if nothing of that type is there
+        template <AssetType T>
+        LoadResult<T> Load(std::string_view path) { return Load(FindOrWarn<T>(path)); }
+
+        [[nodiscard]] MaterialID DefaultMaterial() const;
 
         // The material made for one of a mesh's slots: materials/<slot>.mat, next to the mesh. Invalid if there is none.
-        [[nodiscard]] AssetID FindSlotMaterial(AssetID mesh, std::string_view slot) const;
+        [[nodiscard]] MaterialID FindSlotMaterial(MeshID mesh, std::string_view slot) const;
 
         // What a loaded shader's materials can set
         [[nodiscard]] const ShaderInterface& GetShaderInterface(ShaderHandle shader) const { return m_gpuResources.GetShaderInterface(shader); }
 
-        TextureHandle LoadTexture(AssetID id);
-        ShaderHandle LoadShader(AssetID id);
-        MaterialHandle LoadMaterial(AssetID id);
-        const Mesh* LoadMesh(AssetID id); // stays valid as long as the manager
-
-        TextureHandle LoadTexture(std::string_view path);
-        ShaderHandle LoadShader(std::string_view path);
-        MaterialHandle LoadMaterial(std::string_view path);
-        const Mesh* LoadMesh(std::string_view path);
-
         // A separate copy of a texture for showing as it is stored, as UI that isn't sRGB encoded would show an sRGB
         // texture too dark. The caller owns it, and gives it back to DestroyTexturePreview.
-        [[nodiscard]] TextureHandle CreateTexturePreview(AssetID id) const;
+        [[nodiscard]] TextureHandle CreateTexturePreview(TextureID id) const;
         void DestroyTexturePreview(TextureHandle preview) const { m_gpuResources.DestroyTexture(preview); }
 
         // What a material's texture slot uses when nothing is assigned to it. Invalid means the backend's white texture.
@@ -105,51 +122,45 @@ namespace crimson
         std::vector<AssetID> Refresh();
 
         // These report failures in the log. Engine assets can't be changed, and project assets can't go under "engine/".
-        AssetID CreateMaterial(std::string_view path);
-        AssetID CreateScene(std::string_view path); // with a light, for it not to start out black
-        AssetID CreateShader(std::string_view path); // a simple lit one, to start from
+        MaterialID CreateMaterial(std::string_view path);
+        SceneID CreateScene(std::string_view path); // with a light, for it not to start out black
+        ShaderID CreateShader(std::string_view path); // a simple lit one, to start from
 
         // Makes the material each slot of an .obj looks for, materials/<slot>.mat next to it, from its .mtl: colors,
         // textures and shininess on the default shader, with sRGB turned off on its normal maps. A slot that has one
         // already keeps it, so running it again changes nothing.
-        SlotMaterials CreateSlotMaterials(AssetID mesh);
+        SlotMaterials CreateSlotMaterials(MeshID mesh);
         bool Rename(AssetID id, std::string_view newPath);
         bool Delete(AssetID id);
 
         // What the material is using right now, which edits may have made different from its file
-        [[nodiscard]] const MaterialData* GetMaterialData(AssetID id);
-        [[nodiscard]] std::optional<MaterialData> ReadMaterialFile(AssetID id) const;
+        [[nodiscard]] const MaterialData* GetMaterialData(MaterialID id);
+        [[nodiscard]] std::optional<MaterialData> ReadMaterialFile(MaterialID id) const;
 
         // Shows the data on the material, leaving its file alone
-        MaterialApplyResult ApplyMaterial(AssetID id, const MaterialData& data);
-        bool SaveMaterial(AssetID id, const MaterialData& data);
+        MaterialApplyResult ApplyMaterial(MaterialID id, const MaterialData& data);
+        bool SaveMaterial(MaterialID id, const MaterialData& data);
 
-        [[nodiscard]] std::optional<SceneData> ReadSceneFile(AssetID id) const;
-        bool SaveScene(AssetID id, const SceneData& data);
+        [[nodiscard]] std::optional<SceneData> ReadSceneFile(SceneID id) const;
+        bool SaveScene(SceneID id, const SceneData& data);
 
         // Stores the settings in the texture's meta file, and if it is loaded, recreates it for the materials using it
-        bool ReimportTexture(AssetID id, nlohmann::json settings);
+        bool ReimportTexture(TextureID id, nlohmann::json settings);
 
         // Compiles the project's shaders again whose file or included files changed since they were loaded, and
         // recreates their materials. One that no longer compiles keeps the old version. Returns the ids of the
         // shaders and materials that were replaced, whose handles have to be gotten again.
         std::vector<AssetID> ReloadChangedShaders();
     private:
-        struct Entry
+        // What is known about every asset, loaded or not. What it loads as is in its type's store.
+        struct Record
         {
             AssetInfo Info;
-            AssetImporter* Importer = nullptr;
+            AssetImporterBase* Importer = nullptr;
             const EmbeddedFile* Embedded = nullptr;
-            LoadedAsset Loaded;
-            bool Failed = false;
-            std::optional<MaterialData> Material; // what a material is using, read from its file when first needed
-
-            // For a project's shader: when its file and the files it included last changed, as of its last load
-            std::filesystem::file_time_type FileTime;
-            std::vector<std::pair<std::filesystem::path, std::filesystem::file_time_type>> Dependencies;
         };
 
-        void AddImporter(std::unique_ptr<AssetImporter> importer);
+        void AddImporter(std::unique_ptr<AssetImporterBase> importer);
         void RegisterEngineResources();
         void Scan(std::unordered_set<AssetID>& seen);
         void RegisterFile(const std::filesystem::path& file, std::unordered_set<AssetID>& seen);
@@ -157,26 +168,46 @@ namespace crimson
         void UpdateReferencesTo(const std::unordered_map<std::string, AssetID>& moved); // old path to id
         AssetID CreateAssetFile(std::string_view path, std::string_view extension, const std::string& contents);
 
-        const LoadedAsset& Load(AssetID id);
-        LoadedAsset Import(Entry& entry);
-        std::vector<AssetID> ReloadShader(AssetID id, Entry& entry);
-        AssetID FindIdOrWarn(std::string_view path) const;
-        void Unload(Entry& entry);
+        template <AssetType T>
+        AssetStore<T>& Store();
 
-        template <typename T>
-        const T* LoadAs(AssetID id);
+        // Where an asset of a type keeps what it loaded. Null if there is no such asset of that type.
+        template <AssetType T>
+        typename AssetStore<T>::Slot* SlotFor(AssetID id);
+
+        template <AssetType T>
+        std::optional<LoadedAsset<T>> Import(const Record& record, typename AssetStore<T>::Slot& slot);
+
+        std::vector<AssetID> ReloadShader(AssetID id, const Record& record);
+        [[nodiscard]] AssetSource SourceOf(const Record& record) const;
+        AssetID FindIdOrWarn(std::string_view path) const;
+
+        template <AssetType T>
+        TypedAssetID<T> FindOrWarn(std::string_view path) const
+        {
+            const AssetID id = FindIdOrWarn(path);
+            const TypedAssetID<T> typed = As<T>(id);
+            if (id && !typed)
+                WarnWrongType(path, T);
+            return typed;
+        }
+
+        void WarnWrongType(std::string_view path, AssetType wanted) const;
 
         GpuResourceManager& m_gpuResources;
         std::filesystem::path m_root;
 
-        std::vector<std::unique_ptr<AssetImporter>> m_importers;
-        std::unordered_map<std::string, AssetImporter*> m_importersByExtension;
+        std::vector<std::unique_ptr<AssetImporterBase>> m_importers;
+        std::unordered_map<std::string, AssetImporterBase*> m_importersByExtension;
 
-        std::unordered_map<AssetID, Entry> m_assets;
+        std::unordered_map<AssetID, Record> m_assets;
         std::unordered_map<std::string, AssetID> m_idsByPath;
         std::unordered_map<std::string, AssetID> m_renamedPaths; // an engine asset's old path to its id
         std::unordered_map<AssetID, AssetID> m_renamedIds; // the id made from an engine asset's old path to its id
         mutable std::unordered_map<AssetID, MissingAssetRef> m_missing;
+
+        // One per type that loads, by AssetType. Scenes have none.
+        std::array<std::unique_ptr<AssetStoreBase>, kAssetTypeCount> m_stores;
 
         TextureHandle m_flatNormal; // made when a shader first needs it
     };

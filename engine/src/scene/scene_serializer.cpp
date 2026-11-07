@@ -41,8 +41,8 @@ namespace crimson
                 mesh.CastsShadows = renderer->CastsShadows;
 
                 // The default is what an empty slot ends up with, and left empty it can still find the material made for it
-                for (const AssetID material : renderer->MaterialAssets)
-                    mesh.Materials.push_back(material == assets.DefaultMaterial() ? AssetID{} : material);
+                for (const MaterialID material : renderer->MaterialAssets)
+                    mesh.Materials.push_back(material == assets.DefaultMaterial() ? MaterialID{} : material);
             }
 
             for (const entt::entity child : entity.GetComponent<RelationshipComponent>().Children)
@@ -56,7 +56,7 @@ namespace crimson
         {
             Scene& Target;
             AssetManager& Assets;
-            std::vector<AssetID> Chain;
+            std::vector<SceneID> Chain;
 
             void CreateNode(const SceneNode& node, Entity parent, bool readOnly)
             {
@@ -93,7 +93,7 @@ namespace crimson
                     CreateNode(child, entity, readOnly);
             }
 
-            void Expand(Entity instance, AssetID source)
+            void Expand(Entity instance, SceneID source)
             {
                 instance.AddComponent<SceneInstanceComponent>(source);
 
@@ -117,7 +117,7 @@ namespace crimson
             }
         };
 
-        void CollectInstances(const std::vector<SceneNode>& nodes, std::vector<AssetID>& instances)
+        void CollectInstances(const std::vector<SceneNode>& nodes, std::vector<SceneID>& instances)
         {
             for (const SceneNode& node : nodes)
             {
@@ -140,7 +140,7 @@ namespace crimson
         return data;
     }
 
-    void InstantiateScene(const SceneData& data, Scene& scene, Entity parent, AssetManager& assets, AssetID owner)
+    void InstantiateScene(const SceneData& data, Scene& scene, Entity parent, AssetManager& assets, SceneID owner)
     {
         Instantiation instantiation{ scene, assets, {} };
 
@@ -151,7 +151,7 @@ namespace crimson
             instantiation.CreateNode(root, parent, false);
     }
 
-    Entity CreateSceneInstance(AssetID source, Scene& scene, Entity parent, AssetManager& assets, AssetID owner)
+    Entity CreateSceneInstance(SceneID source, Scene& scene, Entity parent, AssetManager& assets, SceneID owner)
     {
         const AssetInfo* info = assets.GetInfo(source);
         if (!info || info->Type != AssetType::Scene)
@@ -174,14 +174,14 @@ namespace crimson
         return entity;
     }
 
-    bool SceneUses(AssetID scene, AssetID used, const AssetManager& assets)
+    bool SceneUses(SceneID scene, SceneID used, const AssetManager& assets)
     {
-        std::vector<AssetID> visited;
-        std::vector<AssetID> pending = { scene };
+        std::vector<SceneID> visited;
+        std::vector<SceneID> pending = { scene };
 
         while (!pending.empty())
         {
-            const AssetID current = pending.back();
+            const SceneID current = pending.back();
             pending.pop_back();
 
             if (current == used)

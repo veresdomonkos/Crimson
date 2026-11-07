@@ -101,9 +101,10 @@ namespace crimson
         }
 
         // A missing asset is worth a warning only if the file named one
-        AssetID ReadRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view file)
+        template <AssetType T>
+        TypedAssetID<T> ReadRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view file)
         {
-            const AssetID id = ResolveAssetRef(assets, ref, file);
+            const TypedAssetID<T> id = ResolveAssetRef<T>(assets, ref, file);
             if (!id && !ref.is_null())
                 LOG_WARN("[Scene] '{}': no asset for {}", file, ref.dump());
 
@@ -146,17 +147,17 @@ namespace crimson
                 mesh.CastsShadows = renderer->value("castsShadows", true);
 
                 if (const auto ref = renderer->find("mesh"); ref != renderer->end())
-                    mesh.Mesh = ReadRef(assets, *ref, file);
+                    mesh.Mesh = ReadRef<AssetType::Mesh>(assets, *ref, file);
 
                 if (const auto materials = renderer->find("materials"); materials != renderer->end())
                 {
                     for (const nlohmann::json& material : *materials)
-                        mesh.Materials.push_back(ReadRef(assets, material, file));
+                        mesh.Materials.push_back(ReadRef<AssetType::Material>(assets, material, file));
                 }
             }
 
             if (const auto instance = j.find("instance"); instance != j.end())
-                node.Instance = ReadRef(assets, *instance, file);
+                node.Instance = ReadRef<AssetType::Scene>(assets, *instance, file);
 
             if (const auto children = j.find("children"); children != j.end())
             {
@@ -195,7 +196,7 @@ namespace crimson
             {
                 nlohmann::ordered_json materials = nlohmann::ordered_json::array();
 
-                for (const AssetID material : node.MeshRenderer->Materials)
+                for (const MaterialID material : node.MeshRenderer->Materials)
                     materials.push_back(WriteAssetRef(assets, material));
 
                 j["meshRenderer"] = {

@@ -71,10 +71,10 @@ namespace crimson
         MtlMaterial result;
         MaterialData& data = result.Data;
 
-        data.Shader = assets.FindId(kLitShaderPath);
+        data.Shader = assets.Find<AssetType::Shader>(kLitShaderPath);
 
         // A value at the shader's own default isn't written, as the Inspector does
-        const ShaderHandle shader = assets.LoadShader(data.Shader);
+        const ShaderHandle shader = assets.Load(data.Shader);
         const auto set = [&](const std::string& name, std::vector<float> values)
         {
             if (shader)
@@ -87,7 +87,7 @@ namespace crimson
             data.Properties[name] = std::move(values);
         };
 
-        const auto texture = [&](std::string name) -> AssetID
+        const auto texture = [&](std::string name) -> TextureID
         {
             if (name.empty())
                 return {};
@@ -95,14 +95,9 @@ namespace crimson
             std::ranges::replace(name, '\\', '/');
             const std::string path = fs::path(std::string(meshFolder) + name).lexically_normal().generic_string();
 
-            const AssetID id = assets.FindId(path);
-            const AssetInfo* info = assets.GetInfo(id);
-
-            if (!info || info->Type != AssetType::Texture)
-            {
+            const TextureID id = assets.Find<AssetType::Texture>(path);
+            if (!id)
                 LOG_WARN("[Assets] '{}': texture '{}' not found", mtl.name, path);
-                return {};
-            }
 
             return id;
         };
@@ -113,7 +108,7 @@ namespace crimson
             data.Settings.RenderMode = MaterialRenderMode::Transparent;
 
         // With a texture, the color is the texture's. Exporters write a gray Kd next to one, which would only darken it.
-        if (const AssetID color = texture(mtl.diffuse_texname))
+        if (const TextureID color = texture(mtl.diffuse_texname))
         {
             data.Textures["ColorMap"] = color;
 
@@ -131,7 +126,7 @@ namespace crimson
             if (name->empty())
                 continue;
 
-            if (const AssetID normal = texture(*name))
+            if (const TextureID normal = texture(*name))
             {
                 data.Textures["NormalMap"] = normal;
                 result.DataTextures.push_back(normal);
@@ -146,7 +141,7 @@ namespace crimson
         set("Metallic", { std::clamp(mtl.metallic, 0.0f, 1.0f) });
 
         set("EmissiveColor", { mtl.emission[0], mtl.emission[1], mtl.emission[2] });
-        if (const AssetID emissive = texture(mtl.emissive_texname))
+        if (const TextureID emissive = texture(mtl.emissive_texname))
             data.Textures["EmissiveMap"] = emissive;
 
         // Exporters often give the color texture as the ambient one too, which isn't worth mentioning

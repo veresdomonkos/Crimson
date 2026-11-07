@@ -12,7 +12,7 @@ namespace crimson
     {
         renderer.Resolved = {};
 
-        const Mesh* mesh = assets.LoadMesh(renderer.MeshAsset);
+        const Mesh* mesh = assets.Load(renderer.MeshAsset);
         if (!mesh)
             return;
 
@@ -22,10 +22,10 @@ namespace crimson
         for (size_t slot = 0; slot < renderer.MaterialAssets.size(); ++slot)
         {
             // The default counts as empty, as that's how it's saved, so a slot material made since is found
-            AssetID& asset = renderer.MaterialAssets[slot];
+            MaterialID& asset = renderer.MaterialAssets[slot];
             if ((!asset || asset == assets.DefaultMaterial()) && slot < renderer.Resolved.MaterialSlots.size())
             {
-                if (const AssetID found = assets.FindSlotMaterial(renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]))
+                if (const MaterialID found = assets.FindSlotMaterial(renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]))
                     asset = found;
             }
 
@@ -33,7 +33,7 @@ namespace crimson
                 asset = assets.DefaultMaterial();
 
             // A missing one stays in the slot, to be saved, and the default stands in for it
-            renderer.Resolved.Materials[slot] = assets.LoadMaterial(assets.IsMissing(asset) ? assets.DefaultMaterial() : asset);
+            renderer.Resolved.Materials[slot] = assets.Load(assets.IsMissing(asset) ? assets.DefaultMaterial() : asset);
         }
     }
 

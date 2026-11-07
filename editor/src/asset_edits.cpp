@@ -4,7 +4,7 @@
 
 namespace crimson::editor
 {
-    AssetEdits::Edit* AssetEdits::GetOrCreateEdit(AssetID id)
+    AssetEdits::Edit* AssetEdits::GetOrCreateEdit(MaterialID id)
     {
         if (const auto it = m_edits.find(id); it != m_edits.end())
             return &it->second;
@@ -18,13 +18,13 @@ namespace crimson::editor
         return &m_edits.emplace(id, Edit{ .Working = *live, .Saved = saved.value_or(*live) }).first->second;
     }
 
-    const MaterialData* AssetEdits::GetMaterial(AssetID id)
+    const MaterialData* AssetEdits::GetMaterial(MaterialID id)
     {
         const Edit* edit = GetOrCreateEdit(id);
         return edit ? &edit->Working : nullptr;
     }
 
-    void AssetEdits::SetMaterial(AssetID id, const MaterialData& data)
+    void AssetEdits::SetMaterial(MaterialID id, const MaterialData& data)
     {
         const AssetInfo* info = m_assets.GetInfo(id);
         if (!info || info->ReadOnly)
@@ -37,7 +37,7 @@ namespace crimson::editor
         }
     }
 
-    bool AssetEdits::IsDirty(AssetID id) const
+    bool AssetEdits::IsDirty(MaterialID id) const
     {
         const auto it = m_edits.find(id);
         return it != m_edits.end() && it->second.Working != it->second.Saved;
@@ -48,7 +48,7 @@ namespace crimson::editor
         return std::ranges::any_of(m_edits, [](const auto& entry) { return entry.second.Working != entry.second.Saved; });
     }
 
-    bool AssetEdits::Save(AssetID id)
+    bool AssetEdits::Save(MaterialID id)
     {
         const auto it = m_edits.find(id);
         if (it == m_edits.end())
@@ -74,7 +74,7 @@ namespace crimson::editor
         return saved;
     }
 
-    void AssetEdits::Revert(AssetID id)
+    void AssetEdits::Revert(MaterialID id)
     {
         if (const auto it = m_edits.find(id); it != m_edits.end() && it->second.Working != it->second.Saved)
         {
@@ -91,7 +91,7 @@ namespace crimson::editor
 
     void AssetEdits::Forget(AssetID id)
     {
-        m_edits.erase(id);
+        std::erase_if(m_edits, [id](const auto& entry) { return AssetID(entry.first) == id; });
     }
 
     bool AssetEdits::Apply()

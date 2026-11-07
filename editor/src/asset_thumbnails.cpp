@@ -8,7 +8,7 @@ namespace crimson::editor
             Destroy(thumbnail);
     }
 
-    ImTextureID AssetThumbnails::Get(AssetID id)
+    ImTextureID AssetThumbnails::Get(TextureID id)
     {
         if (const auto it = m_thumbnails.find(id); it != m_thumbnails.end())
             return it->second.Id;

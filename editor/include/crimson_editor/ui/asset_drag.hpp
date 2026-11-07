@@ -75,4 +75,11 @@ namespace crimson::editor::ui
 
         return open;
     }
+
+    // The same, for when the type is known when compiling
+    template <AssetType T>
+    TypedAssetID<T> AcceptAssetOnLastItem(const AssetManager& assets)
+    {
+        return assets.As<T>(AcceptAssetOnLastItem(assets, T));
+    }
 }

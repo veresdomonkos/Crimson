@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <string>
 #include <string_view>
 #include <nlohmann/json.hpp>
 
@@ -7,8 +8,6 @@
 
 namespace crimson
 {
-    enum class AssetType : uint8_t { None, Texture, Mesh, Shader, Material, Scene };
-
     inline std::string_view ToString(AssetType t)
     {
         switch (t)

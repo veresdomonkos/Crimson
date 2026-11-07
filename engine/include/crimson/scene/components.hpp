@@ -62,8 +62,8 @@ namespace crimson
     // Call ResolveMeshRenderer after changing the assets.
     struct MeshRendererComponent
     {
-        AssetID MeshAsset;
-        std::vector<AssetID> MaterialAssets; // one per material slot of the mesh
+        MeshID MeshAsset;
+        std::vector<MaterialID> MaterialAssets; // one per material slot of the mesh
         bool CastsShadows = true;
 
         // The loaded assets, set by ResolveMeshRenderer
@@ -73,7 +73,7 @@ namespace crimson
     // Everything below this entity comes from a scene's file, and is created when this is loaded
     struct SceneInstanceComponent
     {
-        AssetID Scene;
+        SceneID Scene;
     };
 
     // This entity came from an instance's scene, so it can't be changed here and isn't saved here

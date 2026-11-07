@@ -38,7 +38,7 @@ namespace crimson::editor
           m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
                      .ResolveMeshRenderers = [this] { ResolveAllMeshRenderers(); },
-                     .OpenScene = [this](AssetID id) { OpenScene(id); },
+                     .OpenScene = [this](SceneID id) { OpenScene(id); },
                      .OpenCodeFile = [this](const std::filesystem::path& file) { OpenInScriptEditor(m_services.Settings.GetScriptEditor(), file, m_project.Root()); } }
     {
         LOG_INFO("[Editor] Opening project '{}' at {}", m_project.Name(), m_project.Root().string());
@@ -88,9 +88,9 @@ namespace crimson::editor
 
     void ProjectSessionMode::SetupRenderer()
     {
-        m_sceneRenderer->SetToneMapMaterial(m_assetManager->LoadMaterial("engine/materials/internal/M_ToneMap.mat"), kMainTargetWidth, kMainTargetHeight);
-        m_sceneRenderer->SetShadowMaterial(m_assetManager->LoadMaterial("engine/materials/internal/M_Shadow.mat"));
-        m_sceneRenderer->SetOutlineMaterials(m_assetManager->LoadMaterial("engine/materials/internal/M_OutlineMask.mat"), m_assetManager->LoadMaterial("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetToneMapMaterial(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_ToneMap.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetShadowMaterial(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_Shadow.mat"));
+        m_sceneRenderer->SetOutlineMaterials(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_OutlineMask.mat"), m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
     }
 
     void ProjectSessionMode::SetupUI()
@@ -170,16 +170,16 @@ namespace crimson::editor
         }
     }
 
-    AssetID ProjectSessionMode::ChooseScene(AssetID preferred)
+    SceneID ProjectSessionMode::ChooseScene(AssetID preferred)
     {
-        if (const AssetInfo* info = m_assetManager->GetInfo(preferred); info && info->Type == AssetType::Scene)
-            return preferred;
+        if (const SceneID scene = m_assetManager->As<AssetType::Scene>(preferred))
+            return scene;
 
         const std::vector<const AssetInfo*> scenes = m_assetManager->List(AssetType::Scene);
-        return scenes.empty() ? m_assetManager->CreateScene("scenes/main.scene") : scenes.front()->Id;
+        return scenes.empty() ? m_assetManager->CreateScene("scenes/main.scene") : m_assetManager->As<AssetType::Scene>(scenes.front()->Id);
     }
 
-    void ProjectSessionMode::OpenScene(AssetID id)
+    void ProjectSessionMode::OpenScene(SceneID id)
     {
         if (id == m_context.ActiveSceneAsset)
             return;
@@ -202,7 +202,7 @@ namespace crimson::editor
             if (node.MeshRenderer)
             {
                 missing += assets.IsMissing(node.MeshRenderer->Mesh);
-                missing += std::ranges::count_if(node.MeshRenderer->Materials, [&](AssetID material) { return assets.IsMissing(material); });
+                missing += std::ranges::count_if(node.MeshRenderer->Materials, [&](MaterialID material) { return assets.IsMissing(material); });
             }
 
             missing += CountMissing(node.Children, assets);
@@ -211,7 +211,7 @@ namespace crimson::editor
         return missing;
     }
 
-    void ProjectSessionMode::LoadScene(AssetID id)
+    void ProjectSessionMode::LoadScene(SceneID id)
     {
         m_context.Selected = {};
         m_context.ActiveSceneAsset = {};

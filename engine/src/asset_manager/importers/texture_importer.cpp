@@ -56,7 +56,7 @@ namespace crimson
         return std::pair{ width, height };
     }
 
-    LoadedAsset TextureImporter::Load(const AssetSource& source, ImportContext& ctx)
+    std::optional<TextureHandle> TextureImporter::Load(const AssetSource& source, ImportContext& ctx)
     {
         const auto file = source.Read();
         if (!file)
@@ -70,14 +70,13 @@ namespace crimson
 
         const TextureHandle handle = CreateTextureFromMemory(ctx.Gpu, std::as_bytes(std::span(*file)), options);
         if (!handle)
-            return {};
+            return std::nullopt;
 
         return handle;
     }
 
-    void TextureImporter::Unload(const LoadedAsset& asset, GpuResourceManager& gpu)
+    void TextureImporter::Unload(TextureHandle& texture, GpuResourceManager& gpu)
     {
-        if (const auto* tex = std::get_if<TextureHandle>(&asset))
-            gpu.DestroyTexture(*tex);
+        gpu.DestroyTexture(texture);
     }
 }

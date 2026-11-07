@@ -24,14 +24,13 @@ namespace crimson
     // Width and height, without decoding the image
     [[nodiscard]] std::optional<std::pair<int, int>> ReadImageSize(std::span<const std::byte> file);
 
-    class TextureImporter final : public AssetImporter
+    class TextureImporter final : public AssetImporter<AssetType::Texture>
     {
     public:
-        AssetType Type() const override { return AssetType::Texture; }
         std::span<const std::string_view> Extensions() const override;
         nlohmann::json DefaultSettings() const override;
 
-        LoadedAsset Load(const AssetSource&, ImportContext&) override;
-        void Unload(const LoadedAsset&, GpuResourceManager&) override;
+        std::optional<TextureHandle> Load(const AssetSource&, ImportContext&) override;
+        void Unload(TextureHandle&, GpuResourceManager&) override;
     };
 }

@@ -55,10 +55,10 @@ namespace
             Assets = std::make_unique<AssetManager>(*Gpu().GPUResources, Project.Path());
             Subject = std::make_unique<SceneRenderer>(*Gpu().GPUResources, *Gpu().Renderer, ShadowAtlasSettings{ .AtlasSize = 1024, .TileSize = 256 });
 
-            Subject->SetToneMapMaterial(Assets->LoadMaterial("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
+            Subject->SetToneMapMaterial(Assets->Load<AssetType::Material>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
             Subject->SetToneMapping(1.0f, ToneMapper::None); // so that expected colors only need the sRGB encoding
-            Subject->SetShadowMaterial(Assets->LoadMaterial("engine/materials/internal/M_Shadow.mat"));
-            Subject->SetOutlineMaterials(Assets->LoadMaterial("engine/materials/internal/M_OutlineMask.mat"), Assets->LoadMaterial("engine/materials/internal/M_Outline.mat"), kSize, kSize);
+            Subject->SetShadowMaterial(Assets->Load<AssetType::Material>("engine/materials/internal/M_Shadow.mat"));
+            Subject->SetOutlineMaterials(Assets->Load<AssetType::Material>("engine/materials/internal/M_OutlineMask.mat"), Assets->Load<AssetType::Material>("engine/materials/internal/M_Outline.mat"), kSize, kSize);
 
             Lighting.AmbientColor = glm::vec3(0.0f);
         }
@@ -77,8 +77,8 @@ namespace
             transform.Scale = scale;
 
             auto& renderer = entity.AddComponent<MeshRendererComponent>();
-            renderer.MeshAsset = Assets->FindId(mesh);
-            renderer.MaterialAssets = { Assets->FindId("white.mat") };
+            renderer.MeshAsset = Assets->Find<AssetType::Mesh>(mesh);
+            renderer.MaterialAssets = { Assets->Find<AssetType::Material>("white.mat") };
             ResolveMeshRenderer(renderer, *Assets);
             REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
 
@@ -362,8 +362,8 @@ namespace
 
             const Entity entity = World.CreateEntity(name);
             auto& renderer = entity.AddComponent<MeshRendererComponent>();
-            renderer.MeshAsset = Assets->FindId("textured_wall.obj");
-            renderer.MaterialAssets = { Assets->FindId(name) };
+            renderer.MeshAsset = Assets->Find<AssetType::Mesh>("textured_wall.obj");
+            renderer.MaterialAssets = { Assets->Find<AssetType::Material>(name) };
             ResolveMeshRenderer(renderer, *Assets);
             REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
 
@@ -375,7 +375,7 @@ namespace
         {
             Project.Write(name, MakeBmp(1, 1, { color }));
             Assets->Refresh();
-            REQUIRE(Assets->ReimportTexture(Assets->FindId(name), { { "srgb", false } }));
+            REQUIRE(Assets->ReimportTexture(Assets->Find<AssetType::Texture>(name), { { "srgb", false } }));
         }
 
         float RenderCenter()
@@ -512,7 +512,7 @@ TEST_CASE_METHOD(MaterialFixture, "A normal map bends the light the same way on 
         Assets->Refresh();
 
         auto& renderer = AddMesh("wall.obj").GetComponent<MeshRendererComponent>();
-        renderer.MaterialAssets = { Assets->FindId("nouv.mat") };
+        renderer.MaterialAssets = { Assets->Find<AssetType::Material>("nouv.mat") };
         ResolveMeshRenderer(renderer, *Assets);
 
         const float right = render(kFromRight);
