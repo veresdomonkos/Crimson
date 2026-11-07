@@ -429,14 +429,15 @@ namespace crimson::vulkan
 
         if (!*material.DescriptorSet) return;
 
-        if (!m_bound.PipelineEntry || m_bound.Shader != material.Shader || m_bound.Settings != material.Settings
+        if (!m_bound.PipelineEntry || m_bound.Shader != material.Shader || m_bound.Settings != material.Settings || m_bound.Pass != draw.Pass
             || m_bound.Target != target || m_bound.VertexBufferHandle != draw.VertexBuffer)
         {
             m_bound.PipelineEntry = &m_resourceManager.GetOrCreateGraphicsPipeline({
-                .Layout = vertexBuffer.Layout, .Shader = material.Shader, .Target = target, .Settings = material.Settings
+                .Layout = vertexBuffer.Layout, .Shader = material.Shader, .Target = target, .Settings = material.Settings, .Pass = draw.Pass
             });
             m_bound.Shader = material.Shader;
             m_bound.Settings = material.Settings;
+            m_bound.Pass = draw.Pass;
             m_bound.Target = target;
             m_bound.VertexBufferHandle = draw.VertexBuffer;
         }

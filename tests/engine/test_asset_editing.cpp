@@ -1129,3 +1129,85 @@ TEST_CASE_METHOD(Fixture, "A reference to an asset of the wrong type is dropped"
     REQUIRE(data);
     CHECK(data->Textures.empty());
 }
+
+namespace
+{
+    float FloatProperty(const FakeGpuResourceManager& gpu, MaterialHandle material, const std::string& name)
+    {
+        const std::vector<std::byte>& bytes = gpu.Materials.at(material.GetRaw()).Properties.at(name);
+        REQUIRE(bytes.size() == sizeof(float));
+
+        float value = 0.0f;
+        std::memcpy(&value, bytes.data(), sizeof(float));
+        return value;
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "A cutout material cuts by its AlphaCutoff, and only a cutout one", "[asset editing]")
+{
+    Temp.Write("leaves.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "renderMode": "cutout", "properties": { "AlphaCutoff": 0.3 } })");
+
+    {
+        AssetManager assets(Gpu, Temp.Path());
+        const MaterialID id = assets.Find<AssetType::Material>("leaves.mat");
+
+        const MaterialHandle material = assets.Load(id);
+        REQUIRE(material);
+        CHECK(assets.GetMaterialData(id)->Settings.RenderMode == MaterialRenderMode::Cutout);
+        CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.3f);
+
+        SECTION("It is written back as a cutout")
+        {
+            CHECK(WriteMaterialData(*assets.GetMaterialData(id), assets).find(R"("renderMode": "cutout")") != std::string::npos);
+        }
+
+        SECTION("As an opaque one it doesn't cut, and as a cutout again it does")
+        {
+            MaterialData data = *assets.GetMaterialData(id);
+            data.Settings.RenderMode = MaterialRenderMode::Opaque;
+
+            CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.0f);
+
+            data.Settings.RenderMode = MaterialRenderMode::Cutout;
+            CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.3f);
+        }
+
+        SECTION("A dragged slider reaches the shader")
+        {
+            MaterialData data = *assets.GetMaterialData(id);
+            data.Properties["AlphaCutoff"] = { 0.7f };
+
+            CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.7f);
+        }
+    }
+
+    CHECK(Gpu.NothingAlive());
+}
+
+TEST_CASE_METHOD(Fixture, "An opaque material on S_Lit cuts nothing, whatever its AlphaCutoff", "[asset editing]")
+{
+    Temp.Write("solid.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "properties": { "AlphaCutoff": 0.9 } })");
+    AssetManager assets(Gpu, Temp.Path());
+
+    const MaterialID id = assets.Find<AssetType::Material>("solid.mat");
+    const MaterialHandle material = assets.Load(id);
+    REQUIRE(material);
+
+    CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.0f);
+}
+
+TEST_CASE_METHOD(SlotFixture, "An .mtl alpha mask makes a cutout material", "[asset editing]")
+{
+    Temp.Write("model/model.mtl", std::string(kSlotsMtl) + "\nnewmtl leaves\nmap_Kd textures/color.bmp\nmap_d textures/color_mask.bmp\n");
+    Temp.Write("model/model.obj", std::string(kSlotsObj) + "usemtl leaves\nf 1 2 3\n");
+    AssetManager assets(Gpu, Temp.Path());
+
+    const MeshID mesh = assets.Find<AssetType::Mesh>("model/model.obj");
+    REQUIRE(assets.CreateSlotMaterials(mesh).Created.size() == 4);
+
+    CHECK(assets.GetMaterialData(assets.FindSlotMaterial(mesh, "leaves"))->Settings.RenderMode == MaterialRenderMode::Cutout);
+    CHECK(assets.GetMaterialData(assets.FindSlotMaterial(mesh, "plain"))->Settings.RenderMode == MaterialRenderMode::Opaque);
+}

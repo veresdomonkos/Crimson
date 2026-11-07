@@ -1,4 +1,5 @@
-// Drawn over the whole screen, colors the pixels right outside the mask from S_OutlineMask.hlsl
+// Drawn over the whole screen, colors the pixels right outside the outlined meshes. OutlineMask is their depth, drawn
+// with each one's own depth pass, which is 1 where there are none.
 #include "crimson/bindings.hlsli"
 
 cbuffer MaterialBlock : register(b0, space2)
@@ -22,11 +23,16 @@ VertexOutput VSMain(float3 position : POSITION)
     return output;
 }
 
+bool Covered(float2 uv)
+{
+    return OutlineMask.Sample(PointClamp, uv).r < 1.0;
+}
+
 float4 PSMain(VertexOutput input) : SV_Target
 {
     static const int kThickness = 2;
 
-    if (OutlineMask.Sample(PointClamp, input.UV).r > 0.5)
+    if (Covered(input.UV))
         return float4(0.0, 0.0, 0.0, 0.0);
 
     uint width, height;
@@ -37,7 +43,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     {
         for (int x = -kThickness; x <= kThickness; ++x)
         {
-            if (OutlineMask.Sample(PointClamp, input.UV + float2(x, y) * texelSize).r > 0.5)
+            if (Covered(input.UV + float2(x, y) * texelSize))
                 return OutlineColor;
         }
     }

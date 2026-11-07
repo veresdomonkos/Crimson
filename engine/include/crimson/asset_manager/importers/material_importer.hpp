@@ -1,5 +1,7 @@
 #pragma once
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "crimson/asset_manager/asset_importer.hpp"
 #include "crimson/asset_manager/material_data.hpp"
@@ -8,6 +10,9 @@ namespace crimson
 {
     // Sets the settings, properties and textures the data lists on an existing material
     void ApplyMaterialValues(const MaterialData& data, MaterialHandle material, ImportContext& ctx);
+
+    // Sets one property, of 1 to 4 floats
+    void ApplyMaterialProperty(GpuResourceManager& gpu, MaterialHandle material, const std::string& name, const std::vector<float>& values);
 
     // Sets every property the shader declares a default for
     void ApplyShaderPropertyDefaults(ShaderHandle shader, MaterialHandle material, ImportContext& ctx);

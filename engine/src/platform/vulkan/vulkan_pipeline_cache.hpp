@@ -6,6 +6,7 @@
 #include "crimson/renderer/buffer_layout.hpp"
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
+#include "crimson/renderer/shader_pass.hpp"
 
 namespace crimson::vulkan
 {
@@ -15,10 +16,11 @@ namespace crimson::vulkan
         ShaderHandle Shader;
         RenderTargetHandle Target;
         MaterialSettings Settings;
+        ShaderPass Pass = ShaderPass::Main;
 
         bool operator==(const GraphicsPipelineInfo& other) const
         {
-            return Layout == other.Layout && Shader == other.Shader && Target == other.Target && Settings == other.Settings;
+            return Layout == other.Layout && Shader == other.Shader && Target == other.Target && Settings == other.Settings && Pass == other.Pass;
         }
     };
 
@@ -42,6 +44,7 @@ namespace crimson::vulkan
             HashCombine(hash, key.Target.GetRaw());
             HashCombine(hash, static_cast<size_t>(key.Settings.RenderMode));
             HashCombine(hash, static_cast<size_t>(key.Settings.Cull));
+            HashCombine(hash, static_cast<size_t>(key.Pass));
 
             return hash;
         }

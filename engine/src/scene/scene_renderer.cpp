@@ -100,17 +100,17 @@ namespace crimson
         m_resources.SetMaterialPropertyByName(m_toneMapMaterial, "ToneMapper", static_cast<float>(mapper));
     }
 
-    void SceneRenderer::SetOutlineMaterials(MaterialHandle mask, MaterialHandle outline, uint32_t width, uint32_t height)
+    void SceneRenderer::SetOutlineMaterial(MaterialHandle outline, uint32_t width, uint32_t height)
     {
-        if (!mask || !outline)
+        if (!outline)
             return;
 
-        m_outlineMaskMaterial = mask;
         m_outlineMaterial = outline;
 
-        const RenderTargetInfo info{ .Width = width, .Height = height, .ColorFormats = { TextureFormat::RGBA8 } };
+        // The outlined meshes' depth, drawn like a shadow, so their shaders decide their shape there too
+        const RenderTargetInfo info{ .Width = width, .Height = height, .DepthFormat = TextureFormat::Depth32F };
         m_outlineMaskTarget = m_resources.CreateRenderTarget(info);
-        m_resources.SetMaterialTexture(outline, "OutlineMask", m_resources.GetColorAttachment(m_outlineMaskTarget, 0));
+        m_resources.SetMaterialTexture(outline, "OutlineMask", m_resources.GetDepthAttachment(m_outlineMaskTarget).value());
 
         CreateScreenTriangle();
     }
@@ -184,7 +184,7 @@ namespace crimson
             for (const Drawable& drawable : m_drawables)
             {
                 if (drawable.CastsShadows)
-                    pass.Draw(*drawable.Mesh, drawable.Object, m_shadowMaterial);
+                    pass.Draw(*drawable.Mesh, drawable.Object, {}, ShaderPass::Depth);
             }
         }
 
@@ -219,8 +219,7 @@ namespace crimson
     {
         RenderPassInfo info{
             .Target = m_outlineMaskTarget,
-            .ClearFlags = ClearFlags::Color,
-            .ClearColor = glm::vec4(0.0f),
+            .ClearFlags = ClearFlags::Depth,
             .ViewProj = mainPass.ViewProj,
             .CameraPosition = mainPass.CameraPosition
         };
@@ -230,7 +229,7 @@ namespace crimson
         for (const Drawable& drawable : m_drawables)
         {
             if (drawable.Outlined)
-                pass.Draw(*drawable.Mesh, drawable.Object, m_outlineMaskMaterial);
+                pass.Draw(*drawable.Mesh, drawable.Object, {}, ShaderPass::Depth);
         }
     }
 }

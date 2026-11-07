@@ -170,31 +170,39 @@ namespace crimson::opengl
         return vao;
     }
 
-    ShaderHandle OpenGLResourceManager::CreateShader(const ShaderBinary& binary)
+    std::optional<OpenGLProgram> OpenGLResourceManager::LinkProgram(std::span<const uint32_t> vertexSpirv, std::span<const uint32_t> pixelSpirv) const
     {
-        auto shaderInterface = ReflectShaderInterface(binary);
-        if (!shaderInterface) return ShaderHandle::Invalid();
-
         std::vector<GlslTextureUnit> textureUnits;
 
-        const auto vertexSource = TranslateSpirvToGlsl(binary.Vertex, textureUnits);
-        const auto fragmentSource = TranslateSpirvToGlsl(binary.Pixel, textureUnits);
-        if (!vertexSource || !fragmentSource) return ShaderHandle::Invalid();
+        const auto vertexSource = TranslateSpirvToGlsl(vertexSpirv, textureUnits);
+        if (!vertexSource) return std::nullopt;
 
-        GLuint vertex = CompileShader(GL_VERTEX_SHADER, *vertexSource);
-        if (vertex == 0) return ShaderHandle::Invalid();
-
-        GLuint fragment = CompileShader(GL_FRAGMENT_SHADER, *fragmentSource);
-        if (fragment == 0)
+        // No pixel stage is fine for a depth program, as depth comes from the vertex shader
+        std::optional<std::string> fragmentSource;
+        if (!pixelSpirv.empty())
         {
-            glDeleteShader(vertex);
-            return ShaderHandle::Invalid();
+            fragmentSource = TranslateSpirvToGlsl(pixelSpirv, textureUnits);
+            if (!fragmentSource) return std::nullopt;
+        }
+
+        std::vector<GLuint> stages;
+        const auto deleteStages = [&stages] { for (const GLuint stage : stages) glDeleteShader(stage); };
+
+        stages.push_back(CompileShader(GL_VERTEX_SHADER, *vertexSource));
+        if (fragmentSource)
+            stages.push_back(CompileShader(GL_FRAGMENT_SHADER, *fragmentSource));
+
+        if (std::ranges::contains(stages, 0u))
+        {
+            deleteStages();
+            return std::nullopt;
         }
 
         GLuint program = glCreateProgram();
-        glAttachShader(program, vertex);
-        glAttachShader(program, fragment);
+        for (const GLuint stage : stages)
+            glAttachShader(program, stage);
         glLinkProgram(program);
+        deleteStages();
 
         GLint success = 0;
         glGetProgramiv(program, GL_LINK_STATUS, &success);
@@ -205,27 +213,42 @@ namespace crimson::opengl
             LOG_ERROR("Shader link error: {}", log);
 
             glDeleteProgram(program);
-            glDeleteShader(vertex);
-            glDeleteShader(fragment);
-            return ShaderHandle::Invalid();
+            return std::nullopt;
         }
 
-        glDeleteShader(vertex);
-        glDeleteShader(fragment);
-
-        OpenGLShader shader {.GLHandle = program};
-        shader.Interface = std::move(*shaderInterface);
-        shader.ObjectIndexLocation = glGetUniformLocation(program, fmt::format("{}.ObjectIndex", kDrawUniformName).c_str());
+        OpenGLProgram result{ .GLHandle = program };
+        result.ObjectIndexLocation = glGetUniformLocation(program, fmt::format("{}.ObjectIndex", kDrawUniformName).c_str());
 
         for (const GlslTextureUnit& unit : textureUnits)
         {
-            shader.TextureUnits.push_back({
+            result.TextureUnits.push_back({
                 .Texture = unit.Texture,
                 .Sampler = GetSharedSampler(unit.Sampler),
                 .Unit = unit.Unit,
                 .IsShadowAtlas = unit.Texture == "ShadowAtlas"
             });
         }
+
+        return result;
+    }
+
+    ShaderHandle OpenGLResourceManager::CreateShader(const ShaderBinary& binary)
+    {
+        auto shaderInterface = ReflectShaderInterface(binary);
+        if (!shaderInterface) return ShaderHandle::Invalid();
+
+        std::optional<OpenGLProgram> main = LinkProgram(binary.Vertex, binary.Pixel);
+        if (!main) return ShaderHandle::Invalid();
+
+        std::optional<OpenGLProgram> depth = LinkProgram(binary.Vertex, binary.PixelDepth);
+        if (!depth)
+        {
+            glDeleteProgram(main->GLHandle);
+            return ShaderHandle::Invalid();
+        }
+
+        OpenGLShader shader{ .Main = std::move(*main), .Depth = std::move(*depth) };
+        shader.Interface = std::move(*shaderInterface);
 
         return m_shaders.Register(std::move(shader));
     }
@@ -234,7 +257,9 @@ namespace crimson::opengl
     {
         if (handle)
         {
-            glDeleteProgram(m_shaders.Get(handle).GLHandle);
+            const OpenGLShader& shader = m_shaders.Get(handle);
+            glDeleteProgram(shader.Main.GLHandle);
+            glDeleteProgram(shader.Depth.GLHandle);
             m_shaders.Unregister(handle);
         }
     }
@@ -242,7 +267,7 @@ namespace crimson::opengl
     MaterialHandle OpenGLResourceManager::CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings)
     {
         const OpenGLShader& shader = m_shaders.Get(shaderHandle);
-        if (!shader.GLHandle)
+        if (!shader.Main.GLHandle)
         {
             LOG_ERROR("Cannot create material form invalid ShaderHandle!");
             return MaterialHandle::Invalid();

@@ -49,10 +49,57 @@ TEST_CASE("Every engine shader compiles, reflects and translates to GLSL", "[sha
             std::vector<opengl::GlslTextureUnit> units;
             CHECK(opengl::TranslateSpirvToGlsl(binary->Vertex, units));
             CHECK(opengl::TranslateSpirvToGlsl(binary->Pixel, units));
+
+            // OpenGL links the depth version as a program of its own
+            if (!binary->PixelDepth.empty())
+            {
+                std::vector<opengl::GlslTextureUnit> depthUnits;
+                CHECK(binary->PixelDepth[0] == kSpirvMagic);
+                CHECK(opengl::TranslateSpirvToGlsl(binary->PixelDepth, depthUnits));
+            }
         }
     }
 
-    CHECK(shaders >= 4);
+    CHECK(shaders >= 3);
+}
+
+TEST_CASE("A shader can have its own depth version, for the shadows and the outline", "[shaders]")
+{
+    SECTION("S_Lit has one, which cuts out like it")
+    {
+        const EmbeddedFile* lit = FindEmbeddedFile(GetEngineResources(), "shaders/S_Lit.hlsl");
+        REQUIRE(lit);
+
+        const auto binary = CompileHlslShader("S_Lit.hlsl", std::string(lit->Text()), {});
+        REQUIRE(binary);
+        CHECK_FALSE(binary->PixelDepth.empty());
+    }
+
+    SECTION("Without one there is none, and nothing goes wrong")
+    {
+        const auto binary = CompileHlslShader("minimal", std::string(kMinimalShader), {});
+        REQUIRE(binary);
+        CHECK(binary->PixelDepth.empty());
+    }
+
+    SECTION("What only it uses is part of the material")
+    {
+        const auto binary = CompileHlslShader("depth_only", std::string(kMinimalShader) + R"(
+cbuffer MaterialBlock : register(b0, space2) { float Cutoff; };
+Texture2D Mask : register(t0, space2);
+void PSDepth(float4 position : SV_Position) { clip(Mask.Load(int3(0, 0, 0)).a - Cutoff); }
+)", {});
+        REQUIRE(binary);
+        REQUIRE_FALSE(binary->PixelDepth.empty());
+
+        const auto shaderInterface = ReflectShaderInterface(*binary);
+        REQUIRE(shaderInterface);
+        CHECK(shaderInterface->Textures.contains("Mask"));
+        CHECK(shaderInterface->Properties.contains("Cutoff"));
+
+        std::vector<opengl::GlslTextureUnit> units;
+        CHECK(opengl::TranslateSpirvToGlsl(binary->PixelDepth, units));
+    }
 }
 
 TEST_CASE("Every engine material names an engine shader", "[shaders]")
@@ -75,7 +122,7 @@ TEST_CASE("Every engine material names an engine shader", "[shaders]")
         CHECK(FindEmbeddedFile(resources, std::string_view(shader).substr(7)) != nullptr);
     }
 
-    CHECK(materials >= 4);
+    CHECK(materials >= 3);
 }
 
 TEST_CASE("Embedded files can be found by their path", "[shaders]")

@@ -102,10 +102,14 @@ namespace crimson
             return id;
         };
 
-        // Exporters write 0 for an opaque one as often as 1, so only a value in between means see-through
+        // Exporters write 0 for an opaque one as often as 1, so only a value in between means see-through. An alpha mask
+        // means leaves and fences, with holes rather than see-through. The color texture's own alpha does the cutting, as
+        // exporters give the mask separately even when the color texture has it too.
         const bool transparent = mtl.dissolve > 0.0f && mtl.dissolve < 1.0f;
         if (transparent)
             data.Settings.RenderMode = MaterialRenderMode::Transparent;
+        else if (!mtl.alpha_texname.empty())
+            data.Settings.RenderMode = MaterialRenderMode::Cutout;
 
         // With a texture, the color is the texture's. Exporters write a gray Kd next to one, which would only darken it.
         if (const TextureID color = texture(mtl.diffuse_texname))
@@ -152,9 +156,8 @@ namespace crimson
             return a == b;
         };
 
-        // What the default shader has no slot for. An alpha mask is a cutout, which materials can't do yet.
+        // What the default shader has no slot for
         std::vector<std::string_view> unused;
-        if (!mtl.alpha_texname.empty())                                                           unused.push_back("map_d");
         if (!mtl.specular_texname.empty())                                                        unused.push_back("map_Ks");
         if (!mtl.ambient_texname.empty() && !sameFile(mtl.ambient_texname, mtl.diffuse_texname)) unused.push_back("map_Ka");
         if (!mtl.roughness_texname.empty())                                                       unused.push_back("map_Pr");

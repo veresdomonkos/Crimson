@@ -12,6 +12,7 @@
 #include "crimson/renderer/buffer_layout.hpp"
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
+#include "crimson/renderer/shader_pass.hpp"
 #include "crimson/renderer/shader_property_info.hpp"
 #include "shader/shader_reflection.hpp"
 
@@ -65,13 +66,21 @@ namespace crimson::opengl
         bool IsShadowAtlas = false;
     };
 
-    struct OpenGLShader
+    struct OpenGLProgram
     {
         GLuint GLHandle = 0;
         GLint ObjectIndexLocation = -1;
+        std::vector<OpenGLShaderTextureUnit> TextureUnits;
+    };
+
+    struct OpenGLShader
+    {
+        OpenGLProgram Main;
+        OpenGLProgram Depth; // VSMain with PSDepth, or alone, for the passes that only need depth
 
         ShaderInterface Interface;
-        std::vector<OpenGLShaderTextureUnit> TextureUnits;
+
+        [[nodiscard]] const OpenGLProgram& For(ShaderPass pass) const { return pass == ShaderPass::Depth ? Depth : Main; }
     };
 
     struct OpenGLMaterial

@@ -10,7 +10,8 @@
 
 namespace crimson
 {
-    // Compiles VSMain and PSMain from HLSL source to SPIR-V. Includes resolve relative to includeDirectory,
+    // Compiles VSMain and PSMain from HLSL source to SPIR-V, and PSDepth if the source declares a "void PSDepth(".
+    // Includes resolve relative to includeDirectory,
     // then to the engine's shaders, and the name is what errors report. Errors go to the log.
     // includedFiles gets the files read from includeDirectory, even when it fails, as fixing one of them can fix it.
     [[nodiscard]] std::optional<ShaderBinary> CompileHlslShader(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory,

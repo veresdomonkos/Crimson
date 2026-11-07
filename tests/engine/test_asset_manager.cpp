@@ -256,8 +256,8 @@ TEST_CASE("Engine assets are always there, with the same id everywhere", "[asset
     AssetManager a(gpu, projectA.Path());
     AssetManager b(gpu, projectB.Path());
 
-    for (const char* path : { "engine/materials/M_Default.mat", "engine/materials/internal/M_Shadow.mat", "engine/materials/internal/M_Outline.mat",
-                              "engine/materials/internal/M_OutlineMask.mat", "engine/shaders/S_Lit.hlsl" })
+    for (const char* path : { "engine/materials/M_Default.mat", "engine/materials/internal/M_ToneMap.mat", "engine/materials/internal/M_Outline.mat",
+                              "engine/shaders/S_Lit.hlsl" })
     {
         CAPTURE(path);
         CHECK(a.FindId(path));
@@ -793,7 +793,7 @@ TEST_CASE("The renderer's own shaders and materials are internal", "[assets]")
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, fs::path("does/not/exist"));
 
-    for (const std::string_view path : { "engine/shaders/internal/S_ToneMap.hlsl", "engine/materials/internal/M_Shadow.mat" })
+    for (const std::string_view path : { "engine/shaders/internal/S_ToneMap.hlsl", "engine/materials/internal/M_Outline.mat" })
     {
         const AssetInfo* info = assets.GetInfo(assets.FindId(path));
         REQUIRE(info);

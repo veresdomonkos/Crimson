@@ -11,6 +11,7 @@
 
 #include "frame_data.hpp"
 #include "mesh.hpp"
+#include "shader_pass.hpp"
 #include "native_handles.hpp"
 
 namespace crimson
@@ -28,6 +29,7 @@ namespace crimson
         uint32_t FirstIndex = 0;
         uint32_t IndexCount = 0;
         ObjectId Object = 0;
+        ShaderPass Pass = ShaderPass::Main;
     };
 
     class RenderPass
@@ -46,13 +48,14 @@ namespace crimson
                 m_drawInfos.emplace_back(drawInfo);
         }
 
-        // A valid materialOverride replaces the materials of all submeshes, as a shadow pass needs
-        void Draw(const Mesh& mesh, ObjectId object = 0, MaterialHandle materialOverride = {})
+        // A valid materialOverride replaces the materials of all submeshes. A depth pass, like the shadows, draws each with
+        // its own material's depth version, so what its shader does to the shape shows there too.
+        void Draw(const Mesh& mesh, ObjectId object = 0, MaterialHandle materialOverride = {}, ShaderPass pass = ShaderPass::Main)
         {
             for (auto subMesh : mesh.SubMeshes)
             {
                 const MaterialHandle material = materialOverride ? materialOverride : mesh.Materials[subMesh.MaterialSlot];
-                Draw(DrawInfo{ mesh.VB, mesh.IB, material, subMesh.FirstIndex, subMesh.IndexCount, object });
+                Draw(DrawInfo{ mesh.VB, mesh.IB, material, subMesh.FirstIndex, subMesh.IndexCount, object, pass });
             }
         }
 

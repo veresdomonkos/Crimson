@@ -237,6 +237,8 @@ namespace crimson::vulkan
 
             shader.Vertex = CreateShaderModule(binary.Vertex);
             shader.Fragment = CreateShaderModule(binary.Pixel);
+            if (!binary.PixelDepth.empty())
+                shader.FragmentDepth = CreateShaderModule(binary.PixelDepth);
             shader.Interface = std::move(*shaderInterface);
 
             const auto stageFlags = [](bool vertex, bool pixel)
@@ -697,14 +699,20 @@ namespace crimson::vulkan
         const bool hasDepth = static_cast<bool>(target.DepthAttachment);
         const vk::Format depthFormat = hasDepth ? GetTexture(target.DepthAttachment).Format : vk::Format::eUndefined;
 
+        // A depth pass uses PSDepth, or no fragment stage at all, as depth comes from the vertex shader
+        const bool depthPass = info.Pass == ShaderPass::Depth;
+        const vk::ShaderModule fragment = depthPass ? *shader.FragmentDepth : *shader.Fragment;
+
         std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages{};
         shaderStages[0].stage = vk::ShaderStageFlagBits::eVertex;
         shaderStages[0].module = *shader.Vertex;
         shaderStages[0].pName = "main";
 
         shaderStages[1].stage = vk::ShaderStageFlagBits::eFragment;
-        shaderStages[1].module = *shader.Fragment;
+        shaderStages[1].module = fragment;
         shaderStages[1].pName = "main";
+
+        const uint32_t stageCount = fragment ? 2u : 1u;
 
         vk::VertexInputBindingDescription binding{};
         binding.binding = 0;
@@ -766,7 +774,8 @@ namespace crimson::vulkan
 
         vk::PipelineDepthStencilStateCreateInfo depthState{};
         depthState.depthTestEnable = hasDepth ? VK_TRUE : VK_FALSE;
-        const bool isTransparent = info.Settings.RenderMode == MaterialRenderMode::Transparent;
+        // A depth pass draws everything as opaque, so a transparent mesh still casts its shadow
+        const bool isTransparent = !depthPass && info.Settings.RenderMode == MaterialRenderMode::Transparent;
 
         depthState.depthWriteEnable = hasDepth && !isTransparent ? VK_TRUE : VK_FALSE;
         depthState.depthCompareOp = vk::CompareOp::eLessOrEqual;
@@ -817,7 +826,7 @@ namespace crimson::vulkan
 
             vk::GraphicsPipelineCreateInfo pipelineInfo{};
             pipelineInfo.pNext = &renderingInfo;
-            pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+            pipelineInfo.stageCount = stageCount;
             pipelineInfo.pStages = shaderStages.data();
             pipelineInfo.pVertexInputState = &vertexInputInfo;
             pipelineInfo.pInputAssemblyState = &inputAssemblyInfo;

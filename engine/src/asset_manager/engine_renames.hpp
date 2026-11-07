@@ -13,7 +13,7 @@ namespace crimson
     // Engine assets that were renamed. What a project saved with an old path, or the id made from it, still finds the
     // asset, and opening the project writes the new one into its files. A rename only goes at the end, also for an
     // asset renamed before, and isn't needed for one that was never in a release.
-    inline constexpr std::array<EngineRename, 16> kRenamedEngineAssets = { {
+    inline constexpr std::array<EngineRename, 12> kRenamedEngineAssets = { {
         { "engine/shaders/main.hlsl",          "engine/shaders/S_Lit.hlsl" },
         { "engine/materials/default.mat",      "engine/materials/M_Default.mat" },
         { "engine/meshes/cube.obj",            "engine/meshes/SM_Cube.obj" },
@@ -23,13 +23,9 @@ namespace crimson
         { "engine/meshes/plane.obj",           "engine/meshes/SM_Plane.obj" },
         { "engine/meshes/quad.obj",            "engine/meshes/SM_Quad.obj" },
         { "engine/shaders/tonemap.hlsl",       "engine/shaders/internal/S_ToneMap.hlsl" },
-        { "engine/shaders/shadow.hlsl",        "engine/shaders/internal/S_Shadow.hlsl" },
         { "engine/shaders/outline.hlsl",       "engine/shaders/internal/S_Outline.hlsl" },
-        { "engine/shaders/outline_mask.hlsl",  "engine/shaders/internal/S_OutlineMask.hlsl" },
         { "engine/materials/tonemap.mat",      "engine/materials/internal/M_ToneMap.mat" },
-        { "engine/materials/shadow.mat",       "engine/materials/internal/M_Shadow.mat" },
         { "engine/materials/outline.mat",      "engine/materials/internal/M_Outline.mat" },
-        { "engine/materials/outline_mask.mat", "engine/materials/internal/M_OutlineMask.mat" },
     } };
 
     // Where a path ends up through the renames, for an asset renamed more than once. Empty if that doesn't exist, which a

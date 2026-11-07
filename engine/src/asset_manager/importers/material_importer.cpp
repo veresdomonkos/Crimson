@@ -7,7 +7,7 @@
 
 namespace crimson
 {
-    static void ApplyProperty(GpuResourceManager& gpu, MaterialHandle material, const std::string& name, const std::vector<float>& v)
+    void ApplyMaterialProperty(GpuResourceManager& gpu, MaterialHandle material, const std::string& name, const std::vector<float>& v)
     {
         switch (v.size())
         {
@@ -25,7 +25,7 @@ namespace crimson
         ctx.Gpu.SetMaterialSettings(material, data.Settings);
 
         for (const auto& [name, values] : data.Properties)
-            ApplyProperty(ctx.Gpu, material, name, values);
+            ApplyMaterialProperty(ctx.Gpu, material, name, values);
 
         for (const auto& [slot, id] : data.Textures)
         {
@@ -42,6 +42,14 @@ namespace crimson
 
             ctx.Gpu.SetMaterialTexture(material, slot, texture);
         }
+
+        // Only a cutout material cuts, so the shader's AlphaCutoff is 0 for any other, which nothing is under
+        if (data.Settings.RenderMode != MaterialRenderMode::Cutout)
+        {
+            const ShaderHandle shader = ctx.Assets.Load(data.Shader);
+            if (shader && ctx.Gpu.GetShaderInterface(shader).Properties.contains("AlphaCutoff"))
+                ctx.Gpu.SetMaterialPropertyByName(material, "AlphaCutoff", 0.0f);
+        }
     }
 
     void ApplyShaderPropertyDefaults(ShaderHandle shader, MaterialHandle material, ImportContext& ctx)
@@ -49,7 +57,7 @@ namespace crimson
         for (const auto& [name, property] : ctx.Gpu.GetShaderInterface(shader).Properties)
         {
             if (!property.Default.empty())
-                ApplyProperty(ctx.Gpu, material, name, property.Default);
+                ApplyMaterialProperty(ctx.Gpu, material, name, property.Default);
         }
     }
 

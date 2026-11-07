@@ -40,6 +40,7 @@ namespace crimson::opengl
         std::vector<DrawSortEntry> m_drawOrder;
         OpenGLStateCache m_state;
         MaterialHandle m_boundMaterial;
+        ShaderPass m_boundPass = ShaderPass::Main;
         VertexBufferHandle m_boundVertexBuffer;
         IndexBufferHandle m_boundIndexBuffer;
         ObjectId m_boundObject = 0;

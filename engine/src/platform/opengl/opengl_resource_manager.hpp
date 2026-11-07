@@ -1,4 +1,7 @@
 #pragma once
+#include <cstdint>
+#include <optional>
+#include <span>
 #include <string_view>
 #include "opengl_device.hpp"
 #include "opengl_resources.hpp"
@@ -48,6 +51,7 @@ namespace crimson::opengl
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
     private:
         static GLuint CompileShader(GLenum type, std::string_view source);
+        [[nodiscard]] std::optional<OpenGLProgram> LinkProgram(std::span<const uint32_t> vertexSpirv, std::span<const uint32_t> pixelSpirv) const;
         [[nodiscard]] GLuint GetSharedSampler(std::string_view name) const;
     private:
         VertexArrayCache m_vertexArrays;

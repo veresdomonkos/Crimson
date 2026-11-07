@@ -28,10 +28,9 @@ namespace crimson
         SceneRenderer(const SceneRenderer&) = delete;
         SceneRenderer& operator=(const SceneRenderer&) = delete;
 
-        void SetShadowMaterial(MaterialHandle material) { m_shadowMaterial = material; }
-
-        // Enables outlines on a target of this size. The outline material samples the mask from its OutlineMask texture.
-        void SetOutlineMaterials(MaterialHandle mask, MaterialHandle outline, uint32_t width, uint32_t height);
+        // Enables outlines on a target of this size. The outline material samples the outlined meshes' depth from its
+        // OutlineMask texture, which is 1 where there are none.
+        void SetOutlineMaterial(MaterialHandle outline, uint32_t width, uint32_t height);
 
         // Enables rendering the scene to an HDR target of this size, which the material maps to the main pass's target.
         // The material samples the scene from its SceneColor texture. The main pass's target then needs no depth buffer.
@@ -65,13 +64,11 @@ namespace crimson
         ShadowAtlasSettings m_atlas;
         RenderTargetHandle m_shadowTarget;
         TextureHandle m_shadowAtlas;
-        MaterialHandle m_shadowMaterial;
 
         RenderTargetHandle m_hdrTarget;
         MaterialHandle m_toneMapMaterial;
 
         RenderTargetHandle m_outlineMaskTarget;
-        MaterialHandle m_outlineMaskMaterial;
         MaterialHandle m_outlineMaterial;
         VertexBufferHandle m_screenTriangleVertices;
         IndexBufferHandle m_screenTriangleIndices;

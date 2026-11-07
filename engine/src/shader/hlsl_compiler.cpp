@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -93,7 +94,8 @@ namespace crimson
             shader.setStringsWithLengthsAndNames(&sourceData, &sourceLength, &sourceName, 1);
             shader.setEnvInput(glslang::EShSourceHlsl, stage, glslang::EShClientVulkan, kDefaultVersion);
             shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_3);
-            shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_6);
+            // Not 1.6, where discard and clip become a demote to a helper invocation, which GLSL for OpenGL can't do
+            shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_5);
             shader.setEntryPoint("main");
             shader.setSourceEntryPoint(entryPoint);
             shader.setAutoMapLocations(true);
@@ -136,12 +138,18 @@ namespace crimson
         auto vertex = CompileStage(name, source, includeDirectory, included, EShLangVertex, "VSMain");
         auto pixel = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSMain");
 
+        // Only when it is there, as glslang reports a missing entry point as an error
+        static const std::regex kDepthEntryPoint(R"(\bvoid\s+PSDepth\s*\()");
+        std::optional<std::vector<uint32_t>> pixelDepth = std::vector<uint32_t>();
+        if (std::regex_search(source, kDepthEntryPoint))
+            pixelDepth = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSDepth");
+
         if (includedFiles)
             *includedFiles = std::move(included);
 
-        if (!vertex || !pixel)
+        if (!vertex || !pixel || !pixelDepth)
             return std::nullopt;
 
-        return ShaderBinary{ std::move(*vertex), std::move(*pixel), ParseShaderAnnotations(source) };
+        return ShaderBinary{ std::move(*vertex), std::move(*pixel), ParseShaderAnnotations(source), std::move(*pixelDepth) };
     }
 }

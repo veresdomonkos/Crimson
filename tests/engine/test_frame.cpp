@@ -100,9 +100,10 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
         CHECK(pass.GetDraws()[0].Material == kMaterial);
         CHECK(pass.GetDraws()[0].IndexCount == 3);
         CHECK(pass.GetDraws()[0].Object == 5);
+        CHECK(pass.GetDraws()[0].Pass == ShaderPass::Main);
     }
 
-    SECTION("An override replaces all of them, as a shadow pass needs")
+    SECTION("An override replaces all of them")
     {
         RenderPass pass;
         pass.Draw(mesh, 0, kOverride);
@@ -110,6 +111,16 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
         REQUIRE(pass.GetDraws().size() == 2);
         CHECK(pass.GetDraws()[0].Material == kOverride);
         CHECK(pass.GetDraws()[1].Material == kOverride);
+    }
+
+    SECTION("A depth pass keeps each one's own material, in its depth version")
+    {
+        RenderPass pass;
+        pass.Draw(mesh, 0, {}, ShaderPass::Depth);
+
+        REQUIRE(pass.GetDraws().size() == 1);
+        CHECK(pass.GetDraws()[0].Material == kMaterial);
+        CHECK(pass.GetDraws()[0].Pass == ShaderPass::Depth);
     }
 }
 

@@ -84,8 +84,30 @@ Includes resolve relative to the shader's folder, then to the engine's shaders.
 | `NormalStrength` | 1 | scales `NormalMap`, with green pointing up in the image (the OpenGL convention, which glTF uses too) |
 | `OcclusionStrength` | 1 | how much `OcclusionMap` (red) darkens ambient light |
 | `EmissiveColor`, `EmissiveStrength` | black, 1 | linear, multiplied with `EmissiveMap` |
+| `AlphaCutoff` | 0.5 | for a cutout material, where the alpha of `Color` times `ColorMap` is under it there is nothing |
 
 Normal maps don't need tangents in the mesh, as the shader works out the directions from how position and UV change between pixels. A mesh without UVs stays flat.
+
+### Cutout
+
+A material whose render mode is **Cutout** has holes where its alpha is under its `AlphaCutoff`, for leaves, fences and chains. Unlike Transparent, it writes depth and needs no sorting. The engine only gives the shader the material's `AlphaCutoff` while its mode is Cutout, and 0 otherwise, so an opaque material never loses a pixel. A shader of your own can be cut out too, by declaring a `float AlphaCutoff` property and ending its pixel shader with `clip(alpha - AlphaCutoff)`. Put the `clip` last: a discarded pixel stops at once, and what comes after it in the pixels around it, such as the derivatives normal mapping uses, would be wrong. For the holes to show in the shadows and the selection outline too, give it a `PSDepth` that clips the same way, as `S_Lit` does.
+
+## Depth passes
+
+The shadows and the selection outline only need to know where a mesh is, so they draw it with its material's **depth version**: the shader's `VSMain`, and its `PSDepth` if it has one. A mesh's shadow therefore has whatever shape its shader gives it, with nothing extra to write for a shader that moves its vertices.
+
+```hlsl
+// Optional. Takes what VSMain outputs, returns nothing, and is only there to discard.
+void PSDepth(VertexOutput input)
+{
+    clip(Mask.Sample(LinearWrap, input.UV).a - AlphaCutoff);
+}
+```
+
+- **Without a `PSDepth`** there is no pixel shader in those passes at all, and the depth comes straight from `VSMain`.
+- **It can use the material's properties and textures,** like `PSMain`, and what only it uses is still part of the material.
+- **It must not sample `ShadowAtlas`,** as the shadow pass is drawing into it.
+- **Every material draws there as opaque,** with its own cull mode, so a transparent mesh still casts its shadow.
 
 ## Color and light
 
