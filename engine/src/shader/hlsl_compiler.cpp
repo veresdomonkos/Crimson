@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -137,12 +138,18 @@ namespace crimson
         auto vertex = CompileStage(name, source, includeDirectory, included, EShLangVertex, "VSMain");
         auto pixel = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSMain");
 
+        // Only when it is there, as glslang reports a missing entry point as an error
+        static const std::regex kDepthEntryPoint(R"(\bvoid\s+PSDepth\s*\()");
+        std::optional<std::vector<uint32_t>> pixelDepth = std::vector<uint32_t>();
+        if (std::regex_search(source, kDepthEntryPoint))
+            pixelDepth = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSDepth");
+
         if (includedFiles)
             *includedFiles = std::move(included);
 
-        if (!vertex || !pixel)
+        if (!vertex || !pixel || !pixelDepth)
             return std::nullopt;
 
-        return ShaderBinary{ std::move(*vertex), std::move(*pixel), ParseShaderAnnotations(source) };
+        return ShaderBinary{ std::move(*vertex), std::move(*pixel), ParseShaderAnnotations(source), std::move(*pixelDepth) };
     }
 }

@@ -1145,72 +1145,42 @@ namespace
 
 TEST_CASE_METHOD(Fixture, "A cutout material cuts by its AlphaCutoff, and only a cutout one", "[asset editing]")
 {
-    Temp.Write("leaves.bmp", MakeImage());
-    Temp.Write("leaves.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "renderMode": "cutout", "properties": { "AlphaCutoff": 0.3 }, "textures": { "ColorMap": "leaves.bmp" } })");
+    Temp.Write("leaves.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "renderMode": "cutout", "properties": { "AlphaCutoff": 0.3 } })");
 
     {
         AssetManager assets(Gpu, Temp.Path());
         const MaterialID id = assets.Find<AssetType::Material>("leaves.mat");
-        const TextureID texture = assets.Find<AssetType::Texture>("leaves.bmp");
 
         const MaterialHandle material = assets.Load(id);
         REQUIRE(material);
         CHECK(assets.GetMaterialData(id)->Settings.RenderMode == MaterialRenderMode::Cutout);
         CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.3f);
 
-        // What the shadows and the outline draw it with have its texture and its cutoff
-        const CutoutMaterials cutout = assets.GetCutoutMaterials(id);
-        REQUIRE(cutout.Shadow);
-        REQUIRE(cutout.Mask);
-
-        for (const MaterialHandle companion : { cutout.Shadow, cutout.Mask })
-        {
-            CHECK(Gpu.Materials.at(companion.GetRaw()).Textures.at("ColorMap") == assets.Load(texture));
-            CHECK(FloatProperty(Gpu, companion, "AlphaCutoff") == 0.3f);
-            CHECK(Gpu.Materials.at(companion.GetRaw()).Settings.RenderMode == MaterialRenderMode::Opaque);
-        }
-
         SECTION("It is written back as a cutout")
         {
             CHECK(WriteMaterialData(*assets.GetMaterialData(id), assets).find(R"("renderMode": "cutout")") != std::string::npos);
         }
 
-        SECTION("As an opaque one it doesn't cut, and its companions go")
+        SECTION("As an opaque one it doesn't cut, and as a cutout again it does")
         {
             MaterialData data = *assets.GetMaterialData(id);
             data.Settings.RenderMode = MaterialRenderMode::Opaque;
 
-            CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Replaced);
-            CHECK(FloatProperty(Gpu, assets.Load(id), "AlphaCutoff") == 0.0f);
-            CHECK_FALSE(assets.GetCutoutMaterials(id).Shadow);
-            CHECK(Gpu.LiveMaterials == 1);
+            CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.0f);
 
-            // And back again
             data.Settings.RenderMode = MaterialRenderMode::Cutout;
-            CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Replaced);
-            CHECK(assets.GetCutoutMaterials(id).Shadow);
+            CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.3f);
         }
 
-        SECTION("A dragged slider only updates them")
+        SECTION("A dragged slider reaches the shader")
         {
             MaterialData data = *assets.GetMaterialData(id);
             data.Properties["AlphaCutoff"] = { 0.7f };
 
             CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
-            CHECK(assets.GetCutoutMaterials(id).Shadow == cutout.Shadow);
-            CHECK(FloatProperty(Gpu, cutout.Shadow, "AlphaCutoff") == 0.7f);
-        }
-
-        SECTION("A reimported texture reaches them too")
-        {
-            REQUIRE(assets.ReimportTexture(texture, { { "srgb", false } }));
-            CHECK(Gpu.Materials.at(cutout.Shadow.GetRaw()).Textures.at("ColorMap") == assets.Load(texture));
-        }
-
-        SECTION("Losing the texture leaves them white, which cuts nothing")
-        {
-            REQUIRE(assets.Delete(texture));
-            CHECK_FALSE(Gpu.Materials.at(cutout.Shadow.GetRaw()).Textures.contains("ColorMap"));
+            CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.7f);
         }
     }
 
@@ -1227,7 +1197,6 @@ TEST_CASE_METHOD(Fixture, "An opaque material on S_Lit cuts nothing, whatever it
     REQUIRE(material);
 
     CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.0f);
-    CHECK_FALSE(assets.GetCutoutMaterials(id).Shadow);
 }
 
 TEST_CASE_METHOD(SlotFixture, "An .mtl alpha mask makes a cutout material", "[asset editing]")

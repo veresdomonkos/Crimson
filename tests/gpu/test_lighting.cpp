@@ -57,8 +57,7 @@ namespace
 
             Subject->SetToneMapMaterial(Assets->Load<AssetType::Material>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
             Subject->SetToneMapping(1.0f, ToneMapper::None); // so that expected colors only need the sRGB encoding
-            Subject->SetShadowMaterial(Assets->Load<AssetType::Material>("engine/materials/internal/M_Shadow.mat"));
-            Subject->SetOutlineMaterials(Assets->Load<AssetType::Material>("engine/materials/internal/M_OutlineMask.mat"), Assets->Load<AssetType::Material>("engine/materials/internal/M_Outline.mat"), kSize, kSize);
+            Subject->SetOutlineMaterial(Assets->Load<AssetType::Material>("engine/materials/internal/M_Outline.mat"), kSize, kSize);
 
             Lighting.AmbientColor = glm::vec3(0.0f);
         }
@@ -708,4 +707,54 @@ TEST_CASE_METHOD(Fixture, "What a cutout material cuts away has no outline", "[l
                 ++outlined;
 
     CHECK(outlined == 0);
+}
+
+TEST_CASE_METHOD(ShadowFixture, "A shader's own depth version decides its shadow", "[lighting]")
+{
+    Lighting.AmbientColor = glm::vec3(0.1f);
+    AddLight({ .Type = LightType::Directional, .CastsShadow = true }, glm::vec3(0.0f), glm::vec3(1.0f, -1.0f, 0.0f));
+
+    const auto shadowAt = [this](const Image& image, const glm::vec3& where)
+    {
+        return LinearBrightness(PixelAt(image, where)) < LinearBrightness(PixelAt(image, kInLight)) / 2;
+    };
+
+    SECTION("Its PSDepth discards everything, so it casts no shadow but still draws")
+    {
+        Project.Write("ghost.hlsl", R"(
+#include "crimson/transforms.hlsli"
+float4 VSMain(float3 position : POSITION) : SV_Position { return WorldToClip(ObjectToWorldPosition(position)); }
+float4 PSMain() : SV_Target { return float4(1.0, 0.0, 0.0, 1.0); }
+void PSDepth() { clip(-1.0); }
+)");
+        Project.Write("ghost.mat", R"({ "shader": "ghost.hlsl" })");
+        Assets->Refresh();
+        UseMaterial(Roof, *Assets, "ghost.mat");
+
+        const Image image = Render();
+        CHECK_FALSE(shadowAt(image, kInShadow));
+
+        const glm::ivec4 roof = PixelAt(image, glm::vec3(0.0f, 1.0f, 0.0f));
+        CAPTURE(roof);
+        CHECK(roof.r > 200);
+        CHECK(roof.g < 50);
+    }
+
+    SECTION("Without PSDepth, its VSMain places the shadow")
+    {
+        Project.Write("moved.hlsl", R"(
+#include "crimson/transforms.hlsli"
+float4 VSMain(float3 position : POSITION) : SV_Position { return WorldToClip(ObjectToWorldPosition(position) + float3(3.0, 0.0, 0.0)); }
+float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+)");
+        Project.Write("moved.mat", R"({ "shader": "moved.hlsl" })");
+        Assets->Refresh();
+        UseMaterial(Roof, *Assets, "moved.mat");
+
+        const Image image = Render();
+        CHECK_FALSE(shadowAt(image, kInShadow));
+
+        // Its shadow falls from x 3.5 to 4.5, and the moved mesh hides the ground up to about 4 from the camera above
+        CHECK(shadowAt(image, glm::vec3(4.3f, 0.0f, 0.0f)));
+    }
 }

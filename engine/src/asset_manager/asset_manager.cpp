@@ -28,8 +28,6 @@ namespace crimson
     static constexpr std::string_view kEnginePathPrefix = "engine/";
     static constexpr std::string_view kDefaultMaterialPath = "engine/materials/M_Default.mat";
     static constexpr std::string_view kDefaultShaderPath = "engine/shaders/S_Lit.hlsl";
-    static constexpr std::string_view kShadowCutoutShaderPath = "engine/shaders/internal/S_ShadowCutout.hlsl";
-    static constexpr std::string_view kMaskCutoutShaderPath = "engine/shaders/internal/S_OutlineMaskCutout.hlsl";
 
     // What a new shader starts as: lit like the default one, with fewer slots, to have something to change
     static constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space2,
@@ -492,12 +490,6 @@ float4 PSMain(VertexOutput input) : SV_Target
 
             if (slot->Failed)
                 LOG_ERROR("[Assets] Failed to load {}", GetInfo(id)->Path);
-
-            if constexpr (T == AssetType::Material)
-            {
-                if (slot->Loaded)
-                    SyncCutout(id);
-            }
         }
 
         const LoadedAsset<T>* loaded = slot && slot->Loaded ? &*slot->Loaded : nullptr;
@@ -587,8 +579,6 @@ float4 PSMain(VertexOutput input) : SV_Target
     {
         const auto isRemoved = [ids](AssetID id) { return std::ranges::find(ids, id) != ids.end(); };
 
-        std::vector<MaterialID> lostTextures;
-
         // Materials first, as they can use the textures and shaders being removed
         for (auto& [id, material] : Store<AssetType::Material>())
         {
@@ -609,10 +599,7 @@ float4 PSMain(VertexOutput input) : SV_Target
             for (const auto& [slot, texture] : data.Textures)
             {
                 if (isRemoved(texture))
-                {
                     m_gpuResources.SetMaterialTexture(*material.Loaded, slot, EmptySlotTexture(Load(data.Shader), slot));
-                    lostTextures.push_back(MaterialID(id));
-                }
             }
         }
 
@@ -633,10 +620,6 @@ float4 PSMain(VertexOutput input) : SV_Target
                 m_assets.erase(it);
             }
         }
-
-        // Once the textures are gone, for the cutout companions to lose them too
-        for (const MaterialID material : lostTextures)
-            SyncCutout(material);
     }
 
     static bool IsUsableAssetPath(std::string_view path)
@@ -913,67 +896,6 @@ float4 PSMain(VertexOutput input) : SV_Target
         return slot->State.Data ? &*slot->State.Data : nullptr;
     }
 
-    CutoutMaterials AssetManager::GetCutoutMaterials(MaterialID id) const
-    {
-        const auto& store = static_cast<const AssetStore<AssetType::Material>&>(*m_stores[static_cast<size_t>(AssetType::Material)]);
-        const auto* slot = store.Find(id);
-
-        return slot && slot->Loaded ? CutoutMaterials{ slot->State.ShadowCutout, slot->State.MaskCutout } : CutoutMaterials{};
-    }
-
-    bool AssetManager::SyncCutout(MaterialID id)
-    {
-        auto* slot = SlotFor<AssetType::Material>(id);
-        if (!slot)
-            return false;
-
-        auto& state = slot->State;
-        const bool had = static_cast<bool>(state.ShadowCutout);
-
-        const MaterialData* data = slot->Loaded ? GetMaterialData(id) : nullptr;
-        if (!data || data->Settings.RenderMode != MaterialRenderMode::Cutout)
-        {
-            ReleaseState(state, m_gpuResources);
-            return had;
-        }
-
-        // Its shape is all they draw, so they are opaque, but on the same sides
-        const MaterialSettings settings{ .RenderMode = MaterialRenderMode::Opaque, .Cull = data->Settings.Cull };
-
-        const auto colorMap = data->Textures.find("ColorMap");
-        const TextureHandle texture = colorMap != data->Textures.end() ? Load(colorMap->second) : TextureHandle::Invalid();
-        const bool textureChanged = !had || texture != state.CutoutColorMap;
-
-        ImportContext ctx{ m_gpuResources, *this };
-
-        for (const auto& [companion, path] : { std::pair{ &state.ShadowCutout, kShadowCutoutShaderPath }, std::pair{ &state.MaskCutout, kMaskCutoutShaderPath } })
-        {
-            const ShaderHandle shader = Load<AssetType::Shader>(path);
-            if (!shader)
-                return false;
-
-            if (!*companion)
-                *companion = m_gpuResources.CreateMaterial(shader, settings);
-            else
-                m_gpuResources.SetMaterialSettings(*companion, settings);
-
-            // The values it cuts by, with the shader's defaults for those the material leaves out
-            ApplyShaderPropertyDefaults(shader, *companion, ctx);
-
-            for (const std::string name : { "Color", "AlphaCutoff" })
-            {
-                if (const auto value = data->Properties.find(name); value != data->Properties.end())
-                    ApplyMaterialProperty(m_gpuResources, *companion, name, value->second);
-            }
-
-            if (textureChanged)
-                m_gpuResources.SetMaterialTexture(*companion, "ColorMap", texture);
-        }
-
-        state.CutoutColorMap = texture;
-        return !had;
-    }
-
     MaterialApplyResult AssetManager::ApplyMaterial(MaterialID id, const MaterialData& data)
     {
         const AssetInfo* info = GetInfo(id);
@@ -997,7 +919,6 @@ float4 PSMain(VertexOutput input) : SV_Target
             slot.Loaded = replacement;
             slot.Failed = false;
             slot.State.Data = data;
-            SyncCutout(id);
             return MaterialApplyResult::Replaced;
         }
 
@@ -1027,9 +948,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         }
 
         slot.State.Data = data;
-
-        // Starting or stopping to be a cutout changes what the shadows draw it with, so it is a new material for them
-        return SyncCutout(id) ? MaterialApplyResult::Replaced : MaterialApplyResult::Updated;
+        return MaterialApplyResult::Updated;
     }
 
     bool AssetManager::SaveMaterial(MaterialID id, const MaterialData& data)
@@ -1122,8 +1041,6 @@ float4 PSMain(VertexOutput input) : SV_Target
             return false;
         }
 
-        std::vector<MaterialID> users;
-
         for (auto& [materialId, material] : Store<AssetType::Material>())
         {
             if (!material.Loaded)
@@ -1134,22 +1051,12 @@ float4 PSMain(VertexOutput input) : SV_Target
                 continue;
 
             for (const auto& [name, used] : data->Textures)
-            {
                 if (used == id)
-                {
                     m_gpuResources.SetMaterialTexture(*material.Loaded, name, *replacement);
-                    users.push_back(MaterialID(materialId));
-                }
-            }
         }
 
         slot.Unload(m_gpuResources);
         slot.Loaded = replacement;
-
-        // Now that the texture is the new one, for the cutout companions to get it too
-        for (const MaterialID material : users)
-            SyncCutout(material);
-
         return true;
     }
 
@@ -1177,13 +1084,6 @@ float4 PSMain(VertexOutput input) : SV_Target
 
             if (changed)
                 std::ranges::move(ReloadShader(id, record), std::back_inserter(reloaded));
-        }
-
-        // Recreating them dropped their cutout companions. Not inside the loop, as making those can load shaders.
-        for (const AssetID id : reloaded)
-        {
-            if (const MaterialID material = As<AssetType::Material>(id))
-                SyncCutout(material);
         }
 
         return reloaded;

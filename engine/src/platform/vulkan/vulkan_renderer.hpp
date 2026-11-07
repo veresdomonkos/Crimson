@@ -30,6 +30,7 @@ namespace crimson::vulkan
         const VulkanGraphicsPipeline* PipelineEntry = nullptr;
         ShaderHandle Shader;
         MaterialSettings Settings;
+        ShaderPass Pass = ShaderPass::Main;
         RenderTargetHandle Target;
         crimson::VertexBufferHandle VertexBufferHandle;
 

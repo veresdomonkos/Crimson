@@ -33,6 +33,7 @@ namespace crimson
         std::vector<uint32_t> Vertex;
         std::vector<uint32_t> Pixel;
         std::unordered_map<std::string, ShaderAnnotation> Annotations;
+        std::vector<uint32_t> PixelDepth; // PSDepth, for the passes that only need depth. Empty if the shader has none.
     };
 
     struct ShaderMaterialTexture

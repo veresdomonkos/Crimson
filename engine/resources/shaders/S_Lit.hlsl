@@ -103,3 +103,11 @@ float4 PSMain(VertexOutput input) : SV_Target
 
     return float4(color, base.a);
 }
+
+// For the shadows and the selection outline, which only need depth: a cutout leaves the same holes there
+void PSDepth(VertexOutput input)
+{
+    // Only a cutout material is given a cutoff above 0, and the others skip the texture
+    if (AlphaCutoff > 0.0)
+        clip((Color * ColorMap.Sample(LinearWrap, input.UV)).a - AlphaCutoff);
+}

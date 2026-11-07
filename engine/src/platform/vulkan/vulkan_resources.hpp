@@ -77,6 +77,7 @@ namespace crimson::vulkan
     {
         vk::raii::ShaderModule Vertex{ nullptr };
         vk::raii::ShaderModule Fragment{ nullptr };
+        vk::raii::ShaderModule FragmentDepth{ nullptr }; // null without PSDepth, and then a depth pass has no fragment stage
 
         vk::raii::DescriptorSetLayout MaterialSetLayout{ nullptr };
         vk::raii::PipelineLayout PipelineLayout{ nullptr };

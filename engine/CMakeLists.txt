@@ -42,6 +42,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/asset_manager/importers/shader_importer.hpp
         include/crimson/asset_manager/importers/scene_importer.hpp
         include/crimson/renderer/mesh.hpp
+        include/crimson/renderer/shader_pass.hpp
         include/crimson/asset_manager/importers/mesh_importer.hpp
         include/crimson/core/profiler.hpp
         include/crimson/renderer/render_stats.hpp

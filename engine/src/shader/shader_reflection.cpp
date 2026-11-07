@@ -180,6 +180,10 @@ namespace crimson
         if (!ReflectStage(binary.Vertex, true, result) || !ReflectStage(binary.Pixel, false, result))
             return std::nullopt;
 
+        // What only PSDepth uses has to be in the material's layout too
+        if (!binary.PixelDepth.empty() && !ReflectStage(binary.PixelDepth, false, result))
+            return std::nullopt;
+
         for (const auto& [name, annotation] : binary.Annotations)
         {
             if (const auto texture = result.Textures.find(name); texture != result.Textures.end())

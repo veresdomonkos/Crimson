@@ -89,8 +89,7 @@ namespace crimson::editor
     void ProjectSessionMode::SetupRenderer()
     {
         m_sceneRenderer->SetToneMapMaterial(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_ToneMap.mat"), kMainTargetWidth, kMainTargetHeight);
-        m_sceneRenderer->SetShadowMaterial(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_Shadow.mat"));
-        m_sceneRenderer->SetOutlineMaterials(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_OutlineMask.mat"), m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetOutlineMaterial(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
     }
 
     void ProjectSessionMode::SetupUI()

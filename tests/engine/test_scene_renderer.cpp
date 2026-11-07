@@ -16,8 +16,6 @@ using Catch::Approx;
 namespace
 {
     constexpr MaterialHandle kMeshMaterial{ 100, 1 };
-    constexpr MaterialHandle kShadowMaterial{ 101, 1 };
-    constexpr MaterialHandle kMaskMaterial{ 102, 1 };
     constexpr MaterialHandle kOutlineMaterial{ 103, 1 };
 
     Entity AddMesh(Scene& scene, const char* name, Entity parent = {}, bool castsShadows = true)
@@ -86,7 +84,7 @@ TEST_CASE("Outline resources are freed too", "[scene renderer]")
 
     {
         SceneRenderer sceneRenderer(gpu, renderer);
-        sceneRenderer.SetOutlineMaterials(kMaskMaterial, kOutlineMaterial, 64, 64);
+        sceneRenderer.SetOutlineMaterial(kOutlineMaterial, 64, 64);
         CHECK(gpu.LiveRenderTargets == 2);
         CHECK(gpu.LiveVertexBuffers == 1);
     }
@@ -153,7 +151,6 @@ TEST_CASE("Lighting comes from the active lights' transforms", "[scene renderer]
 TEST_CASE("There is one pass per shadow view, then the main pass", "[scene renderer]")
 {
     Fixture fixture;
-    fixture.Subject.SetShadowMaterial(kShadowMaterial);
 
     AddLight(fixture.World, LightType::Directional, true);
     AddLight(fixture.World, LightType::Point, true);
@@ -170,7 +167,10 @@ TEST_CASE("There is one pass per shadow view, then the main pass", "[scene rende
     {
         CAPTURE(i);
         REQUIRE(passes[i]->GetDraws().size() == 1);
-        CHECK(passes[i]->GetDraws()[0].Material == kShadowMaterial);
+
+        // The caster's own material, in its depth version, so its shader decides its shape in the shadow too
+        CHECK(passes[i]->GetDraws()[0].Material == kMeshMaterial);
+        CHECK(passes[i]->GetDraws()[0].Pass == ShaderPass::Depth);
     }
 
     const RenderPass& main = *passes.back();
@@ -178,6 +178,7 @@ TEST_CASE("There is one pass per shadow view, then the main pass", "[scene rende
     REQUIRE(main.GetDraws().size() == 2);
     CHECK(main.GetDraws()[0].Material == kMeshMaterial);
     CHECK(main.GetDraws()[1].Material == kMeshMaterial);
+    CHECK(main.GetDraws()[0].Pass == ShaderPass::Main);
 }
 
 TEST_CASE("Only active, loaded meshes are drawn", "[scene renderer]")
@@ -221,7 +222,7 @@ TEST_CASE("A draw's object is its world transform", "[scene renderer]")
 TEST_CASE("Outlining adds a mask pass and a full screen draw", "[scene renderer]")
 {
     Fixture fixture;
-    fixture.Subject.SetOutlineMaterials(kMaskMaterial, kOutlineMaterial, 64, 64);
+    fixture.Subject.SetOutlineMaterial(kOutlineMaterial, 64, 64);
 
     const Entity parent = AddMesh(fixture.World, "Parent");
     AddMesh(fixture.World, "Child", parent);
@@ -243,7 +244,8 @@ TEST_CASE("Outlining adds a mask pass and a full screen draw", "[scene renderer]
 
         const RenderPass& mask = *passes[0];
         REQUIRE(mask.GetDraws().size() == 2);
-        CHECK(mask.GetDraws()[0].Material == kMaskMaterial);
+        CHECK(mask.GetDraws()[0].Material == kMeshMaterial);
+        CHECK(mask.GetDraws()[0].Pass == ShaderPass::Depth);
 
         const RenderPass& main = *passes[1];
         REQUIRE(main.GetDraws().size() == 3);
@@ -274,7 +276,7 @@ TEST_CASE("Tone mapping renders the scene to an HDR target first", "[scene rende
 
     Fixture fixture;
     fixture.Subject.SetToneMapMaterial(kToneMapMaterial, 64, 64);
-    fixture.Subject.SetOutlineMaterials(kMaskMaterial, kOutlineMaterial, 64, 64);
+    fixture.Subject.SetOutlineMaterial(kOutlineMaterial, 64, 64);
 
     const Entity entity = AddMesh(fixture.World, "Mesh");
 
@@ -296,7 +298,7 @@ TEST_CASE("Tone mapping renders the scene to an HDR target first", "[scene rende
         const std::vector<const RenderPass*> passes = fixture.Record(entity);
         REQUIRE(passes.size() == 4);
 
-        CHECK(passes[0]->GetDraws()[0].Material == kMaskMaterial);
+        CHECK(passes[0]->GetDraws()[0].Pass == ShaderPass::Depth);
         CHECK(passes[2]->GetDraws()[0].Material == kToneMapMaterial);
         CHECK(passes[3]->GetDraws()[0].Material == kOutlineMaterial);
         CHECK(passes[3]->Info().Target == fixture.MainPass.Target);
@@ -323,7 +325,7 @@ TEST_CASE("A tone map material that failed to load leaves the scene going straig
     CHECK(passes[0]->Info().Target == fixture.MainPass.Target);
 }
 
-TEST_CASE("Without outline materials, selecting draws nothing extra", "[scene renderer]")
+TEST_CASE("Without an outline material, selecting draws nothing extra", "[scene renderer]")
 {
     Fixture fixture;
 
@@ -333,9 +335,9 @@ TEST_CASE("Without outline materials, selecting draws nothing extra", "[scene re
         CHECK(fixture.Record(entity).size() == 1);
     }
 
-    SECTION("One failed to load")
+    SECTION("It failed to load")
     {
-        fixture.Subject.SetOutlineMaterials(MaterialHandle::Invalid(), kOutlineMaterial, 64, 64);
+        fixture.Subject.SetOutlineMaterial(MaterialHandle::Invalid(), 64, 64);
         CHECK(fixture.Gpu.LiveRenderTargets == 1);
 
         const Entity entity = AddMesh(fixture.World, "Selected");

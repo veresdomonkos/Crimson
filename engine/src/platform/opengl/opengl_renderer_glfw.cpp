@@ -200,7 +200,7 @@ namespace crimson::opengl
 
         OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(info.IndexBuffer);
         OpenGLMaterial& material = m_resourceManager.GetMaterial(info.Material);
-        OpenGLShader& shader = m_resourceManager.GetShader(material.Shader);
+        const OpenGLProgram& program = m_resourceManager.GetShader(material.Shader).For(info.Pass);
 
         if (material.GLBufferHandle != 0 && material.IsDirty)
         {
@@ -208,8 +208,9 @@ namespace crimson::opengl
             material.IsDirty = false;
         }
 
-        // Applied on every draw because clearing depth between passes can change depth write
-        const bool transparent = material.Settings.RenderMode == MaterialRenderMode::Transparent;
+        // Applied on every draw because clearing depth between passes can change depth write. A depth pass draws
+        // everything as opaque, so a transparent mesh still casts its shadow.
+        const bool transparent = info.Pass == ShaderPass::Main && material.Settings.RenderMode == MaterialRenderMode::Transparent;
 
         m_state.SetBlend(transparent);
         m_state.SetDepthWrite(!transparent);
@@ -217,12 +218,12 @@ namespace crimson::opengl
 
         bool programChanged = false;
 
-        if (info.Material != m_boundMaterial)
+        if (info.Material != m_boundMaterial || info.Pass != m_boundPass)
         {
             if (material.GLBufferHandle != 0)
                 m_state.BindUniformBuffer(kMaterialBlockSlot, material.GLBufferHandle);
 
-            for (const OpenGLShaderTextureUnit& unit : shader.TextureUnits)
+            for (const OpenGLShaderTextureUnit& unit : program.TextureUnits)
             {
                 GLuint texture = m_shadowAtlas;
 
@@ -236,18 +237,19 @@ namespace crimson::opengl
                 m_state.BindSampler(unit.Unit, unit.Sampler);
             }
 
-            programChanged = m_state.UseProgram(shader.GLHandle);
+            programChanged = m_state.UseProgram(program.GLHandle);
             if (programChanged)
                 ++m_stats.PipelineBinds;
 
             m_boundMaterial = info.Material;
+            m_boundPass = info.Pass;
             ++m_stats.MaterialBinds;
         }
 
         // Each program has its own copy of the uniform
         if (programChanged || info.Object != m_boundObject)
         {
-            glUniform1ui(shader.ObjectIndexLocation, info.Object);
+            glUniform1ui(program.ObjectIndexLocation, info.Object);
             m_boundObject = info.Object;
         }
 
