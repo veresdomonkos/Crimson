@@ -187,10 +187,11 @@ A mesh's material slots fill themselves in: an empty slot uses `materials/<slot 
 | `Pm` | `Metallic` |
 | `Ke`, `map_Ke` | `EmissiveColor`, `EmissiveMap` |
 | `d` between 0 and 1 | transparent, with `d` as the alpha. A `d` of 0 is ignored, as exporters write it for opaque materials. |
+| `map_d` | cutout, cut by the color texture's own alpha, as exporters give the mask separately even when the color texture has it |
 
-Texture paths are relative to the `.mtl`, and one that isn't there is logged and left empty. What `S_Lit` has no slot for, such as `map_d` cutouts (#27) and `map_Ks`, is logged and left out. A value at the shader's default isn't written.
+Texture paths are relative to the `.mtl`, and one that isn't there is logged and left empty. What `S_Lit` has no slot for, such as `map_Ks`, is logged and left out. A value at the shader's default isn't written.
 
-`.mat` files can also set `"renderMode"` (`"opaque"` or `"transparent"`) and `"cull"` (`"back"`, `"front"` or `"none"`), which default to opaque and back. Transparent materials are alpha blended using the alpha the shader outputs, don't write depth, and draw after opaque ones in the order they were submitted.
+`.mat` files can also set `"renderMode"` (`"opaque"`, `"transparent"` or `"cutout"`) and `"cull"` (`"back"`, `"front"` or `"none"`), which default to opaque and back. Transparent materials are alpha blended using the alpha the shader outputs, don't write depth, and draw after opaque ones in the order they were submitted. Cutout materials draw like opaque ones, but where the alpha is under the shader's `AlphaCutoff` there is nothing, in the shadows and the selection outline too. Those passes draw a mesh with one material of their own, so the asset manager gives each cutout material two companions that cut the same way (`GetCutoutMaterials`), and `ResolveMeshRenderer` puts them in the mesh's `ShadowMaterials` and `MaskMaterials`.
 
 ### Engine assets
 

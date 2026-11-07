@@ -84,8 +84,13 @@ Includes resolve relative to the shader's folder, then to the engine's shaders.
 | `NormalStrength` | 1 | scales `NormalMap`, with green pointing up in the image (the OpenGL convention, which glTF uses too) |
 | `OcclusionStrength` | 1 | how much `OcclusionMap` (red) darkens ambient light |
 | `EmissiveColor`, `EmissiveStrength` | black, 1 | linear, multiplied with `EmissiveMap` |
+| `AlphaCutoff` | 0.5 | for a cutout material, where the alpha of `Color` times `ColorMap` is under it there is nothing |
 
 Normal maps don't need tangents in the mesh, as the shader works out the directions from how position and UV change between pixels. A mesh without UVs stays flat.
+
+### Cutout
+
+A material whose render mode is **Cutout** has holes where its alpha is under its `AlphaCutoff`, for leaves, fences and chains. Unlike Transparent, it writes depth and needs no sorting. The engine only gives the shader the material's `AlphaCutoff` while its mode is Cutout, and 0 otherwise, so an opaque material never loses a pixel. A shader of your own can be cut out too, by declaring a `float AlphaCutoff` property and ending its pixel shader with `clip(alpha - AlphaCutoff)`. Put the `clip` last: a discarded pixel stops at once, and what comes after it in the pixels around it, such as the derivatives normal mapping uses, would be wrong. The shadows and the selection outline cut the same way, from the material's `ColorMap`, `Color` and `AlphaCutoff`.
 
 ## Color and light
 
