@@ -103,6 +103,8 @@ set(ENGINE_IMPLEMENTATION
         src/asset_manager/scene_data.cpp
         src/asset_manager/asset_ref.hpp
         src/asset_manager/asset_ref.cpp
+        src/asset_manager/mtl_materials.hpp
+        src/asset_manager/mtl_materials.cpp
         include/crimson/asset_manager/importers/texture_importer.hpp
         src/asset_manager/importers/texture_importer.cpp
         src/asset_manager/importers/material_importer.cpp

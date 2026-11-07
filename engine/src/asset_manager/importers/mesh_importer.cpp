@@ -13,36 +13,10 @@
 #include "crimson/core/log.hpp"
 #include "crimson/renderer/mesh.hpp"
 
+#include "asset_manager/mtl_materials.hpp"
+
 namespace crimson
 {
-    namespace
-    {
-        // tinyobj's own file reader can't open paths with non-ASCII characters on Windows
-        class MaterialFolderReader final : public tinyobj::MaterialReader
-        {
-        public:
-            explicit MaterialFolderReader(std::filesystem::path folder) : m_folder(std::move(folder)) {}
-
-            bool operator()(const std::string& matId, std::vector<tinyobj::material_t>* materials,
-                            std::map<std::string, int>* matMap, std::string* warn, std::string* err) override
-            {
-                std::ifstream file(m_folder / std::filesystem::path(matId));
-                if (!file)
-                {
-                    if (warn)
-                        *warn += "Material file '" + matId + "' not found\n";
-                    return false;
-                }
-
-                tinyobj::LoadMtl(matMap, materials, &file, warn, err);
-                return true;
-            }
-
-        private:
-            std::filesystem::path m_folder;
-        };
-    }
-
     std::span<const std::string_view> MeshImporter::Extensions() const
     {
         static constexpr std::string_view exts[] = { ".obj" };

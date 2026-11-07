@@ -1,8 +1,10 @@
+#include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <filesystem>
 #include <fstream>
@@ -968,4 +970,129 @@ TEST_CASE_METHOD(Fixture, "A shader that failed to load works once it is fixed",
 
     CHECK(Contains(assets.ReloadChangedShaders(), assets.FindId("mine.hlsl")));
     CHECK(assets.LoadMaterial(material));
+}
+
+namespace
+{
+    // Three slots: one with textures as Sponza writes them, one with values only, and a see-through one with a texture
+    // that isn't there
+    constexpr std::string_view kSlotsObj = "mtllib model.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nusemtl textured\nf 1 2 3\nusemtl plain\nf 1 2 3\nusemtl glass\nf 1 2 3\n";
+    constexpr std::string_view kSlotsMtl = R"(newmtl textured
+Ns 7.843137
+Kd 0.470400 0.470400 0.470400
+d 0.000000
+map_Kd textures\color.bmp
+map_Disp textures/color_ddn.bmp
+map_Ka textures/color.bmp
+
+newmtl plain
+Ns 100
+Kd 1 0 0
+
+newmtl glass
+d 0.5
+map_Kd textures/gone.bmp
+)";
+
+    struct SlotFixture : Fixture
+    {
+        SlotFixture()
+        {
+            Temp.Write("model/model.obj", kSlotsObj);
+            Temp.Write("model/model.mtl", kSlotsMtl);
+            Temp.Write("model/textures/color.bmp", MakeImage());
+            Temp.Write("model/textures/color_ddn.bmp", MakeImage());
+        }
+
+        std::string ReadMaterial(std::string_view slot) const
+        {
+            return ReadFile(Temp.Path() / "model/materials" / (std::string(slot) + ".mat"));
+        }
+    };
+}
+
+TEST_CASE_METHOD(SlotFixture, "An .obj's .mtl gives its slots materials", "[asset editing]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+    const AssetID mesh = assets.FindId("model/model.obj");
+
+    const SlotMaterials result = assets.CreateSlotMaterials(mesh);
+    CHECK(result.Created.size() == 3);
+    CHECK(result.Kept == 0);
+
+    const AssetID color = assets.FindId("model/textures/color.bmp");
+    const AssetID normal = assets.FindId("model/textures/color_ddn.bmp");
+
+    SECTION("Textures, without the gray an exporter puts next to them")
+    {
+        const MaterialData* textured = assets.GetMaterialData(assets.FindSlotMaterial(mesh, "textured"));
+        REQUIRE(textured);
+        CHECK(textured->Shader == assets.FindId("engine/shaders/S_Lit.hlsl"));
+        CHECK(textured->Settings.RenderMode == MaterialRenderMode::Opaque);
+        CHECK(textured->Textures.at("ColorMap") == color);
+        CHECK(textured->Textures.at("NormalMap") == normal);
+        CHECK_FALSE(textured->Properties.contains("Color"));
+        CHECK(textured->Properties.at("Roughness").at(0) == Catch::Approx(1.0f - std::sqrt(7.843137f / 1000.0f)));
+
+        // A normal map holds directions, a color map colors
+        CHECK_FALSE(assets.GetInfo(normal)->Settings.value("srgb", true));
+        CHECK(assets.GetInfo(color)->Settings.value("srgb", true));
+    }
+
+    SECTION("Values only")
+    {
+        const MaterialData* plain = assets.GetMaterialData(assets.FindSlotMaterial(mesh, "plain"));
+        REQUIRE(plain);
+        CHECK(plain->Textures.empty());
+        CHECK(plain->Properties.at("Color") == std::vector{ 1.0f, 0.0f, 0.0f, 1.0f });
+        CHECK(plain->Properties.at("Roughness").at(0) == Catch::Approx(1.0f - std::sqrt(0.1f)));
+
+        // Left out when they are the shader's own defaults
+        CHECK_FALSE(plain->Properties.contains("Metallic"));
+        CHECK_FALSE(plain->Properties.contains("EmissiveColor"));
+    }
+
+    SECTION("See-through, and a texture that isn't there is only left out")
+    {
+        const MaterialData* glass = assets.GetMaterialData(assets.FindSlotMaterial(mesh, "glass"));
+        REQUIRE(glass);
+        CHECK(glass->Settings.RenderMode == MaterialRenderMode::Transparent);
+        CHECK(glass->Properties.at("Color").at(3) == 0.5f);
+        CHECK(glass->Textures.empty());
+    }
+}
+
+TEST_CASE_METHOD(SlotFixture, "Making slot materials again changes nothing", "[asset editing]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+    const AssetID mesh = assets.FindId("model/model.obj");
+
+    REQUIRE(assets.CreateSlotMaterials(mesh).Created.size() == 3);
+    const std::string textured = ReadMaterial("textured");
+    const std::string normalMeta = ReadFile(meta::MetaPathFor(Temp.Path() / "model/textures/color_ddn.bmp"));
+
+    const SlotMaterials again = assets.CreateSlotMaterials(mesh);
+    CHECK(again.Created.empty());
+    CHECK(again.Kept == 3);
+    CHECK(ReadMaterial("textured") == textured);
+    CHECK(ReadFile(meta::MetaPathFor(Temp.Path() / "model/textures/color_ddn.bmp")) == normalMeta);
+}
+
+TEST_CASE_METHOD(SlotFixture, "A slot material that is there already is never replaced", "[asset editing]")
+{
+    Temp.Write("model/materials/plain.mat", kMainMaterial);
+    AssetManager assets(Gpu, Temp.Path());
+
+    const SlotMaterials result = assets.CreateSlotMaterials(assets.FindId("model/model.obj"));
+    CHECK(result.Created.size() == 2);
+    CHECK(result.Kept == 1);
+    CHECK(ReadMaterial("plain") == kMainMaterial);
+}
+
+TEST_CASE_METHOD(Fixture, "Only a project's .obj can get slot materials", "[asset editing]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+
+    CHECK(assets.CreateSlotMaterials(assets.FindId("engine/meshes/SM_Cube.obj")).Created.empty());
+    CHECK(assets.CreateSlotMaterials({}).Created.empty());
 }
