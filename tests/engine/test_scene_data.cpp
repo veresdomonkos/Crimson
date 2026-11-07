@@ -526,3 +526,25 @@ TEST_CASE_METHOD(Fixture, "A renamed folder keeps a scene's references working",
     REQUIRE(data);
     CHECK(data->Roots[0].MeshRenderer->Mesh == mesh);
 }
+
+TEST_CASE_METHOD(Fixture, "A cutout slot has its own materials for the shadows and the outline", "[scene data]")
+{
+    Temp.Write("thing.obj", "mtllib thing.mtl\nv 0 0 0\nv 1 0 0\nv 0 2 0\nusemtl Leaves\nf 1 2 3\nusemtl Bark\nf 1 2 3\n");
+    Temp.Write("thing.mtl", "newmtl Leaves\nnewmtl Bark\n");
+    Temp.Write("materials/Leaves.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "renderMode": "cutout" })");
+    AssetManager assets(Gpu, Temp.Path());
+
+    Scene scene;
+    auto& renderer = scene.CreateEntity("Tree").AddComponent<MeshRendererComponent>();
+    renderer.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
+    ResolveMeshRenderer(renderer, assets);
+
+    const CutoutMaterials leaves = assets.GetCutoutMaterials(assets.Find<AssetType::Material>("materials/Leaves.mat"));
+    REQUIRE(leaves.Shadow);
+
+    REQUIRE(renderer.Resolved.ShadowMaterials.size() == 2);
+    CHECK(renderer.Resolved.ShadowMaterials[0] == leaves.Shadow);
+    CHECK(renderer.Resolved.MaskMaterials[0] == leaves.Mask);
+    CHECK_FALSE(renderer.Resolved.ShadowMaterials[1]);
+    CHECK_FALSE(renderer.Resolved.MaskMaterials[1]);
+}

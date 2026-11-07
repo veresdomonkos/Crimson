@@ -26,7 +26,29 @@ namespace crimson
     struct AssetState<AssetType::Material>
     {
         std::optional<MaterialData> Data; // what it is using, which edits may have made different from its file
+
+        // For a cutout one, what draws it in the shadow pass and the outline mask, which only need its shape
+        MaterialHandle ShadowCutout;
+        MaterialHandle MaskCutout;
+        TextureHandle CutoutColorMap; // what they were given last, as replacing a texture has to wait for the GPU
     };
+
+    // Frees what an asset's state holds on the GPU, when the asset is unloaded
+    template <AssetType T>
+    void ReleaseState(AssetState<T>&, GpuResourceManager&) {}
+
+    inline void ReleaseState(AssetState<AssetType::Material>& state, GpuResourceManager& gpu)
+    {
+        for (MaterialHandle* companion : { &state.ShadowCutout, &state.MaskCutout })
+        {
+            if (*companion)
+                gpu.DestroyMaterial(*companion);
+
+            *companion = {};
+        }
+
+        state.CutoutColorMap = {};
+    }
 
     // What can be done to a store without knowing its type, for what goes over every type of asset
     class AssetStoreBase
@@ -57,6 +79,8 @@ namespace crimson
 
             void Unload(GpuResourceManager& gpu)
             {
+                ReleaseState(State, gpu);
+
                 if (Loaded)
                 {
                     Importer->Unload(*Loaded, gpu);

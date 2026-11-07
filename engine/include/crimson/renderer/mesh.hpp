@@ -35,6 +35,11 @@ namespace crimson
         std::vector<SubMesh> SubMeshes;
         std::vector<MaterialHandle> Materials;
         std::vector<std::string> MaterialSlots; // names, in the same order as Materials
+
+        // By slot, what draws it in a pass that only needs its shape, for a cutout material whose holes have to show
+        // there too. Empty, or invalid for a slot, where the pass's own material does.
+        std::vector<MaterialHandle> ShadowMaterials;
+        std::vector<MaterialHandle> MaskMaterials;
         MeshBounds Bounds;
     };
 }

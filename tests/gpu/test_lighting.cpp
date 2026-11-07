@@ -625,3 +625,87 @@ TEST_CASE_METHOD(Fixture, "A selected mesh gets an outline", "[lighting]")
         CHECK(countOutlinePixels(Render()) == 0);
     }
 }
+
+namespace
+{
+    // Cutout materials whose alpha is all under the cutoff, and all over it
+    constexpr std::string_view kCutAway = R"({ "shader": "engine/shaders/S_Lit.hlsl", "renderMode": "cutout", "properties": { "Color": [1, 1, 1, 0] } })";
+    constexpr std::string_view kCutNothing = R"({ "shader": "engine/shaders/S_Lit.hlsl", "renderMode": "cutout", "properties": { "Color": [1, 1, 1, 1] } })";
+
+    void UseMaterial(Entity entity, AssetManager& assets, std::string_view path)
+    {
+        auto& renderer = entity.GetComponent<MeshRendererComponent>();
+        renderer.MaterialAssets = { assets.Find<AssetType::Material>(path) };
+        ResolveMeshRenderer(renderer, assets);
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "What a cutout material cuts away isn't drawn", "[lighting]")
+{
+    Lighting.AmbientColor = glm::vec3(0.3f);
+    Project.Write("cut_away.mat", kCutAway);
+    Project.Write("cut_nothing.mat", kCutNothing);
+    Assets->Refresh();
+
+    const Entity wall = AddMesh("wall.obj", glm::vec3(0.0f), glm::vec3(0.5f));
+
+    UseMaterial(wall, *Assets, "cut_away.mat");
+    CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), kClearPixel, 2));
+
+    UseMaterial(wall, *Assets, "cut_nothing.mat");
+    CHECK_FALSE(IsNear(PixelAt(Render(), glm::vec3(0.0f)), kClearPixel, 2));
+}
+
+TEST_CASE_METHOD(ShadowFixture, "What a cutout material cuts away casts no shadow", "[lighting]")
+{
+    Lighting.AmbientColor = glm::vec3(0.1f);
+    Project.Write("cut_away.mat", kCutAway);
+    Project.Write("cut_nothing.mat", kCutNothing);
+    Assets->Refresh();
+
+    AddLight({ .Type = LightType::Directional, .CastsShadow = true }, glm::vec3(0.0f), glm::vec3(1.0f, -1.0f, 0.0f));
+
+    SECTION("All of it cut away, so no shadow")
+    {
+        UseMaterial(Roof, *Assets, "cut_away.mat");
+
+        const Image image = Render();
+        const float shadow = LinearBrightness(PixelAt(image, kInShadow));
+        const float light = LinearBrightness(PixelAt(image, kInLight));
+
+        CAPTURE(shadow, light);
+        CHECK(std::abs(shadow - light) <= kSpecularDifference);
+    }
+
+    SECTION("Nothing cut away, so the whole shadow")
+    {
+        UseMaterial(Roof, *Assets, "cut_nothing.mat");
+
+        const Image image = Render();
+        const float shadow = LinearBrightness(PixelAt(image, kInShadow));
+        const float light = LinearBrightness(PixelAt(image, kInLight));
+
+        CAPTURE(shadow, light);
+        CHECK(shadow < light / 2);
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "What a cutout material cuts away has no outline", "[lighting]")
+{
+    Lighting.AmbientColor = glm::vec3(0.3f);
+    Project.Write("cut_away.mat", kCutAway);
+    Assets->Refresh();
+
+    const Entity wall = AddMesh("wall.obj", glm::vec3(0.0f), glm::vec3(0.5f));
+    UseMaterial(wall, *Assets, "cut_away.mat");
+
+    const Image image = Render(wall);
+    int outlined = 0;
+
+    for (uint32_t row = 0; row < image.Height; ++row)
+        for (uint32_t x = 0; x < image.Width; ++x)
+            if (IsNear(image.At(x, row), glm::ivec3(255, 166, 26), 40))
+                ++outlined;
+
+    CHECK(outlined == 0);
+}

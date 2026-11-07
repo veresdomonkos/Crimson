@@ -18,6 +18,8 @@ namespace crimson
 
         renderer.Resolved = *mesh;
         renderer.MaterialAssets.resize(renderer.Resolved.Materials.size());
+        renderer.Resolved.ShadowMaterials.assign(renderer.MaterialAssets.size(), MaterialHandle{});
+        renderer.Resolved.MaskMaterials.assign(renderer.MaterialAssets.size(), MaterialHandle{});
 
         for (size_t slot = 0; slot < renderer.MaterialAssets.size(); ++slot)
         {
@@ -33,7 +35,13 @@ namespace crimson
                 asset = assets.DefaultMaterial();
 
             // A missing one stays in the slot, to be saved, and the default stands in for it
-            renderer.Resolved.Materials[slot] = assets.Load(assets.IsMissing(asset) ? assets.DefaultMaterial() : asset);
+            const MaterialID used = assets.IsMissing(asset) ? assets.DefaultMaterial() : asset;
+            renderer.Resolved.Materials[slot] = assets.Load(used);
+
+            // A cutout one keeps its holes in the shadows and the selection outline
+            const CutoutMaterials cutout = assets.GetCutoutMaterials(used);
+            renderer.Resolved.ShadowMaterials[slot] = cutout.Shadow;
+            renderer.Resolved.MaskMaterials[slot] = cutout.Mask;
         }
     }
 
@@ -184,7 +192,7 @@ namespace crimson
             for (const Drawable& drawable : m_drawables)
             {
                 if (drawable.CastsShadows)
-                    pass.Draw(*drawable.Mesh, drawable.Object, m_shadowMaterial);
+                    pass.Draw(*drawable.Mesh, drawable.Object, m_shadowMaterial, drawable.Mesh->ShadowMaterials);
             }
         }
 
@@ -230,7 +238,7 @@ namespace crimson
         for (const Drawable& drawable : m_drawables)
         {
             if (drawable.Outlined)
-                pass.Draw(*drawable.Mesh, drawable.Object, m_outlineMaskMaterial);
+                pass.Draw(*drawable.Mesh, drawable.Object, m_outlineMaskMaterial, drawable.Mesh->MaskMaterials);
         }
     }
 }

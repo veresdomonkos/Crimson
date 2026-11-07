@@ -46,12 +46,16 @@ namespace crimson
                 m_drawInfos.emplace_back(drawInfo);
         }
 
-        // A valid materialOverride replaces the materials of all submeshes, as a shadow pass needs
-        void Draw(const Mesh& mesh, ObjectId object = 0, MaterialHandle materialOverride = {})
+        // A valid materialOverride replaces the materials of all submeshes, as a shadow pass needs, except for the slots
+        // that have a valid one of their own in slotOverrides
+        void Draw(const Mesh& mesh, ObjectId object = 0, MaterialHandle materialOverride = {}, std::span<const MaterialHandle> slotOverrides = {})
         {
             for (auto subMesh : mesh.SubMeshes)
             {
-                const MaterialHandle material = materialOverride ? materialOverride : mesh.Materials[subMesh.MaterialSlot];
+                const uint32_t slot = subMesh.MaterialSlot;
+                const MaterialHandle own = slot < slotOverrides.size() ? slotOverrides[slot] : MaterialHandle{};
+
+                const MaterialHandle material = own ? own : materialOverride ? materialOverride : mesh.Materials[slot];
                 Draw(DrawInfo{ mesh.VB, mesh.IB, material, subMesh.FirstIndex, subMesh.IndexCount, object });
             }
         }

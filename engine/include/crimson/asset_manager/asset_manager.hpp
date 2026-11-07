@@ -24,6 +24,13 @@ namespace crimson
         Replaced  // the material has a new handle, so anything holding on to the old one has to get it again
     };
 
+    // What draws a cutout material in the passes that only need its shape. Both are invalid for any other material.
+    struct CutoutMaterials
+    {
+        MaterialHandle Shadow;
+        MaterialHandle Mask; // for the selection outline
+    };
+
     // What CreateSlotMaterials did
     struct SlotMaterials
     {
@@ -141,6 +148,10 @@ namespace crimson
         MaterialApplyResult ApplyMaterial(MaterialID id, const MaterialData& data);
         bool SaveMaterial(MaterialID id, const MaterialData& data);
 
+        // For a loaded cutout material, so the shadows and the outline have its holes too. They change when it is
+        // replaced, or when it starts or stops being a cutout, which ApplyMaterial reports as Replaced.
+        [[nodiscard]] CutoutMaterials GetCutoutMaterials(MaterialID id) const;
+
         [[nodiscard]] std::optional<SceneData> ReadSceneFile(SceneID id) const;
         bool SaveScene(SceneID id, const SceneData& data);
 
@@ -179,6 +190,9 @@ namespace crimson
         std::optional<LoadedAsset<T>> Import(const Record& record, typename AssetStore<T>::Slot& slot);
 
         std::vector<AssetID> ReloadShader(AssetID id, const Record& record);
+
+        // Makes, updates or drops a material's cutout companions to match its data. Returns whether they were made or dropped.
+        bool SyncCutout(MaterialID id);
         [[nodiscard]] AssetSource SourceOf(const Record& record) const;
         AssetID FindIdOrWarn(std::string_view path) const;
 
