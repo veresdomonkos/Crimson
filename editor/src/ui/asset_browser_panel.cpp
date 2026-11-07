@@ -579,6 +579,25 @@ namespace crimson::editor::ui
 
             ImGui::Separator();
 
+            // The materials its .mtl describes, one for each slot that has none
+            if (item.Type == AssetType::Mesh && file.extension() == ".obj")
+            {
+                if (ImGui::MenuItem("Create Materials from .mtl"))
+                {
+                    m_context.Deferred.emplace_back([this, id = item.Id]
+                    {
+                        if (m_context.Assets.CreateSlotMaterials(id).Created.empty())
+                            return;
+
+                        ++m_context.AssetsVersion;
+                        m_context.ResolveMeshRenderers();
+                    });
+                }
+
+                ImGui::SetItemTooltip("Makes materials/<slot>.mat next to it for each slot, and leaves the ones that are there");
+                ImGui::Separator();
+            }
+
             if (ImGui::MenuItem("Rename"))
             {
                 m_dialogAsset = item.Id;
