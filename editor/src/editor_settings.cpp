@@ -23,6 +23,15 @@ namespace crimson::editor
         Save();
     }
 
+    void EditorSettings::SetShowEngineContent(bool show)
+    {
+        if (show == m_showEngineContent)
+            return;
+
+        m_showEngineContent = show;
+        Save();
+    }
+
     void EditorSettings::Load()
     {
         std::ifstream file(m_file);
@@ -40,11 +49,15 @@ namespace crimson::editor
                 m_scriptEditor.Program = std::filesystem::path(std::u8string(program.begin(), program.end()));
                 m_scriptEditor.Arguments = editor->value("arguments", std::string());
             }
+
+            if (const auto assets = json.find("assetsPanel"); assets != json.end())
+                m_showEngineContent = assets->value("showEngineContent", false);
         }
         catch (const std::exception& e)
         {
             LOG_WARN("[Editor] Ignoring the settings in {}: {}", m_file.string(), e.what());
             m_scriptEditor = {};
+            m_showEngineContent = false;
         }
     }
 
@@ -53,7 +66,8 @@ namespace crimson::editor
         const std::u8string program = m_scriptEditor.Program.u8string();
 
         const nlohmann::json json = {
-            { "scriptEditor", { { "program", std::string(program.begin(), program.end()) }, { "arguments", m_scriptEditor.Arguments } } }
+            { "scriptEditor", { { "program", std::string(program.begin(), program.end()) }, { "arguments", m_scriptEditor.Arguments } } },
+            { "assetsPanel", { { "showEngineContent", m_showEngineContent } } }
         };
 
         std::ofstream file(m_file);

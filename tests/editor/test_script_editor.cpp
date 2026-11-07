@@ -108,3 +108,23 @@ TEST_CASE("The script editor is remembered between runs", "[script editor]")
         CHECK(EditorSettings(file).GetScriptEditor() == EditorSettings::ScriptEditor{});
     }
 }
+
+TEST_CASE("Showing the engine's assets is remembered between runs, beside the script editor", "[script editor]")
+{
+    const TempFolder temp;
+    const fs::path file = temp.Path() / "settings.json";
+
+    const EditorSettings::ScriptEditor editor{ .Program = fs::path("code.exe") };
+
+    {
+        EditorSettings settings(file);
+        CHECK_FALSE(settings.GetShowEngineContent());
+
+        settings.SetScriptEditor(editor);
+        settings.SetShowEngineContent(true);
+    }
+
+    const EditorSettings again(file);
+    CHECK(again.GetShowEngineContent());
+    CHECK(again.GetScriptEditor() == editor);
+}
