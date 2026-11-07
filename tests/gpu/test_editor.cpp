@@ -53,7 +53,7 @@ namespace
         {
             temp.Write(std::string(name) + "/assets/meshes/floor.obj", kQuad);
             temp.Write(std::string(name) + "/assets/meshes/pyramid.obj", kQuad);
-            temp.Write(std::string(name) + "/assets/materials/floor.mat", R"({ "shader": "engine/shaders/main.hlsl" })");
+            temp.Write(std::string(name) + "/assets/materials/floor.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl" })");
             temp.Write(std::string(name) + "/assets/scenes/main.scene", R"({ "version": 1, "entities": [
                 { "name": "Floor", "meshRenderer": { "mesh": "meshes/floor.obj", "materials": [ "materials/floor.mat" ] } },
                 { "name": "Pyramid", "meshRenderer": { "mesh": "meshes/pyramid.obj" } },
@@ -208,7 +208,7 @@ namespace
 TEST_CASE_METHOD(AssetFixture, "Every kind of asset can be selected", "[editor]")
 {
     for (const char* path : { "materials/floor.mat", "textures/picture.bmp", "meshes/floor.obj", "shaders/own.hlsl", "scenes/main.scene",
-                              "engine/materials/default.mat", "engine/shaders/main.hlsl" })
+                              "engine/materials/M_Default.mat", "engine/shaders/S_Lit.hlsl" })
     {
         CAPTURE(path);
 

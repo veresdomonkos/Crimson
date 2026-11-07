@@ -24,12 +24,12 @@ namespace crimson::editor::ui
     };
 
     static constexpr BuiltInMesh kBuiltInMeshes[] = {
-        { "Cube",     "engine/meshes/cube.obj" },
-        { "Sphere",   "engine/meshes/sphere.obj" },
-        { "Cylinder", "engine/meshes/cylinder.obj" },
-        { "Capsule",  "engine/meshes/capsule.obj" },
-        { "Plane",    "engine/meshes/plane.obj" },
-        { "Quad",     "engine/meshes/quad.obj" },
+        { "Cube",     "engine/meshes/SM_Cube.obj" },
+        { "Sphere",   "engine/meshes/SM_Sphere.obj" },
+        { "Cylinder", "engine/meshes/SM_Cylinder.obj" },
+        { "Capsule",  "engine/meshes/SM_Capsule.obj" },
+        { "Plane",    "engine/meshes/SM_Plane.obj" },
+        { "Quad",     "engine/meshes/SM_Quad.obj" },
     };
 
     // What kind of entity it is, at a glance

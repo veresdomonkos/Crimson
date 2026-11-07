@@ -27,7 +27,7 @@ namespace
     {
         TempFolder Temp;
         FakeGpuResourceManager Gpu;
-        std::filesystem::path File = Temp.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "properties": { "Color": [1, 0, 0, 1] } })");
+        std::filesystem::path File = Temp.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "properties": { "Color": [1, 0, 0, 1] } })");
         AssetManager Assets{ Gpu, Temp.Path() };
         AssetEdits Edits{ Assets };
         AssetID Id = Assets.FindId("mine.mat");
@@ -160,7 +160,7 @@ TEST_CASE_METHOD(Fixture, "An edit that can't be shown is undone", "[asset edits
 
     CHECK_FALSE(Edits.Apply());
 
-    CHECK(Edits.GetMaterial(Id)->Shader == Assets.FindId("engine/shaders/main.hlsl"));
+    CHECK(Edits.GetMaterial(Id)->Shader == Assets.FindId("engine/shaders/S_Lit.hlsl"));
     CHECK_FALSE(Edits.IsDirty(Id));
 }
 

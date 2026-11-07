@@ -91,7 +91,7 @@ float4 PSMain(VertexOutput input) : SV_Target
             Lighting.AmbientColor = glm::vec3(1.0f);
 
             Project.Write("quad.obj", kFullQuad);
-            Project.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "cull": "none", "properties": { "Color": [1, 0, 0, 1] } })");
+            Project.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "cull": "none", "properties": { "Color": [1, 0, 0, 1] } })");
         }
 
         Image Draw(AssetManager& assets, const OffscreenTarget& target, const char* material = "mine.mat")
@@ -194,7 +194,7 @@ float4 PSMain() : SV_Target { return float4(0.0, 1.0, 0.0, 1.0); }
 TEST_CASE_METHOD(Fixture, "A material's color map multiplies its color", "[asset editing]")
 {
     Project.Write("blue.bmp", MakeBmp(1, 1, { Rgb{ 0, 0, 255 } }));
-    Project.Write("white.mat", R"({ "shader": "engine/shaders/main.hlsl", "cull": "none", "properties": { "Color": [1, 1, 1, 1] } })");
+    Project.Write("white.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "cull": "none", "properties": { "Color": [1, 1, 1, 1] } })");
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
     const AssetID id = assets.FindId("white.mat");
@@ -228,7 +228,7 @@ TEST_CASE("Mipmaps keep a shrunken texture from flickering", "[asset editing]")
     TempFolder project;
     project.Write("quad.obj", kFullQuad);
     project.Write("checker.bmp", MakeCheckerboard(256));
-    project.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "cull": "none", "properties": { "Color": [1, 1, 1, 1] }, "textures": { "ColorMap": "checker.bmp" } })");
+    project.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "cull": "none", "properties": { "Color": [1, 1, 1, 1] }, "textures": { "ColorMap": "checker.bmp" } })");
 
     // A size that doesn't divide the texture evenly, so without mips the samples land on different mixes of the two colors
     const OffscreenTarget target(37, 37);
@@ -283,7 +283,7 @@ TEST_CASE("Mipmaps keep a shrunken texture from flickering", "[asset editing]")
 TEST_CASE_METHOD(Fixture, "Flip Y turns the picture upside down", "[asset editing]")
 {
     Project.Write("rows.bmp", MakeBmp(1, 2, { Rgb{ 255, 0, 0 }, Rgb{ 0, 0, 255 } }));
-    Project.Write("rows.mat", R"({ "shader": "engine/shaders/main.hlsl", "cull": "none", "properties": { "Color": [1, 1, 1, 1] }, "textures": { "ColorMap": "rows.bmp" } })");
+    Project.Write("rows.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "cull": "none", "properties": { "Color": [1, 1, 1, 1] }, "textures": { "ColorMap": "rows.bmp" } })");
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
     const AssetID texture = assets.FindId("rows.bmp");

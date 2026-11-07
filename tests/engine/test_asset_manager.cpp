@@ -25,7 +25,7 @@ namespace fs = std::filesystem;
 namespace
 {
     constexpr std::string_view kTriangleObj = "v 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n";
-    constexpr std::string_view kValidMaterial = R"({ "shader": "engine/shaders/main.hlsl" })";
+    constexpr std::string_view kValidMaterial = R"({ "shader": "engine/shaders/S_Lit.hlsl" })";
     constexpr std::string_view kBrokenShader = "this does not compile";
 
     // A 1x1 uncompressed BMP, as PNGs are hard to write out by hand
@@ -99,7 +99,7 @@ TEST_CASE("A folder that doesn't exist gives just the engine's assets", "[assets
 
     AssetManager assets(gpu, temp.Path() / "nothing");
 
-    CHECK(assets.FindId("engine/materials/default.mat"));
+    CHECK(assets.FindId("engine/materials/M_Default.mat"));
     CHECK(std::ranges::all_of(assets.List(AssetType::Mesh), [](const AssetInfo* info) { return info->ReadOnly && info->Path.starts_with("engine/"); }));
 }
 
@@ -117,12 +117,12 @@ TEST_CASE("The engine's built-in meshes load, at the size they are meant to be",
     };
 
     const std::array kMeshes = {
-        Expected{ "engine/meshes/cube.obj",     { -0.5f, -0.5f, -0.5f }, { 0.5f, 0.5f, 0.5f } },
-        Expected{ "engine/meshes/sphere.obj",   { -0.5f, -0.5f, -0.5f }, { 0.5f, 0.5f, 0.5f } },
-        Expected{ "engine/meshes/cylinder.obj", { -0.5f, -1.0f, -0.5f }, { 0.5f, 1.0f, 0.5f } },
-        Expected{ "engine/meshes/capsule.obj",  { -0.5f, -1.0f, -0.5f }, { 0.5f, 1.0f, 0.5f } },
-        Expected{ "engine/meshes/plane.obj",    { -5.0f,  0.0f, -5.0f }, { 5.0f, 0.0f, 5.0f } },
-        Expected{ "engine/meshes/quad.obj",     { -0.5f, -0.5f,  0.0f }, { 0.5f, 0.5f, 0.0f } },
+        Expected{ "engine/meshes/SM_Cube.obj",     { -0.5f, -0.5f, -0.5f }, { 0.5f, 0.5f, 0.5f } },
+        Expected{ "engine/meshes/SM_Sphere.obj",   { -0.5f, -0.5f, -0.5f }, { 0.5f, 0.5f, 0.5f } },
+        Expected{ "engine/meshes/SM_Cylinder.obj", { -0.5f, -1.0f, -0.5f }, { 0.5f, 1.0f, 0.5f } },
+        Expected{ "engine/meshes/SM_Capsule.obj",  { -0.5f, -1.0f, -0.5f }, { 0.5f, 1.0f, 0.5f } },
+        Expected{ "engine/meshes/SM_Plane.obj",    { -5.0f,  0.0f, -5.0f }, { 5.0f, 0.0f, 5.0f } },
+        Expected{ "engine/meshes/SM_Quad.obj",     { -0.5f, -0.5f,  0.0f }, { 0.5f, 0.5f, 0.0f } },
     };
 
     const auto near = [](const glm::vec3& a, const glm::vec3& b) { return glm::all(glm::lessThan(glm::abs(a - b), glm::vec3(1e-4f))); };
@@ -252,15 +252,15 @@ TEST_CASE("Engine assets are always there, with the same id everywhere", "[asset
     AssetManager a(gpu, projectA.Path());
     AssetManager b(gpu, projectB.Path());
 
-    for (const char* path : { "engine/materials/default.mat", "engine/materials/shadow.mat", "engine/materials/outline.mat",
-                              "engine/materials/outline_mask.mat", "engine/shaders/main.hlsl" })
+    for (const char* path : { "engine/materials/M_Default.mat", "engine/materials/internal/M_Shadow.mat", "engine/materials/internal/M_Outline.mat",
+                              "engine/materials/internal/M_OutlineMask.mat", "engine/shaders/S_Lit.hlsl" })
     {
         CAPTURE(path);
         CHECK(a.FindId(path));
         CHECK(a.FindId(path) == b.FindId(path));
     }
 
-    CHECK(a.DefaultMaterial() == a.FindId("engine/materials/default.mat"));
+    CHECK(a.DefaultMaterial() == a.FindId("engine/materials/M_Default.mat"));
 
     // Includes aren't assets, and engine assets don't write metas anywhere
     CHECK_FALSE(a.FindId("engine/shaders/crimson/bindings.hlsli"));
@@ -286,20 +286,20 @@ TEST_CASE("Every engine material loads, without any project files", "[assets]")
 TEST_CASE("A project can't shadow the engine's assets", "[assets]")
 {
     const TempFolder temp;
-    temp.Write("engine/materials/default.mat", R"({ "shader": "nope" })");
+    temp.Write("engine/materials/M_Default.mat", R"({ "shader": "nope" })");
     FakeGpuResourceManager gpu;
 
     AssetManager assets(gpu, temp.Path());
 
-    CHECK(assets.LoadMaterial("engine/materials/default.mat"));
-    CHECK_FALSE(fs::exists(temp.Path() / "engine/materials/default.mat.meta"));
+    CHECK(assets.LoadMaterial("engine/materials/M_Default.mat"));
+    CHECK_FALSE(fs::exists(temp.Path() / "engine/materials/M_Default.mat.meta"));
 }
 
 TEST_CASE("A project's material can use an engine shader, or its own", "[assets]")
 {
     const TempFolder temp;
     temp.Write("mine.mat", R"({
-        "shader": "engine/shaders/main.hlsl",
+        "shader": "engine/shaders/S_Lit.hlsl",
         "renderMode": "transparent",
         "cull": "none",
         "properties": { "Color": [0.1, 0.2, 0.3, 1.0] },
@@ -407,7 +407,7 @@ TEST_CASE("Materials that can't load fail cleanly", "[assets]")
 
     SECTION("A missing texture only loses the texture")
     {
-        temp.Write("m.mat", R"({ "shader": "engine/shaders/main.hlsl", "textures": { "Albedo": "nope.bmp" } })");
+        temp.Write("m.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "Albedo": "nope.bmp" } })");
         AssetManager assets(gpu, temp.Path());
         const MaterialHandle material = assets.LoadMaterial("m.mat");
         REQUIRE(material);
@@ -556,7 +556,7 @@ TEST_CASE("A texture's srgb setting picks its format", "[assets]")
 
     SECTION("Only textures have a preview")
     {
-        CHECK_FALSE(assets.CreateTexturePreview(assets.FindId("engine/materials/default.mat")));
+        CHECK_FALSE(assets.CreateTexturePreview(assets.FindId("engine/materials/M_Default.mat")));
     }
 }
 
@@ -565,7 +565,7 @@ TEST_CASE("Destroying the manager frees what it loaded, users first", "[assets]"
     const TempFolder temp;
     temp.Write("tri.obj", kTriangleObj);
     temp.Write("image.bmp", MakeImage());
-    temp.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "textures": { "Albedo": "image.bmp" } })");
+    temp.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "Albedo": "image.bmp" } })");
 
     FakeGpuResourceManager gpu;
 
@@ -683,5 +683,82 @@ TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
         renderer.MeshAsset = {};
         ResolveMeshRenderer(renderer, assets);
         CHECK(renderer.Resolved.SubMeshes.empty());
+    }
+}
+
+TEST_CASE("Engine assets saved under their old names still load", "[assets]")
+{
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, fs::path("does/not/exist"));
+
+    const AssetID lit = assets.FindId("engine/shaders/S_Lit.hlsl");
+    const AssetID cube = assets.FindId("engine/meshes/SM_Cube.obj");
+    REQUIRE(lit);
+    REQUIRE(cube);
+
+    // What an engine asset's id was made from before it was renamed, FNV-1a of its path
+    const auto oldId = [](std::string_view path)
+    {
+        uint64_t hash = 0xcbf29ce484222325ull;
+        for (const unsigned char c : path)
+        {
+            hash ^= c;
+            hash *= 0x100000001b3ull;
+        }
+        return AssetID{ hash }.ToString();
+    };
+
+    SECTION("A material, by id and path or by path alone")
+    {
+        const std::string saved = R"({ "shader": { "guid": ")" + oldId("engine/shaders/main.hlsl") + R"(", "path": "engine/shaders/main.hlsl" } })";
+
+        for (const std::string& text : { saved, std::string(R"({ "shader": "engine/shaders/main.hlsl" })") })
+        {
+            const auto data = ParseMaterialData(text, assets, "test");
+            REQUIRE(data);
+            CHECK(data->Shader == lit);
+            CHECK_THAT(WriteMaterialData(*data, assets), Catch::Matchers::ContainsSubstring(R"("path": "engine/shaders/S_Lit.hlsl")"));
+        }
+    }
+
+    SECTION("A scene")
+    {
+        const std::string text = R"({ "version": 1, "entities": [ { "meshRenderer": { "mesh": { "guid": ")" + oldId("engine/meshes/cube.obj")
+            + R"(", "path": "engine/meshes/cube.obj" }, "materials": [ "engine/materials/default.mat" ] } } ] })";
+
+        const auto data = ParseSceneData(text, assets, "test");
+        REQUIRE(data);
+        CHECK(data->Roots.at(0).MeshRenderer->Mesh == cube);
+        CHECK(data->Roots.at(0).MeshRenderer->Materials.at(0) == assets.DefaultMaterial());
+
+        const std::string written = WriteSceneData(*data, assets);
+        CHECK_THAT(written, Catch::Matchers::ContainsSubstring("engine/meshes/SM_Cube.obj"));
+        CHECK_THAT(written, Catch::Matchers::ContainsSubstring("engine/materials/M_Default.mat"));
+    }
+
+    SECTION("An id that was never an engine asset's stays as it is")
+    {
+        CHECK(assets.Redirect(AssetID{ 42 }) == AssetID{ 42 });
+        CHECK(assets.Redirect(lit) == lit);
+    }
+}
+
+TEST_CASE("The renderer's own shaders and materials are internal", "[assets]")
+{
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, fs::path("does/not/exist"));
+
+    for (const std::string_view path : { "engine/shaders/internal/S_ToneMap.hlsl", "engine/materials/internal/M_Shadow.mat" })
+    {
+        const AssetInfo* info = assets.GetInfo(assets.FindId(path));
+        REQUIRE(info);
+        CHECK(IsInternal(*info));
+    }
+
+    for (const std::string_view path : { "engine/shaders/S_Lit.hlsl", "engine/materials/M_Default.mat", "engine/meshes/SM_Cube.obj" })
+    {
+        const AssetInfo* info = assets.GetInfo(assets.FindId(path));
+        REQUIRE(info);
+        CHECK_FALSE(IsInternal(*info));
     }
 }

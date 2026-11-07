@@ -1,0 +1,4 @@
+{
+  "shader": "engine/shaders/internal/S_OutlineMask.hlsl",
+  "cull": "none"
+}

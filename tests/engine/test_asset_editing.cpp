@@ -24,7 +24,7 @@ namespace fs = std::filesystem;
 
 namespace
 {
-    constexpr std::string_view kMainMaterial = R"({ "shader": "engine/shaders/main.hlsl", "properties": { "Color": [0.1, 0.2, 0.3, 1.0] } })";
+    constexpr std::string_view kMainMaterial = R"({ "shader": "engine/shaders/S_Lit.hlsl", "properties": { "Color": [0.1, 0.2, 0.3, 1.0] } })";
     constexpr std::string_view kTriangleObj = "v 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n";
 
     std::string MakeImage()
@@ -63,7 +63,7 @@ TEST_CASE_METHOD(Fixture, "Material data survives being written and read back", 
     AssetManager assets(Gpu, Temp.Path());
 
     MaterialData data;
-    data.Shader = assets.FindId("engine/shaders/main.hlsl");
+    data.Shader = assets.FindId("engine/shaders/S_Lit.hlsl");
     data.Settings = { .RenderMode = MaterialRenderMode::Transparent, .Cull = CullMode::Front };
     data.Properties["Single"] = { 0.5f };
     data.Properties["Color"] = { 0.25f, 0.5f, 0.75f, 1.0f };
@@ -81,13 +81,13 @@ TEST_CASE_METHOD(Fixture, "Materials written by hand keep working", "[asset edit
     AssetManager assets(Gpu, Temp.Path());
 
     const auto data = ParseMaterialData(R"({
-        "shader": "engine/shaders/main.hlsl",
+        "shader": "engine/shaders/S_Lit.hlsl",
         "properties": { "Number": 2, "Color": [1, 0, 0, 1], "TooLong": [1, 2, 3, 4, 5] },
         "textures": { "ColorMap": "image.bmp", "Gone": "no/such.bmp" }
     })", assets, "test");
 
     REQUIRE(data);
-    CHECK(data->Shader == assets.FindId("engine/shaders/main.hlsl"));
+    CHECK(data->Shader == assets.FindId("engine/shaders/S_Lit.hlsl"));
     CHECK(data->Settings == MaterialSettings{});
     CHECK(data->Properties.at("Number") == std::vector{ 2.0f });
     CHECK_FALSE(data->Properties.contains("TooLong"));
@@ -186,7 +186,7 @@ TEST_CASE_METHOD(Fixture, "A saved reference survives its file being renamed", "
 TEST_CASE_METHOD(Fixture, "Moving a texture updates the materials referencing it", "[asset editing]")
 {
     Temp.Write("old.bmp", MakeImage());
-    const fs::path file = Temp.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "textures": { "ColorMap": "old.bmp" } })");
+    const fs::path file = Temp.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "ColorMap": "old.bmp" } })");
     AssetManager assets(Gpu, Temp.Path());
 
     const AssetID texture = assets.FindId("old.bmp");
@@ -248,7 +248,7 @@ TEST_CASE_METHOD(Fixture, "Moving a shader updates the materials referencing it"
 TEST_CASE_METHOD(Fixture, "A renamed folder keeps the references inside it working", "[asset editing]")
 {
     Temp.Write("sponza/textures/arch.bmp", MakeImage());
-    Temp.Write("sponza/materials/arch.mat", R"({ "shader": "engine/shaders/main.hlsl", "textures": { "ColorMap": "sponza/textures/arch.bmp" } })");
+    Temp.Write("sponza/materials/arch.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "ColorMap": "sponza/textures/arch.bmp" } })");
     AssetManager assets(Gpu, Temp.Path());
 
     const AssetID texture = assets.FindId("sponza/textures/arch.bmp");
@@ -265,7 +265,7 @@ TEST_CASE_METHOD(Fixture, "A renamed folder keeps the references inside it worki
 TEST_CASE_METHOD(Fixture, "A file moved outside the editor updates the materials referencing it", "[asset editing]")
 {
     const fs::path image = Temp.Write("old.bmp", MakeImage());
-    Temp.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "textures": { "ColorMap": "old.bmp" } })");
+    Temp.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "ColorMap": "old.bmp" } })");
     AssetManager assets(Gpu, Temp.Path());
 
     const AssetID texture = assets.FindId("old.bmp");
@@ -288,7 +288,7 @@ TEST_CASE_METHOD(Fixture, "Moving a file leaves everything else in materials alo
 
     SECTION("Files with no reference to it stay exactly as they were")
     {
-        constexpr std::string_view kOther = R"({ "shader": "engine/shaders/main.hlsl", "textures": { "ColorMap": "other.bmp" } })";
+        constexpr std::string_view kOther = R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "ColorMap": "other.bmp" } })";
         constexpr std::string_view kBroken = "{ not json";
 
         const fs::path other = Temp.Write("other.mat", kOther);
@@ -304,7 +304,7 @@ TEST_CASE_METHOD(Fixture, "Moving a file leaves everything else in materials alo
     SECTION("A rewritten file only changes the reference")
     {
         const fs::path file = Temp.Write("mine.mat", R"({
-            "shader": "engine/shaders/main.hlsl",
+            "shader": "engine/shaders/S_Lit.hlsl",
             "properties": { "Roughness": 0.8 },
             "textures": { "ColorMap": "old.bmp", "NormalMap": "other.bmp", "Gone": "no/such.bmp" }
         })");
@@ -315,7 +315,7 @@ TEST_CASE_METHOD(Fixture, "Moving a file leaves everything else in materials alo
         const std::string text = ReadFile(file);
         CHECK(text.find("new.bmp") != std::string::npos);
         CHECK(text.find("Roughness") != std::string::npos);
-        CHECK(text.find("\"engine/shaders/main.hlsl\"") != std::string::npos);
+        CHECK(text.find("\"engine/shaders/S_Lit.hlsl\"") != std::string::npos);
         CHECK(text.find("\"other.bmp\"") != std::string::npos);
         CHECK(text.find("no/such.bmp") != std::string::npos);
         CHECK(text.find("renderMode") == std::string::npos);
@@ -324,7 +324,7 @@ TEST_CASE_METHOD(Fixture, "Moving a file leaves everything else in materials alo
 
     SECTION("Unsaved changes stay unsaved")
     {
-        Temp.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "properties": { "Roughness": 0.8 }, "textures": { "ColorMap": "old.bmp" } })");
+        Temp.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "properties": { "Roughness": 0.8 }, "textures": { "ColorMap": "old.bmp" } })");
         AssetManager assets(Gpu, Temp.Path());
         const AssetID material = assets.FindId("mine.mat");
 
@@ -419,7 +419,7 @@ TEST_CASE_METHOD(Fixture, "Refreshing finds what changed on disk", "[asset editi
     SECTION("Engine assets stay")
     {
         CHECK(assets.Refresh().empty());
-        CHECK(assets.FindId("engine/materials/default.mat"));
+        CHECK(assets.FindId("engine/materials/M_Default.mat"));
     }
 }
 
@@ -431,7 +431,7 @@ TEST_CASE_METHOD(Fixture, "Removing what a material uses leaves the material saf
 float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
 float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 )");
-    Temp.Write("textured.mat", R"({ "shader": "engine/shaders/main.hlsl", "textures": { "ColorMap": "image.bmp" } })");
+    Temp.Write("textured.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "ColorMap": "image.bmp" } })");
     Temp.Write("own.mat", R"({ "shader": "own.hlsl" })");
 
     AssetManager assets(Gpu, Temp.Path());
@@ -494,7 +494,7 @@ TEST_CASE_METHOD(Fixture, "New materials", "[asset editing]")
         CHECK(fs::exists(Temp.Path() / "folder/new.mat.meta"));
         CHECK(assets.GetInfo(id)->Type == AssetType::Material);
         CHECK(assets.LoadMaterial(id));
-        CHECK(assets.GetMaterialData(id)->Shader == assets.FindId("engine/shaders/main.hlsl"));
+        CHECK(assets.GetMaterialData(id)->Shader == assets.FindId("engine/shaders/S_Lit.hlsl"));
     }
 
     SECTION("Refuse bad places")
@@ -667,7 +667,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 
         CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Failed);
         CHECK(assets.LoadMaterial(id) == handle);
-        CHECK(assets.GetMaterialData(id)->Shader == assets.FindId("engine/shaders/main.hlsl"));
+        CHECK(assets.GetMaterialData(id)->Shader == assets.FindId("engine/shaders/S_Lit.hlsl"));
     }
 
     SECTION("Reading the file again gets back what was saved")
@@ -693,7 +693,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 TEST_CASE_METHOD(Fixture, "Reimporting a texture", "[asset editing]")
 {
     const fs::path file = Temp.Write("image.bmp", MakeImage());
-    Temp.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl", "textures": { "ColorMap": "image.bmp" } })");
+    Temp.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "ColorMap": "image.bmp" } })");
 
     AssetManager assets(Gpu, Temp.Path());
     const AssetID id = assets.FindId("image.bmp");

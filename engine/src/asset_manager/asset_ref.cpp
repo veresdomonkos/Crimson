@@ -30,7 +30,7 @@ namespace crimson
     template <typename Json>
     static AssetID ResolveGuid(const AssetManager& assets, const Json& ref)
     {
-        const AssetID id = ReadGuid(ref);
+        const AssetID id = assets.Redirect(ReadGuid(ref));
         return id && assets.GetInfo(id) ? id : AssetID{};
     }
 

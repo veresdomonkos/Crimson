@@ -1,5 +1,5 @@
 {
-  "shader": "engine/shaders/outline.hlsl",
+  "shader": "engine/shaders/internal/S_Outline.hlsl",
   "renderMode": "transparent",
   "cull": "none",
   "properties": {

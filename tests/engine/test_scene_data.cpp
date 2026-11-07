@@ -24,7 +24,7 @@ namespace fs = std::filesystem;
 namespace
 {
     constexpr std::string_view kTriangleObj = "v 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n";
-    constexpr std::string_view kMaterial = R"({ "shader": "engine/shaders/main.hlsl" })";
+    constexpr std::string_view kMaterial = R"({ "shader": "engine/shaders/S_Lit.hlsl" })";
 
     std::string ReadFile(const fs::path& file)
     {
