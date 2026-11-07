@@ -67,7 +67,7 @@ C++23, in the style the code already has:
 
 ### Engine assets
 
-The engine's own assets get a prefix for their kind: `S_` for shaders, `M_` for materials, `SM_` for meshes, `T_` for textures, then a `PascalCase` name, such as `S_Lit.hlsl`. Shader include files (`crimson/*.hlsli`) don't, as shaders include them by path. A rename goes in `kRenamedEngineAssets` in `engine/src/asset_manager/asset_manager.cpp`, so nothing saved with the old name breaks.
+The engine's own assets get a prefix for their kind: `S_` for shaders, `M_` for materials, `SM_` for meshes, `T_` for textures, then a `PascalCase` name, such as `S_Lit.hlsl`. Shader include files (`crimson/*.hlsli`) don't, as shaders include them by path. Before the first release, renaming one needs nothing else. After it, a rename gets a line at the end of `kRenamedEngineAssets` in `engine/src/asset_manager/engine_renames.hpp`, so nothing saved with the old name breaks.
 
 ## Tests
 

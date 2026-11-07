@@ -17,6 +17,8 @@
 #include "crimson/core/engine_resources.hpp"
 #include "crimson/core/log.hpp"
 
+#include "engine_renames.hpp"
+
 namespace fs = std::filesystem;
 
 namespace crimson
@@ -24,27 +26,6 @@ namespace crimson
     static constexpr std::string_view kEnginePathPrefix = "engine/";
     static constexpr std::string_view kDefaultMaterialPath = "engine/materials/M_Default.mat";
     static constexpr std::string_view kDefaultShaderPath = "engine/shaders/S_Lit.hlsl";
-
-    // Engine assets that were renamed, old path to new. What a project saved with an old path, or the id made from it,
-    // still finds the asset, and its next save writes the new one.
-    static constexpr std::array<std::pair<std::string_view, std::string_view>, 16> kRenamedEngineAssets = { {
-        { "engine/shaders/main.hlsl",          "engine/shaders/S_Lit.hlsl" },
-        { "engine/materials/default.mat",      "engine/materials/M_Default.mat" },
-        { "engine/meshes/cube.obj",            "engine/meshes/SM_Cube.obj" },
-        { "engine/meshes/sphere.obj",          "engine/meshes/SM_Sphere.obj" },
-        { "engine/meshes/cylinder.obj",        "engine/meshes/SM_Cylinder.obj" },
-        { "engine/meshes/capsule.obj",         "engine/meshes/SM_Capsule.obj" },
-        { "engine/meshes/plane.obj",           "engine/meshes/SM_Plane.obj" },
-        { "engine/meshes/quad.obj",            "engine/meshes/SM_Quad.obj" },
-        { "engine/shaders/tonemap.hlsl",       "engine/shaders/internal/S_ToneMap.hlsl" },
-        { "engine/shaders/shadow.hlsl",        "engine/shaders/internal/S_Shadow.hlsl" },
-        { "engine/shaders/outline.hlsl",       "engine/shaders/internal/S_Outline.hlsl" },
-        { "engine/shaders/outline_mask.hlsl",  "engine/shaders/internal/S_OutlineMask.hlsl" },
-        { "engine/materials/tonemap.mat",      "engine/materials/internal/M_ToneMap.mat" },
-        { "engine/materials/shadow.mat",       "engine/materials/internal/M_Shadow.mat" },
-        { "engine/materials/outline.mat",      "engine/materials/internal/M_Outline.mat" },
-        { "engine/materials/outline_mask.mat", "engine/materials/internal/M_OutlineMask.mat" },
-    } };
 
     // What a new shader starts as: lit like the default one, with fewer slots, to have something to change
     static constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space2,
@@ -156,6 +137,9 @@ float4 PSMain(VertexOutput input) : SV_Target
 
         std::unordered_set<AssetID> seen;
         Scan(seen);
+
+        // For the project's files to stop needing the old names
+        UpdateReferencesTo(m_renamedPaths);
     }
 
     AssetManager::~AssetManager()
@@ -219,14 +203,18 @@ float4 PSMain(VertexOutput input) : SV_Target
             m_assets.emplace(id, Entry{ .Info = std::move(info), .Importer = importer->second, .Embedded = &file });
         }
 
+        const auto exists = [this](std::string_view path) { return m_idsByPath.contains(std::string(path)); };
+
         for (const auto& [oldPath, newPath] : kRenamedEngineAssets)
         {
-            const AssetID id = FindId(newPath);
-            if (!id)
+            const std::string_view now = FollowRenames(kRenamedEngineAssets, newPath, exists);
+            if (now.empty())
             {
                 LOG_ERROR("[Assets] {} was renamed to {}, which doesn't exist", oldPath, newPath);
                 continue;
             }
+
+            const AssetID id = m_idsByPath.at(std::string(now));
 
             m_renamedPaths.emplace(oldPath, id);
             m_renamedIds.emplace(EngineResourceId(oldPath), id);

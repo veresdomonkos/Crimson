@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <array>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -12,6 +14,8 @@
 #include <crimson/asset_manager/importers/texture_importer.hpp>
 #include <crimson/core/log.hpp>
 #include <crimson/scene/scene_renderer.hpp>
+
+#include "asset_manager/engine_renames.hpp"
 
 #include "support/fake_gpu.hpp"
 #include "support/temp_folder.hpp"
@@ -686,6 +690,27 @@ TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
     }
 }
 
+namespace
+{
+    std::string ReadFile(const fs::path& file)
+    {
+        std::ifstream stream(file, std::ios::binary);
+        return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+    }
+
+    // The id an engine asset had at a path, FNV-1a of it
+    std::string EngineIdOf(std::string_view path)
+    {
+        uint64_t hash = 0xcbf29ce484222325ull;
+        for (const unsigned char c : path)
+        {
+            hash ^= c;
+            hash *= 0x100000001b3ull;
+        }
+        return AssetID{ hash }.ToString();
+    }
+}
+
 TEST_CASE("Engine assets saved under their old names still load", "[assets]")
 {
     FakeGpuResourceManager gpu;
@@ -696,21 +721,9 @@ TEST_CASE("Engine assets saved under their old names still load", "[assets]")
     REQUIRE(lit);
     REQUIRE(cube);
 
-    // What an engine asset's id was made from before it was renamed, FNV-1a of its path
-    const auto oldId = [](std::string_view path)
-    {
-        uint64_t hash = 0xcbf29ce484222325ull;
-        for (const unsigned char c : path)
-        {
-            hash ^= c;
-            hash *= 0x100000001b3ull;
-        }
-        return AssetID{ hash }.ToString();
-    };
-
     SECTION("A material, by id and path or by path alone")
     {
-        const std::string saved = R"({ "shader": { "guid": ")" + oldId("engine/shaders/main.hlsl") + R"(", "path": "engine/shaders/main.hlsl" } })";
+        const std::string saved = R"({ "shader": { "guid": ")" + EngineIdOf("engine/shaders/main.hlsl") + R"(", "path": "engine/shaders/main.hlsl" } })";
 
         for (const std::string& text : { saved, std::string(R"({ "shader": "engine/shaders/main.hlsl" })") })
         {
@@ -723,7 +736,7 @@ TEST_CASE("Engine assets saved under their old names still load", "[assets]")
 
     SECTION("A scene")
     {
-        const std::string text = R"({ "version": 1, "entities": [ { "meshRenderer": { "mesh": { "guid": ")" + oldId("engine/meshes/cube.obj")
+        const std::string text = R"({ "version": 1, "entities": [ { "meshRenderer": { "mesh": { "guid": ")" + EngineIdOf("engine/meshes/cube.obj")
             + R"(", "path": "engine/meshes/cube.obj" }, "materials": [ "engine/materials/default.mat" ] } } ] })";
 
         const auto data = ParseSceneData(text, assets, "test");
@@ -761,4 +774,38 @@ TEST_CASE("The renderer's own shaders and materials are internal", "[assets]")
         REQUIRE(info);
         CHECK_FALSE(IsInternal(*info));
     }
+}
+
+TEST_CASE("An engine asset renamed twice is found from either old name", "[assets]")
+{
+    const auto exists = [](std::string_view path) { return path == "c"; };
+
+    constexpr std::array<EngineRename, 2> twice = { { { "a", "b" }, { "b", "c" } } };
+    CHECK(FollowRenames(twice, "a", exists) == "c");
+    CHECK(FollowRenames(twice, "b", exists) == "c");
+    CHECK(FollowRenames(twice, "c", exists) == "c");
+    CHECK(FollowRenames(twice, "d", exists).empty());
+
+    constexpr std::array<EngineRename, 2> loop = { { { "x", "y" }, { "y", "x" } } };
+    CHECK(FollowRenames(loop, "x", exists).empty());
+}
+
+TEST_CASE("Opening a project writes the engine's new names into its files", "[assets]")
+{
+    const TempFolder temp;
+    const fs::path material = temp.Write("mine.mat", R"({ "shader": "engine/shaders/main.hlsl" })");
+    const fs::path scene = temp.Write("level.scene", R"({ "version": 1, "entities": [ { "meshRenderer": { "mesh": { "guid": ")"
+        + EngineIdOf("engine/meshes/cube.obj") + R"(", "path": "engine/meshes/cube.obj" } } } ] })");
+
+    FakeGpuResourceManager gpu;
+    const AssetManager assets(gpu, temp.Path());
+
+    const std::string materialText = ReadFile(material);
+    CHECK_THAT(materialText, Catch::Matchers::ContainsSubstring("engine/shaders/S_Lit.hlsl"));
+    CHECK_THAT(materialText, !Catch::Matchers::ContainsSubstring("main.hlsl"));
+
+    const std::string sceneText = ReadFile(scene);
+    CHECK_THAT(sceneText, Catch::Matchers::ContainsSubstring(R"("path": "engine/meshes/SM_Cube.obj")"));
+    CHECK_THAT(sceneText, Catch::Matchers::ContainsSubstring(assets.FindId("engine/meshes/SM_Cube.obj").ToString()));
+    CHECK_THAT(sceneText, !Catch::Matchers::ContainsSubstring("meshes/cube.obj"));
 }
