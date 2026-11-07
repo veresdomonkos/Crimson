@@ -51,7 +51,10 @@ namespace crimson
 
         // What exists. None of these load anything.
         [[nodiscard]] const AssetInfo* GetInfo(AssetID id) const;
-        [[nodiscard]] AssetID FindId(std::string_view path) const;
+        [[nodiscard]] AssetID FindId(std::string_view path) const; // an engine asset's old path finds it under its new one
+
+        // The id an engine asset that was renamed has now, for one that was saved with its old id. Any other id stays.
+        [[nodiscard]] AssetID Redirect(AssetID id) const;
         [[nodiscard]] std::vector<const AssetInfo*> List(AssetType type) const; // sorted by path
         [[nodiscard]] std::vector<const AssetInfo*> ListAll() const; // sorted by path
         [[nodiscard]] const std::filesystem::path& GetRoot() const { return m_root; }
@@ -159,6 +162,8 @@ namespace crimson
 
         std::unordered_map<AssetID, Entry> m_assets;
         std::unordered_map<std::string, AssetID> m_idsByPath;
+        std::unordered_map<std::string, AssetID> m_renamedPaths; // an engine asset's old path to its id
+        std::unordered_map<AssetID, AssetID> m_renamedIds; // the id made from an engine asset's old path to its id
         mutable std::unordered_map<AssetID, MissingAssetRef> m_missing;
 
         TextureHandle m_flatNormal; // made when a shader first needs it

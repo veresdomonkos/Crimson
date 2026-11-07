@@ -17,13 +17,15 @@
 #include "crimson/core/engine_resources.hpp"
 #include "crimson/core/log.hpp"
 
+#include "engine_renames.hpp"
+
 namespace fs = std::filesystem;
 
 namespace crimson
 {
     static constexpr std::string_view kEnginePathPrefix = "engine/";
-    static constexpr std::string_view kDefaultMaterialPath = "engine/materials/default.mat";
-    static constexpr std::string_view kDefaultShaderPath = "engine/shaders/main.hlsl";
+    static constexpr std::string_view kDefaultMaterialPath = "engine/materials/M_Default.mat";
+    static constexpr std::string_view kDefaultShaderPath = "engine/shaders/S_Lit.hlsl";
 
     // What a new shader starts as: lit like the default one, with fewer slots, to have something to change
     static constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space2,
@@ -135,6 +137,9 @@ float4 PSMain(VertexOutput input) : SV_Target
 
         std::unordered_set<AssetID> seen;
         Scan(seen);
+
+        // For the project's files to stop needing the old names
+        UpdateReferencesTo(m_renamedPaths);
     }
 
     AssetManager::~AssetManager()
@@ -196,6 +201,23 @@ float4 PSMain(VertexOutput input) : SV_Target
             const AssetID id = info.Id;
             m_idsByPath[info.Path] = id;
             m_assets.emplace(id, Entry{ .Info = std::move(info), .Importer = importer->second, .Embedded = &file });
+        }
+
+        const auto exists = [this](std::string_view path) { return m_idsByPath.contains(std::string(path)); };
+
+        for (const auto& [oldPath, newPath] : kRenamedEngineAssets)
+        {
+            const std::string_view now = FollowRenames(kRenamedEngineAssets, newPath, exists);
+            if (now.empty())
+            {
+                LOG_ERROR("[Assets] {} was renamed to {}, which doesn't exist", oldPath, newPath);
+                continue;
+            }
+
+            const AssetID id = m_idsByPath.at(std::string(now));
+
+            m_renamedPaths.emplace(oldPath, id);
+            m_renamedIds.emplace(EngineResourceId(oldPath), id);
         }
     }
 
@@ -341,8 +363,20 @@ float4 PSMain(VertexOutput input) : SV_Target
 
     AssetID AssetManager::FindId(std::string_view path) const
     {
-        const auto it = m_idsByPath.find(std::string(path));
-        return it != m_idsByPath.end() ? it->second : AssetID{};
+        if (const auto it = m_idsByPath.find(std::string(path)); it != m_idsByPath.end())
+            return it->second;
+
+        const auto renamed = m_renamedPaths.find(std::string(path));
+        return renamed != m_renamedPaths.end() ? renamed->second : AssetID{};
+    }
+
+    AssetID AssetManager::Redirect(AssetID id) const
+    {
+        if (GetInfo(id))
+            return id;
+
+        const auto renamed = m_renamedIds.find(id);
+        return renamed != m_renamedIds.end() ? renamed->second : id;
     }
 
     AssetID AssetManager::FindIdOrWarn(std::string_view path) const

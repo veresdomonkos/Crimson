@@ -1,4 +1,4 @@
-// Drawn over the whole screen, colors the pixels right outside the mask from outline_mask.hlsl
+// Drawn over the whole screen, colors the pixels right outside the mask from S_OutlineMask.hlsl
 #include "crimson/bindings.hlsli"
 
 cbuffer MaterialBlock : register(b0, space2)

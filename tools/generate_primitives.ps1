@@ -142,35 +142,35 @@ $cube.Rectangle(@(0, 0.5, 0), @(0.5, 0, 0), @(0, 0, -0.5), @(0, 1, 0))
 $cube.Rectangle(@(0, -0.5, 0), @(0.5, 0, 0), @(0, 0, 0.5), @(0, -1, 0))
 $cube.Rectangle(@(0, 0, 0.5), @(0.5, 0, 0), @(0, 0.5, 0), @(0, 0, 1))
 $cube.Rectangle(@(0, 0, -0.5), @(-0.5, 0, 0), @(0, 0.5, 0), @(0, 0, -1))
-$cube.Save((Join-Path $OutDir 'cube.obj'), 'A cube, 1 m on each side')
+$cube.Save((Join-Path $OutDir 'SM_Cube.obj'), 'A cube, 1 m on each side')
 
 # 1 m across
 $sphere = [MeshBuilder]::new()
 $sphere.Lathe(@(Sphere-Rows 0.5 0.0 ([Math]::PI) $Rings 0.0 1.0), $Segments)
-$sphere.Save((Join-Path $OutDir 'sphere.obj'), 'A sphere, 1 m across')
+$sphere.Save((Join-Path $OutDir 'SM_Sphere.obj'), 'A sphere, 1 m across')
 
 # 2 m tall and 1 m across
 $cylinder = [MeshBuilder]::new()
 $cylinder.Lathe(@(@(1.0, 0.5, 0.0, 1.0), @(-1.0, 0.5, 0.0, 0.0)), $Segments)
 $cylinder.Cap(1.0, 0.5, $Segments, $true)
 $cylinder.Cap(-1.0, 0.5, $Segments, $false)
-$cylinder.Save((Join-Path $OutDir 'cylinder.obj'), 'A cylinder, 2 m tall and 1 m across')
+$cylinder.Save((Join-Path $OutDir 'SM_Cylinder.obj'), 'A cylinder, 2 m tall and 1 m across')
 
 # 2 m tall and 1 m across: a 1 m cylinder with a half sphere on each end
 $capsule = [MeshBuilder]::new()
 $top = @(Sphere-Rows 0.5 0.0 ([Math]::PI / 2) $CapsuleRings 0.5 2.0)
 $bottom = @(Sphere-Rows 0.5 ([Math]::PI / 2) ([Math]::PI) $CapsuleRings -0.5 2.0)
 $capsule.Lathe($top + $bottom, $Segments)
-$capsule.Save((Join-Path $OutDir 'capsule.obj'), 'A capsule, 2 m tall and 1 m across')
+$capsule.Save((Join-Path $OutDir 'SM_Capsule.obj'), 'A capsule, 2 m tall and 1 m across')
 
 # 10 m on each side, facing up
 $plane = [MeshBuilder]::new()
 $plane.Rectangle(@(0, 0, 0), @(5, 0, 0), @(0, 0, -5), @(0, 1, 0))
-$plane.Save((Join-Path $OutDir 'plane.obj'), 'A plane, 10 m on each side, facing up')
+$plane.Save((Join-Path $OutDir 'SM_Plane.obj'), 'A plane, 10 m on each side, facing up')
 
 # 1 m on each side, facing +Z
 $quad = [MeshBuilder]::new()
 $quad.Rectangle(@(0, 0, 0), @(0.5, 0, 0), @(0, 0.5, 0), @(0, 0, 1))
-$quad.Save((Join-Path $OutDir 'quad.obj'), 'A quad, 1 m on each side, facing +Z')
+$quad.Save((Join-Path $OutDir 'SM_Quad.obj'), 'A quad, 1 m on each side, facing +Z')
 
 Get-ChildItem $OutDir -Filter *.obj | ForEach-Object { "$($_.Name): $($_.Length) bytes" }

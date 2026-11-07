@@ -50,15 +50,15 @@ namespace
         {
             Project.Write("wall.obj", kWall);
             Project.Write("floor.obj", kFloor);
-            Project.Write("white.mat", R"({ "shader": "engine/shaders/main.hlsl", "properties": { "Color": [1, 1, 1, 1] } })");
+            Project.Write("white.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "properties": { "Color": [1, 1, 1, 1] } })");
 
             Assets = std::make_unique<AssetManager>(*Gpu().GPUResources, Project.Path());
             Subject = std::make_unique<SceneRenderer>(*Gpu().GPUResources, *Gpu().Renderer, ShadowAtlasSettings{ .AtlasSize = 1024, .TileSize = 256 });
 
-            Subject->SetToneMapMaterial(Assets->LoadMaterial("engine/materials/tonemap.mat"), kSize, kSize);
+            Subject->SetToneMapMaterial(Assets->LoadMaterial("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
             Subject->SetToneMapping(1.0f, ToneMapper::None); // so that expected colors only need the sRGB encoding
-            Subject->SetShadowMaterial(Assets->LoadMaterial("engine/materials/shadow.mat"));
-            Subject->SetOutlineMaterials(Assets->LoadMaterial("engine/materials/outline_mask.mat"), Assets->LoadMaterial("engine/materials/outline.mat"), kSize, kSize);
+            Subject->SetShadowMaterial(Assets->LoadMaterial("engine/materials/internal/M_Shadow.mat"));
+            Subject->SetOutlineMaterials(Assets->LoadMaterial("engine/materials/internal/M_OutlineMask.mat"), Assets->LoadMaterial("engine/materials/internal/M_Outline.mat"), kSize, kSize);
 
             Lighting.AmbientColor = glm::vec3(0.0f);
         }
@@ -357,7 +357,7 @@ namespace
             Project.Write("textured_wall.obj", kTexturedWall);
 
             const std::string name = "wall" + std::to_string(MaterialCount++) + ".mat";
-            Project.Write(name, R"({ "shader": "engine/shaders/main.hlsl", "properties": )" + properties + R"(, "textures": )" + textures + " }");
+            Project.Write(name, R"({ "shader": "engine/shaders/S_Lit.hlsl", "properties": )" + properties + R"(, "textures": )" + textures + " }");
             Assets->Refresh();
 
             const Entity entity = World.CreateEntity(name);
@@ -508,7 +508,7 @@ TEST_CASE_METHOD(MaterialFixture, "A normal map bends the light the same way on 
     SECTION("Without UVs there is nothing to go by, and it stays flat")
     {
         WriteDataTexture("lean.bmp", Rgb{ 218, 128, 218 });
-        Project.Write("nouv.mat", R"({ "shader": "engine/shaders/main.hlsl", "properties": { "Roughness": 1 }, "textures": { "NormalMap": "lean.bmp" } })");
+        Project.Write("nouv.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "properties": { "Roughness": 1 }, "textures": { "NormalMap": "lean.bmp" } })");
         Assets->Refresh();
 
         auto& renderer = AddMesh("wall.obj").GetComponent<MeshRendererComponent>();

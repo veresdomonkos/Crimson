@@ -1,5 +1,5 @@
 {
-  "shader": "engine/shaders/main.hlsl",
+  "shader": "engine/shaders/S_Lit.hlsl",
   "properties": {
     "Color": [0.4, 0.4, 0.4, 1.0],
     "Roughness": 0.8

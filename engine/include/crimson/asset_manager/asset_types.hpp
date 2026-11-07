@@ -41,4 +41,10 @@ namespace crimson
         uint32_t ImporterVersion = 1;
         nlohmann::json Settings = nlohmann::json::object();
     };
+
+    // One of the engine's assets that only the renderer can use, like the tone mapping shader, which pickers leave out
+    [[nodiscard]] inline bool IsInternal(const AssetInfo& info)
+    {
+        return info.ReadOnly && (info.Path.starts_with("engine/shaders/internal/") || info.Path.starts_with("engine/materials/internal/"));
+    }
 }

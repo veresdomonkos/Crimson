@@ -194,7 +194,8 @@ TEST_CASE("Projects get copies of the engine's shader headers for code editors",
         CHECK(fs::exists(folder / "crimson/lighting.hlsli"));
 
         // Shaders are assets, not headers
-        CHECK_FALSE(fs::exists(folder / "main.hlsl"));
+        CHECK_FALSE(fs::exists(folder / "S_Lit.hlsl"));
+        CHECK_FALSE(fs::exists(folder / "internal"));
 
         CHECK(readConfig().at("hlsl.additionalIncludeDirectories") == nlohmann::json::array({ ".crimson/shader_includes" }));
     }

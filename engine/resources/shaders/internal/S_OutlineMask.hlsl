@@ -1,4 +1,4 @@
-// Marks where the selected meshes are, for outline.hlsl
+// Marks where the selected meshes are, for S_Outline.hlsl
 #include "crimson/bindings.hlsli"
 
 float4 VSMain(float3 position : POSITION) : SV_Position

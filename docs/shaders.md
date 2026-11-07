@@ -75,7 +75,7 @@ Includes resolve relative to the shader's folder, then to the engine's shaders.
 
 ## The default lit shader
 
-`engine/shaders/main.hlsl` is the default lit shader: metallic-roughness PBR with a Cook-Torrance GGX specular and a Lambert diffuse, with the same material slots as glTF.
+`engine/shaders/S_Lit.hlsl` is the default lit shader: metallic-roughness PBR with a Cook-Torrance GGX specular and a Lambert diffuse, with the same material slots as glTF.
 
 | Property | Default | |
 |:---------|:--------|:--|
