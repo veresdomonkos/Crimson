@@ -100,7 +100,7 @@ Lights are kept in a GPU buffer, in the style of glTF's `KHR_lights_punctual`, a
 
 ### The selection outline
 
-`SceneRenderer` can outline an entity and its children: their meshes are drawn into a mask, and a pass over the whole screen colors the pixels next to it. The color comes from `engine/materials/outline.mat`. Drawing the selection a second time is costly on large meshes; #60 moves it to the stencil buffer.
+`SceneRenderer` can outline an entity and its children: their meshes are drawn into a mask, and a pass over the whole screen colors the pixels next to it. The color comes from `engine/materials/internal/M_Outline.mat`. Drawing the selection a second time is costly on large meshes; #60 moves it to the stencil buffer.
 
 ## Scenes
 
@@ -180,9 +180,9 @@ A mesh's material slots fill themselves in: an empty slot uses `materials/<slot 
 
 ### Engine assets
 
-The engine's own shaders, materials and meshes live in `engine/resources/` and are bundled into the executable (`crimson_embed_resources`, in `cmake/`). They are always available under `engine/`, read-only and with the same ids in every project, so a project's material can use `"shader": "engine/shaders/main.hlsl"`.
+The engine's own shaders, materials and meshes live in `engine/resources/` and are bundled into the executable (`crimson_embed_resources`, in `cmake/`). They are always available under `engine/`, read-only and with the same ids in every project, so a project's material can use `"shader": "engine/shaders/S_Lit.hlsl"`. They are named with a prefix for their kind (`S_` shaders, `M_` materials, `SM_` meshes, `T_` textures). The ones only the renderer can use, for tone mapping, shadows and the selection outline, are under `internal/` and left out of the Inspector's pickers and the Assets panel. A renamed engine asset gets a line in `kRenamedEngineAssets` (`asset_manager.cpp`), so what was saved with its old path or id still finds it, and the next save writes the new one.
 
-The built-in meshes are sized like Unity's: `engine/meshes/cube.obj` (1 m), `sphere.obj` (1 m across), `cylinder.obj` and `capsule.obj` (2 m tall, 1 m across), `plane.obj` (10 m, facing up) and `quad.obj` (1 m, facing +Z). `tools/generate_primitives.ps1` makes them, so a change goes there and the script is run again.
+The built-in meshes are sized like Unity's: `engine/meshes/SM_Cube.obj` (1 m), `SM_Sphere.obj` (1 m across), `SM_Cylinder.obj` and `SM_Capsule.obj` (2 m tall, 1 m across), `SM_Plane.obj` (10 m, facing up) and `SM_Quad.obj` (1 m, facing +Z). `tools/generate_primitives.ps1` makes them, so a change goes there and the script is run again.
 
 The embedded files are kept in Git LFS, like the editor's, and CI pulls `engine/resources/` and `editor/resources/` from LFS before building.
 

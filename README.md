@@ -64,7 +64,7 @@ It needs a C++23 compiler, CMake 3.22+, the [Vulkan SDK](https://vulkan.lunarg.c
 | **Scene** | the scene, with a gizmo on the selection |
 | **Hierarchy** | the scene's entities. Drag to reparent, `F2` or double-click to rename, `Delete` to delete, and search at the top. |
 | **Inspector** | the selected entity or asset. Right-click any field to reset it. |
-| **Assets** | the project's files and the engine's built-in ones. Drag them into the scene or the Inspector, and right-click for more. |
+| **Assets** | the project's files and the engine's built-in ones, which are named with a prefix for their kind: `S_Lit.hlsl`, `M_Default.mat`, `SM_Cube.obj`. Drag them into the scene or the Inspector, and right-click for more. |
 | **Console** | everything the engine logs |
 | **Render Settings** | exposure, tone mapping and ambient light, saved with the scene |
 | **Stats** | frame times, draw calls and triangles |
