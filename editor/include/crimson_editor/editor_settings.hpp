@@ -22,11 +22,16 @@ namespace crimson::editor
 
         [[nodiscard]] const ScriptEditor& GetScriptEditor() const { return m_scriptEditor; }
         void SetScriptEditor(ScriptEditor editor);
+
+        // Whether the Assets panel shows the engine's own assets, apart from the project's
+        [[nodiscard]] bool GetShowEngineContent() const { return m_showEngineContent; }
+        void SetShowEngineContent(bool show);
     private:
         void Load();
         void Save() const;
     private:
         std::filesystem::path m_file;
         ScriptEditor m_scriptEditor;
+        bool m_showEngineContent = false;
     };
 }

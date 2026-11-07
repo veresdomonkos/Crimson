@@ -33,9 +33,14 @@ namespace crimson::editor::ui
         return slash == std::string::npos ? path : path.substr(slash + 1);
     }
 
-    static bool IsEngineFolder(const std::string& folder)
+    bool IsEngineFolder(std::string_view folder)
     {
-        return folder == kEngineFolder || folder.starts_with(std::string(kEngineFolder) + "/");
+        return folder == kEngineFolder || (folder.starts_with(kEngineFolder) && folder.size() > kEngineFolder.size() && folder[kEngineFolder.size()] == '/');
+    }
+
+    bool ListsAsset(const AssetInfo& info, bool showEngineContent)
+    {
+        return !IsInternal(info) && (showEngineContent || !info.ReadOnly);
     }
 
     // Whether an asset is edited in another program. Scenes and materials are edited in the editor, and their JSON
@@ -151,6 +156,8 @@ namespace crimson::editor::ui
     {
         m_builtOnce = true;
         m_builtVersion = m_context.AssetsVersion;
+        m_builtShowingEngine = m_settings.GetShowEngineContent();
+        m_reservedFolderFound = false;
 
         m_items.clear();
         std::set<std::string> folders;
@@ -166,8 +173,7 @@ namespace crimson::editor::ui
 
         for (const AssetInfo* info : m_context.Assets.ListAll())
         {
-            // The renderer's own, which nothing else can use
-            if (IsInternal(*info))
+            if (!ListsAsset(*info, m_builtShowingEngine))
                 continue;
 
             const std::string folder = ParentOf(info->Path);
@@ -181,8 +187,19 @@ namespace crimson::editor::ui
 
         for (fs::recursive_directory_iterator it(root, fs::directory_options::skip_permission_denied, error), end; !error && it != end; it.increment(error))
         {
-            if (it->is_directory(error))
-                addFolderAndParents(fs::relative(it->path(), root, error).generic_string());
+            if (!it->is_directory(error))
+                continue;
+
+            // The project's own engine folder is skipped by the scan, as the engine's assets are there
+            const std::string folder = fs::relative(it->path(), root, error).generic_string();
+            if (IsEngineFolder(folder))
+            {
+                m_reservedFolderFound = true;
+                it.disable_recursion_pending();
+                continue;
+            }
+
+            addFolderAndParents(folder);
         }
 
         m_folders.assign(folders.begin(), folders.end());
@@ -222,7 +239,7 @@ namespace crimson::editor::ui
 
         RefreshWhenRefocused();
 
-        if (!m_builtOnce || m_builtVersion != m_context.AssetsVersion)
+        if (!m_builtOnce || m_builtVersion != m_context.AssetsVersion || m_builtShowingEngine != m_settings.GetShowEngineContent())
             Rebuild();
 
         DrawToolbar();
@@ -237,7 +254,7 @@ namespace crimson::editor::ui
 
             ImGui::TableNextColumn();
             if (ImGui::BeginChild("##Folders"))
-                DrawFolderTree({});
+                DrawFolderRoots();
             ImGui::EndChild();
 
             ImGui::TableNextColumn();
@@ -268,12 +285,18 @@ namespace crimson::editor::ui
             ImGui::GetWindowDrawList()->AddText(ImVec2(min.x + style.FramePadding.x, min.y + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_TextDisabled), "Search");
         }
 
-        // The path to the current folder, each part leading back to it
         ImGui::SameLine();
-        if (ImGui::SmallButton("Assets"))
-            m_currentFolder.clear();
+        if (bool show = m_settings.GetShowEngineContent(); ImGui::Checkbox("Show Engine Content", &show))
+            m_settings.SetShowEngineContent(show);
 
-        size_t start = 0;
+        // The path to the current folder, each part leading back to it. The engine's start at a root of their own.
+        const bool inEngine = IsEngineFolder(m_currentFolder);
+
+        ImGui::SameLine();
+        if (ImGui::SmallButton(inEngine ? "Engine" : "Assets"))
+            m_currentFolder = inEngine ? std::string(kEngineFolder) : std::string();
+
+        size_t start = inEngine ? std::min(kEngineFolder.size() + 1, m_currentFolder.size()) : 0;
         while (start < m_currentFolder.size())
         {
             const size_t slash = m_currentFolder.find('/', start);
@@ -295,13 +318,68 @@ namespace crimson::editor::ui
 
             start = end + 1;
         }
+
+        if (m_reservedFolderFound)
+            ImGui::TextColored(theme::Warning, "The project's engine folder is reserved for the engine's assets, so what's in it doesn't show. Rename it.");
+    }
+
+    void AssetBrowserPanel::DrawFolderRoots()
+    {
+        constexpr ImGuiTreeNodeFlags kRootFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
+
+        // The project's folders, without the engine's
+        {
+            const bool selected = m_currentFolder.empty();
+            const bool open = ImGui::TreeNodeEx("##AssetsRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), "%s  Assets", selected ? kIconFolderOpen : kIconFolder);
+
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+                m_currentFolder.clear();
+
+            for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture, AssetType::Scene })
+            {
+                if (const AssetID dropped = AcceptAssetOnLastItem(m_context.Assets, type))
+                    MoveAssetToFolder(dropped, {});
+            }
+
+            if (open)
+            {
+                DrawFolderTree({});
+                ImGui::TreePop();
+            }
+        }
+
+        if (!m_settings.GetShowEngineContent())
+            return;
+
+        // The engine's, which can be looked at and used but not changed
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        const std::string engine(kEngineFolder);
+        const bool selected = m_currentFolder == engine;
+
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+        const bool open = ImGui::TreeNodeEx("##EngineRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), "%s  Engine", selected ? kIconFolderOpen : kIconFolder);
+        ImGui::PopStyleColor();
+
+        ImGui::SetItemTooltip("The engine's built-in assets, which can be used but not changed");
+
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+            m_currentFolder = engine;
+
+        if (open)
+        {
+            DrawFolderTree(engine);
+            ImGui::TreePop();
+        }
     }
 
     void AssetBrowserPanel::DrawFolderTree(const std::string& parent)
     {
         for (const std::string& folder : m_folders)
         {
-            if (ParentOf(folder) != parent)
+            if (ParentOf(folder) != parent || (parent.empty() && IsEngineFolder(folder)))
                 continue;
 
             const bool hasChildren = std::ranges::any_of(m_folders, [&folder](const std::string& other) { return ParentOf(other) == folder; });
@@ -355,7 +433,7 @@ namespace crimson::editor::ui
         {
             for (const std::string& folder : m_folders)
             {
-                if (ParentOf(folder) == m_currentFolder)
+                if (ParentOf(folder) == m_currentFolder && !(m_currentFolder.empty() && IsEngineFolder(folder)))
                 {
                     DrawFolderTile(folder, tileSize);
                     continueRow();
@@ -805,7 +883,7 @@ namespace crimson::editor::ui
             if (!info || info->ReadOnly || ParentOf(info->Path) == folder)
                 return;
 
-            if (m_context.Assets.Rename(asset, folder + "/" + NameOf(info->Path)))
+            if (m_context.Assets.Rename(asset, folder.empty() ? NameOf(info->Path) : folder + "/" + NameOf(info->Path)))
                 ++m_context.AssetsVersion;
         });
     }

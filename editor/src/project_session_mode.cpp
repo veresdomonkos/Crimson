@@ -98,7 +98,7 @@ namespace crimson::editor
 
         m_sceneViewport = &m_ui->AddPanel<ui::SceneViewportPanel>("Scene", imgui.GetOrCreateTextureId(m_mainColor), 16.0f / 9.0f, m_context, m_camera);
         m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_sceneRenderer->GetShadowAtlas()), 1.0f);
-        m_ui->AddPanel<ui::AssetBrowserPanel>(m_context, m_services.AppWindow); // before the console, for its tab to be in front
+        m_ui->AddPanel<ui::AssetBrowserPanel>(m_context, m_services.Settings, m_services.AppWindow); // before the console, for its tab to be in front
         m_ui->AddPanel<ui::ConsolePanel>();
         m_ui->AddPanel<ui::HierarchyPanel>(m_context);
         m_ui->AddPanel<ui::InspectorPanel>(m_context);
