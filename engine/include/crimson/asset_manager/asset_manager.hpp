@@ -23,6 +23,13 @@ namespace crimson
         Replaced  // the material has a new handle, so anything holding on to the old one has to get it again
     };
 
+    // What CreateSlotMaterials did
+    struct SlotMaterials
+    {
+        std::vector<AssetID> Created;
+        size_t Kept = 0; // slots that had a material already, which is left as it is
+    };
+
     // A reference to an asset that isn't there, with what it was written as, for a save to write it back the same way
     struct MissingAssetRef
     {
@@ -37,8 +44,8 @@ namespace crimson
     // handle or null, logs once and isn't tried again. An invalid id does the same without logging, so a
     // component's empty asset slot needs no check.
     //
-    // What changes or removes GPU resources has to run between frames: Refresh, Delete, ApplyMaterial, ReimportTexture
-    // and ReloadChangedShaders.
+    // What changes or removes GPU resources has to run between frames: Refresh, Delete, ApplyMaterial, ReimportTexture,
+    // CreateSlotMaterials and ReloadChangedShaders.
     // Handles that were copied elsewhere stop working when these remove what they refer to.
     class AssetManager
     {
@@ -101,6 +108,11 @@ namespace crimson
         AssetID CreateMaterial(std::string_view path);
         AssetID CreateScene(std::string_view path); // with a light, for it not to start out black
         AssetID CreateShader(std::string_view path); // a simple lit one, to start from
+
+        // Makes the material each slot of an .obj looks for, materials/<slot>.mat next to it, from its .mtl: colors,
+        // textures and shininess on the default shader, with sRGB turned off on its normal maps. A slot that has one
+        // already keeps it, so running it again changes nothing.
+        SlotMaterials CreateSlotMaterials(AssetID mesh);
         bool Rename(AssetID id, std::string_view newPath);
         bool Delete(AssetID id);
 

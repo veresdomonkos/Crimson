@@ -18,6 +18,7 @@
 #include "crimson/core/log.hpp"
 
 #include "engine_renames.hpp"
+#include "mtl_materials.hpp"
 
 namespace fs = std::filesystem;
 
@@ -670,6 +671,70 @@ float4 PSMain(VertexOutput input) : SV_Target
         return CreateAssetFile(path, ".hlsl", std::string(kNewShaderSource));
     }
 
+    // The folder an asset is in, with a slash at the end, or empty at the top
+    static std::string FolderOf(const std::string& path)
+    {
+        const size_t folderEnd = path.rfind('/');
+        return folderEnd == std::string::npos ? std::string{} : path.substr(0, folderEnd + 1);
+    }
+
+    // Where the material for one of a mesh's slots goes
+    static std::string SlotMaterialPath(const std::string& meshPath, std::string_view slot)
+    {
+        return FolderOf(meshPath) + "materials/" + std::string(slot) + ".mat";
+    }
+
+    SlotMaterials AssetManager::CreateSlotMaterials(AssetID mesh)
+    {
+        SlotMaterials result;
+
+        const AssetInfo* info = GetInfo(mesh);
+        if (!info || info->Type != AssetType::Mesh || info->ReadOnly || NormalizeExt(fs::path(info->Path)) != ".obj")
+        {
+            LOG_ERROR("[Assets] Only a project's .obj meshes can get materials from their .mtl");
+            return result;
+        }
+
+        // Copied, as creating files adds assets, which can move the info
+        const std::string meshPath = info->Path;
+        std::vector<AssetID> dataTextures;
+
+        for (const tinyobj::material_t& mtl : ReadMtlMaterials(m_root / fs::path(meshPath)))
+        {
+            const std::string path = SlotMaterialPath(meshPath, mtl.name);
+
+            std::error_code error;
+            if (FindId(path) || fs::exists(m_root / fs::path(path), error))
+            {
+                ++result.Kept;
+                continue;
+            }
+
+            MtlMaterial material = MaterialFromMtl(mtl, FolderOf(meshPath), *this);
+
+            if (const AssetID created = CreateAssetFile(path, ".mat", WriteMaterialData(material.Data, *this)))
+            {
+                result.Created.push_back(created);
+                std::ranges::move(material.DataTextures, std::back_inserter(dataTextures));
+            }
+        }
+
+        // Normal maps hold directions, which sRGB decoding would bend
+        for (const AssetID texture : dataTextures)
+        {
+            const AssetInfo* textureInfo = GetInfo(texture);
+            if (!textureInfo || textureInfo->ReadOnly || !textureInfo->Settings.value("srgb", true))
+                continue;
+
+            nlohmann::json settings = textureInfo->Settings;
+            settings["srgb"] = false;
+            ReimportTexture(texture, std::move(settings));
+        }
+
+        LOG_INFO("[Assets] {}: made {} slot materials, and kept {} that were there", meshPath, result.Created.size(), result.Kept);
+        return result;
+    }
+
     AssetID AssetManager::CreateAssetFile(std::string_view path, std::string_view extension, const std::string& contents)
     {
         if (!IsUsableAssetPath(path) || NormalizeExt(fs::path(path)) != extension)
@@ -786,10 +851,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         if (!info || info->Type != AssetType::Mesh)
             return {};
 
-        const size_t folderEnd = info->Path.rfind('/');
-        const std::string folder = folderEnd == std::string::npos ? std::string{} : info->Path.substr(0, folderEnd + 1);
-
-        const AssetID material = FindId(folder + "materials/" + std::string(slot) + ".mat");
+        const AssetID material = FindId(SlotMaterialPath(info->Path, slot));
         const AssetInfo* materialInfo = GetInfo(material);
 
         return materialInfo && materialInfo->Type == AssetType::Material ? material : AssetID{};

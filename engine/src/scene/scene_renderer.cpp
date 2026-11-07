@@ -21,9 +21,13 @@ namespace crimson
 
         for (size_t slot = 0; slot < renderer.MaterialAssets.size(); ++slot)
         {
+            // The default counts as empty, as that's how it's saved, so a slot material made since is found
             AssetID& asset = renderer.MaterialAssets[slot];
-            if (!asset && slot < renderer.Resolved.MaterialSlots.size())
-                asset = assets.FindSlotMaterial(renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]);
+            if ((!asset || asset == assets.DefaultMaterial()) && slot < renderer.Resolved.MaterialSlots.size())
+            {
+                if (const AssetID found = assets.FindSlotMaterial(renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]))
+                    asset = found;
+            }
 
             if (!asset)
                 asset = assets.DefaultMaterial();

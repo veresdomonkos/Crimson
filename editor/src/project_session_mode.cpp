@@ -37,6 +37,7 @@ namespace crimson::editor
           m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, *m_services.Graphics.Imgui)),
           m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
+                     .ResolveMeshRenderers = [this] { ResolveAllMeshRenderers(); },
                      .OpenScene = [this](AssetID id) { OpenScene(id); },
                      .OpenCodeFile = [this](const std::filesystem::path& file) { OpenInScriptEditor(m_services.Settings.GetScriptEditor(), file, m_project.Root()); } }
     {

@@ -164,6 +164,35 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
     CHECK(entity.GetComponent<MeshRendererComponent>().MaterialAssets[0] == assets.FindId("materials/Paint.mat"));
 }
 
+TEST_CASE_METHOD(Fixture, "A slot on the default material finds one made for it, and a chosen one stays", "[scene data]")
+{
+    Temp.Write("thing.obj", "mtllib thing.mtl\nusemtl Paint\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n");
+    Temp.Write("thing.mtl", "newmtl Paint\n");
+    Temp.Write("other.mat", kMaterial);
+    AssetManager assets(Gpu, Temp.Path());
+
+    Scene scene;
+    auto& onDefault = scene.CreateEntity("Default").AddComponent<MeshRendererComponent>();
+    onDefault.MeshAsset = assets.FindId("thing.obj");
+    ResolveMeshRenderer(onDefault, assets);
+    REQUIRE(onDefault.MaterialAssets[0] == assets.DefaultMaterial());
+
+    auto& chosen = scene.CreateEntity("Chosen").AddComponent<MeshRendererComponent>();
+    chosen.MeshAsset = assets.FindId("thing.obj");
+    chosen.MaterialAssets = { assets.FindId("other.mat") };
+    ResolveMeshRenderer(chosen, assets);
+
+    // As the editor's Create Materials from .mtl does
+    Temp.Write("materials/Paint.mat", kMaterial);
+    assets.Refresh();
+
+    ResolveMeshRenderer(onDefault, assets);
+    ResolveMeshRenderer(chosen, assets);
+
+    CHECK(onDefault.MaterialAssets[0] == assets.FindId("materials/Paint.mat"));
+    CHECK(chosen.MaterialAssets[0] == assets.FindId("other.mat"));
+}
+
 TEST_CASE_METHOD(Fixture, "An instance's entities come from its scene", "[scene data]")
 {
     Temp.Write("crate.scene", SceneWith(R"({ "name": "Lid", "position": [0, 1, 0], "children": [ { "name": "Knob" } ] }, { "name": "Base" })"));

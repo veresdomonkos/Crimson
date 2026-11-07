@@ -174,7 +174,19 @@ The asset manager can also change what it has while running:
 
 A file moved along with its `.meta` keeps its id. Moving an asset while the engine runs also updates the `.mat` and `.scene` files that reference it, even if they only name its path. A reference with only a path breaks if the file moves while nothing is running. A reference to an asset that isn't there, because its file is gone or was deleted, keeps its id and path: it is saved as it was, shows as missing in the Inspector, and works again once the file is back. Opening a scene that has any warns about how many. Anything that changes GPU resources has to run between frames, which is why panels queue these in `EditorContext::Deferred`.
 
-A mesh's material slots fill themselves in: an empty slot uses `materials/<slot name>.mat` next to the mesh if that file exists, and the default material if not. For an `.obj`, the slot names are the material names in its `.mtl`. The `.mtl`'s values and textures aren't imported, so those `.mat` files are made by hand (#18).
+A mesh's material slots fill themselves in: an empty slot uses `materials/<slot name>.mat` next to the mesh if that file exists, and the default material if not. For an `.obj`, the slot names are the material names in its `.mtl`. **Create Materials from .mtl**, on an `.obj` in the Assets panel (`AssetManager::CreateSlotMaterials`), writes those files from the `.mtl` for the slots that have none, and never replaces one. Each is a material on `S_Lit`:
+
+| `.mtl` | Material |
+|:-------|:---------|
+| `map_Kd` | `ColorMap` |
+| `Kd` | `Color`, only without `map_Kd`, as exporters write a gray there that would darken the texture |
+| `norm`, else `map_bump`, else `map_Disp` | `NormalMap`, with sRGB turned off on the texture |
+| `Pr`, else `Ns` | `Roughness`, from `Ns` as `1 - sqrt(Ns / 1000)` |
+| `Pm` | `Metallic` |
+| `Ke`, `map_Ke` | `EmissiveColor`, `EmissiveMap` |
+| `d` between 0 and 1 | transparent, with `d` as the alpha. A `d` of 0 is ignored, as exporters write it for opaque materials. |
+
+Texture paths are relative to the `.mtl`, and one that isn't there is logged and left empty. What `S_Lit` has no slot for, such as `map_d` cutouts (#27) and `map_Ks`, is logged and left out. A value at the shader's default isn't written.
 
 `.mat` files can also set `"renderMode"` (`"opaque"` or `"transparent"`) and `"cull"` (`"back"`, `"front"` or `"none"`), which default to opaque and back. Transparent materials are alpha blended using the alpha the shader outputs, don't write depth, and draw after opaque ones in the order they were submitted.
 
