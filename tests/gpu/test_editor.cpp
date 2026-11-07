@@ -12,6 +12,7 @@
 #include <crimson/project/project.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 #include <crimson_editor/editor_application.hpp>
+#include <crimson_editor/editor_settings.hpp>
 #include <crimson_editor/project_manager_mode.hpp>
 #include <crimson_editor/project_session_mode.hpp>
 
@@ -22,6 +23,7 @@ using namespace crimson;
 using namespace crimson::tests;
 using crimson::editor::EditorApplication;
 using crimson::editor::EditorContext;
+using crimson::editor::EditorSettings;
 using crimson::editor::ProjectManagerMode;
 using crimson::editor::ProjectSessionMode;
 
@@ -220,6 +222,34 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of asset can be selected", "[editor]"
 
         CHECK(Context().SelectedAsset == id);
     }
+}
+
+// What it lists is checked by the ListsAsset unit test, as nothing here can click in it
+TEST_CASE_METHOD(AssetFixture, "The Assets panel draws with and without the engine's assets", "[editor]")
+{
+    EditorSettings& settings = App.Services().Settings;
+
+    // A folder of the project's own that is named like the engine's, which the panel warns about
+    Temp.Write("Assets/assets/engine/mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl" })");
+    Context().Deferred.emplace_back([&]
+    {
+        Assets().Refresh();
+        ++Context().AssetsVersion;
+    });
+    RunFrames(App);
+
+    CHECK_FALSE(Assets().FindId("engine/mine.mat"));
+
+    for (const bool show : { true, false, true })
+    {
+        CAPTURE(show);
+        settings.SetShowEngineContent(show);
+        RunFrames(App);
+        CHECK(IsShowing<ProjectSessionMode>(App));
+    }
+
+    // The settings are shared by the tests that come after
+    settings.SetShowEngineContent(false);
 }
 
 TEST_CASE_METHOD(AssetFixture, "Selecting an entity and an asset replace each other", "[editor]")
