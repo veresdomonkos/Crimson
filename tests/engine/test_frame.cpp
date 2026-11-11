@@ -87,9 +87,9 @@ TEST_CASE("A pass builder stays valid while more passes are added", "[frame]")
 
     // Enough to make the list of passes grow and move
     for (int i = 0; i < 20; ++i)
-        frame.AddPass({}).AddDraw(DrawItem{ .Material = kOverride });
+        frame.AddPass({}).Draw(DrawItem{ .Material = kOverride });
 
-    first.AddDraw(DrawItem{ .Material = kMaterial });
+    first.Draw(DrawItem{ .Material = kMaterial });
 
     REQUIRE(packet.GetPasses()[0].GetDraws().size() == 1);
     CHECK(packet.GetPasses()[0].GetDraws()[0].Material == kMaterial);
@@ -101,10 +101,10 @@ TEST_CASE("A draw without a material is left out", "[frame]")
     FrameRecorder frame(packet);
     PassBuilder pass = frame.AddPass({});
 
-    pass.AddDraw(DrawItem{ .Material = MaterialHandle::Invalid() });
+    pass.Draw(DrawItem{ .Material = MaterialHandle::Invalid() });
     CHECK(pass.GetDraws().empty());
 
-    pass.AddDraw(DrawItem{ .Material = kMaterial });
+    pass.Draw(DrawItem{ .Material = kMaterial });
     CHECK(pass.GetDraws().size() == 1);
 }
 
@@ -120,7 +120,7 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
 
     SECTION("Each with its own material, and the one that failed to load is skipped")
     {
-        pass.AddMesh(mesh, 5);
+        pass.DrawMesh(mesh, 5);
 
         REQUIRE(pass.GetDraws().size() == 1);
         CHECK(pass.GetDraws()[0].Material == kMaterial);
@@ -131,7 +131,7 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
 
     SECTION("An override replaces all of them")
     {
-        pass.AddMesh(mesh, 0, { .MaterialOverride = kOverride });
+        pass.DrawMesh(mesh, 0, { .MaterialOverride = kOverride });
 
         REQUIRE(pass.GetDraws().size() == 2);
         CHECK(pass.GetDraws()[0].Material == kOverride);
@@ -140,7 +140,7 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
 
     SECTION("A depth pass keeps each one's own material, in its depth version")
     {
-        pass.AddMesh(mesh, 0, { .Variant = ShaderVariant::Depth });
+        pass.DrawMesh(mesh, 0, { .Variant = ShaderVariant::Depth });
 
         REQUIRE(pass.GetDraws().size() == 1);
         CHECK(pass.GetDraws()[0].Material == kMaterial);
@@ -186,7 +186,7 @@ TEST_CASE("Resetting a packet leaves it empty for the next frame", "[frame]")
 
     {
         FrameRecorder frame(packet);
-        frame.AddPass({}).AddDraw(DrawItem{ .Material = kMaterial });
+        frame.AddPass({}).Draw(DrawItem{ .Material = kMaterial });
         frame.AddNativePass({}, [](const NativeContext&) {});
         frame.AddObject(glm::mat4(1.0f));
         frame.Lighting().Lights.push_back({});

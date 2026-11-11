@@ -128,19 +128,19 @@ namespace crimson
         PassBuilder(FramePacket& packet, uint32_t index) : m_packet(&packet), m_index(index) {}
 
         // A draw without a material is skipped, so a shader that failed to compile leaves the object out of the frame
-        void AddDraw(const DrawItem& item)
+        void Draw(const DrawItem& item)
         {
             if (m_packet && item.Material)
                 Record().m_draws.push_back(item);
         }
 
         // One draw per submesh, each with its slot's material
-        void AddMesh(const Mesh& mesh, ObjectId object = 0, const DrawOptions& options = {})
+        void DrawMesh(const Mesh& mesh, ObjectId object = 0, const DrawOptions& options = {})
         {
             for (const SubMesh& subMesh : mesh.SubMeshes)
             {
                 const MaterialHandle material = options.MaterialOverride ? options.MaterialOverride : mesh.Materials[subMesh.MaterialSlot];
-                AddDraw(DrawItem{ mesh.VertexBuffer, mesh.IndexBuffer, material, subMesh.FirstIndex, subMesh.IndexCount, object, options.Variant });
+                Draw(DrawItem{ mesh.VertexBuffer, mesh.IndexBuffer, material, subMesh.FirstIndex, subMesh.IndexCount, object, options.Variant });
             }
         }
 

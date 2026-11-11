@@ -104,7 +104,7 @@ float4 PSMain(VertexOutput input) : SV_Target
             // In front of the quad, which faces +Z, for the lighting to see it from the front
             const PassInfo pass{ .Target = target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth }, .View = { .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) } };
 
-            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).AddMesh(*mesh, 0, { .MaterialOverride = handle }); }, Lighting);
+            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).DrawMesh(*mesh, 0, { .MaterialOverride = handle }); }, Lighting);
 
             return target.Read();
         }
@@ -141,7 +141,7 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
             const MaterialHandle handle = assets.Load(id);
             const PassInfo pass{ .Target = Target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth }, .View = { .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) } };
 
-            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).AddMesh(*mesh, 0, { .MaterialOverride = handle }); }, Lighting);
+            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).DrawMesh(*mesh, 0, { .MaterialOverride = handle }); }, Lighting);
 
             return Target.Read().AtClip(0.0f, 0.0f);
         };
@@ -247,7 +247,7 @@ TEST_CASE("Mipmaps keep a shrunken texture from flickering", "[asset editing]")
         REQUIRE(material);
 
         const PassInfo pass{ .Target = target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth } };
-        RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).AddMesh(*mesh, 0, { .MaterialOverride = material }); }, lighting);
+        RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).DrawMesh(*mesh, 0, { .MaterialOverride = material }); }, lighting);
 
         const Image image = target.Read();
         int lowest = 255;

@@ -187,7 +187,7 @@ namespace crimson
             for (const Drawable& drawable : m_drawables)
             {
                 if (drawable.CastsShadows)
-                    pass.AddMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth });
+                    pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth });
             }
         }
 
@@ -203,7 +203,7 @@ namespace crimson
         PassBuilder pass = frame.AddPass(sceneInfo);
 
         for (const Drawable& drawable : m_drawables)
-            pass.AddMesh(*drawable.Mesh, drawable.Object);
+            pass.DrawMesh(*drawable.Mesh, drawable.Object);
 
         if (m_hdrTarget)
         {
@@ -215,14 +215,14 @@ namespace crimson
                 .Viewport = mainPass.Viewport,
                 .Reads = { m_hdrColor }
             };
-            frame.AddPass(toneMapInfo).AddDraw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, m_toneMapMaterial });
+            frame.AddPass(toneMapInfo).Draw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, m_toneMapMaterial });
         }
 
         // In display colors, after the tone mapping, so that it stays the color it was set to
         if (anyOutlined)
         {
             const PassInfo outlineInfo{ .Name = "Outline", .Target = mainPass.Target, .Viewport = mainPass.Viewport, .Reads = { m_outlineMask } };
-            frame.AddPass(outlineInfo).AddDraw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, m_outlineMaterial });
+            frame.AddPass(outlineInfo).Draw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, m_outlineMaterial });
         }
     }
 
@@ -240,7 +240,7 @@ namespace crimson
         for (const Drawable& drawable : m_drawables)
         {
             if (drawable.Outlined)
-                pass.AddMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth });
+                pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth });
         }
     }
 }

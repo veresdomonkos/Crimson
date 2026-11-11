@@ -71,10 +71,10 @@ for (const ShadowView& view : frame.Lighting().Shadows)
 {
     PassBuilder shadow = frame.AddPass({ .Name = "Shadows", .Target = shadowTarget, .Clear = { .Flags = ClearFlags::Depth },
                                          .Viewport = view.Viewport, .View = { .ViewProj = view.Shadow.ViewProj } });
-    shadow.AddMesh(mesh, object, { .Variant = ShaderVariant::Depth });
+    shadow.DrawMesh(mesh, object, { .Variant = ShaderVariant::Depth });
 }
 
-frame.AddPass({ .Name = "Scene", .Target = sceneTarget, .View = camera, .Reads = { shadowAtlas } }).AddMesh(mesh, object);
+frame.AddPass({ .Name = "Scene", .Target = sceneTarget, .View = camera, .Reads = { shadowAtlas } }).DrawMesh(mesh, object);
 
 frame.AddNativePass({ .Name = "UI", .Clear = { .Flags = ClearFlags::Color } },
                     [](const NativeContext& context) { /* ImGui, debug draw, ... */ });
@@ -84,7 +84,7 @@ renderer.Submit(std::move(frame)); // false when the frame was dropped, like for
 
 - A pass is a `PassRecord`: its `PassInfo` and either draws or a native callback. Passes run in the order they are added.
 - `PassInfo` holds the pass's `Name` (shown in Tracy), its `Target` (the back buffer when empty), what to `Clear` it to, an optional `Viewport` to limit drawing and clearing to part of it, the `View` (camera) and the textures the pass samples in `Reads`.
-- A draw is a `DrawItem`: vertex buffer, index buffer, material, object and `ShaderVariant`. `PassBuilder::AddDraw` adds one, `AddMesh(mesh, object, options)` adds one per submesh. A `PassBuilder` refers to its pass by index, so it stays valid while more passes are added.
+- A draw is a `DrawItem`: vertex buffer, index buffer, material, object and `ShaderVariant`. `PassBuilder::Draw` adds one, `DrawMesh(mesh, object, options)` one per submesh. A `PassBuilder` refers to its pass by index, so it stays valid while more passes are added.
 - A native pass runs a callback with `NativeContext` (device, command buffer, color format) between engine-managed layout transitions. ImGui is rendered this way, so the engine itself has no UI concepts. The callback runs inside `Submit`, so it captures by value or references what outlives the frame.
 - Each draw indexes a per-frame buffer of object transforms, filled by `AddObject`.
 - In debug builds `Submit` checks the passes' `Reads`, and logs once when a pass samples its own target or a texture that a later pass writes.
