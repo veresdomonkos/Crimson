@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <limits>
 #include <map>
 #include <string_view>
 #include <vector>
@@ -120,12 +121,13 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
 
     SECTION("Each with its own material, and the one that failed to load is skipped")
     {
-        pass.DrawMesh(mesh, 5);
+        const ObjectId object = frame.AddObject(glm::mat4(1.0f));
+        pass.DrawMesh(mesh, object);
 
         REQUIRE(pass.GetDraws().size() == 1);
         CHECK(pass.GetDraws()[0].Material == kMaterial);
         CHECK(pass.GetDraws()[0].IndexCount == 3);
-        CHECK(pass.GetDraws()[0].Object == 5);
+        CHECK(pass.GetDraws()[0].Object == object);
         CHECK(pass.GetDraws()[0].Variant == ShaderVariant::Main);
     }
 
@@ -333,7 +335,7 @@ TEST_CASE("Opaque draws are grouped to rebind as little as possible", "[draw sor
     }
 }
 
-TEST_CASE("Transparent draws come after opaque ones, in the order they were submitted", "[draw sort]")
+TEST_CASE("Transparent draws come after opaque ones, farthest first", "[draw sort]")
 {
     FakeMaterials materials;
     materials.Materials = {
@@ -342,9 +344,68 @@ TEST_CASE("Transparent draws come after opaque ones, in the order they were subm
         { ShaderHandle{ 2, 1 }, { .RenderMode = MaterialRenderMode::Transparent } }
     };
 
-    const std::vector<DrawItem> draws = { MakeDraw(2), MakeDraw(1), MakeDraw(0), MakeDraw(2) };
+    const auto at = [](uint32_t material, float depth)
+    {
+        DrawItem draw = MakeDraw(material);
+        draw.SortDepth = depth;
+        return draw;
+    };
 
-    CHECK(DrawOrder(draws, materials) == std::vector<uint32_t>{ 2, 0, 1, 3 });
+    SECTION("Whatever their material")
+    {
+        const std::vector<DrawItem> draws = { at(2, 1.0f), at(1, 4.0f), at(0, 9.0f), at(2, 16.0f) };
+        CHECK(DrawOrder(draws, materials) == std::vector<uint32_t>{ 2, 3, 1, 0 });
+    }
+
+    SECTION("At the same depth, in the order they were submitted")
+    {
+        const std::vector<DrawItem> draws = { MakeDraw(2), MakeDraw(1), MakeDraw(0), MakeDraw(2) };
+        CHECK(DrawOrder(draws, materials) == std::vector<uint32_t>{ 2, 0, 1, 3 });
+    }
+
+    SECTION("A depth that isn't a distance counts as 0")
+    {
+        const std::vector<DrawItem> draws = { at(1, -5.0f), at(1, 2.0f), at(1, std::numeric_limits<float>::quiet_NaN()) };
+        CHECK(DrawOrder(draws, materials) == std::vector<uint32_t>{ 1, 0, 2 });
+    }
+}
+
+TEST_CASE("A transparent material's depth version sorts like an opaque one", "[draw sort]")
+{
+    FakeMaterials materials;
+    materials.Materials = {
+        { ShaderHandle{ 2, 1 }, {} },
+        { ShaderHandle{ 1, 1 }, { .RenderMode = MaterialRenderMode::Transparent } }
+    };
+
+    DrawItem transparent = MakeDraw(1);
+    transparent.Variant = ShaderVariant::Depth;
+    DrawItem opaque = MakeDraw(0);
+    opaque.Variant = ShaderVariant::Depth;
+
+    // Grouped by shader, so the transparent material's lower shader id goes first
+    const std::vector<DrawItem> draws = { opaque, transparent };
+    CHECK(DrawOrder(draws, materials) == std::vector<uint32_t>{ 1, 0 });
+}
+
+TEST_CASE("A mesh's draws sort by the distance from the camera to its center", "[frame]")
+{
+    Mesh mesh;
+    mesh.Materials = { kMaterial, kOverride };
+    mesh.SubMeshes = { { .MaterialSlot = 0 }, { .MaterialSlot = 1 } };
+    mesh.Bounds = { glm::vec3(-1.0f), glm::vec3(3.0f) }; // centered on (1, 1, 1)
+
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    const ObjectId object = frame.AddObject(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2.0f)));
+    PassBuilder pass = frame.AddPass({ .View = { .CameraPosition = glm::vec3(1.0f, 1.0f, 2.0f) } });
+    pass.DrawMesh(mesh, object);
+
+    // The center ends up at (1, 1, -1), 3 away from the camera
+    REQUIRE(pass.GetDraws().size() == 2);
+    CHECK(pass.GetDraws()[0].SortDepth == 9.0f);
+    CHECK(pass.GetDraws()[1].SortDepth == 9.0f);
 }
 
 TEST_CASE("The frame clock starts at 0 and counts the time between frames", "[frame]")

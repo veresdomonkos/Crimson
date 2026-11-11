@@ -308,6 +308,49 @@ TEST_CASE_METHOD(Fixture, "A transparent material blends over what is behind it"
     CHECK(IsNear(image.AtClip(0.5f, 0.0f), kRed));
 }
 
+TEST_CASE_METHOD(Fixture, "Overlapping transparent draws blend back to front, whatever order they come in", "[rendering]")
+{
+    Project.Write("half_red.mat", MakeMaterial("[1, 0, 0, 0.5]", R"("renderMode": "transparent",)"));
+    Project.Write("half_green.mat", MakeMaterial("[0, 1, 0, 0.5]", R"("renderMode": "transparent",)"));
+    Project.Write("back.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f, 0.8f));
+    Project.Write("front.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f, 0.2f));
+
+    AssetManager assets(*Gpu().GPUResources, Project.Path());
+
+    const Mesh* back = assets.Load<AssetType::Mesh>("back.obj");
+    const Mesh* front = assets.Load<AssetType::Mesh>("front.obj");
+    REQUIRE(back);
+    REQUIRE(front);
+
+    const MaterialHandle halfRed = assets.Load<AssetType::Material>("half_red.mat");
+    const MaterialHandle halfGreen = assets.Load<AssetType::Material>("half_green.mat");
+
+    const auto render = [&](bool frontFirst)
+    {
+        RenderOneFrame([&](FrameRecorder& frame)
+        {
+            // The camera is at the origin, so the front quad is the nearer one
+            PassBuilder pass = frame.AddPass(Pass());
+
+            if (frontFirst)
+                pass.DrawMesh(*front, 0, { .MaterialOverride = halfGreen });
+
+            pass.DrawMesh(*back, 0, { .MaterialOverride = halfRed });
+
+            if (!frontFirst)
+                pass.DrawMesh(*front, 0, { .MaterialOverride = halfGreen });
+        });
+
+        return Target.Read().AtClip(0.0f, 0.0f);
+    };
+
+    // Half of the red over the black clear color, then half of the green over that
+    const glm::ivec3 expected(63, 127, 0);
+
+    CHECK(IsNear(render(true), expected, 4));
+    CHECK(IsNear(render(false), expected, 4));
+}
+
 TEST_CASE_METHOD(Fixture, "Passes can read what an earlier pass of the frame rendered", "[rendering]")
 {
     Project.Write("textured.hlsl", kTexturedShader);
