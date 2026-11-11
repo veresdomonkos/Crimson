@@ -2,18 +2,19 @@
 
 #include "crimson/asset_manager/importers/mesh_importer.hpp"
 
-#include <array>
 #include <filesystem>
 #include <fstream>
-#include <map>
 #include <algorithm>
 #include <limits>
 #include <sstream>
+#include <string_view>
+#include <unordered_map>
 #include <utility>
 #include "crimson/core/log.hpp"
 #include "crimson/renderer/mesh.hpp"
 
 #include "asset_manager/mtl_materials.hpp"
+#include "mesh_tangents.hpp"
 
 namespace crimson
 {
@@ -63,12 +64,9 @@ namespace crimson
 
         mesh.Materials.resize(std::max<size_t>(1, materials.size()));
 
-        std::vector<MeshVertex> vertices;
-        std::vector<std::vector<uint32_t>> indicesBySlot(mesh.Materials.size());
-        std::map<std::array<int, 3>, uint32_t> dedup;
-
-        glm::vec3 bmin{  std::numeric_limits<float>::max() };
-        glm::vec3 bmax{ -std::numeric_limits<float>::max() };
+        // Every triangle's corners first, as the tangents depend on the triangles around a vertex. They are welded after.
+        std::vector<MeshVertex> corners;
+        std::vector<size_t> triangleSlots;
 
         for (const auto& shape : shapes)
         {
@@ -77,8 +75,9 @@ namespace crimson
             for (size_t face = 0; face < idx.size() / 3; ++face)
             {
                 const int matId = shape.mesh.material_ids[face];
-                const size_t slot = (matId >= 0 && static_cast<size_t>(matId) < indicesBySlot.size())
+                const size_t slot = (matId >= 0 && static_cast<size_t>(matId) < mesh.Materials.size())
                                   ? static_cast<size_t>(matId) : 0;
+                triangleSlots.push_back(slot);
 
                 glm::vec3 faceNormal{ 0.0f, 1.0f, 0.0f };
                 if (idx[face * 3].normal_index < 0)
@@ -97,16 +96,6 @@ namespace crimson
                 {
                     const auto& i = idx[face * 3 + k];
                     const bool hasNormal = i.normal_index >= 0;
-                    const std::array<int, 3> key{ i.vertex_index, i.normal_index, i.texcoord_index };
-
-                    if (hasNormal)
-                    {
-                        if (auto it = dedup.find(key); it != dedup.end())
-                        {
-                            indicesBySlot[slot].push_back(it->second);
-                            continue;
-                        }
-                    }
 
                     MeshVertex v{};
                     v.Position = { attrib.vertices[3 * i.vertex_index],
@@ -124,21 +113,43 @@ namespace crimson
                         v.UV = { u, flipV ? 1.0f - t : t };
                     }
 
-                    bmin = glm::min(bmin, v.Position);
-                    bmax = glm::max(bmax, v.Position);
-
-                    const uint32_t newIndex = static_cast<uint32_t>(vertices.size());
-                    vertices.push_back(v);
-                    if (hasNormal) dedup.emplace(key, newIndex);
-                    indicesBySlot[slot].push_back(newIndex);
+                    corners.push_back(v);
                 }
             }
         }
 
-        if (vertices.empty())
+        if (corners.empty())
         {
             LOG_ERROR("[MeshImporter] '{}': no geometry", name);
             return {};
+        }
+
+        ComputeTangents(corners, !attrib.texcoords.empty());
+
+        // Corners that came out the same are one vertex. Ones that only differ in their tangent, at a seam where the UVs
+        // are mirrored, stay apart.
+        std::vector<MeshVertex> vertices;
+        std::vector<std::vector<uint32_t>> indicesBySlot(mesh.Materials.size());
+        std::unordered_map<std::string_view, uint32_t> welded;
+        welded.reserve(corners.size());
+
+        glm::vec3 bmin{  std::numeric_limits<float>::max() };
+        glm::vec3 bmax{ -std::numeric_limits<float>::max() };
+
+        for (size_t corner = 0; corner < corners.size(); ++corner)
+        {
+            const MeshVertex& v = corners[corner];
+            const std::string_view bytes(reinterpret_cast<const char*>(&v), sizeof(MeshVertex));
+
+            const auto [it, added] = welded.try_emplace(bytes, static_cast<uint32_t>(vertices.size()));
+            if (added)
+            {
+                vertices.push_back(v);
+                bmin = glm::min(bmin, v.Position);
+                bmax = glm::max(bmax, v.Position);
+            }
+
+            indicesBySlot[triangleSlots[corner / 3]].push_back(it->second);
         }
 
         std::vector<uint32_t> indices;
@@ -158,7 +169,7 @@ namespace crimson
         mesh.Bounds = { bmin, bmax };
 
         VertexBufferInfo vInfo{
-            .Layout = { ShaderDataType::Float3, ShaderDataType::Float3, ShaderDataType::Float2 },
+            .Layout = { ShaderDataType::Float3, ShaderDataType::Float3, ShaderDataType::Float2, ShaderDataType::Float4 },
             .Size   = vertices.size() * sizeof(MeshVertex),
             .Usage  = BufferUsage::Static
         };

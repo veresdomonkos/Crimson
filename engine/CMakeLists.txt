@@ -110,6 +110,8 @@ set(ENGINE_IMPLEMENTATION
         src/asset_manager/importers/texture_importer.cpp
         src/asset_manager/importers/material_importer.cpp
         src/asset_manager/importers/mesh_importer.cpp
+        src/asset_manager/importers/mesh_tangents.hpp
+        src/asset_manager/importers/mesh_tangents.cpp
         src/asset_manager/importers/shader_importer.cpp
         src/asset_manager/importers/scene_importer.cpp
         src/scene/scene.cpp
@@ -169,5 +171,6 @@ target_link_libraries(Engine
         glslang::glslang-default-resource-limits
         stb_image
         tinyobjloader
+        mikktspace
         GPUOpen::VulkanMemoryAllocator
 )
