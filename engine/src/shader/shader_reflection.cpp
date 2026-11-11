@@ -6,7 +6,7 @@
 #include <spirv_reflect.h>
 
 #include "crimson/core/log.hpp"
-#include "crimson/renderer/frame_data.hpp"
+#include "crimson/renderer/frame_gpu_data.hpp"
 
 namespace crimson
 {
@@ -26,7 +26,7 @@ namespace crimson
             { "FrameBlock",    kFrameSpace, kFrameBlockBinding,    SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER, sizeof(FrameBlock) },
             { "Lights",        kFrameSpace, kLightsBinding,        SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuLight) },
             { "Shadows",       kFrameSpace, kShadowsBinding,       SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuShadow) },
-            { "Objects",       kFrameSpace, kObjectsBinding,       SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(ObjectData) },
+            { "Objects",       kFrameSpace, kObjectsBinding,       SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuObject) },
             { "ShadowAtlas",   kFrameSpace, kShadowAtlasBinding,   SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  0 },
             { "LinearWrap",    kFrameSpace, kLinearWrapBinding,    SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
             { "LinearClamp",   kFrameSpace, kLinearClampBinding,   SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },

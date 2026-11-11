@@ -3,10 +3,10 @@
 
 #include <crimson/core/input.hpp>
 #include <crimson/core/window.hpp>
-#include <crimson/graphics/graphincs_backend.hpp>
+#include <crimson/graphics/graphics_backend.hpp>
 #include <crimson/project/project.hpp>
-#include <crimson/renderer/frame_context.hpp>
-#include <crimson/renderer/renderer_api.hpp>
+#include <crimson/renderer/frame_recorder.hpp>
+#include <crimson/renderer/graphics_api.hpp>
 
 namespace crimson::editor
 {
@@ -20,7 +20,7 @@ namespace crimson::editor
         Window& AppWindow;
         GraphicsBackend& Graphics;
         Input& AppInput;
-        RendererAPIType RendererType;
+        GraphicsApi RendererType;
         EditorIcons& Icons;
         RecentProjects& Recents;
         EditorSettings& Settings;
@@ -37,12 +37,10 @@ namespace crimson::editor
     public:
         virtual ~AppMode() = default;
 
-        // Before the frame starts
-        virtual void PrepareFrame() {}
-        [[nodiscard]] virtual const FrameLightingData& Lighting() const { return m_noLighting; }
+        // Fills in the frame: its lighting and passes. The UI pass goes after them.
+        virtual void Record(FrameRecorder& frame) {}
 
-        // Inside the frame
-        virtual void RecordPasses(FrameContext& frame) {}
+        // Builds the UI, after Record, while the frame is still being recorded
         virtual void OnImGui() = 0;
 
         // After the frame
@@ -50,7 +48,5 @@ namespace crimson::editor
 
         // Something wants to close the mode. A mode with unsaved work can ask first, and calls proceed if it goes ahead.
         virtual void RequestClose(std::function<void()> proceed) { proceed(); }
-    private:
-        FrameLightingData m_noLighting;
     };
 }

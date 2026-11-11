@@ -11,7 +11,7 @@ namespace crimson::vulkan
         VulkanImGuiBackend(VulkanDevice& device, VulkanResourceManager& resourceManager, const Window& window);
         ~VulkanImGuiBackend() override;
         void NewFrame() override;
-        void RenderDrawData(ImDrawData* drawData, const NativeFrameHandles& handles) override;
+        void RenderDrawData(ImDrawData* drawData, const NativeContext& context) override;
         ImTextureID GetOrCreateTextureId(TextureHandle texture) override;
         void ReleaseTexture(TextureHandle texture) override;
     private:

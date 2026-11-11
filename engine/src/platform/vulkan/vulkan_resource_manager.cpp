@@ -40,16 +40,16 @@ namespace crimson::vulkan
         poolSizes[0].descriptorCount = 1;
 
         poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[1].descriptorCount = 100 + MAX_FRAMES_IN_FLIGHT;
+        poolSizes[1].descriptorCount = 100 + kMaxFramesInFlight;
 
         poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = 3 * MAX_FRAMES_IN_FLIGHT;
+        poolSizes[2].descriptorCount = 3 * kMaxFramesInFlight;
 
         poolSizes[3].type = vk::DescriptorType::eSampledImage;
-        poolSizes[3].descriptorCount = 100 + MAX_FRAMES_IN_FLIGHT;
+        poolSizes[3].descriptorCount = 100 + kMaxFramesInFlight;
 
         poolSizes[4].type = vk::DescriptorType::eSampler;
-        poolSizes[4].descriptorCount = 4 * MAX_FRAMES_IN_FLIGHT;
+        poolSizes[4].descriptorCount = 4 * kMaxFramesInFlight;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -700,7 +700,7 @@ namespace crimson::vulkan
         const vk::Format depthFormat = hasDepth ? GetTexture(target.DepthAttachment).Format : vk::Format::eUndefined;
 
         // A depth pass uses PSDepth, or no fragment stage at all, as depth comes from the vertex shader
-        const bool depthPass = info.Pass == ShaderPass::Depth;
+        const bool depthPass = info.Variant == ShaderVariant::Depth;
         const vk::ShaderModule fragment = depthPass ? *shader.FragmentDepth : *shader.Fragment;
 
         std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages{};
@@ -1054,7 +1054,7 @@ namespace crimson::vulkan
             if (extent.width == 0 || extent.height == 0 || extent.width == UINT32_MAX)
                 return false;
 
-            uint32_t imageCount = std::max(capabilities.minImageCount + 1, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT));
+            uint32_t imageCount = std::max(capabilities.minImageCount + 1, static_cast<uint32_t>(kMaxFramesInFlight));
 
             if (capabilities.maxImageCount > 0 && imageCount > capabilities.maxImageCount)
                 imageCount = capabilities.maxImageCount;

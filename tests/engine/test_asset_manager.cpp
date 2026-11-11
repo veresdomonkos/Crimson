@@ -489,8 +489,8 @@ TEST_CASE("Meshes load their geometry, bounds and material slots", "[assets]")
 
         const Mesh* mesh = assets.Load<AssetType::Mesh>("tri.obj");
         REQUIRE(mesh);
-        CHECK(mesh->VB);
-        CHECK(mesh->IB);
+        CHECK(mesh->VertexBuffer);
+        CHECK(mesh->IndexBuffer);
         CHECK(mesh->MaterialSlots == std::vector<std::string>{ "default" });
         REQUIRE(mesh->SubMeshes.size() == 1);
         CHECK(mesh->SubMeshes[0].IndexCount == 3);

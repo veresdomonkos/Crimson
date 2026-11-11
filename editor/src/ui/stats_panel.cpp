@@ -14,7 +14,7 @@ namespace crimson::editor::ui
 #else
         constexpr const char* buildType = "Debug";
 #endif
-        ImGui::Text("%s | %s", m_api == RendererAPIType::Vulkan ? "Vulkan" : "OpenGL", buildType);
+        ImGui::Text("%s | %s", m_api == GraphicsApi::Vulkan ? "Vulkan" : "OpenGL", buildType);
 
 #ifndef NDEBUG
         ImGui::TextColored(theme::Warning, "Debug build, timings are not representative");

@@ -29,8 +29,8 @@ namespace crimson
 
     struct Mesh
     {
-        VertexBufferHandle VB;
-        IndexBufferHandle  IB;
+        VertexBufferHandle VertexBuffer;
+        IndexBufferHandle  IndexBuffer;
 
         std::vector<SubMesh> SubMeshes;
         std::vector<MaterialHandle> Materials;

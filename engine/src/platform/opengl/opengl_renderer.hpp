@@ -3,6 +3,7 @@
 #include "opengl_device.hpp"
 #include "opengl_state_cache.hpp"
 #include "crimson/renderer/draw_sort.hpp"
+#include "crimson/renderer/frame_validation.hpp"
 #include "crimson/renderer/renderer.hpp"
 
 #include <vector>
@@ -15,14 +16,16 @@ namespace crimson::opengl
         OpenGLRenderer(OpenGLDevice& device, OpenGLResourceManager& resourceManager);
         ~OpenGLRenderer() override;
 
-        FrameContext BeginFrame(const FrameLightingData& lighting) override;
-        void EndFrame(const FrameContext& frameContext) override;
-        void SetShadowMap(TextureHandle shadowMap) override;
+        [[nodiscard]] bool CanRender() const override;
+        bool Submit(FrameRecorder frame) override;
+        void SetShadowAtlas(TextureHandle shadowAtlas) override;
     private:
-        void ExecuteDraw(const DrawInfo &info);
-        void ExecuteBeginRenderPass(const RenderPassInfo& info);
-        void ExecuteBeginRawPass(const RawPassInfo& info);
-        void ClearTarget(ClearFlags flags, const glm::vec4& color, float depth, uint32_t stencil);
+        void ExecutePass(const PassRecord& pass);
+        void BeginPass(const PassInfo& info);
+        void ExecuteNativePass(const PassRecord& pass);
+        void BindTarget(const PassInfo& info);
+        void ClearTarget(const ClearInfo& clear);
+        void ExecuteDraw(const DrawItem& info);
         void ResetBoundState();
         void BindFrameResources();
     private:
@@ -35,12 +38,12 @@ namespace crimson::opengl
 
         OpenGLDevice& m_device;
         OpenGLResourceManager& m_resourceManager;
-        Frame m_frames[1];
 
         std::vector<DrawSortEntry> m_drawOrder;
+        FrameValidator m_validator;
         OpenGLStateCache m_state;
         MaterialHandle m_boundMaterial;
-        ShaderPass m_boundPass = ShaderPass::Main;
+        ShaderVariant m_boundVariant = ShaderVariant::Main;
         VertexBufferHandle m_boundVertexBuffer;
         IndexBufferHandle m_boundIndexBuffer;
         ObjectId m_boundObject = 0;

@@ -49,18 +49,19 @@ namespace crimson
         uint32_t Height = 0;
     };
 
-    struct RenderPassInfo
+    // What a pass clears its target to before drawing, the parts not in Flags keep what was there
+    struct ClearInfo
     {
-        RenderTargetHandle Target;
-        crimson::ClearFlags ClearFlags = crimson::ClearFlags::None;
-        glm::vec4 ClearColor{0, 0, 0, 1};
-        float ClearDepth = 1.0f;
-        uint32_t ClearStencil = 0;
+        ClearFlags Flags = ClearFlags::None;
+        glm::vec4 Color{0, 0, 0, 1};
+        float Depth = 1.0f;
+        uint32_t Stencil = 0;
+    };
 
+    // The camera a pass draws with, what goes into the view block
+    struct ViewData
+    {
         glm::mat4 ViewProj{1.0f};
         glm::vec3 CameraPosition{0.0f};
-
-        // Limits drawing and clearing to part of the target, the whole target when not set
-        std::optional<RenderRect> Viewport;
     };
 }

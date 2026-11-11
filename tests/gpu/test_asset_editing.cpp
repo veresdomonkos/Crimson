@@ -84,7 +84,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         SceneRenderer Shadows = MakeSceneRenderer();
 
         // Full ambient light, so a lit material shows exactly what it is
-        FrameLightingData Lighting;
+        FrameLighting Lighting;
 
         Fixture()
         {
@@ -102,9 +102,9 @@ float4 PSMain(VertexOutput input) : SV_Target
             REQUIRE(handle);
 
             // In front of the quad, which faces +Z, for the lighting to see it from the front
-            const RenderPassInfo pass{ .Target = target.Handle(), .ClearFlags = ClearFlags::Color | ClearFlags::Depth, .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) };
+            const PassInfo pass{ .Target = target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth }, .View = { .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) } };
 
-            RenderOneFrame([&](FrameContext& frame) { frame.BeginRenderPass(pass).Draw(*mesh, 0, handle); }, Lighting);
+            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).Draw(*mesh, 0, { .MaterialOverride = handle }); }, Lighting);
 
             return target.Read();
         }
@@ -139,9 +139,9 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
             REQUIRE(mesh);
 
             const MaterialHandle handle = assets.Load(id);
-            const RenderPassInfo pass{ .Target = Target.Handle(), .ClearFlags = ClearFlags::Color | ClearFlags::Depth, .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) };
+            const PassInfo pass{ .Target = Target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth }, .View = { .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) } };
 
-            RenderOneFrame([&](FrameContext& frame) { frame.BeginRenderPass(pass).Draw(*mesh, 0, handle); }, Lighting);
+            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).Draw(*mesh, 0, { .MaterialOverride = handle }); }, Lighting);
 
             return Target.Read().AtClip(0.0f, 0.0f);
         };
@@ -236,7 +236,7 @@ TEST_CASE("Mipmaps keep a shrunken texture from flickering", "[asset editing]")
 
     AssetManager assets(*Gpu().GPUResources, project.Path());
     const TextureID texture = assets.Find<AssetType::Texture>("checker.bmp");
-    FrameLightingData lighting;
+    FrameLighting lighting;
     lighting.AmbientColor = glm::vec3(1.0f);
 
     const auto spread = [&]
@@ -246,8 +246,8 @@ TEST_CASE("Mipmaps keep a shrunken texture from flickering", "[asset editing]")
         REQUIRE(mesh);
         REQUIRE(material);
 
-        const RenderPassInfo pass{ .Target = target.Handle(), .ClearFlags = ClearFlags::Color | ClearFlags::Depth };
-        RenderOneFrame([&](FrameContext& frame) { frame.BeginRenderPass(pass).Draw(*mesh, 0, material); }, lighting);
+        const PassInfo pass{ .Target = target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth } };
+        RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).Draw(*mesh, 0, { .MaterialOverride = material }); }, lighting);
 
         const Image image = target.Read();
         int lowest = 255;

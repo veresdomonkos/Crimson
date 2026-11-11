@@ -30,7 +30,7 @@ namespace crimson::vulkan
         initInfo.DescriptorPool = VK_NULL_HANDLE;
         initInfo.DescriptorPoolSize = 1000;
         initInfo.MinImageCount = 2;
-        initInfo.ImageCount = MAX_FRAMES_IN_FLIGHT;
+        initInfo.ImageCount = kMaxFramesInFlight;
         initInfo.UseDynamicRendering = true;
         initInfo.PipelineInfoMain.PipelineRenderingCreateInfo = renderingInfo;
         initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
@@ -54,9 +54,9 @@ namespace crimson::vulkan
         ImGui::NewFrame();
     }
 
-    void VulkanImGuiBackend::RenderDrawData(ImDrawData* drawData, const NativeFrameHandles& handles)
+    void VulkanImGuiBackend::RenderDrawData(ImDrawData* drawData, const NativeContext& context)
     {
-        ImGui_ImplVulkan_RenderDrawData(drawData, static_cast<VkCommandBuffer>(handles.CommandBuffer));
+        ImGui_ImplVulkan_RenderDrawData(drawData, static_cast<VkCommandBuffer>(context.CommandBuffer));
     }
 
     ImTextureID VulkanImGuiBackend::GetOrCreateTextureId(TextureHandle texture)

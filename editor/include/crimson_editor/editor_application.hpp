@@ -7,7 +7,7 @@
 
 #include <crimson/core/input.hpp>
 #include <crimson/core/window.hpp>
-#include <crimson/graphics/graphincs_backend.hpp>
+#include <crimson/graphics/graphics_backend.hpp>
 #include <crimson/project/project.hpp>
 
 #include "crimson_editor/app_mode.hpp"
@@ -22,7 +22,7 @@ namespace crimson::editor
 	{
 	public:
 		// An empty path starts with the project manager
-		EditorApplication(RendererAPIType rendererType, const std::filesystem::path& projectPath);
+		EditorApplication(GraphicsApi rendererType, const std::filesystem::path& projectPath);
         ~EditorApplication();
 		void Run();
 
@@ -38,7 +38,7 @@ namespace crimson::editor
 	private:
 	    // --- Frame ---
 	    void RenderFrame();
-	    void RecordUIPass(FrameContext& frame);
+	    void RecordUIPass(FrameRecorder& frame);
 
 	    // --- Modes ---
 	    void ShowProjectManager(std::string error = {});

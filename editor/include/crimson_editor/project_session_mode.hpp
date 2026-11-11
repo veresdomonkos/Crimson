@@ -23,9 +23,7 @@ namespace crimson::editor
         ProjectSessionMode(EditorServices& services, Project project);
         ~ProjectSessionMode() override;
 
-        void PrepareFrame() override;
-        [[nodiscard]] const FrameLightingData& Lighting() const override { return m_lighting; }
-        void RecordPasses(FrameContext& frame) override;
+        void Record(FrameRecorder& frame) override;
         void OnImGui() override;
         void Update(float deltaTime) override;
         void RequestClose(std::function<void()> proceed) override;
@@ -91,8 +89,6 @@ namespace crimson::editor
         float m_sinceSceneCheck = 0.0f;
         float m_sinceShaderCheck = 0.0f;
 
-        // Light
-        FrameLightingData m_lighting;
         FrameStats m_frameStats;
 
         std::unique_ptr<ui::EditorUI> m_ui;

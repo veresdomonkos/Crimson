@@ -11,7 +11,7 @@ namespace crimson::opengl
         OpenGLImGuiBackend(OpenGLDevice& device, OpenGLResourceManager& resourceManager);
         ~OpenGLImGuiBackend() override;
         void NewFrame() override;
-        void RenderDrawData(ImDrawData* drawData, const NativeFrameHandles& handles) override;
+        void RenderDrawData(ImDrawData* drawData, const NativeContext& context) override;
         ImTextureID GetOrCreateTextureId(TextureHandle texture) override;
         void ReleaseTexture(TextureHandle) override {} // the id is the texture's own GL handle
     private:

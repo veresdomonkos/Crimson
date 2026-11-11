@@ -4,11 +4,11 @@
 
 #include <utility>
 #include "crimson/core/log.hpp"
-#include "crimson/renderer/renderer_api.hpp"
+#include "crimson/renderer/graphics_api.hpp"
 
 namespace crimson
 {
-	Unique<Window> Window::Create(RendererAPIType rendererAPI, WindowData data)
+	Unique<Window> Window::Create(GraphicsApi rendererAPI, WindowData data)
 	{
 		glfwSetErrorCallback([](int, const char* description) { LOG_ERROR("[GLFW] {}", description); });
 
@@ -24,11 +24,11 @@ namespace crimson
 
 		switch (rendererAPI)
 		{
-			case RendererAPIType::OpenGL:
+			case GraphicsApi::OpenGL:
 				glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
 				break;
 
-			case RendererAPIType::Vulkan:
+			case GraphicsApi::Vulkan:
 				glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 				break;
 

@@ -8,14 +8,14 @@
 #include <glm/glm.hpp>
 
 #include <crimson/core/window.hpp>
-#include <crimson/graphics/graphincs_backend.hpp>
-#include <crimson/renderer/frame_context.hpp>
+#include <crimson/graphics/graphics_backend.hpp>
+#include <crimson/renderer/frame_recorder.hpp>
 
 namespace crimson::tests
 {
     // The backend this run tests, chosen on the command line
-    [[nodiscard]] RendererAPIType SelectedBackend();
-    void SelectBackend(RendererAPIType type);
+    [[nodiscard]] GraphicsApi SelectedBackend();
+    void SelectBackend(GraphicsApi type);
 
     // The window and backend the rendering tests share, created on first use.
     // Only one can exist at a time, so a test that brings its own has to shut this down first.
@@ -78,5 +78,5 @@ namespace crimson::tests
     };
 
     // Runs one whole frame, with whatever record adds to it
-    void RenderOneFrame(const std::function<void(FrameContext&)>& record, const FrameLightingData& lighting = {});
+    void RenderOneFrame(const std::function<void(FrameRecorder&)>& record, const FrameLighting& lighting = {});
 }

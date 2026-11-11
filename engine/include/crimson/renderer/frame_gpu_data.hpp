@@ -39,12 +39,12 @@ namespace crimson
     };
     static_assert(sizeof(GpuShadow) == 96);
 
-    struct ObjectData
+    struct GpuObject
     {
         glm::mat4 Transform;
         glm::mat4 NormalMatrix;
     };
-    static_assert(sizeof(ObjectData) == 128);
+    static_assert(sizeof(GpuObject) == 128);
 
     // One tile of the shadow atlas, rendered by its own pass
     struct ShadowView
@@ -53,7 +53,7 @@ namespace crimson
         RenderRect Viewport;
     };
 
-    struct FrameLightingData
+    struct FrameLighting
     {
         glm::vec3 AmbientColor{0.02f};
         std::vector<Light> Lights;
@@ -98,7 +98,7 @@ namespace crimson
         std::vector<GpuLight> Lights;
         std::vector<GpuShadow> Shadows;
 
-        void Build(const FrameLightingData& lighting, FrameTime time)
+        void Build(const FrameLighting& lighting, FrameTime time)
         {
             Block.Time = time.Time;
             Block.DeltaTime = time.DeltaTime;

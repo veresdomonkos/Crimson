@@ -5,7 +5,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-#include "crimson/renderer/frame_data.hpp"
+#include "crimson/renderer/frame_gpu_data.hpp"
 
 namespace crimson
 {
