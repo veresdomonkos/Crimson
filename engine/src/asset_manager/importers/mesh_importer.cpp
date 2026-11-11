@@ -168,14 +168,14 @@ namespace crimson
             .Type  = IndexType::UInt32
         };
 
-        mesh.VB = ctx.Gpu.CreateVertexBuffer(vInfo, vertices.data());
-        mesh.IB = ctx.Gpu.CreateIndexBuffer(iInfo, indices.data());
+        mesh.VertexBuffer = ctx.Gpu.CreateVertexBuffer(vInfo, vertices.data());
+        mesh.IndexBuffer = ctx.Gpu.CreateIndexBuffer(iInfo, indices.data());
 
-        if (!mesh.VB || !mesh.IB)
+        if (!mesh.VertexBuffer || !mesh.IndexBuffer)
         {
             LOG_ERROR("[MeshImporter] GPU buffer creation failed for '{}'", name);
-            if (mesh.VB) ctx.Gpu.DestroyVertexBuffer(mesh.VB);
-            if (mesh.IB) ctx.Gpu.DestroyIndexBuffer(mesh.IB);
+            if (mesh.VertexBuffer) ctx.Gpu.DestroyVertexBuffer(mesh.VertexBuffer);
+            if (mesh.IndexBuffer) ctx.Gpu.DestroyIndexBuffer(mesh.IndexBuffer);
             return {};
         }
 
@@ -186,7 +186,7 @@ namespace crimson
 
     void MeshImporter::Unload(Mesh& mesh, GpuResourceManager& gpu)
     {
-        gpu.DestroyVertexBuffer(mesh.VB);
-        gpu.DestroyIndexBuffer(mesh.IB);
+        gpu.DestroyVertexBuffer(mesh.VertexBuffer);
+        gpu.DestroyIndexBuffer(mesh.IndexBuffer);
     }
 }

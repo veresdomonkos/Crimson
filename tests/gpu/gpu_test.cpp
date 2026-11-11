@@ -13,7 +13,7 @@ namespace crimson::tests
 {
     namespace
     {
-        RendererAPIType s_backend = RendererAPIType::OpenGL;
+        GraphicsApi s_backend = GraphicsApi::OpenGL;
 
         // In this order, as the backend needs the window while it is destroyed
         std::unique_ptr<Window> s_window;
@@ -32,8 +32,8 @@ namespace crimson::tests
         }
     }
 
-    RendererAPIType SelectedBackend() { return s_backend; }
-    void SelectBackend(RendererAPIType type) { s_backend = type; }
+    GraphicsApi SelectedBackend() { return s_backend; }
+    void SelectBackend(GraphicsApi type) { s_backend = type; }
 
     GraphicsBackend& Gpu()
     {
@@ -181,7 +181,7 @@ namespace crimson::tests
         return { m_width, m_height, Gpu().GPUResources->ReadColorPixels(m_color) };
     }
 
-    void RenderOneFrame(const std::function<void(FrameContext&)>& record, const FrameLightingData& lighting)
+    void RenderOneFrame(const std::function<void(FrameRecorder&)>& record, const FrameLighting& lighting)
     {
         constexpr int kAttempts = 10;
         Renderer& renderer = *Gpu().Renderer;
@@ -191,17 +191,19 @@ namespace crimson::tests
         {
             GpuWindow().PollEvents();
 
-            FrameContext frame = renderer.BeginFrame(lighting);
-            if (!frame.ShouldRender())
+            if (!renderer.CanRender())
                 continue;
+
+            FrameRecorder frame = renderer.BeginRecording();
+            frame.Lighting() = lighting;
 
             record(frame);
 
-            // Something has to present the back buffer, and a raw pass is what leaves it ready for that
-            frame.AddRawPass({ .ClearFlags = ClearFlags::Color, .Callback = [](const NativeFrameHandles&) {} });
+            // Something has to present the back buffer, and a native pass is what leaves it ready for that
+            frame.AddNativePass({ .Name = "Present", .Clear = { .Flags = ClearFlags::Color } }, [](const NativeContext&) {});
 
-            renderer.EndFrame(frame);
-            return;
+            if (renderer.Submit(std::move(frame)))
+                return;
         }
 
         FAIL("The renderer kept skipping frames");

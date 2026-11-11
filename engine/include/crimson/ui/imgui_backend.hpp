@@ -14,7 +14,7 @@ namespace crimson
     public:
         virtual ~ImGuiBackend() = default;
         virtual void NewFrame() = 0;
-        virtual void RenderDrawData(ImDrawData* drawData, const NativeFrameHandles& handles) = 0;
+        virtual void RenderDrawData(ImDrawData* drawData, const NativeContext& context) = 0;
         virtual ImTextureID GetOrCreateTextureId(TextureHandle texture) = 0;
 
         // Call before destroying a texture that got an id. Can't be called inside a frame.

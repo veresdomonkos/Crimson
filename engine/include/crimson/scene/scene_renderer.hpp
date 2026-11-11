@@ -1,7 +1,7 @@
 #pragma once
 #include <vector>
 
-#include "crimson/renderer/frame_context.hpp"
+#include "crimson/renderer/frame_recorder.hpp"
 #include "crimson/renderer/renderer.hpp"
 #include "crimson/renderer/resource_manager.hpp"
 #include "crimson/renderer/shadow_atlas.hpp"
@@ -41,13 +41,14 @@ namespace crimson
 
         [[nodiscard]] TextureHandle GetShadowAtlas() const { return m_shadowAtlas; }
 
-        // Call before Renderer::BeginFrame, with the scene's world transforms up to date
-        void BuildLighting(Scene& scene, FrameLightingData& lighting);
+        // Fills the frame's lighting, call before Record with the scene's world transforms up to date
+        void BuildLighting(Scene& scene, FrameLighting& lighting);
 
-        // Records one shadow pass per shadow view, then the main pass described by mainPass, then the tone mapping.
+        // Records one shadow pass per shadow view of the frame's lighting, then the main pass described by mainPass, then the tone mapping.
+        // The main pass is named "Scene", and samples the shadow atlas besides what mainPass.Reads lists.
         // Clear colors are in linear light when tone mapping is enabled.
         // The outlined entity and its children get an outline, if there is one and outlines are enabled.
-        void RecordPasses(FrameContext& frame, Scene& scene, const FrameLightingData& lighting, const RenderPassInfo& mainPass, Entity outlined = {});
+        void Record(FrameRecorder& frame, Scene& scene, const PassInfo& mainPass, Entity outlined = {});
     private:
         struct Drawable
         {
@@ -58,7 +59,7 @@ namespace crimson
         };
 
         void CreateScreenTriangle();
-        void RecordOutlineMask(FrameContext& frame, const RenderPassInfo& mainPass);
+        void RecordOutlineMask(FrameRecorder& frame, const PassInfo& mainPass);
 
         GpuResourceManager& m_resources;
         ShadowAtlasSettings m_atlas;
@@ -66,9 +67,11 @@ namespace crimson
         TextureHandle m_shadowAtlas;
 
         RenderTargetHandle m_hdrTarget;
+        TextureHandle m_hdrColor;
         MaterialHandle m_toneMapMaterial;
 
         RenderTargetHandle m_outlineMaskTarget;
+        TextureHandle m_outlineMask;
         MaterialHandle m_outlineMaterial;
         VertexBufferHandle m_screenTriangleVertices;
         IndexBufferHandle m_screenTriangleIndices;

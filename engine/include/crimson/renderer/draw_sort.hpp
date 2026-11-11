@@ -6,7 +6,7 @@
 #include <tuple>
 #include <vector>
 
-#include "crimson/renderer/frame_context.hpp"
+#include "crimson/renderer/frame_recorder.hpp"
 #include "crimson/renderer/material_settings.hpp"
 
 namespace crimson
@@ -21,7 +21,7 @@ namespace crimson
     // Ids too large for their field wrap around, which can only cost extra binds, the draws still use their own handles.
     // Transparent draws only set the top bit so the index keeps them in submission order, they have no depth to sort by yet.
     template <typename Material>
-    uint64_t MakeDrawSortKey(const DrawInfo& draw, const Material& material)
+    uint64_t MakeDrawSortKey(const DrawItem& draw, const Material& material)
     {
         if (material.Settings.RenderMode == MaterialRenderMode::Transparent)
             return uint64_t{1} << 63;
@@ -40,7 +40,7 @@ namespace crimson
 
     // Opaque draws first, grouped by state so the renderers rebind as little as possible.
     template <typename ResourceManager>
-    void BuildDrawOrder(std::span<const DrawInfo> draws, const ResourceManager& resourceManager, std::vector<DrawSortEntry>& order)
+    void BuildDrawOrder(std::span<const DrawItem> draws, const ResourceManager& resourceManager, std::vector<DrawSortEntry>& order)
     {
         order.clear();
         order.reserve(draws.size());

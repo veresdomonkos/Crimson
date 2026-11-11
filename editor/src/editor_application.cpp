@@ -4,7 +4,7 @@
 #include <crimson/core/log.hpp>
 #include <crimson/core/profiler.hpp>
 #include <crimson/project/project.hpp>
-#include <crimson/renderer/renderer_api.hpp>
+#include <crimson/graphics/graphics_api.hpp>
 #include <GLFW/glfw3.h>
 #include <nfd.h>
 #include <utility>
@@ -21,7 +21,7 @@ namespace crimson::editor
     static constexpr uint32_t kEditorWidth = 1280;
     static constexpr uint32_t kEditorHeight = 720;
 
-	EditorApplication::EditorApplication(RendererAPIType rendererType, const std::filesystem::path& projectPath)
+	EditorApplication::EditorApplication(GraphicsApi rendererType, const std::filesystem::path& projectPath)
         : m_running(true), m_lastTime(0.0)
     {
         if (NFD_Init() != NFD_OKAY)
@@ -158,35 +158,35 @@ namespace crimson::editor
 
         auto& renderer = *m_graphicsBackend->Renderer;
 
-        m_mode->PrepareFrame();
-
-        auto frame = renderer.BeginFrame(m_mode->Lighting());
-
-        if (!frame.ShouldRender())
+        if (!renderer.CanRender())
             return;
 
 	    m_graphicsBackend->Imgui->NewFrame();
 
-        m_mode->RecordPasses(frame);
+        FrameRecorder frame = renderer.BeginRecording();
+        m_mode->Record(frame);
+
+        // After the passes, so the UI sees the world transforms they updated
+        m_mode->OnImGui();
+        ImGui::Render();
         RecordUIPass(frame);
 
-        renderer.EndFrame(frame);
+        renderer.Submit(std::move(frame));
     }
 
-    void EditorApplication::RecordUIPass(FrameContext& frame)
+    void EditorApplication::RecordUIPass(FrameRecorder& frame)
     {
-        RawPassInfo info{
-            .ClearFlags = ClearFlags::Color | ClearFlags::Depth,
-            .ClearColor = glm::vec4(0.09f, 0.10f, 0.11f, 1.0f),
-            .Callback = [this](const NativeFrameHandles& handles)
-            {
-                m_mode->OnImGui();
-
-                ImGui::Render();
-                m_graphicsBackend->Imgui->RenderDrawData(ImGui::GetDrawData(), handles);
-            }
+        const PassInfo info{
+            .Name = "UI",
+            .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(0.09f, 0.10f, 0.11f, 1.0f) }
         };
-        frame.AddRawPass(info);
+
+        // The draw data stays valid until the next ImGui frame starts, which is after Submit.
+        // TODO: snapshot it once rendering moves to its own thread.
+        frame.AddNativePass(info, [&imgui = *m_graphicsBackend->Imgui](const NativeContext& context)
+        {
+            imgui.RenderDrawData(ImGui::GetDrawData(), context);
+        });
     }
 
 	void EditorApplication::OnEvent(Event& event)

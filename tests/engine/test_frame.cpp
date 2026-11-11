@@ -1,32 +1,23 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <map>
+#include <string_view>
 #include <vector>
 
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <crimson/renderer/draw_sort.hpp>
-#include <crimson/renderer/frame_context.hpp>
-#include <crimson/renderer/frame_data.hpp>
+#include <crimson/renderer/frame_gpu_data.hpp>
+#include <crimson/renderer/frame_recorder.hpp>
+#include <crimson/renderer/frame_validation.hpp>
 
 using namespace crimson;
 
 namespace
 {
-    constexpr RenderTargetHandle kBackBuffer{ 7, 1 };
     constexpr MaterialHandle kMaterial{ 1, 1 };
     constexpr MaterialHandle kOverride{ 2, 1 };
-
-    struct FrameFixture
-    {
-        Frame Data;
-
-        FrameFixture()
-        {
-            Data.Reset();
-            Data.Init(kBackBuffer, true);
-        }
-    };
 
     // BuildDrawOrder only needs something with GetMaterial, so no real resource manager is involved
     struct FakeMaterial
@@ -42,46 +33,78 @@ namespace
         [[nodiscard]] const FakeMaterial& GetMaterial(MaterialHandle handle) const { return Materials[handle.GetId()]; }
     };
 
-    DrawInfo MakeDraw(uint32_t material, uint32_t vertexBuffer = 0)
+    DrawItem MakeDraw(uint32_t material, uint32_t vertexBuffer = 0)
     {
-        return DrawInfo{ .VertexBuffer = VertexBufferHandle{ vertexBuffer, 1 }, .Material = MaterialHandle{ material, 1 } };
+        return DrawItem{ .VertexBuffer = VertexBufferHandle{ vertexBuffer, 1 }, .Material = MaterialHandle{ material, 1 } };
     }
 
-    std::vector<uint32_t> DrawOrder(const std::vector<DrawInfo>& draws, const FakeMaterials& materials)
+    std::vector<uint32_t> DrawOrder(const std::vector<DrawItem>& draws, const FakeMaterials& materials)
     {
         std::vector<DrawSortEntry> order;
-        BuildDrawOrder(std::span<const DrawInfo>(draws), materials, order);
+        BuildDrawOrder(std::span<const DrawItem>(draws), materials, order);
 
         std::vector<uint32_t> indices;
         for (const DrawSortEntry& entry : order)
             indices.push_back(entry.Index);
         return indices;
     }
+
+    // Render targets and the textures they write, for the validation
+    struct FakeTargets
+    {
+        std::map<uint64_t, std::vector<TextureHandle>> Attachments;
+
+        [[nodiscard]] std::vector<TextureHandle> operator()(RenderTargetHandle target) const { return Attachments.at(target.GetRaw()); }
+    };
 }
 
-TEST_CASE("A pass without a target draws to the frame's default one", "[frame]")
+TEST_CASE("A pass keeps what it was added with", "[frame]")
 {
-    FrameFixture fixture;
-    FrameContext frame = fixture.Data.CreateContext();
+    FramePacket packet;
+    FrameRecorder frame(packet);
 
-    const RenderPass& pass = frame.BeginRenderPass({});
-    CHECK(pass.Info().Target == kBackBuffer);
+    constexpr RenderTargetHandle target{ 9, 1 };
+    const PassBuilder pass = frame.AddPass({ .Name = "Shadows", .Target = target, .Clear = { .Flags = ClearFlags::Depth } });
 
-    constexpr RenderTargetHandle other{ 9, 1 };
-    const RenderPass& passWithTarget = frame.BeginRenderPass({ .Target = other });
-    CHECK(passWithTarget.Info().Target == other);
+    CHECK(pass.GetInfo().Target == target);
+    CHECK(pass.GetInfo().Clear.Flags == ClearFlags::Depth);
 
-    CHECK(fixture.Data.GetPasses().size() == 2);
+    SECTION("Without a target it stays empty, for the renderer to draw it to the back buffer")
+    {
+        CHECK_FALSE(frame.AddPass({}).GetInfo().Target);
+    }
+
+    CHECK(packet.GetPasses().size() >= 1);
+    CHECK(std::string_view(packet.GetPasses()[0].GetInfo().Name) == "Shadows");
+}
+
+TEST_CASE("A pass builder stays valid while more passes are added", "[frame]")
+{
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    PassBuilder first = frame.AddPass({});
+
+    // Enough to make the list of passes grow and move
+    for (int i = 0; i < 20; ++i)
+        frame.AddPass({}).Draw(DrawItem{ .Material = kOverride });
+
+    first.Draw(DrawItem{ .Material = kMaterial });
+
+    REQUIRE(packet.GetPasses()[0].GetDraws().size() == 1);
+    CHECK(packet.GetPasses()[0].GetDraws()[0].Material == kMaterial);
 }
 
 TEST_CASE("A draw without a material is left out", "[frame]")
 {
-    RenderPass pass;
+    FramePacket packet;
+    FrameRecorder frame(packet);
+    PassBuilder pass = frame.AddPass({});
 
-    pass.Draw(DrawInfo{ .Material = MaterialHandle::Invalid() });
+    pass.Draw(DrawItem{ .Material = MaterialHandle::Invalid() });
     CHECK(pass.GetDraws().empty());
 
-    pass.Draw(DrawInfo{ .Material = kMaterial });
+    pass.Draw(DrawItem{ .Material = kMaterial });
     CHECK(pass.GetDraws().size() == 1);
 }
 
@@ -91,22 +114,24 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
     mesh.Materials = { kMaterial, MaterialHandle::Invalid() };
     mesh.SubMeshes = { { .FirstIndex = 0, .IndexCount = 3, .MaterialSlot = 0 }, { .FirstIndex = 3, .IndexCount = 6, .MaterialSlot = 1 } };
 
+    FramePacket packet;
+    FrameRecorder frame(packet);
+    PassBuilder pass = frame.AddPass({});
+
     SECTION("Each with its own material, and the one that failed to load is skipped")
     {
-        RenderPass pass;
-        pass.Draw(mesh, 5);
+        pass.DrawMesh(mesh, 5);
 
         REQUIRE(pass.GetDraws().size() == 1);
         CHECK(pass.GetDraws()[0].Material == kMaterial);
         CHECK(pass.GetDraws()[0].IndexCount == 3);
         CHECK(pass.GetDraws()[0].Object == 5);
-        CHECK(pass.GetDraws()[0].Pass == ShaderPass::Main);
+        CHECK(pass.GetDraws()[0].Variant == ShaderVariant::Main);
     }
 
     SECTION("An override replaces all of them")
     {
-        RenderPass pass;
-        pass.Draw(mesh, 0, kOverride);
+        pass.DrawMesh(mesh, 0, { .MaterialOverride = kOverride });
 
         REQUIRE(pass.GetDraws().size() == 2);
         CHECK(pass.GetDraws()[0].Material == kOverride);
@@ -115,52 +140,169 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
 
     SECTION("A depth pass keeps each one's own material, in its depth version")
     {
-        RenderPass pass;
-        pass.Draw(mesh, 0, {}, ShaderPass::Depth);
+        pass.DrawMesh(mesh, 0, { .Variant = ShaderVariant::Depth });
 
         REQUIRE(pass.GetDraws().size() == 1);
         CHECK(pass.GetDraws()[0].Material == kMaterial);
-        CHECK(pass.GetDraws()[0].Pass == ShaderPass::Depth);
+        CHECK(pass.GetDraws()[0].Variant == ShaderVariant::Depth);
     }
+}
+
+TEST_CASE("A native pass keeps its callback and has no draws", "[frame]")
+{
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    bool called = false;
+    frame.AddNativePass({ .Name = "UI" }, [&called](const NativeContext&) { called = true; });
+
+    REQUIRE(packet.GetPasses().size() == 1);
+    const PassRecord& pass = packet.GetPasses()[0];
+    REQUIRE(pass.IsNative());
+    CHECK(pass.GetDraws().empty());
+
+    pass.GetNativeFn()(NativeContext{});
+    CHECK(called);
 }
 
 TEST_CASE("Object 0 is always the identity", "[frame]")
 {
-    FrameFixture fixture;
-    FrameContext frame = fixture.Data.CreateContext();
+    FramePacket packet;
+    FrameRecorder frame(packet);
 
     const glm::mat4 moved = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 2.0f, 3.0f));
 
     CHECK(frame.AddObject(moved) == 1);
     CHECK(frame.AddObject(moved) == 2);
 
-    REQUIRE(fixture.Data.GetObjects().size() == 3);
-    CHECK(fixture.Data.GetObjects()[0].Transform == glm::mat4(1.0f));
-    CHECK(fixture.Data.GetObjects()[1].Transform == moved);
+    REQUIRE(packet.GetObjects().size() == 3);
+    CHECK(packet.GetObjects()[0].Transform == glm::mat4(1.0f));
+    CHECK(packet.GetObjects()[1].Transform == moved);
 }
 
-TEST_CASE("Resetting a frame leaves it empty for the next one", "[frame]")
+TEST_CASE("Resetting a packet leaves it empty for the next frame", "[frame]")
 {
-    FrameFixture fixture;
+    FramePacket packet;
 
     {
-        FrameContext frame = fixture.Data.CreateContext();
-        frame.BeginRenderPass({}).Draw(DrawInfo{ .Material = kMaterial });
-        frame.AddRawPass({ .Callback = [](const NativeFrameHandles&) {} });
+        FrameRecorder frame(packet);
+        frame.AddPass({}).Draw(DrawItem{ .Material = kMaterial });
+        frame.AddNativePass({}, [](const NativeContext&) {});
         frame.AddObject(glm::mat4(1.0f));
+        frame.Lighting().Lights.push_back({});
     }
 
-    fixture.Data.Reset();
+    packet.Reset();
 
-    CHECK(fixture.Data.GetPasses().empty());
-    CHECK(fixture.Data.GetObjects().size() == 1);
+    CHECK(packet.GetPasses().empty());
+    CHECK(packet.GetObjects().size() == 1);
+    CHECK(packet.GetLighting().Lights.empty());
 
-    SECTION("A reused pass doesn't keep the last frame's draws")
+    SECTION("A reused pass doesn't keep the last frame's draws or callback")
     {
-        fixture.Data.Init(kBackBuffer, true);
-        FrameContext frame = fixture.Data.CreateContext();
-        CHECK(frame.BeginRenderPass({}).GetDraws().empty());
+        FrameRecorder frame(packet);
+        CHECK(frame.AddPass({}).GetDraws().empty());
+
+        frame.AddPass({});
+        CHECK_FALSE(packet.GetPasses()[1].IsNative());
     }
+}
+
+TEST_CASE("The renderer hands out its packets in turn, emptied", "[frame]")
+{
+    FramePacketRing<2> ring;
+
+    FramePacket& first = ring.Next();
+    FramePacket& second = ring.Next();
+
+    CHECK(&first != &second);
+    CHECK(&ring.Next() == &first);
+}
+
+TEST_CASE("A recorder can't be used once it was moved from", "[frame]")
+{
+    FramePacket packet;
+    FrameRecorder frame(packet);
+    CHECK(frame.IsValid());
+
+    const FrameRecorder submitted = std::move(frame);
+    CHECK(submitted.IsValid());
+    CHECK_FALSE(frame.IsValid()); // NOLINT(bugprone-use-after-move): that's what is being checked
+}
+
+TEST_CASE("Validation finds passes that sample what they shouldn't", "[frame]")
+{
+    constexpr RenderTargetHandle kShadowTarget{ 1, 1 };
+    constexpr RenderTargetHandle kSceneTarget{ 2, 1 };
+    constexpr TextureHandle kShadowAtlas{ 10, 1 };
+    constexpr TextureHandle kSceneColor{ 11, 1 };
+    constexpr TextureHandle kSceneDepth{ 12, 1 };
+
+    FakeTargets targets;
+    targets.Attachments[kShadowTarget.GetRaw()] = { kShadowAtlas };
+    targets.Attachments[kSceneTarget.GetRaw()] = { kSceneColor, kSceneDepth };
+
+    FramePacket packet;
+    FrameRecorder frame(packet);
+    std::vector<PassProblem> problems;
+
+    SECTION("Nothing wrong with sampling what an earlier pass wrote, or something no pass writes")
+    {
+        frame.AddPass({ .Name = "Shadows", .Target = kShadowTarget });
+        frame.AddPass({ .Name = "Scene", .Target = kSceneTarget, .Reads = { kShadowAtlas, TextureHandle{ 99, 1 } } });
+        frame.AddPass({ .Name = "Tone Mapping", .Reads = { kSceneColor } });
+
+        FindPassProblems(packet.GetPasses(), targets, problems);
+        CHECK(problems.empty());
+    }
+
+    SECTION("Sampling the target the pass draws to")
+    {
+        frame.AddPass({ .Name = "Scene", .Target = kSceneTarget, .Reads = { kSceneDepth } });
+
+        FindPassProblems(packet.GetPasses(), targets, problems);
+        REQUIRE(problems.size() == 1);
+        CHECK(problems[0] == PassProblem{ 0, kSceneDepth, PassProblemKind::ReadsOwnTarget, 0 });
+    }
+
+    SECTION("Sampling something before the pass that writes it")
+    {
+        frame.AddPass({ .Name = "Scene", .Target = kSceneTarget, .Reads = { kShadowAtlas } });
+        frame.AddPass({ .Name = "Shadows", .Target = kShadowTarget });
+
+        FindPassProblems(packet.GetPasses(), targets, problems);
+        REQUIRE(problems.size() == 1);
+        CHECK(problems[0] == PassProblem{ 0, kShadowAtlas, PassProblemKind::ReadBeforeWrite, 1 });
+    }
+
+    SECTION("Nothing wrong with sampling what an earlier pass wrote, when a later one writes it again")
+    {
+        frame.AddPass({ .Name = "Shadows", .Target = kShadowTarget });
+        frame.AddPass({ .Name = "Scene", .Target = kSceneTarget, .Reads = { kShadowAtlas } });
+        frame.AddPass({ .Name = "More shadows", .Target = kShadowTarget });
+
+        FindPassProblems(packet.GetPasses(), targets, problems);
+        CHECK(problems.empty());
+    }
+}
+
+TEST_CASE("A pass past the limit is dropped, and reads as an empty one", "[frame]")
+{
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    for (uint32_t i = 0; i < kMaxPassesPerFrame; ++i)
+        CHECK(frame.AddPass({}).IsValid());
+
+#ifdef NDEBUG
+    PassBuilder dropped = frame.AddPass({ .Name = "Dropped" });
+    CHECK_FALSE(dropped.IsValid());
+
+    dropped.Draw(DrawItem{ .Material = kMaterial });
+    CHECK(dropped.GetDraws().empty());
+    CHECK(std::string_view(dropped.GetInfo().Name) == "Pass");
+    CHECK(packet.GetPasses().size() == kMaxPassesPerFrame);
+#endif
 }
 
 TEST_CASE("Opaque draws are grouped to rebind as little as possible", "[draw sort]")
@@ -174,19 +316,19 @@ TEST_CASE("Opaque draws are grouped to rebind as little as possible", "[draw sor
 
     SECTION("By shader first")
     {
-        const std::vector<DrawInfo> draws = { MakeDraw(0), MakeDraw(1), MakeDraw(2) };
+        const std::vector<DrawItem> draws = { MakeDraw(0), MakeDraw(1), MakeDraw(2) };
         CHECK(DrawOrder(draws, materials) == std::vector<uint32_t>{ 1, 0, 2 });
     }
 
     SECTION("Then by material, then by vertex buffer")
     {
-        const std::vector<DrawInfo> draws = { MakeDraw(2, 1), MakeDraw(0, 5), MakeDraw(2, 0), MakeDraw(0, 1) };
+        const std::vector<DrawItem> draws = { MakeDraw(2, 1), MakeDraw(0, 5), MakeDraw(2, 0), MakeDraw(0, 1) };
         CHECK(DrawOrder(draws, materials) == std::vector<uint32_t>{ 3, 1, 2, 0 });
     }
 
     SECTION("Identical draws keep their order")
     {
-        const std::vector<DrawInfo> draws = { MakeDraw(0), MakeDraw(0), MakeDraw(0) };
+        const std::vector<DrawItem> draws = { MakeDraw(0), MakeDraw(0), MakeDraw(0) };
         CHECK(DrawOrder(draws, materials) == std::vector<uint32_t>{ 0, 1, 2 });
     }
 }
@@ -200,7 +342,7 @@ TEST_CASE("Transparent draws come after opaque ones, in the order they were subm
         { ShaderHandle{ 2, 1 }, { .RenderMode = MaterialRenderMode::Transparent } }
     };
 
-    const std::vector<DrawInfo> draws = { MakeDraw(2), MakeDraw(1), MakeDraw(0), MakeDraw(2) };
+    const std::vector<DrawItem> draws = { MakeDraw(2), MakeDraw(1), MakeDraw(0), MakeDraw(2) };
 
     CHECK(DrawOrder(draws, materials) == std::vector<uint32_t>{ 2, 0, 1, 3 });
 }
@@ -220,7 +362,7 @@ TEST_CASE("The frame clock starts at 0 and counts the time between frames", "[fr
 TEST_CASE("The frame block carries the frame's time", "[frame]")
 {
     FrameGpuData data;
-    data.Build(FrameLightingData{}, FrameTime{ 2.5f, 0.125f });
+    data.Build(FrameLighting{}, FrameTime{ 2.5f, 0.125f });
 
     CHECK(data.Block.Time == 2.5f);
     CHECK(data.Block.DeltaTime == 0.125f);

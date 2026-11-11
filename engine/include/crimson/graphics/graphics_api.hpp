@@ -2,7 +2,7 @@
 
 namespace crimson
 {
-    enum class RendererAPIType
+    enum class GraphicsApi
     {
         OpenGL,
         Vulkan

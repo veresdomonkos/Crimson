@@ -1,5 +1,5 @@
 #include "crimson_editor/editor_application.hpp"
-#include <crimson/renderer/renderer_api.hpp>
+#include <crimson/graphics/graphics_api.hpp>
 #include <filesystem>
 #include <iostream>
 #include <string_view>
@@ -27,7 +27,7 @@ static std::filesystem::path ArgumentAsPath(int index, char* argv[])
 
 int main(int argc, char* argv[])
 {
-    crimson::RendererAPIType apiType = crimson::RendererAPIType::OpenGL;
+    crimson::GraphicsApi apiType = crimson::GraphicsApi::OpenGL;
     std::filesystem::path projectPath;
 
     for (int i = 1; i < argc; ++i)
@@ -40,11 +40,11 @@ int main(int argc, char* argv[])
         }
         else if (arg == "-vk" || arg == "--vulkan")
         {
-            apiType = crimson::RendererAPIType::Vulkan;
+            apiType = crimson::GraphicsApi::Vulkan;
         }
         else if (arg == "-gl" || arg == "--opengl")
         {
-            apiType = crimson::RendererAPIType::OpenGL;
+            apiType = crimson::GraphicsApi::OpenGL;
         }
         else if (arg == "-h" || arg == "--help")
         {

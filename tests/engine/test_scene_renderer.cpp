@@ -1,7 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
-#include <variant>
+#include <string_view>
 #include <vector>
 
 #include <crimson/scene/scene_renderer.hpp>
@@ -23,8 +23,8 @@ namespace
         const Entity entity = scene.CreateEntity(name, parent);
         auto& renderer = entity.AddComponent<MeshRendererComponent>();
         renderer.CastsShadows = castsShadows;
-        renderer.Resolved.VB = VertexBufferHandle{ 1, 1 };
-        renderer.Resolved.IB = IndexBufferHandle{ 1, 1 };
+        renderer.Resolved.VertexBuffer = VertexBufferHandle{ 1, 1 };
+        renderer.Resolved.IndexBuffer = IndexBufferHandle{ 1, 1 };
         renderer.Resolved.Materials = { kMeshMaterial };
         renderer.Resolved.SubMeshes.push_back({ .IndexCount = 3 });
         return entity;
@@ -43,20 +43,23 @@ namespace
         FakeRenderer Renderer;
         SceneRenderer Subject{ Gpu, Renderer };
         Scene World;
-        FrameLightingData Lighting;
-        RenderPassInfo MainPass{ .Target = RenderTargetHandle{ 50, 1 } };
+        FrameLighting Lighting;
+        PassInfo MainPass{ .Target = RenderTargetHandle{ 50, 1 } };
 
-        std::vector<const RenderPass*> Record(Entity outlined = {})
+        std::vector<const PassRecord*> Record(Entity outlined = {})
         {
             World.UpdateWorldTransforms();
-            Subject.BuildLighting(World, Lighting);
 
-            FrameContext frame = Renderer.BeginFrame(Lighting);
-            Subject.RecordPasses(frame, World, Lighting, MainPass, outlined);
+            FrameRecorder frame = Renderer.BeginRecording();
+            Subject.BuildLighting(World, frame.Lighting());
+            Subject.Record(frame, World, MainPass, outlined);
 
-            std::vector<const RenderPass*> passes;
-            for (const PassEntry& entry : Renderer.CurrentFrame.GetPasses())
-                passes.push_back(&std::get<RenderPass>(entry));
+            Lighting = frame.Lighting();
+            Renderer.Submit(std::move(frame));
+
+            std::vector<const PassRecord*> passes;
+            for (const PassRecord& pass : Renderer.Submitted->GetPasses())
+                passes.push_back(&pass);
             return passes;
         }
     };
@@ -70,7 +73,7 @@ TEST_CASE("The shadow atlas is created, handed to the renderer and freed", "[sce
     {
         const SceneRenderer sceneRenderer(gpu, renderer);
         CHECK(sceneRenderer.GetShadowAtlas());
-        CHECK(renderer.ShadowMap == sceneRenderer.GetShadowAtlas());
+        CHECK(renderer.ShadowAtlas == sceneRenderer.GetShadowAtlas());
         CHECK(gpu.LiveRenderTargets == 1);
     }
 
@@ -159,7 +162,7 @@ TEST_CASE("There is one pass per shadow view, then the main pass", "[scene rende
     AddMesh(fixture.World, "Caster");
     AddMesh(fixture.World, "Non-caster", {}, false);
 
-    const std::vector<const RenderPass*> passes = fixture.Record();
+    const std::vector<const PassRecord*> passes = fixture.Record();
 
     REQUIRE(passes.size() == 1 + 6 + 1);
 
@@ -170,15 +173,15 @@ TEST_CASE("There is one pass per shadow view, then the main pass", "[scene rende
 
         // The caster's own material, in its depth version, so its shader decides its shape in the shadow too
         CHECK(passes[i]->GetDraws()[0].Material == kMeshMaterial);
-        CHECK(passes[i]->GetDraws()[0].Pass == ShaderPass::Depth);
+        CHECK(passes[i]->GetDraws()[0].Variant == ShaderVariant::Depth);
     }
 
-    const RenderPass& main = *passes.back();
-    CHECK(main.Info().Target == fixture.MainPass.Target);
+    const PassRecord& main = *passes.back();
+    CHECK(main.GetInfo().Target == fixture.MainPass.Target);
     REQUIRE(main.GetDraws().size() == 2);
     CHECK(main.GetDraws()[0].Material == kMeshMaterial);
     CHECK(main.GetDraws()[1].Material == kMeshMaterial);
-    CHECK(main.GetDraws()[0].Pass == ShaderPass::Main);
+    CHECK(main.GetDraws()[0].Variant == ShaderVariant::Main);
 }
 
 TEST_CASE("Only active, loaded meshes are drawn", "[scene renderer]")
@@ -197,7 +200,7 @@ TEST_CASE("Only active, loaded meshes are drawn", "[scene renderer]")
     const Entity notLoaded = AddMesh(fixture.World, "Not loaded");
     notLoaded.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.clear();
 
-    const std::vector<const RenderPass*> passes = fixture.Record();
+    const std::vector<const PassRecord*> passes = fixture.Record();
 
     REQUIRE(passes.size() == 1);
     CHECK(passes[0]->GetDraws().size() == 1);
@@ -210,12 +213,12 @@ TEST_CASE("A draw's object is its world transform", "[scene renderer]")
     const Entity entity = AddMesh(fixture.World, "Moved");
     entity.GetComponent<TransformComponent>().Position = glm::vec3(1.0f, 2.0f, 3.0f);
 
-    const std::vector<const RenderPass*> passes = fixture.Record();
+    const std::vector<const PassRecord*> passes = fixture.Record();
 
     REQUIRE(passes.size() == 1);
     REQUIRE(passes[0]->GetDraws().size() == 1);
 
-    const ObjectData& object = fixture.Renderer.CurrentFrame.GetObjects()[passes[0]->GetDraws()[0].Object];
+    const GpuObject& object = fixture.Renderer.Submitted->GetObjects()[passes[0]->GetDraws()[0].Object];
     CHECK(glm::vec3(object.Transform[3]) == glm::vec3(1.0f, 2.0f, 3.0f));
 }
 
@@ -230,7 +233,7 @@ TEST_CASE("Outlining adds a mask pass and a full screen draw", "[scene renderer]
 
     SECTION("Nothing selected")
     {
-        const std::vector<const RenderPass*> passes = fixture.Record();
+        const std::vector<const PassRecord*> passes = fixture.Record();
 
         REQUIRE(passes.size() == 1);
         CHECK(passes[0]->GetDraws().size() == 3);
@@ -238,23 +241,23 @@ TEST_CASE("Outlining adds a mask pass and a full screen draw", "[scene renderer]
 
     SECTION("The selected entity's children are outlined with it")
     {
-        const std::vector<const RenderPass*> passes = fixture.Record(parent);
+        const std::vector<const PassRecord*> passes = fixture.Record(parent);
 
         REQUIRE(passes.size() == 3);
 
-        const RenderPass& mask = *passes[0];
+        const PassRecord& mask = *passes[0];
         REQUIRE(mask.GetDraws().size() == 2);
         CHECK(mask.GetDraws()[0].Material == kMeshMaterial);
-        CHECK(mask.GetDraws()[0].Pass == ShaderPass::Depth);
+        CHECK(mask.GetDraws()[0].Variant == ShaderVariant::Depth);
 
-        const RenderPass& main = *passes[1];
+        const PassRecord& main = *passes[1];
         REQUIRE(main.GetDraws().size() == 3);
-        CHECK(main.Info().Target == fixture.MainPass.Target);
+        CHECK(main.GetInfo().Target == fixture.MainPass.Target);
 
-        const RenderPass& outline = *passes[2];
+        const PassRecord& outline = *passes[2];
         REQUIRE(outline.GetDraws().size() == 1);
         CHECK(outline.GetDraws()[0].Material == kOutlineMaterial);
-        CHECK(outline.Info().Target == fixture.MainPass.Target);
+        CHECK(outline.GetInfo().Target == fixture.MainPass.Target);
     }
 
     SECTION("A selected entity without a mesh of its own, or below it, adds nothing")
@@ -282,26 +285,26 @@ TEST_CASE("Tone mapping renders the scene to an HDR target first", "[scene rende
 
     SECTION("The output only gets the tone mapped picture")
     {
-        const std::vector<const RenderPass*> passes = fixture.Record();
+        const std::vector<const PassRecord*> passes = fixture.Record();
         REQUIRE(passes.size() == 2);
 
-        CHECK(passes[0]->Info().Target != fixture.MainPass.Target);
+        CHECK(passes[0]->GetInfo().Target != fixture.MainPass.Target);
         CHECK(passes[0]->GetDraws().size() == 1);
 
-        CHECK(passes[1]->Info().Target == fixture.MainPass.Target);
+        CHECK(passes[1]->GetInfo().Target == fixture.MainPass.Target);
         REQUIRE(passes[1]->GetDraws().size() == 1);
         CHECK(passes[1]->GetDraws()[0].Material == kToneMapMaterial);
     }
 
     SECTION("The outline goes after it")
     {
-        const std::vector<const RenderPass*> passes = fixture.Record(entity);
+        const std::vector<const PassRecord*> passes = fixture.Record(entity);
         REQUIRE(passes.size() == 4);
 
-        CHECK(passes[0]->GetDraws()[0].Pass == ShaderPass::Depth);
+        CHECK(passes[0]->GetDraws()[0].Variant == ShaderVariant::Depth);
         CHECK(passes[2]->GetDraws()[0].Material == kToneMapMaterial);
         CHECK(passes[3]->GetDraws()[0].Material == kOutlineMaterial);
-        CHECK(passes[3]->Info().Target == fixture.MainPass.Target);
+        CHECK(passes[3]->GetInfo().Target == fixture.MainPass.Target);
     }
 
     SECTION("Exposure and the tone mapper reach the material")
@@ -320,9 +323,9 @@ TEST_CASE("A tone map material that failed to load leaves the scene going straig
 
     AddMesh(fixture.World, "Mesh");
 
-    const std::vector<const RenderPass*> passes = fixture.Record();
+    const std::vector<const PassRecord*> passes = fixture.Record();
     REQUIRE(passes.size() == 1);
-    CHECK(passes[0]->Info().Target == fixture.MainPass.Target);
+    CHECK(passes[0]->GetInfo().Target == fixture.MainPass.Target);
 }
 
 TEST_CASE("Without an outline material, selecting draws nothing extra", "[scene renderer]")
@@ -343,4 +346,44 @@ TEST_CASE("Without an outline material, selecting draws nothing extra", "[scene 
         const Entity entity = AddMesh(fixture.World, "Selected");
         CHECK(fixture.Record(entity).size() == 1);
     }
+}
+
+TEST_CASE("Passes are named and say what they sample", "[scene renderer]")
+{
+    constexpr MaterialHandle kToneMapMaterial{ 104, 1 };
+
+    Fixture fixture;
+    fixture.Subject.SetToneMapMaterial(kToneMapMaterial, 64, 64);
+    fixture.Subject.SetOutlineMaterial(kOutlineMaterial, 64, 64);
+
+    AddLight(fixture.World, LightType::Spot, true);
+    const Entity entity = AddMesh(fixture.World, "Mesh");
+
+    const std::vector<const PassRecord*> passes = fixture.Record(entity);
+    REQUIRE(passes.size() == 5);
+
+    CHECK(std::string_view(passes[0]->GetInfo().Name) == "Shadows");
+    CHECK(std::string_view(passes[1]->GetInfo().Name) == "Outline Mask");
+    CHECK(std::string_view(passes[2]->GetInfo().Name) == "Scene");
+    CHECK(std::string_view(passes[3]->GetInfo().Name) == "Tone Mapping");
+    CHECK(std::string_view(passes[4]->GetInfo().Name) == "Outline");
+
+    CHECK(passes[2]->GetInfo().Reads[0] == fixture.Subject.GetShadowAtlas());
+    CHECK(passes[3]->GetInfo().Reads[0] == fixture.Gpu.GetColorAttachment(passes[2]->GetInfo().Target, 0));
+    CHECK(passes[4]->GetInfo().Reads[0] == fixture.Gpu.GetDepthAttachment(passes[1]->GetInfo().Target).value());
+}
+
+TEST_CASE("The scene pass samples the shadow atlas next to what the main pass samples", "[scene renderer]")
+{
+    constexpr TextureHandle kEnvironment{ 77, 1 };
+
+    Fixture fixture;
+    fixture.MainPass.Reads = { kEnvironment };
+    AddMesh(fixture.World, "Mesh");
+
+    const std::vector<const PassRecord*> passes = fixture.Record();
+    REQUIRE(passes.size() == 1);
+
+    CHECK(passes[0]->GetInfo().Reads[0] == kEnvironment);
+    CHECK(passes[0]->GetInfo().Reads[1] == fixture.Subject.GetShadowAtlas());
 }

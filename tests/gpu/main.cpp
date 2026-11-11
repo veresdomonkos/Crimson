@@ -39,7 +39,7 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    tests::SelectBackend(backend == "vk" ? RendererAPIType::Vulkan : RendererAPIType::OpenGL);
+    tests::SelectBackend(backend == "vk" ? GraphicsApi::Vulkan : GraphicsApi::OpenGL);
 
     const tests::TempFolder config;
     RedirectUserConfig(config.Path());

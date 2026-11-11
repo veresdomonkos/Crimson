@@ -41,7 +41,7 @@ namespace
         OffscreenTarget Target{ kSize, kSize };
         PerspectiveCamera Camera{ glm::vec3(0.0f, 0.0f, 3.0f), 70.0f, 1.0f };
         Scene World;
-        FrameLightingData Lighting;
+        FrameLighting Lighting;
 
         std::unique_ptr<AssetManager> Assets;
         std::unique_ptr<SceneRenderer> Subject;
@@ -101,15 +101,13 @@ namespace
             World.UpdateWorldTransforms();
             Subject->BuildLighting(World, Lighting);
 
-            const RenderPassInfo main{
+            const PassInfo main{
                 .Target = Target.Handle(),
-                .ClearFlags = ClearFlags::Color | ClearFlags::Depth,
-                .ClearColor = kClearColor,
-                .ViewProj = Camera.GetViewProj(),
-                .CameraPosition = Camera.GetPosition()
+                .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = kClearColor },
+                .View = { .ViewProj = Camera.GetViewProj(), .CameraPosition = Camera.GetPosition() }
             };
 
-            RenderOneFrame([&](FrameContext& frame) { Subject->RecordPasses(frame, World, Lighting, main, outlined); }, Lighting);
+            RenderOneFrame([&](FrameRecorder& frame) { Subject->Record(frame, World, main, outlined); }, Lighting);
 
             return Target.Read();
         }

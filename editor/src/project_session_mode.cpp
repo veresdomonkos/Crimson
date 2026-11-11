@@ -353,25 +353,21 @@ namespace crimson::editor
         ImGui::EndPopup();
     }
 
-    void ProjectSessionMode::PrepareFrame()
+    void ProjectSessionMode::Record(FrameRecorder& frame)
     {
-        m_lighting.AmbientColor = m_environment.Ambient;
-
         m_scene.UpdateWorldTransforms();
-        m_sceneRenderer->BuildLighting(m_scene, m_lighting);
-    }
 
-    void ProjectSessionMode::RecordPasses(FrameContext& frame)
-    {
-        RenderPassInfo info{
+        FrameLighting& lighting = frame.Lighting();
+        lighting.AmbientColor = m_environment.Ambient;
+        m_sceneRenderer->BuildLighting(m_scene, lighting);
+
+        const PassInfo info{
             .Target = m_mainTarget,
-            .ClearFlags = ClearFlags::Color | ClearFlags::Depth,
-            .ClearColor = glm::vec4(0.02f, 0.02f, 0.035f, 1.0f),
-            .ViewProj = m_camera.GetViewProj(),
-            .CameraPosition = m_camera.GetPosition()
+            .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(0.02f, 0.02f, 0.035f, 1.0f) },
+            .View = { .ViewProj = m_camera.GetViewProj(), .CameraPosition = m_camera.GetPosition() }
         };
 
-        m_sceneRenderer->RecordPasses(frame, m_scene, m_lighting, info, m_context.Selected);
+        m_sceneRenderer->Record(frame, m_scene, info, m_context.Selected);
     }
 
     void ProjectSessionMode::OnImGui()

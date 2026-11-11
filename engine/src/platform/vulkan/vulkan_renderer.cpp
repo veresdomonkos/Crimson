@@ -33,26 +33,25 @@ namespace crimson::vulkan
         vk::CommandBufferAllocateInfo allocInfo{};
         allocInfo.commandPool = *m_commandPool;
         allocInfo.level = vk::CommandBufferLevel::ePrimary;
-        allocInfo.commandBufferCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+        allocInfo.commandBufferCount = static_cast<uint32_t>(kMaxFramesInFlight);
 
         std::vector<vk::raii::CommandBuffer> buffers = device.allocateCommandBuffers(allocInfo);
 
         vk::FenceCreateInfo fenceInfo{};
         fenceInfo.flags = vk::FenceCreateFlagBits::eSignaled;
 
-        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        for (uint32_t i = 0; i < kMaxFramesInFlight; i++)
         {
-            m_frames[i].SetIndex(i);
-            m_frameSyncs[i].CommandBuffer = std::move(buffers[i]);
-            m_frameSyncs[i].ImageAvailableSemaphore = device.createSemaphore({});
-            m_frameSyncs[i].InFlightFence = device.createFence(fenceInfo);
+            m_inFlight[i].CommandBuffer = std::move(buffers[i]);
+            m_inFlight[i].ImageAvailableSemaphore = device.createSemaphore({});
+            m_inFlight[i].InFlightFence = device.createFence(fenceInfo);
         }
 
         m_tracyContext = TracyVkContext(
             static_cast<VkPhysicalDevice>(*m_device.GetPhysicalDevice()),
             static_cast<VkDevice>(*device),
             static_cast<VkQueue>(*m_device.GetGraphicsQueue()),
-            static_cast<VkCommandBuffer>(*m_frameSyncs[0].CommandBuffer));
+            static_cast<VkCommandBuffer>(*m_inFlight[0].CommandBuffer));
     }
 
     void VulkanRenderer::InitGlobals()
@@ -63,7 +62,7 @@ namespace crimson::vulkan
         const vk::DeviceSize minUboAlignment = m_device.GetProperties().limits.minUniformBufferOffsetAlignment;
         m_viewUboAlignment = (sizeof(ViewBlock) + minUboAlignment - 1) & ~(minUboAlignment - 1);
 
-        m_viewUBO = CreateAllocatedBuffer(allocator, m_viewUboAlignment * MaxRenderPasses * MAX_FRAMES_IN_FLIGHT, vk::BufferUsageFlagBits::eUniformBuffer, BufferMemory::HostMapped);
+        m_viewUBO = CreateAllocatedBuffer(allocator, m_viewUboAlignment * kMaxPassesPerFrame * kMaxFramesInFlight, vk::BufferUsageFlagBits::eUniformBuffer, BufferMemory::HostMapped);
 
         if (!m_viewUBO)
         {
@@ -96,7 +95,7 @@ namespace crimson::vulkan
 
         const vk::DescriptorSetLayout frameLayout = m_resourceManager.GetFrameSetLayout();
 
-        for (FrameResources& resources : m_frameResources)
+        for (InFlightFrame& resources : m_inFlight)
         {
             vk::DescriptorSetAllocateInfo frameAllocInfo{};
             frameAllocInfo.descriptorPool = m_resourceManager.GetDescriptorPool();
@@ -136,7 +135,7 @@ namespace crimson::vulkan
     }
 
     // Only call this for a frame whose fence has been waited on, as it can free the buffer the frame used last
-    void VulkanRenderer::UploadStorageBuffer(const FrameResources& resources, FrameStorageBuffer& storage, uint32_t binding, const void* data, std::size_t size)
+    void VulkanRenderer::UploadStorageBuffer(const InFlightFrame& resources, FrameStorageBuffer& storage, uint32_t binding, const void* data, std::size_t size)
     {
         if (size > storage.Capacity)
         {
@@ -174,9 +173,9 @@ namespace crimson::vulkan
             std::memcpy(storage.Buffer.Mapped(), data, size);
     }
 
-    void VulkanRenderer::SetShadowMap(TextureHandle shadowMap)
+    void VulkanRenderer::SetShadowAtlas(TextureHandle shadowAtlas)
     {
-        VulkanTexture& tex = m_resourceManager.GetTexture(shadowMap);
+        VulkanTexture& tex = m_resourceManager.GetTexture(shadowAtlas);
 
         // Called between frames, so frames still in flight must finish before their sets change
         m_device.WaitIdle();
@@ -211,7 +210,7 @@ namespace crimson::vulkan
         imageInfo.imageView = *tex.View;
         imageInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
-        for (const FrameResources& resources : m_frameResources)
+        for (const InFlightFrame& resources : m_inFlight)
         {
             vk::WriteDescriptorSet write{};
             write.dstSet = *resources.DescriptorSet;
@@ -299,28 +298,61 @@ namespace crimson::vulkan
         texture.Layout = newLayout;
     }
 
-    void VulkanRenderer::ExecuteBeginRenderPass(const vk::raii::CommandBuffer& cmdBuffer, const RenderPassInfo& info, uint32_t passIndex)
+    void VulkanRenderer::ExecutePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, uint32_t passIndex)
     {
-        VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(info.Target);
+        const PassInfo& info = pass.GetInfo();
 
+        CRIMSON_PROFILE_SCOPE_DYNAMIC(info.Name);
+        TracyVkZoneTransient(m_tracyContext, passZone, static_cast<VkCommandBuffer>(*cmdBuffer), info.Name, true);
+
+        const RenderTargetHandle target = info.Target ? info.Target : m_resourceManager.GetCurrentBackBuffer();
+        VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(target);
+
+        // What the pass samples has to be readable before it starts. Every pass also leaves its attachments readable
+        // when it ends, so for now this only changes something for a texture nothing has drawn to yet.
+        for (const TextureHandle read : info.Reads)
+        {
+            if (read)
+                TransitionImage(cmdBuffer, m_resourceManager.GetTexture(read), vk::ImageLayout::eShaderReadOnlyOptimal);
+        }
+
+        if (pass.IsNative())
+        {
+            ExecuteNativePass(cmdBuffer, pass, rt);
+            return;
+        }
+
+        BeginPass(cmdBuffer, info, rt, passIndex);
+
+        const std::span<const DrawItem> draws = pass.GetDraws();
+
+        BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
+        for (const DrawSortEntry& sorted : m_drawOrder)
+            ExecuteDraw(cmdBuffer, draws[sorted.Index], target, passIndex);
+
+        EndPass(cmdBuffer, rt);
+    }
+
+    void VulkanRenderer::BeginPass(const vk::raii::CommandBuffer& cmdBuffer, const PassInfo& info, VulkanRenderTarget& rt, uint32_t passIndex)
+    {
         if (m_viewUBO)
         {
             ViewBlock block{};
-            block.ViewProj = info.ViewProj;
-            block.CameraPosition = glm::vec4(info.CameraPosition, 0.0f);
+            block.ViewProj = info.View.ViewProj;
+            block.CameraPosition = glm::vec4(info.View.CameraPosition, 0.0f);
 
-            uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
-            vk::DeviceSize offset = globalPassIndex * m_viewUboAlignment;
+            const uint32_t globalPassIndex = (m_inFlightIndex * kMaxPassesPerFrame) + passIndex;
+            const vk::DeviceSize offset = globalPassIndex * m_viewUboAlignment;
             std::memcpy(static_cast<char*>(m_viewUBO.Mapped()) + offset, &block, sizeof(ViewBlock));
         }
 
-        BeginRenderingOnTarget(cmdBuffer, rt, info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil, info.Viewport);
+        BeginRendering(cmdBuffer, rt, info.Clear, info.Viewport);
 
         // The view block's dynamic offset is different for every pass
         m_bound.ViewSetBound = false;
     }
 
-    void VulkanRenderer::ExecuteEndRenderPass(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt)
+    void VulkanRenderer::EndPass(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt)
     {
         cmdBuffer.endRendering();
 
@@ -338,31 +370,27 @@ namespace crimson::vulkan
         }
     }
 
-    void VulkanRenderer::ExecuteRawPass(const vk::raii::CommandBuffer& cmdBuffer, const RawPass& pass)
+    void VulkanRenderer::ExecuteNativePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, VulkanRenderTarget& rt)
     {
-        const RawPassInfo& info = pass.Info();
-        VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(info.Target);
+        BeginRendering(cmdBuffer, rt, pass.GetInfo().Clear, pass.GetInfo().Viewport);
 
-        BeginRenderingOnTarget(cmdBuffer, rt, info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil, std::nullopt);
-
-        NativeFrameHandles handles{};
-        handles.Device = static_cast<VkDevice>(*m_device.GetDevice());
-        handles.CommandBuffer = static_cast<VkCommandBuffer>(*cmdBuffer);
-        handles.ColorFormat = static_cast<uint32_t>(m_resourceManager.GetTexture(rt.ColorAttachments[0]).Format);
-        info.Callback(handles);
+        NativeContext context{};
+        context.Device = static_cast<VkDevice>(*m_device.GetDevice());
+        context.CommandBuffer = static_cast<VkCommandBuffer>(*cmdBuffer);
+        context.ColorFormat = static_cast<uint32_t>(m_resourceManager.GetTexture(rt.ColorAttachments[0]).Format);
+        pass.GetNativeFn()(context);
 
         // The callback records its own pipeline, buffer and descriptor set binds
         m_bound = {};
 
-        ExecuteEndRenderPass(cmdBuffer, rt);
+        EndPass(cmdBuffer, rt);
     }
 
-    void VulkanRenderer::BeginRenderingOnTarget(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget &rt, ClearFlags flags,
-        const glm::vec4 &clearColorValue, float clearDepthValue, uint32_t clearStencilValue, const std::optional<RenderRect>& area)
+    void VulkanRenderer::BeginRendering(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt, const ClearInfo& clear, const std::optional<RenderRect>& area)
     {
-        const bool clearColor = HasClearFlag(flags, ClearFlags::Color);
-        const bool clearDepth = HasClearFlag(flags, ClearFlags::Depth);
-        const bool clearStencil = HasClearFlag(flags, ClearFlags::Stencil);
+        const bool clearColor = HasClearFlag(clear.Flags, ClearFlags::Color);
+        const bool clearDepth = HasClearFlag(clear.Flags, ClearFlags::Depth);
+        const bool clearStencil = HasClearFlag(clear.Flags, ClearFlags::Stencil);
 
         std::vector<vk::RenderingAttachmentInfo> colorAttachments;
         colorAttachments.reserve(rt.ColorAttachments.size());
@@ -377,7 +405,7 @@ namespace crimson::vulkan
             attachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
             attachment.loadOp = clearColor ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
             attachment.storeOp = vk::AttachmentStoreOp::eStore;
-            attachment.clearValue.color = vk::ClearColorValue(clearColorValue.r, clearColorValue.g, clearColorValue.b, clearColorValue.a);
+            attachment.clearValue.color = vk::ClearColorValue(clear.Color.r, clear.Color.g, clear.Color.b, clear.Color.a);
             colorAttachments.push_back(attachment);
         }
 
@@ -397,7 +425,7 @@ namespace crimson::vulkan
             depthAttachment.imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
             depthAttachment.loadOp = clearDepth ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
             depthAttachment.storeOp = vk::AttachmentStoreOp::eStore;
-            depthAttachment.clearValue.depthStencil = vk::ClearDepthStencilValue(clearDepthValue, clearStencilValue);
+            depthAttachment.clearValue.depthStencil = vk::ClearDepthStencilValue(clear.Depth, clear.Stencil);
 
             stencilAttachment = depthAttachment;
             stencilAttachment.loadOp = clearStencil ? vk::AttachmentLoadOp::eClear : vk::AttachmentLoadOp::eLoad;
@@ -419,7 +447,7 @@ namespace crimson::vulkan
         cmdBuffer.setScissor(0, rendering.renderArea);
     }
 
-    void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawInfo& draw, RenderTargetHandle target, uint32_t passIndex)
+    void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, uint32_t passIndex)
     {
         CRIMSON_PROFILE_FUNCTION();
 
@@ -429,15 +457,15 @@ namespace crimson::vulkan
 
         if (!*material.DescriptorSet) return;
 
-        if (!m_bound.PipelineEntry || m_bound.Shader != material.Shader || m_bound.Settings != material.Settings || m_bound.Pass != draw.Pass
+        if (!m_bound.PipelineEntry || m_bound.Shader != material.Shader || m_bound.Settings != material.Settings || m_bound.Variant != draw.Variant
             || m_bound.Target != target || m_bound.VertexBufferHandle != draw.VertexBuffer)
         {
             m_bound.PipelineEntry = &m_resourceManager.GetOrCreateGraphicsPipeline({
-                .Layout = vertexBuffer.Layout, .Shader = material.Shader, .Target = target, .Settings = material.Settings, .Pass = draw.Pass
+                .Layout = vertexBuffer.Layout, .Shader = material.Shader, .Target = target, .Settings = material.Settings, .Variant = draw.Variant
             });
             m_bound.Shader = material.Shader;
             m_bound.Settings = material.Settings;
-            m_bound.Pass = draw.Pass;
+            m_bound.Variant = draw.Variant;
             m_bound.Target = target;
             m_bound.VertexBufferHandle = draw.VertexBuffer;
         }
@@ -480,13 +508,13 @@ namespace crimson::vulkan
 
         if (!m_bound.FrameSetBound)
         {
-            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, kFrameSpace, *m_frameResources[m_currentFrameIndex].DescriptorSet, nullptr);
+            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, kFrameSpace, *m_inFlight[m_inFlightIndex].DescriptorSet, nullptr);
             m_bound.FrameSetBound = true;
         }
 
         if (!m_bound.ViewSetBound)
         {
-            const uint32_t globalPassIndex = (m_currentFrameIndex * MaxRenderPasses) + passIndex;
+            const uint32_t globalPassIndex = (m_inFlightIndex * kMaxPassesPerFrame) + passIndex;
             const uint32_t dynamicOffset = static_cast<uint32_t>(globalPassIndex * m_viewUboAlignment);
 
             cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, kViewSpace, *m_viewDescriptorSet, dynamicOffset);
@@ -515,43 +543,76 @@ namespace crimson::vulkan
         m_stats.Triangles += indexCount / 3;
     }
 
-    FrameContext VulkanRenderer::BeginFrame(const FrameLightingData& lighting)
+    bool VulkanRenderer::CanRender() const
+    {
+        const Window& window = m_device.GetPrimaryWindow();
+        return window.Width() > 0 && window.Height() > 0;
+    }
+
+    bool VulkanRenderer::Submit(FrameRecorder frame)
     {
         CRIMSON_PROFILE_FUNCTION();
 
         m_stats = {};
-        m_frames[m_currentFrameIndex].Reset();
 
-        uint32_t windowWidth = m_device.GetPrimaryWindow().Width();
-        uint32_t windowHeight = m_device.GetPrimaryWindow().Height();
+        if (!frame.IsValid() || !CanRender())
+            return false;
 
-        if (windowWidth == 0 || windowHeight == 0)
-            return m_frames[m_currentFrameIndex].CreateContext();
+        const FramePacket& packet = frame.GetPacket();
 
+        if (!BeginFrame(packet))
+            return false;
+
+#ifndef NDEBUG
+        m_validator.Check(packet, [this](RenderTargetHandle target)
+        {
+            const VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(target);
+            std::vector<TextureHandle> attachments = rt.ColorAttachments;
+            if (rt.DepthAttachment)
+                attachments.push_back(rt.DepthAttachment);
+            return attachments;
+        });
+#endif
+
+        const vk::raii::CommandBuffer& cmdBuffer = m_inFlight[m_inFlightIndex].CommandBuffer;
+        const std::span<const PassRecord> passes = packet.GetPasses();
+        m_stats.Passes = static_cast<uint32_t>(passes.size());
+
+        for (uint32_t i = 0; i < passes.size(); ++i)
+            ExecutePass(cmdBuffer, passes[i], i);
+
+        CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
+
+        EndFrame();
+        return true;
+    }
+
+    bool VulkanRenderer::BeginFrame(const FramePacket& packet)
+    {
         VulkanSurface& surface = m_resourceManager.GetRenderSurface();
 
-        if (surface.IsDirty)
-        {
-            if (!m_resourceManager.RecreateSwapchain(surface))
-                return m_frames[m_currentFrameIndex].CreateContext();
-        }
+        if (surface.IsDirty && !m_resourceManager.RecreateSwapchain(surface))
+            return false;
 
         const vk::raii::Device& device = m_device.GetDevice();
-        FrameSync& sync = m_frameSyncs[m_currentFrameIndex];
+        InFlightFrame& frame = m_inFlight[m_inFlightIndex];
 
         {
             CRIMSON_PROFILE_SCOPE("Wait For Frame Fence");
             ScopedWaitTimer waitTimer(m_stats);
-            (void)device.waitForFences(*sync.InFlightFence, VK_TRUE, UINT64_MAX);
+            (void)device.waitForFences(*frame.InFlightFence, VK_TRUE, UINT64_MAX);
         }
 
-        m_gpuData.Build(lighting, m_clock.Tick(std::chrono::steady_clock::now()));
+        // The slot's last frame is done, so nothing reads its buffers anymore, and nothing has bound its set yet,
+        // so they can still grow
+        m_gpuData.Build(packet.GetLighting(), m_clock.Tick(std::chrono::steady_clock::now()));
 
-        FrameResources& resources = m_frameResources[m_currentFrameIndex];
+        std::memcpy(frame.FrameBlockBuffer.Mapped(), &m_gpuData.Block, sizeof(FrameBlock));
+        UploadStorageBuffer(frame, frame.Lights, kLightsBinding, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes());
+        UploadStorageBuffer(frame, frame.Shadows, kShadowsBinding, m_gpuData.Shadows.data(), std::span(m_gpuData.Shadows).size_bytes());
 
-        std::memcpy(resources.FrameBlockBuffer.Mapped(), &m_gpuData.Block, sizeof(FrameBlock));
-        UploadStorageBuffer(resources, resources.Lights, kLightsBinding, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes());
-        UploadStorageBuffer(resources, resources.Shadows, kShadowsBinding, m_gpuData.Shadows.data(), std::span(m_gpuData.Shadows).size_bytes());
+        const std::span<const GpuObject> objects = packet.GetObjects();
+        UploadStorageBuffer(frame, frame.Objects, kObjectsBinding, objects.data(), objects.size_bytes());
 
         uint32_t imageIndex = 0;
         vk::Result result = vk::Result::eSuccess;
@@ -560,94 +621,47 @@ namespace crimson::vulkan
         {
             CRIMSON_PROFILE_SCOPE("Acquire Swapchain Image");
             ScopedWaitTimer waitTimer(m_stats);
-            const auto acquired = surface.Swapchain.acquireNextImage(UINT64_MAX, *sync.ImageAvailableSemaphore);
+            const auto acquired = surface.Swapchain.acquireNextImage(UINT64_MAX, *frame.ImageAvailableSemaphore);
             result = acquired.result;
             imageIndex = acquired.value;
         }
         catch (const vk::SystemError& error)
         {
             LOG_ERROR("[Vulkan Renderer] AcquireNextImage failed: {}", error.what());
-            return m_frames[m_currentFrameIndex].CreateContext();
+            return false;
         }
 
         if (result == vk::Result::eErrorOutOfDateKHR)
         {
             surface.IsDirty = true;
-            return m_frames[m_currentFrameIndex].CreateContext();
+            return false;
         }
 
         surface.CurrentImageIndex = imageIndex;
-        device.resetFences(*sync.InFlightFence);
+        device.resetFences(*frame.InFlightFence);
 
-        sync.CommandBuffer.reset();
+        frame.CommandBuffer.reset();
 
         vk::CommandBufferBeginInfo begin{};
         begin.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
-        sync.CommandBuffer.begin(begin);
+        frame.CommandBuffer.begin(begin);
         m_bound = {};
 
-        TracyVkCollect(m_tracyContext, static_cast<VkCommandBuffer>(*sync.CommandBuffer));
-
-        m_frames[m_currentFrameIndex].Init(m_resourceManager.GetCurrentBackBuffer(), true);
-
-        return m_frames[m_currentFrameIndex].CreateContext();
+        TracyVkCollect(m_tracyContext, static_cast<VkCommandBuffer>(*frame.CommandBuffer));
+        return true;
     }
 
-    void VulkanRenderer::EndFrame(const FrameContext& frameContext)
+    void VulkanRenderer::EndFrame()
     {
-        CRIMSON_PROFILE_FUNCTION();
-
-        Frame& frame = m_frames[frameContext.GetIndex()];
-        FrameSync& sync = m_frameSyncs[frameContext.GetIndex()];
-        const vk::raii::CommandBuffer& cmdBuffer = sync.CommandBuffer;
-        [[maybe_unused]] const VkCommandBuffer tracyCmdBuffer = static_cast<VkCommandBuffer>(*cmdBuffer);
-
-        // Nothing has bound this frame's set yet, so the buffer can still grow
-        FrameResources& resources = m_frameResources[frameContext.GetIndex()];
-        const std::span<const ObjectData> objects = frame.GetObjects();
-        UploadStorageBuffer(resources, resources.Objects, kObjectsBinding, objects.data(), objects.size_bytes());
-
-        uint32_t passIndex = 0;
-        m_stats.Passes = static_cast<uint32_t>(frame.GetPasses().size());
-
-        for (const auto& entry : frame.GetPasses())
-        {
-            if (const auto* materialPass = std::get_if<RenderPass>(&entry))
-            {
-                CRIMSON_PROFILE_SCOPE("Render Pass");
-                TracyVkZone(m_tracyContext, tracyCmdBuffer, "Render Pass");
-
-                const RenderPassInfo& passInfo = materialPass->Info();
-                VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(passInfo.Target);
-
-                ExecuteBeginRenderPass(cmdBuffer, passInfo, passIndex);
-
-                const std::span<const DrawInfo> draws = materialPass->GetDraws();
-
-                BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
-                for (const DrawSortEntry& sorted : m_drawOrder)
-                    ExecuteDraw(cmdBuffer, draws[sorted.Index], passInfo.Target, passIndex);
-
-                ExecuteEndRenderPass(cmdBuffer, rt);
-                ++passIndex;
-            }
-            else if (const auto* rawPass = std::get_if<RawPass>(&entry))
-            {
-                CRIMSON_PROFILE_SCOPE("Raw Pass");
-                TracyVkZone(m_tracyContext, tracyCmdBuffer, "Raw Pass");
-
-                ExecuteRawPass(cmdBuffer, *rawPass);
-            }
-        }
-
-        CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
+        InFlightFrame& frame = m_inFlight[m_inFlightIndex];
+        const vk::raii::CommandBuffer& cmdBuffer = frame.CommandBuffer;
 
         cmdBuffer.end();
 
         VulkanSurface& surface = m_resourceManager.GetRenderSurface();
         uint32_t imageIndex = surface.CurrentImageIndex;
 
-        const vk::Semaphore waitSemaphore = *sync.ImageAvailableSemaphore;
+        const vk::Semaphore waitSemaphore = *frame.ImageAvailableSemaphore;
         const vk::Semaphore signalSemaphore = *surface.RenderFinishedSemaphores[imageIndex];
         const vk::CommandBuffer rawCmdBuffer = *cmdBuffer;
         const vk::PipelineStageFlags waitStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
@@ -665,7 +679,7 @@ namespace crimson::vulkan
 
         {
             CRIMSON_PROFILE_SCOPE("Queue Submit");
-            queue.submit(submit, *sync.InFlightFence);
+            queue.submit(submit, *frame.InFlightFence);
         }
 
         const vk::SwapchainKHR swapchain = *surface.Swapchain;
@@ -690,6 +704,6 @@ namespace crimson::vulkan
         }
 
         m_lastStats = m_stats;
-        m_currentFrameIndex = (m_currentFrameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
+        m_inFlightIndex = (m_inFlightIndex + 1) % kMaxFramesInFlight;
     }
 }

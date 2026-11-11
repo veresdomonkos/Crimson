@@ -33,9 +33,9 @@ namespace crimson::opengl
         if (m_objectsBuffer != 0) { glDeleteBuffers(1, &m_objectsBuffer); m_objectsBuffer = 0; }
     }
 
-    void OpenGLRenderer::SetShadowMap(TextureHandle shadowMap)
+    void OpenGLRenderer::SetShadowAtlas(TextureHandle shadowAtlas)
     {
-        m_shadowAtlas = m_resourceManager.GetTexture(shadowMap).GLHandle;
+        m_shadowAtlas = m_resourceManager.GetTexture(shadowAtlas).GLHandle;
     }
 
     // Replaces the buffer's storage, so a frame the GPU is still reading isn't waited on.
@@ -48,63 +48,54 @@ namespace crimson::opengl
             glNamedBufferData(buffer, static_cast<GLsizeiptr>(size), data, GL_STREAM_DRAW);
     }
 
-    FrameContext OpenGLRenderer::BeginFrame(const FrameLightingData& lighting)
+    bool OpenGLRenderer::CanRender() const
+    {
+        return true;
+    }
+
+    bool OpenGLRenderer::Submit(FrameRecorder frame)
     {
         CRIMSON_PROFILE_FUNCTION();
 
         m_stats = {};
 
-        m_gpuData.Build(lighting, m_clock.Tick(std::chrono::steady_clock::now()));
+        if (!frame.IsValid())
+            return false;
 
-        glNamedBufferSubData(m_frameUBO, 0, sizeof(FrameBlock), &m_gpuData.Block);
-        UploadStorageBuffer(m_lightsBuffer, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes(), sizeof(GpuLight));
-        UploadStorageBuffer(m_shadowsBuffer, m_gpuData.Shadows.data(), std::span(m_gpuData.Shadows).size_bytes(), sizeof(GpuShadow));
-
-        m_frames[0].Reset();
-        m_frames[0].Init(m_resourceManager.GetBackBufferHandle(), true);
-        return m_frames[0].CreateContext();
-    }
-
-    void OpenGLRenderer::EndFrame(const FrameContext& frameContext)
-    {
-        CRIMSON_PROFILE_FUNCTION();
-
-        Frame& frame = m_frames[frameContext.GetIndex()];
+        const FramePacket& packet = frame.GetPacket();
         auto* window = m_device.GetPrimaryWindow();
 
         // ImGui and resource creation may have touched GL state since the last frame
         ResetBoundState();
 
-        const std::span<const ObjectData> objects = frame.GetObjects();
-        UploadStorageBuffer(m_objectsBuffer, objects.data(), objects.size_bytes(), sizeof(ObjectData));
+        // Replacing the buffers' storage, so the frame before isn't waited on
+        m_gpuData.Build(packet.GetLighting(), m_clock.Tick(std::chrono::steady_clock::now()));
+
+        glNamedBufferSubData(m_frameUBO, 0, sizeof(FrameBlock), &m_gpuData.Block);
+        UploadStorageBuffer(m_lightsBuffer, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes(), sizeof(GpuLight));
+        UploadStorageBuffer(m_shadowsBuffer, m_gpuData.Shadows.data(), std::span(m_gpuData.Shadows).size_bytes(), sizeof(GpuShadow));
+
+        const std::span<const GpuObject> objects = packet.GetObjects();
+        UploadStorageBuffer(m_objectsBuffer, objects.data(), objects.size_bytes(), sizeof(GpuObject));
 
         BindFrameResources();
 
-        m_stats.Passes = static_cast<uint32_t>(frame.GetPasses().size());
-
-        for (const auto& entry : frame.GetPasses())
+#ifndef NDEBUG
+        m_validator.Check(packet, [this](RenderTargetHandle target)
         {
-            if (const auto* materialPass = std::get_if<RenderPass>(&entry))
-            {
-                CRIMSON_PROFILE_SCOPE("Render Pass");
-                TracyGpuZone("Render Pass");
+            const OpenGLRenderTarget& rt = m_resourceManager.GetRenderTarget(target);
+            std::vector<TextureHandle> attachments = rt.ColorAttachments;
+            if (rt.DepthAttachment)
+                attachments.push_back(rt.DepthAttachment);
+            return attachments;
+        });
+#endif
 
-                ExecuteBeginRenderPass(materialPass->Info());
+        const std::span<const PassRecord> passes = packet.GetPasses();
+        m_stats.Passes = static_cast<uint32_t>(passes.size());
 
-                const std::span<const DrawInfo> draws = materialPass->GetDraws();
-
-                BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
-                for (const DrawSortEntry& sorted : m_drawOrder)
-                    ExecuteDraw(draws[sorted.Index]);
-            }
-            else if (const auto* rawPass = std::get_if<RawPass>(&entry))
-            {
-                CRIMSON_PROFILE_SCOPE("Raw Pass");
-                TracyGpuZone("Raw Pass");
-
-                ExecuteBeginRawPass(rawPass->Info());
-            }
-        }
+        for (const PassRecord& pass : passes)
+            ExecutePass(pass);
 
         CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
 
@@ -117,61 +108,85 @@ namespace crimson::opengl
         TracyGpuCollect;
 
         m_lastStats = m_stats;
+        return true;
     }
 
-    void OpenGLRenderer::ExecuteBeginRenderPass(const RenderPassInfo& info)
+    void OpenGLRenderer::ExecutePass(const PassRecord& pass)
+    {
+        const PassInfo& info = pass.GetInfo();
+
+        CRIMSON_PROFILE_SCOPE_DYNAMIC(info.Name);
+        TracyGpuZoneTransient(passZone, info.Name, true);
+
+        if (pass.IsNative())
+        {
+            ExecuteNativePass(pass);
+            return;
+        }
+
+        BeginPass(info);
+
+        const std::span<const DrawItem> draws = pass.GetDraws();
+
+        BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
+        for (const DrawSortEntry& sorted : m_drawOrder)
+            ExecuteDraw(draws[sorted.Index]);
+    }
+
+    void OpenGLRenderer::BeginPass(const PassInfo& info)
     {
         ViewBlock block{};
-        block.ViewProj = info.ViewProj;
-        block.CameraPosition = glm::vec4(info.CameraPosition, 0.0f);
+        block.ViewProj = info.View.ViewProj;
+        block.CameraPosition = glm::vec4(info.View.CameraPosition, 0.0f);
         glNamedBufferSubData(m_viewUBO, 0, sizeof(ViewBlock), &block);
 
-        const auto& target = m_resourceManager.GetRenderTarget(info.Target);
+        BindTarget(info);
+
+        m_state.SetDepthTest(true);
+    }
+
+    void OpenGLRenderer::ExecuteNativePass(const PassRecord& pass)
+    {
+        BindTarget(pass.GetInfo());
+
+        const NativeContext context{};
+        pass.GetNativeFn()(context);
+
+        // The callback runs code that changes GL state without going through m_state
+        ResetBoundState();
+    }
+
+    void OpenGLRenderer::BindTarget(const PassInfo& info)
+    {
+        // A pass without a target draws to the back buffer
+        const auto& target = m_resourceManager.GetRenderTarget(info.Target ? info.Target : m_resourceManager.GetBackBufferHandle());
         m_state.BindFramebuffer(target.FrameBufferHandle);
 
         const RenderRect rect = info.Viewport.value_or(RenderRect{ 0, 0, target.Width, target.Height });
         glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
         m_state.SetScissor(info.Viewport ? &rect : nullptr);
 
-        ClearTarget(info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
-
-        m_state.SetDepthTest(true);
+        ClearTarget(info.Clear);
     }
 
-    void OpenGLRenderer::ExecuteBeginRawPass(const RawPassInfo &info)
-    {
-        const auto& target = m_resourceManager.GetRenderTarget(info.Target);
-        m_state.BindFramebuffer(target.FrameBufferHandle);
-        glViewport(0, 0, static_cast<GLsizei>(target.Width), static_cast<GLsizei>(target.Height));
-        m_state.SetScissor(nullptr);
-
-        ClearTarget(info.ClearFlags, info.ClearColor, info.ClearDepth, info.ClearStencil);
-
-        NativeFrameHandles handles{};
-        info.Callback(handles);
-
-        // The callback runs code that changes GL state without going through m_state
-        ResetBoundState();
-    }
-
-    void OpenGLRenderer::ClearTarget(ClearFlags flags, const glm::vec4& color, float depth, uint32_t stencil)
+    void OpenGLRenderer::ClearTarget(const ClearInfo& clear)
     {
         GLbitfield clearMask = 0;
-        if (HasClearFlag(flags, ClearFlags::Color))
+        if (HasClearFlag(clear.Flags, ClearFlags::Color))
         {
-            glClearColor(color.r, color.g, color.b, color.a);
+            glClearColor(clear.Color.r, clear.Color.g, clear.Color.b, clear.Color.a);
             clearMask |= GL_COLOR_BUFFER_BIT;
         }
-        if (HasClearFlag(flags, ClearFlags::Depth))
+        if (HasClearFlag(clear.Flags, ClearFlags::Depth))
         {
             // glClear obeys the depth mask, which a transparent draw may have left off
             m_state.SetDepthWrite(true);
-            glClearDepth(depth);
+            glClearDepth(clear.Depth);
             clearMask |= GL_DEPTH_BUFFER_BIT;
         }
-        if (HasClearFlag(flags, ClearFlags::Stencil))
+        if (HasClearFlag(clear.Flags, ClearFlags::Stencil))
         {
-            glClearStencil(static_cast<GLint>(stencil));
+            glClearStencil(static_cast<GLint>(clear.Stencil));
             clearMask |= GL_STENCIL_BUFFER_BIT;
         }
         if (clearMask != 0) glClear(clearMask);
@@ -194,13 +209,13 @@ namespace crimson::opengl
         m_state.BindStorageBuffer(kObjectsSlot, m_objectsBuffer);
     }
 
-    void OpenGLRenderer::ExecuteDraw(const DrawInfo& info)
+    void OpenGLRenderer::ExecuteDraw(const DrawItem& info)
     {
         CRIMSON_PROFILE_FUNCTION();
 
         OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(info.IndexBuffer);
         OpenGLMaterial& material = m_resourceManager.GetMaterial(info.Material);
-        const OpenGLProgram& program = m_resourceManager.GetShader(material.Shader).For(info.Pass);
+        const OpenGLProgram& program = m_resourceManager.GetShader(material.Shader).For(info.Variant);
 
         if (material.GLBufferHandle != 0 && material.IsDirty)
         {
@@ -210,7 +225,7 @@ namespace crimson::opengl
 
         // Applied on every draw because clearing depth between passes can change depth write. A depth pass draws
         // everything as opaque, so a transparent mesh still casts its shadow.
-        const bool transparent = info.Pass == ShaderPass::Main && material.Settings.RenderMode == MaterialRenderMode::Transparent;
+        const bool transparent = info.Variant == ShaderVariant::Main && material.Settings.RenderMode == MaterialRenderMode::Transparent;
 
         m_state.SetBlend(transparent);
         m_state.SetDepthWrite(!transparent);
@@ -218,7 +233,7 @@ namespace crimson::opengl
 
         bool programChanged = false;
 
-        if (info.Material != m_boundMaterial || info.Pass != m_boundPass)
+        if (info.Material != m_boundMaterial || info.Variant != m_boundVariant)
         {
             if (material.GLBufferHandle != 0)
                 m_state.BindUniformBuffer(kMaterialBlockSlot, material.GLBufferHandle);
@@ -242,7 +257,7 @@ namespace crimson::opengl
                 ++m_stats.PipelineBinds;
 
             m_boundMaterial = info.Material;
-            m_boundPass = info.Pass;
+            m_boundVariant = info.Variant;
             ++m_stats.MaterialBinds;
         }
 

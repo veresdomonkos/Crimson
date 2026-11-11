@@ -1,6 +1,8 @@
 #include "crimson/scene/scene_renderer.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cassert>
 
 #include "crimson/asset_manager/asset_manager.hpp"
 #include "crimson/core/log.hpp"
@@ -44,7 +46,7 @@ namespace crimson
         m_shadowTarget = resources.CreateRenderTarget(info);
         m_shadowAtlas = resources.GetDepthAttachment(m_shadowTarget).value();
 
-        renderer.SetShadowMap(m_shadowAtlas);
+        renderer.SetShadowAtlas(m_shadowAtlas);
     }
 
     SceneRenderer::~SceneRenderer()
@@ -86,7 +88,8 @@ namespace crimson
 
         const RenderTargetInfo info{ .Width = width, .Height = height, .ColorFormats = { TextureFormat::RGBA16F }, .DepthFormat = TextureFormat::Depth32F };
         m_hdrTarget = m_resources.CreateRenderTarget(info);
-        m_resources.SetMaterialTexture(material, "SceneColor", m_resources.GetColorAttachment(m_hdrTarget, 0));
+        m_hdrColor = m_resources.GetColorAttachment(m_hdrTarget, 0);
+        m_resources.SetMaterialTexture(material, "SceneColor", m_hdrColor);
 
         CreateScreenTriangle();
     }
@@ -110,12 +113,13 @@ namespace crimson
         // The outlined meshes' depth, drawn like a shadow, so their shaders decide their shape there too
         const RenderTargetInfo info{ .Width = width, .Height = height, .DepthFormat = TextureFormat::Depth32F };
         m_outlineMaskTarget = m_resources.CreateRenderTarget(info);
-        m_resources.SetMaterialTexture(outline, "OutlineMask", m_resources.GetDepthAttachment(m_outlineMaskTarget).value());
+        m_outlineMask = m_resources.GetDepthAttachment(m_outlineMaskTarget).value();
+        m_resources.SetMaterialTexture(outline, "OutlineMask", m_outlineMask);
 
         CreateScreenTriangle();
     }
 
-    void SceneRenderer::BuildLighting(Scene& scene, FrameLightingData& lighting)
+    void SceneRenderer::BuildLighting(Scene& scene, FrameLighting& lighting)
     {
         lighting.Lights.clear();
 
@@ -146,7 +150,7 @@ namespace crimson
         m_atlasFullLogged = skipped > 0;
     }
 
-    void SceneRenderer::RecordPasses(FrameContext& frame, Scene& scene, const FrameLightingData& lighting, const RenderPassInfo& mainPass, Entity outlined)
+    void SceneRenderer::Record(FrameRecorder& frame, Scene& scene, const PassInfo& mainPass, Entity outlined)
     {
         m_drawables.clear();
 
@@ -170,66 +174,81 @@ namespace crimson
             m_drawables.push_back({ &renderer.Resolved, frame.AddObject(transform.World), renderer.CastsShadows, isOutlined });
         }
 
-        for (const ShadowView& view : lighting.Shadows)
+        for (const ShadowView& view : frame.Lighting().Shadows)
         {
-            RenderPassInfo info{
+            const PassInfo info{
+                .Name = "Shadows",
                 .Target = m_shadowTarget,
-                .ClearFlags = ClearFlags::Depth,
-                .ViewProj = view.Shadow.ViewProj,
-                .Viewport = view.Viewport
+                .Clear = { .Flags = ClearFlags::Depth },
+                .Viewport = view.Viewport,
+                .View = { .ViewProj = view.Shadow.ViewProj }
             };
 
-            RenderPass& pass = frame.BeginRenderPass(info);
+            PassBuilder pass = frame.AddPass(info);
 
             for (const Drawable& drawable : m_drawables)
             {
                 if (drawable.CastsShadows)
-                    pass.Draw(*drawable.Mesh, drawable.Object, {}, ShaderPass::Depth);
+                    pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth });
             }
         }
 
         if (anyOutlined)
             RecordOutlineMask(frame, mainPass);
 
-        RenderPassInfo sceneInfo = mainPass;
+        PassInfo sceneInfo = mainPass;
+        sceneInfo.Name = "Scene";
+
+        // Next to what the caller's pass samples
+        const auto freeRead = std::find(sceneInfo.Reads.begin(), sceneInfo.Reads.end(), TextureHandle{});
+        assert(freeRead != sceneInfo.Reads.end() && "The main pass reads too many textures to add the shadow atlas");
+        if (freeRead != sceneInfo.Reads.end())
+            *freeRead = m_shadowAtlas;
+
         if (m_hdrTarget)
             sceneInfo.Target = m_hdrTarget;
 
-        RenderPass& pass = frame.BeginRenderPass(sceneInfo);
+        PassBuilder pass = frame.AddPass(sceneInfo);
 
         for (const Drawable& drawable : m_drawables)
-            pass.Draw(*drawable.Mesh, drawable.Object);
+            pass.DrawMesh(*drawable.Mesh, drawable.Object);
 
         if (m_hdrTarget)
         {
             // Depth too, for a target that has it, as this draws in front of whatever is left in there
-            const RenderPassInfo toneMapInfo{ .Target = mainPass.Target, .ClearFlags = ClearFlags::Color | ClearFlags::Depth, .Viewport = mainPass.Viewport };
-            frame.BeginRenderPass(toneMapInfo).Draw(DrawInfo{ m_screenTriangleVertices, m_screenTriangleIndices, m_toneMapMaterial });
+            const PassInfo toneMapInfo{
+                .Name = "Tone Mapping",
+                .Target = mainPass.Target,
+                .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth },
+                .Viewport = mainPass.Viewport,
+                .Reads = { m_hdrColor }
+            };
+            frame.AddPass(toneMapInfo).Draw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, m_toneMapMaterial });
         }
 
         // In display colors, after the tone mapping, so that it stays the color it was set to
         if (anyOutlined)
         {
-            const RenderPassInfo outlineInfo{ .Target = mainPass.Target, .Viewport = mainPass.Viewport };
-            frame.BeginRenderPass(outlineInfo).Draw(DrawInfo{ m_screenTriangleVertices, m_screenTriangleIndices, m_outlineMaterial });
+            const PassInfo outlineInfo{ .Name = "Outline", .Target = mainPass.Target, .Viewport = mainPass.Viewport, .Reads = { m_outlineMask } };
+            frame.AddPass(outlineInfo).Draw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, m_outlineMaterial });
         }
     }
 
-    void SceneRenderer::RecordOutlineMask(FrameContext& frame, const RenderPassInfo& mainPass)
+    void SceneRenderer::RecordOutlineMask(FrameRecorder& frame, const PassInfo& mainPass)
     {
-        RenderPassInfo info{
+        const PassInfo info{
+            .Name = "Outline Mask",
             .Target = m_outlineMaskTarget,
-            .ClearFlags = ClearFlags::Depth,
-            .ViewProj = mainPass.ViewProj,
-            .CameraPosition = mainPass.CameraPosition
+            .Clear = { .Flags = ClearFlags::Depth },
+            .View = mainPass.View
         };
 
-        RenderPass& pass = frame.BeginRenderPass(info);
+        PassBuilder pass = frame.AddPass(info);
 
         for (const Drawable& drawable : m_drawables)
         {
             if (drawable.Outlined)
-                pass.Draw(*drawable.Mesh, drawable.Object, {}, ShaderPass::Depth);
+                pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth });
         }
     }
 }

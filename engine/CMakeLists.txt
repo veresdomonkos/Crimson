@@ -6,15 +6,15 @@ set(ENGINE_PUBLIC_HEADERS
 		include/crimson/core/events.hpp
 		include/crimson/core/embedded_resource.hpp
 		include/crimson/core/engine_resources.hpp
-        include/crimson/renderer/render_commands.hpp
         include/crimson/core/log.hpp
         include/crimson/core/input.hpp
-        include/crimson/renderer/renderer_api.hpp
+        include/crimson/graphics/graphics_api.hpp
         include/crimson/renderer/resource_manager.hpp
         include/crimson/renderer/renderer.hpp
-        include/crimson/renderer/frame_context.hpp
+        include/crimson/renderer/frame_recorder.hpp
+        include/crimson/renderer/frame_validation.hpp
+        include/crimson/renderer/native_context.hpp
         include/crimson/renderer/draw_sort.hpp
-        include/crimson/core/command_buffer.hpp
         include/crimson/renderer/handle_registry.hpp
         include/crimson/renderer/resource_handles.hpp
         include/crimson/renderer/core.hpp
@@ -27,8 +27,8 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/renderer/shader_compiler.hpp
         include/crimson/renderer/shadow_atlas.hpp
         include/crimson/renderer/light.hpp
-        include/crimson/renderer/frame_data.hpp
-		include/crimson/graphics/graphincs_backend.hpp
+        include/crimson/renderer/frame_gpu_data.hpp
+		include/crimson/graphics/graphics_backend.hpp
 		include/crimson/graphics/graphics_device.hpp
         include/crimson/renderer/resource_tags.hpp
         include/crimson/asset_manager/asset_id.hpp
@@ -42,7 +42,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/asset_manager/importers/shader_importer.hpp
         include/crimson/asset_manager/importers/scene_importer.hpp
         include/crimson/renderer/mesh.hpp
-        include/crimson/renderer/shader_pass.hpp
+        include/crimson/renderer/shader_variant.hpp
         include/crimson/asset_manager/importers/mesh_importer.hpp
         include/crimson/core/profiler.hpp
         include/crimson/renderer/render_stats.hpp

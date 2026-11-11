@@ -3,7 +3,7 @@
 #include <memory>
 
 #include "graphics_device.hpp"
-#include "crimson/renderer/renderer_api.hpp"
+#include "crimson/graphics/graphics_api.hpp"
 #include "crimson/ui/imgui_backend.hpp"
 
 namespace crimson
@@ -15,6 +15,6 @@ namespace crimson
         std::unique_ptr<crimson::Renderer> Renderer;
         std::unique_ptr<ImGuiBackend> Imgui;
 
-        static std::unique_ptr<GraphicsBackend> Create(RendererAPIType type, Window& window);
+        static std::unique_ptr<GraphicsBackend> Create(GraphicsApi type, Window& window);
     };
 }

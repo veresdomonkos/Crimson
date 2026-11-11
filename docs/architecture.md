@@ -41,7 +41,7 @@ Vulkan 1.3 (dynamic rendering, synchronization2) and OpenGL 4.5 implement the sa
 A single factory call creates the whole graphics subsystem and hands over ownership:
 
 ```cpp
-auto backend = GraphicsBackend::Create(RendererAPIType::Vulkan, *window);
+auto backend = GraphicsBackend::Create(GraphicsApi::Vulkan, *window);
 // backend->Device, ->GPUResources, ->Renderer, ->Imgui
 ```
 
@@ -56,30 +56,40 @@ Members are declared so that destruction order is correct (ImGui, renderer, reso
 
 ## Frames and passes
 
-A frame is an ordered list of `RenderPass` (material draws) and `RawPass` (native interop, such as ImGui) entries, kept in a fixed-size array that doesn't allocate.
+A frame is recorded into a `FramePacket` through a `FrameRecorder`: an ordered list of passes, the frame's object transforms and its lighting. Recording makes no GPU calls; `Submit` does all of the GPU work, from waiting for the frame's slot to presenting.
 
 ```cpp
-auto frame = renderer.BeginFrame(lighting);
+if (!renderer.CanRender()) // a minimized window
+    return;
+
+FrameRecorder frame = renderer.BeginRecording();
+frame.Lighting().Lights = lights; // starts empty every frame
 
 ObjectId object = frame.AddObject(transform); // usable in every pass of this frame
 
-for (const ShadowView& view : lighting.Shadows)
+for (const ShadowView& view : frame.Lighting().Shadows)
 {
-    auto& shadow = frame.BeginRenderPass({ .Target = atlas, .ClearFlags = ClearFlags::Depth, .ViewProj = view.Shadow.ViewProj, .Viewport = view.Viewport });
-    shadow.Draw(mesh, object, shadowMaterial);
+    PassBuilder shadow = frame.AddPass({ .Name = "Shadows", .Target = shadowTarget, .Clear = { .Flags = ClearFlags::Depth },
+                                         .Viewport = view.Viewport, .View = { .ViewProj = view.Shadow.ViewProj } });
+    shadow.DrawMesh(mesh, object, { .Variant = ShaderVariant::Depth });
 }
 
-frame.AddRawPass(RawPassInfo{ .ClearFlags = ClearFlags::Color,
-                              .Callback = [](const NativeFrameHandles& h) { /* ImGui, debug draw, ... */ } });
+frame.AddPass({ .Name = "Scene", .Target = sceneTarget, .View = camera, .Reads = { shadowAtlas } }).DrawMesh(mesh, object);
 
-renderer.EndFrame(frame);
+frame.AddNativePass({ .Name = "UI", .Clear = { .Flags = ClearFlags::Color } },
+                    [](const NativeContext& context) { /* ImGui, debug draw, ... */ });
+
+renderer.Submit(std::move(frame)); // false when the frame was dropped, like for an out of date swapchain
 ```
 
-- `RenderPass` - draws described by vertex buffer, index buffer, material and object. A pass can limit itself to part of its target with `Viewport`.
-- `RawPass` - runs a callback with `NativeFrameHandles` (device, command buffer, color format) between engine-managed layout transitions. ImGui is rendered this way, so the engine itself has no UI concepts.
+- A pass is a `PassRecord`: its `PassInfo` and either draws or a native callback. Passes run in the order they are added.
+- `PassInfo` holds the pass's `Name` (shown in Tracy), its `Target` (the back buffer when empty), what to `Clear` it to, an optional `Viewport` to limit drawing and clearing to part of it, the `View` (camera) and the textures the pass samples in `Reads`.
+- A draw is a `DrawItem`: vertex buffer, index buffer, material, object and `ShaderVariant`. `PassBuilder::Draw` adds one, `DrawMesh(mesh, object, options)` one per submesh. A `PassBuilder` refers to its pass by index, so it stays valid while more passes are added.
+- A native pass runs a callback with `NativeContext` (device, command buffer, color format) between engine-managed layout transitions. ImGui is rendered this way, so the engine itself has no UI concepts. The callback runs inside `Submit`, so it captures by value or references what outlives the frame.
 - Each draw indexes a per-frame buffer of object transforms, filled by `AddObject`.
-- Vulkan layout transitions and barriers are handled by the renderer; OpenGL needs none.
-- Frame-in-flight synchronisation (fences, semaphores, per-frame buffers) is internal to the Vulkan renderer.
+- In debug builds `Submit` checks the passes' `Reads`, and logs once when a pass samples its own target or a texture that a later pass writes.
+- Vulkan layout transitions and barriers are handled by the renderer, a pass's `Reads` are made readable before it starts; OpenGL needs none.
+- The renderer keeps one `FramePacket` per frame in flight (`kMaxFramesInFlight`), and reuses their memory. Frame-in-flight synchronisation (fences, semaphores, per-frame buffers) is internal to the Vulkan renderer.
 - The frame's time, `Time` and `DeltaTime`, comes from a `FrameClock` each renderer owns, and reaches shaders through the frame block.
 
 ## Rendering
@@ -125,7 +135,7 @@ scene.SetParent(light, {}); // back to the top level, it stays where it is in th
 
 Every entity has the first three, and the others are optional. Meshes and renderers share one component because there is only one kind of renderer so far. It can be split when something else needs a mesh, such as skinned meshes. The Inspector, the scene files and the renderer each know these types by hand today; #61 moves them to a registry, so components can also come from scripts.
 
-`SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLightingData`, gives every active renderer an object transform, and records the passes under [Rendering](#rendering).
+`SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLighting`, gives every active renderer an object transform, and records the passes under [Rendering](#rendering).
 
 ### Scene files
 
@@ -193,7 +203,7 @@ Texture paths are relative to the `.mtl`, and one that isn't there is logged and
 
 `.mat` files can also set `"renderMode"` (`"opaque"`, `"transparent"` or `"cutout"`) and `"cull"` (`"back"`, `"front"` or `"none"`), which default to opaque and back. Transparent materials are alpha blended using the alpha the shader outputs, don't write depth, and draw after opaque ones in the order they were submitted. Cutout materials draw like opaque ones, but where the alpha is under the shader's `AlphaCutoff` there is nothing.
 
-The shadow passes and the selection outline's mask only need depth, so they draw each mesh with its own material in `ShaderPass::Depth`: its shader's `VSMain` and, if it declares one, its `PSDepth`, drawn as opaque. That is how a cutout's holes, or a shader that moves vertices, show up in its shadow. `CompileHlslShader` puts `PSDepth` in `ShaderBinary::PixelDepth`. Each backend makes a depth version of every shader from it: on Vulkan a pipeline with `GraphicsPipelineInfo::Pass`, and on OpenGL a second program, with only the vertex stage where there is no `PSDepth`. The outline mask is the outlined meshes' depth, which `S_Outline` reads as covered where it is under 1.
+The shadow passes and the selection outline's mask only need depth, so they draw each mesh with its own material in `ShaderVariant::Depth`: its shader's `VSMain` and, if it declares one, its `PSDepth`, drawn as opaque. That is how a cutout's holes, or a shader that moves vertices, show up in its shadow. `CompileHlslShader` puts `PSDepth` in `ShaderBinary::PixelDepth`. Each backend makes a depth version of every shader from it: on Vulkan a pipeline with `GraphicsPipelineInfo::Variant`, and on OpenGL a second program, with only the vertex stage where there is no `PSDepth`. The outline mask is the outlined meshes' depth, which `S_Outline` reads as covered where it is under 1.
 
 ### Engine assets
 
@@ -214,7 +224,7 @@ A project is a folder with a `project.crimson` file and an `assets/` folder. It 
 
 ### Panels and menus
 
-Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single raw pass. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default.
+Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single native pass. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default.
 
 - **The main menu:** File and View come from `EditorUI`. Panels add their own menus between them through `Panel::OnMainMenuBar`. The Hierarchy adds **Edit** (Rename, Delete) and **Create**, the same as its right-click menu. The Preferences window adds **Edit > Preferences**.
 - **Notifications:** `ui::Notifications` shows errors, from anywhere in the engine, and finished saves in the bottom right corner, so they are seen with the Console closed. It reads the same `Logger` the Console does.

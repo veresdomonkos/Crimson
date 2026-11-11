@@ -121,22 +121,22 @@ namespace crimson::tests
         std::map<uint64_t, ShaderInterface> m_shaderInterfaces;
     };
 
-    // A renderer that records nothing and only keeps the frame for SceneRenderer to fill
+    // A renderer that renders nothing and only keeps the last submitted frame, to look at what was recorded
     class FakeRenderer final : public Renderer
     {
     public:
-        FrameContext BeginFrame(const FrameLightingData&) override
+        [[nodiscard]] bool CanRender() const override { return true; }
+
+        bool Submit(FrameRecorder frame) override
         {
-            CurrentFrame.Reset();
-            CurrentFrame.Init(RenderTargetHandle{ 1000, 1 }, true);
-            return CurrentFrame.CreateContext();
+            Submitted = &frame.GetPacket();
+            return true;
         }
 
-        void EndFrame(const FrameContext&) override {}
+        void SetShadowAtlas(TextureHandle shadowAtlas) override { ShadowAtlas = shadowAtlas; }
 
-        void SetShadowMap(TextureHandle shadowMap) override { ShadowMap = shadowMap; }
-
-        Frame CurrentFrame;
-        TextureHandle ShadowMap;
+        // Stays valid until another frame is recorded into the same packet
+        const FramePacket* Submitted = nullptr;
+        TextureHandle ShadowAtlas;
     };
 }

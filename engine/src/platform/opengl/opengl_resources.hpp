@@ -12,7 +12,7 @@
 #include "crimson/renderer/buffer_layout.hpp"
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
-#include "crimson/renderer/shader_pass.hpp"
+#include "crimson/renderer/shader_variant.hpp"
 #include "crimson/renderer/shader_property_info.hpp"
 #include "shader/shader_reflection.hpp"
 
@@ -80,7 +80,7 @@ namespace crimson::opengl
 
         ShaderInterface Interface;
 
-        [[nodiscard]] const OpenGLProgram& For(ShaderPass pass) const { return pass == ShaderPass::Depth ? Depth : Main; }
+        [[nodiscard]] const OpenGLProgram& For(ShaderVariant pass) const { return pass == ShaderVariant::Depth ? Depth : Main; }
     };
 
     struct OpenGLMaterial

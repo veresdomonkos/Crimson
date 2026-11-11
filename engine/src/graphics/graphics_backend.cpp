@@ -1,11 +1,11 @@
 // graphics_backend_vulkan.cpp
 
-#include "crimson/graphics/graphincs_backend.hpp"
+#include "crimson/graphics/graphics_backend.hpp"
 #include "../platform/vulkan/vulkan_device.hpp"
 #include "../platform/vulkan/vulkan_resource_manager.hpp"
 #include "../platform/vulkan/vulkan_renderer.hpp"
 #include "../platform/vulkan/vulkan_imgui_backend.hpp"
-#include "crimson/renderer/renderer_api.hpp"
+#include "crimson/graphics/graphics_api.hpp"
 
 #include "../platform/opengl/opengl_device.hpp"
 #include "../platform/opengl/opengl_resource_manager.hpp"
@@ -49,12 +49,12 @@ namespace crimson
     }
 
 
-    std::unique_ptr<GraphicsBackend> GraphicsBackend::Create(RendererAPIType type, Window& window)
+    std::unique_ptr<GraphicsBackend> GraphicsBackend::Create(GraphicsApi type, Window& window)
     {
         switch (type)
         {
-            case RendererAPIType::Vulkan: return std::make_unique<GraphicsBackend>(CreateVulkanBackend(window));
-            case RendererAPIType::OpenGL: return std::make_unique<GraphicsBackend>(CreateOpenGLBackend(window));
+            case GraphicsApi::Vulkan: return std::make_unique<GraphicsBackend>(CreateVulkanBackend(window));
+            case GraphicsApi::OpenGL: return std::make_unique<GraphicsBackend>(CreateOpenGLBackend(window));
         }
         return {};
     }

@@ -31,7 +31,7 @@ namespace crimson::opengl
         ImGui::NewFrame();
     }
 
-    void OpenGLImGuiBackend::RenderDrawData(ImDrawData* drawData, const NativeFrameHandles& handles)
+    void OpenGLImGuiBackend::RenderDrawData(ImDrawData* drawData, const NativeContext& context)
     {
         ImGui_ImplOpenGL3_RenderDrawData(drawData);
     }

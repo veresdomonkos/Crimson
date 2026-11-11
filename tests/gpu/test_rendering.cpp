@@ -105,9 +105,9 @@ float4 PSMain(VertexOutput input) : SV_Target { return Albedo.Sample(LinearWrap,
             Project.Write("green.mat", MakeMaterial("[0, 1, 0, 1]"));
         }
 
-        [[nodiscard]] RenderPassInfo Pass() const
+        [[nodiscard]] PassInfo Pass() const
         {
-            return { .Target = Target.Handle(), .ClearFlags = ClearFlags::Color | ClearFlags::Depth, .ClearColor = kClearColor };
+            return { .Target = Target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = kClearColor } };
         }
 
         Image RenderMesh(AssetManager& assets, const char* mesh, const char* material)
@@ -117,7 +117,7 @@ float4 PSMain(VertexOutput input) : SV_Target { return Albedo.Sample(LinearWrap,
             REQUIRE(loaded);
             REQUIRE(loadedMaterial);
 
-            RenderOneFrame([&](FrameContext& frame) { frame.BeginRenderPass(Pass()).Draw(*loaded, 0, loadedMaterial); });
+            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*loaded, 0, { .MaterialOverride = loadedMaterial }); });
 
             return Target.Read();
         }
@@ -126,10 +126,10 @@ float4 PSMain(VertexOutput input) : SV_Target { return Albedo.Sample(LinearWrap,
 
 TEST_CASE_METHOD(Fixture, "A pass clears its target to the color it asks for", "[rendering]")
 {
-    RenderPassInfo pass = Pass();
-    pass.ClearColor = glm::vec4(0.25f, 0.5f, 0.75f, 1.0f);
+    PassInfo pass = Pass();
+    pass.Clear.Color = glm::vec4(0.25f, 0.5f, 0.75f, 1.0f);
 
-    RenderOneFrame([&](FrameContext& frame) { frame.BeginRenderPass(pass); });
+    RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass); });
 
     const glm::ivec4 pixel = Target.Read().At(0, 0);
 
@@ -178,11 +178,11 @@ TEST_CASE_METHOD(Fixture, "The nearer of two meshes wins, whichever is drawn fir
 
     SECTION("Near one sorts first")
     {
-        RenderOneFrame([&](FrameContext& frame)
+        RenderOneFrame([&](FrameRecorder& frame)
         {
-            RenderPass& pass = frame.BeginRenderPass(Pass());
-            pass.Draw(*near, 0, red);
-            pass.Draw(*far, 0, green);
+            PassBuilder pass = frame.AddPass(Pass());
+            pass.DrawMesh(*near, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*far, 0, { .MaterialOverride = green });
         });
 
         CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kRed));
@@ -190,11 +190,11 @@ TEST_CASE_METHOD(Fixture, "The nearer of two meshes wins, whichever is drawn fir
 
     SECTION("Near one sorts last")
     {
-        RenderOneFrame([&](FrameContext& frame)
+        RenderOneFrame([&](FrameRecorder& frame)
         {
-            RenderPass& pass = frame.BeginRenderPass(Pass());
-            pass.Draw(*near, 0, green);
-            pass.Draw(*far, 0, red);
+            PassBuilder pass = frame.AddPass(Pass());
+            pass.DrawMesh(*near, 0, { .MaterialOverride = green });
+            pass.DrawMesh(*far, 0, { .MaterialOverride = red });
         });
 
         CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kGreen));
@@ -210,10 +210,10 @@ TEST_CASE_METHOD(Fixture, "An object's transform moves it", "[rendering]")
     REQUIRE(mesh);
     const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
 
-    RenderOneFrame([&](FrameContext& frame)
+    RenderOneFrame([&](FrameRecorder& frame)
     {
         const ObjectId object = frame.AddObject(glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.0f)));
-        frame.BeginRenderPass(Pass()).Draw(*mesh, object, red);
+        frame.AddPass(Pass()).DrawMesh(*mesh, object, { .MaterialOverride = red });
     });
 
     const Image image = Target.Read();
@@ -238,11 +238,11 @@ TEST_CASE_METHOD(Fixture, "Materials keep their own properties", "[rendering]")
 
     const auto render = [&]
     {
-        RenderOneFrame([&](FrameContext& frame)
+        RenderOneFrame([&](FrameRecorder& frame)
         {
-            RenderPass& pass = frame.BeginRenderPass(Pass());
-            pass.Draw(*left, 0, red);
-            pass.Draw(*right, 0, green);
+            PassBuilder pass = frame.AddPass(Pass());
+            pass.DrawMesh(*left, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*right, 0, { .MaterialOverride = green });
         });
 
         return Target.Read();
@@ -293,13 +293,13 @@ TEST_CASE_METHOD(Fixture, "A transparent material blends over what is behind it"
     const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
     const MaterialHandle half = assets.Load<AssetType::Material>("half.mat");
 
-    RenderOneFrame([&](FrameContext& frame)
+    RenderOneFrame([&](FrameRecorder& frame)
     {
-        RenderPass& pass = frame.BeginRenderPass(Pass());
+        PassBuilder pass = frame.AddPass(Pass());
 
         // In the wrong order on purpose: opaque draws have to go first anyway
-        pass.Draw(*front, 0, half);
-        pass.Draw(*back, 0, red);
+        pass.DrawMesh(*front, 0, { .MaterialOverride = half });
+        pass.DrawMesh(*back, 0, { .MaterialOverride = red });
     });
 
     const Image image = Target.Read();
@@ -324,10 +324,10 @@ TEST_CASE_METHOD(Fixture, "Passes can read what an earlier pass of the frame ren
     REQUIRE(textured);
     Gpu().GPUResources->SetMaterialTexture(textured, "Albedo", Gpu().GPUResources->GetColorAttachment(source.Handle(), 0));
 
-    RenderOneFrame([&](FrameContext& frame)
+    RenderOneFrame([&](FrameRecorder& frame)
     {
-        frame.BeginRenderPass({ .Target = source.Handle(), .ClearFlags = ClearFlags::Color | ClearFlags::Depth, .ClearColor = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f) });
-        frame.BeginRenderPass(Pass()).Draw(*mesh, 0, textured);
+        frame.AddPass({ .Target = source.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f) } });
+        frame.AddPass(Pass()).DrawMesh(*mesh, 0, { .MaterialOverride = textured });
     });
 
     CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kGreen));
@@ -349,10 +349,10 @@ TEST_CASE("The back buffer survives a window resize", "[rendering]")
     Fixture fixture;
 
     GpuWindow().SetSize(400, 300);
-    RenderOneFrame([&](FrameContext& frame) { frame.BeginRenderPass(fixture.Pass()); });
+    RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(fixture.Pass()); });
 
     GpuWindow().SetSize(320, 240);
-    RenderOneFrame([&](FrameContext& frame) { frame.BeginRenderPass(fixture.Pass()); });
+    RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(fixture.Pass()); });
 
     CHECK(IsNear(fixture.Target.Read().At(0, 0), kBlack));
 }
@@ -425,10 +425,10 @@ float4 PSMain(VertexOutput input) : SV_Target { return float4(input.Correct, 0.0
     transform = glm::rotate(transform, 0.7f, glm::normalize(glm::vec3(0.0f, 1.0f, 1.0f)));
     transform = glm::scale(transform, glm::vec3(2.0f, 0.5f, 3.0f));
 
-    RenderOneFrame([&](FrameContext& frame)
+    RenderOneFrame([&](FrameRecorder& frame)
     {
         const ObjectId object = frame.AddObject(transform);
-        frame.BeginRenderPass(Pass()).Draw(*mesh, object, material);
+        frame.AddPass(Pass()).DrawMesh(*mesh, object, { .MaterialOverride = material });
     });
 
     CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kRed));
