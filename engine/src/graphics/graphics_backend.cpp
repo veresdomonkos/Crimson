@@ -5,7 +5,7 @@
 #include "../platform/vulkan/vulkan_resource_manager.hpp"
 #include "../platform/vulkan/vulkan_renderer.hpp"
 #include "../platform/vulkan/vulkan_imgui_backend.hpp"
-#include "crimson/renderer/graphics_api.hpp"
+#include "crimson/graphics/graphics_api.hpp"
 
 #include "../platform/opengl/opengl_device.hpp"
 #include "../platform/opengl/opengl_resource_manager.hpp"

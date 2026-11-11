@@ -1,6 +1,6 @@
 #pragma once
 
-#include <crimson/renderer/graphics_api.hpp>
+#include <crimson/graphics/graphics_api.hpp>
 #include "crimson_editor/frame_stats.hpp"
 #include "crimson_editor/ui/panel.hpp"
 

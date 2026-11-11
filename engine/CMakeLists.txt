@@ -8,7 +8,7 @@ set(ENGINE_PUBLIC_HEADERS
 		include/crimson/core/engine_resources.hpp
         include/crimson/core/log.hpp
         include/crimson/core/input.hpp
-        include/crimson/renderer/graphics_api.hpp
+        include/crimson/graphics/graphics_api.hpp
         include/crimson/renderer/resource_manager.hpp
         include/crimson/renderer/renderer.hpp
         include/crimson/renderer/frame_recorder.hpp

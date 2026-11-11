@@ -4,7 +4,7 @@
 
 #include <utility>
 #include "crimson/core/log.hpp"
-#include "crimson/renderer/graphics_api.hpp"
+#include "crimson/graphics/graphics_api.hpp"
 
 namespace crimson
 {

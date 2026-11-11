@@ -372,3 +372,18 @@ TEST_CASE("Passes are named and say what they sample", "[scene renderer]")
     CHECK(passes[3]->GetInfo().Reads[0] == fixture.Gpu.GetColorAttachment(passes[2]->GetInfo().Target, 0));
     CHECK(passes[4]->GetInfo().Reads[0] == fixture.Gpu.GetDepthAttachment(passes[1]->GetInfo().Target).value());
 }
+
+TEST_CASE("The scene pass samples the shadow atlas next to what the main pass samples", "[scene renderer]")
+{
+    constexpr TextureHandle kEnvironment{ 77, 1 };
+
+    Fixture fixture;
+    fixture.MainPass.Reads = { kEnvironment };
+    AddMesh(fixture.World, "Mesh");
+
+    const std::vector<const PassRecord*> passes = fixture.Record();
+    REQUIRE(passes.size() == 1);
+
+    CHECK(passes[0]->GetInfo().Reads[0] == kEnvironment);
+    CHECK(passes[0]->GetInfo().Reads[1] == fixture.Subject.GetShadowAtlas());
+}

@@ -45,6 +45,7 @@ namespace crimson
         void BuildLighting(Scene& scene, FrameLighting& lighting);
 
         // Records one shadow pass per shadow view of the frame's lighting, then the main pass described by mainPass, then the tone mapping.
+        // The main pass is named "Scene", and samples the shadow atlas besides what mainPass.Reads lists.
         // Clear colors are in linear light when tone mapping is enabled.
         // The outlined entity and its children get an outline, if there is one and outlines are enabled.
         void Record(FrameRecorder& frame, Scene& scene, const PassInfo& mainPass, Entity outlined = {});

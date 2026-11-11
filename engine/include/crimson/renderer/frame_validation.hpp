@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <span>
-#include <string_view>
+#include <string>
 #include <vector>
 
 #include "crimson/core/log.hpp"
@@ -62,6 +62,14 @@ namespace crimson
                     continue;
                 }
 
+                // Reading what an earlier pass wrote is fine, even if a later one writes it again
+                bool writtenBefore = false;
+                for (uint32_t earlier = 0; earlier < pass && !writtenBefore; ++earlier)
+                    writtenBefore = writes(passes[earlier].GetInfo().Target, read);
+
+                if (writtenBefore)
+                    continue;
+
                 for (uint32_t later = pass + 1; later < passes.size(); ++later)
                 {
                     if (writes(passes[later].GetInfo().Target, read))
@@ -101,7 +109,8 @@ namespace crimson
     private:
         struct Reported
         {
-            std::string_view Pass;
+            // A copy, as it is kept for the rest of the run and a pass's name only has to last its frame
+            std::string Pass;
             TextureHandle Texture;
             PassProblemKind Kind;
 

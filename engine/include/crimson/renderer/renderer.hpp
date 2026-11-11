@@ -22,7 +22,8 @@ namespace crimson
         // False while there is nothing to render to, like when the window is minimized
         [[nodiscard]] virtual bool CanRender() const = 0;
 
-        // Makes no GPU calls, it only hands out the next packet, emptied
+        // Makes no GPU calls, it only hands out the next packet, emptied. There is one per frame in flight, so record and
+        // submit one frame at a time: beginning more than kMaxFramesInFlight at once reuses the first one's packet.
         [[nodiscard]] FrameRecorder BeginRecording()
         {
             FramePacket& packet = m_packets.Next();

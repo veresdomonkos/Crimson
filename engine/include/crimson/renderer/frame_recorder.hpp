@@ -147,10 +147,18 @@ namespace crimson
         // False for a pass that was dropped, as the frame already had kMaxPassesPerFrame
         [[nodiscard]] bool IsValid() const { return m_packet != nullptr; }
 
-        [[nodiscard]] const PassInfo& GetInfo() const { return Record().m_info; }
-        [[nodiscard]] std::span<const DrawItem> GetDraws() const { return Record().m_draws; }
+        [[nodiscard]] const PassInfo& GetInfo() const { return Read().m_info; }
+        [[nodiscard]] std::span<const DrawItem> GetDraws() const { return Read().m_draws; }
     private:
+        // Only for a valid builder
         [[nodiscard]] PassRecord& Record() const { return m_packet->m_passes[m_index]; }
+
+        // A dropped pass reads as an empty one
+        [[nodiscard]] const PassRecord& Read() const
+        {
+            static const PassRecord dropped;
+            return m_packet ? Record() : dropped;
+        }
 
         FramePacket* m_packet = nullptr;
         uint32_t m_index = 0;

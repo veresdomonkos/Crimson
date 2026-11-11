@@ -274,6 +274,35 @@ TEST_CASE("Validation finds passes that sample what they shouldn't", "[frame]")
         REQUIRE(problems.size() == 1);
         CHECK(problems[0] == PassProblem{ 0, kShadowAtlas, PassProblemKind::ReadBeforeWrite, 1 });
     }
+
+    SECTION("Nothing wrong with sampling what an earlier pass wrote, when a later one writes it again")
+    {
+        frame.AddPass({ .Name = "Shadows", .Target = kShadowTarget });
+        frame.AddPass({ .Name = "Scene", .Target = kSceneTarget, .Reads = { kShadowAtlas } });
+        frame.AddPass({ .Name = "More shadows", .Target = kShadowTarget });
+
+        FindPassProblems(packet.GetPasses(), targets, problems);
+        CHECK(problems.empty());
+    }
+}
+
+TEST_CASE("A pass past the limit is dropped, and reads as an empty one", "[frame]")
+{
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    for (uint32_t i = 0; i < kMaxPassesPerFrame; ++i)
+        CHECK(frame.AddPass({}).IsValid());
+
+#ifdef NDEBUG
+    PassBuilder dropped = frame.AddPass({ .Name = "Dropped" });
+    CHECK_FALSE(dropped.IsValid());
+
+    dropped.Draw(DrawItem{ .Material = kMaterial });
+    CHECK(dropped.GetDraws().empty());
+    CHECK(std::string_view(dropped.GetInfo().Name) == "Pass");
+    CHECK(packet.GetPasses().size() == kMaxPassesPerFrame);
+#endif
 }
 
 TEST_CASE("Opaque draws are grouped to rebind as little as possible", "[draw sort]")

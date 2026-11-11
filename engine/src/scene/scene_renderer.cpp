@@ -1,6 +1,8 @@
 #include "crimson/scene/scene_renderer.hpp"
 
+#include <algorithm>
 #include <array>
+#include <cassert>
 
 #include "crimson/asset_manager/asset_manager.hpp"
 #include "crimson/core/log.hpp"
@@ -196,7 +198,13 @@ namespace crimson
 
         PassInfo sceneInfo = mainPass;
         sceneInfo.Name = "Scene";
-        sceneInfo.Reads = { m_shadowAtlas };
+
+        // Next to what the caller's pass samples
+        const auto freeRead = std::find(sceneInfo.Reads.begin(), sceneInfo.Reads.end(), TextureHandle{});
+        assert(freeRead != sceneInfo.Reads.end() && "The main pass reads too many textures to add the shadow atlas");
+        if (freeRead != sceneInfo.Reads.end())
+            *freeRead = m_shadowAtlas;
+
         if (m_hdrTarget)
             sceneInfo.Target = m_hdrTarget;
 

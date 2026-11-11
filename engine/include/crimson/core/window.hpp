@@ -6,7 +6,7 @@
 
 #include "crimson/core/events.hpp"
 #include "core.hpp"
-#include "crimson/renderer/graphics_api.hpp"
+#include "crimson/graphics/graphics_api.hpp"
 
 namespace crimson
 {
