@@ -34,6 +34,9 @@ namespace crimson
         uint32_t IndexCount = 0;
         ObjectId Object = 0;
         ShaderVariant Variant = ShaderVariant::Main;
+
+        // Squared distance from the pass's camera, transparent draws go back to front by it
+        float SortDepth = 0.0f;
     };
 
     struct DrawOptions
@@ -134,13 +137,21 @@ namespace crimson
                 Record().m_draws.push_back(item);
         }
 
-        // One draw per submesh, each with its slot's material
+        // One draw per submesh, each with its slot's material. They sort by the distance to the mesh's center.
         void DrawMesh(const Mesh& mesh, ObjectId object = 0, const DrawOptions& options = {})
         {
+            if (!m_packet)
+                return;
+
+            const glm::vec3 localCenter = (mesh.Bounds.Min + mesh.Bounds.Max) * 0.5f;
+            const glm::vec3 center = glm::vec3(m_packet->m_objects[object].Transform * glm::vec4(localCenter, 1.0f));
+            const glm::vec3 fromCamera = center - Record().m_info.View.CameraPosition;
+            const float depth = glm::dot(fromCamera, fromCamera);
+
             for (const SubMesh& subMesh : mesh.SubMeshes)
             {
                 const MaterialHandle material = options.MaterialOverride ? options.MaterialOverride : mesh.Materials[subMesh.MaterialSlot];
-                Draw(DrawItem{ mesh.VertexBuffer, mesh.IndexBuffer, material, subMesh.FirstIndex, subMesh.IndexCount, object, options.Variant });
+                Draw(DrawItem{ mesh.VertexBuffer, mesh.IndexBuffer, material, subMesh.FirstIndex, subMesh.IndexCount, object, options.Variant, depth });
             }
         }
 
