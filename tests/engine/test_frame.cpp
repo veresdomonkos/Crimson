@@ -121,12 +121,13 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
 
     SECTION("Each with its own material, and the one that failed to load is skipped")
     {
-        pass.DrawMesh(mesh, 5);
+        const ObjectId object = frame.AddObject(glm::mat4(1.0f));
+        pass.DrawMesh(mesh, object);
 
         REQUIRE(pass.GetDraws().size() == 1);
         CHECK(pass.GetDraws()[0].Material == kMaterial);
         CHECK(pass.GetDraws()[0].IndexCount == 3);
-        CHECK(pass.GetDraws()[0].Object == 5);
+        CHECK(pass.GetDraws()[0].Object == object);
         CHECK(pass.GetDraws()[0].Variant == ShaderVariant::Main);
     }
 

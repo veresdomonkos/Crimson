@@ -143,6 +143,8 @@ namespace crimson
             if (!m_packet)
                 return;
 
+            assert(object < m_packet->m_objects.size() && "The object has to come from this frame's AddObject");
+
             const glm::vec3 localCenter = (mesh.Bounds.Min + mesh.Bounds.Max) * 0.5f;
             const glm::vec3 center = glm::vec3(m_packet->m_objects[object].Transform * glm::vec4(localCenter, 1.0f));
             const glm::vec3 fromCamera = center - Record().m_info.View.CameraPosition;
