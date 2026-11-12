@@ -264,6 +264,50 @@ TEST_CASE_METHOD(AssetFixture, "Selecting an entity and an asset replace each ot
     CHECK_FALSE(Context().SelectedAsset);
 }
 
+// The Inspector draws components from their registered fields, so a field it can't draw would assert here
+TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[editor]")
+{
+    const ComponentType* health = Assets().Components().RegisterRuntime("health", "Health", {
+        FieldInfo{ .Key = "max", .Label = "Max", .Type = FieldType::Int, .Default = int32_t{ 3 } },
+        FieldInfo{ .Key = "title", .Label = "Title", .Type = FieldType::String, .Default = std::string("Guard") },
+        FieldInfo{ .Key = "tint", .Label = "Tint", .Type = FieldType::Color, .Default = glm::vec3(1.0f) },
+        FieldInfo{ .Key = "weapon", .Label = "Weapon", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh },
+        FieldInfo{ .Key = "drops", .Label = "Drops", .Type = FieldType::AssetList, .Default = std::vector<AssetID>{ AssetID{} }, .Asset = AssetType::Material }
+    });
+    REQUIRE(health);
+
+    Scene& scene = Context().ActiveScene;
+    std::vector<Entity> entities;
+
+    for (const LightType type : { LightType::Directional, LightType::Point, LightType::Spot })
+    {
+        const Entity light = scene.CreateEntity("Light");
+        light.AddComponent<LightComponent>().Type = type;
+        entities.push_back(light);
+    }
+
+    const Entity guard = scene.CreateEntity("Guard");
+    health->Add(guard);
+    entities.push_back(guard);
+
+    SceneData withUnknown;
+    withUnknown.Roots.push_back(SceneNode{ .Name = "Door", .Components = { SceneComponent{ .Type = "lock", .Raw = R"({ "code": 1234 })" } } });
+    InstantiateScene(withUnknown, scene, {}, Assets(), {});
+    entities.push_back(scene.GetEntity(scene.GetRoots().back()));
+
+    for (const entt::entity root : scene.GetRoots())
+        entities.push_back(scene.GetEntity(root));
+
+    for (const Entity entity : entities)
+    {
+        CAPTURE(entity.GetComponent<NameComponent>().Name);
+        Context().SelectEntity(entity);
+        RunFrames(App, 2);
+    }
+
+    CHECK(health->Has(guard));
+}
+
 TEST_CASE_METHOD(AssetFixture, "A material's edits show and can be saved or reverted", "[editor]")
 {
     const MaterialID id = Assets().Find<AssetType::Material>("materials/floor.mat");

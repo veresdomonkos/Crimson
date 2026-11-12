@@ -9,6 +9,7 @@
 
 #include <crimson/scene/scene_renderer.hpp>
 
+#include "crimson_editor/ui/component_fields.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
@@ -33,23 +34,23 @@ namespace crimson::editor::ui
     };
 
     // What kind of entity it is, at a glance
-    static const char* EntityIcon(Entity entity)
+    static const char* EntityIcon(Entity entity, const ComponentRegistry& components)
     {
         if (entity.HasComponent<SceneInstanceComponent>())
             return kIconSceneInstance;
 
-        if (const auto* light = entity.TryGetComponent<LightComponent>())
+        // The first component with an icon, in the order they were registered, which puts a light before a mesh
+        for (const ComponentType& type : components.Types())
         {
-            switch (light->Type)
+            if (type.InlineInFile)
+                continue;
+
+            if (const void* component = type.Get(entity))
             {
-                case LightType::Directional: return kIconDirectionalLight;
-                case LightType::Point:       return kIconPointLight;
-                case LightType::Spot:        return kIconSpotLight;
+                if (const char* icon = ComponentIcon(type, component))
+                    return icon;
             }
         }
-
-        if (entity.HasComponent<MeshRendererComponent>())
-            return kIconMesh;
 
         return kIconEntity;
     }
@@ -233,8 +234,8 @@ namespace crimson::editor::ui
         ImGui::PushID(static_cast<int>(entt::to_integral(handle)));
         const bool renaming = handle == m_renaming;
         const bool open = renaming
-            ? ImGui::TreeNodeEx("##Entity", flags, "%s", EntityIcon(entity))
-            : ImGui::TreeNodeEx("##Entity", flags, isInstance ? "%s  %s [scene]" : "%s  %s", EntityIcon(entity), name.Name.c_str());
+            ? ImGui::TreeNodeEx("##Entity", flags, "%s", EntityIcon(entity, m_context.Assets.Components()))
+            : ImGui::TreeNodeEx("##Entity", flags, isInstance ? "%s  %s [scene]" : "%s  %s", EntityIcon(entity, m_context.Assets.Components()), name.Name.c_str());
 
         if (dimmed)
             ImGui::PopStyleColor();

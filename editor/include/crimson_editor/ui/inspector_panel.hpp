@@ -12,9 +12,13 @@ namespace crimson::editor::ui
         void OnImGui() override;
     private:
         void DrawHeader(Entity entity);
-        void DrawTransform(Entity entity);
-        void DrawLight(Entity entity);
-        void DrawMeshRenderer(Entity entity);
+
+        // Any registered component from its fields, except for the few that have a look of their own below
+        void DrawComponent(Entity entity, const ComponentType& type);
+        void DrawTransform(TransformComponent& transform);
+        void DrawMeshRenderer(MeshRendererComponent& renderer);
+
+        void DrawUnknownComponents(Entity entity);
         void DrawSceneInstance(Entity entity);
         void DrawAddComponent(Entity entity);
     private:
