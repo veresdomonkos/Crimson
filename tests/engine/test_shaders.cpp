@@ -289,6 +289,59 @@ float4 PSMain() : SV_Target
     CHECK(pixel->find(opengl::kDrawUniformName) != std::string::npos);
 }
 
+TEST_CASE("A shader whose depth version reads the time is told apart", "[shaders]")
+{
+    const auto reflect = [](std::string_view source)
+    {
+        const auto binary = CompileHlslShader("time.hlsl", "#include \"crimson/bindings.hlsli\"\n" + std::string(source), {});
+        REQUIRE(binary);
+
+        const auto shaderInterface = ReflectShaderInterface(*binary);
+        REQUIRE(shaderInterface);
+        return shaderInterface->DepthReadsTime;
+    };
+
+    SECTION("S_Lit doesn't")
+    {
+        const EmbeddedFile* lit = FindEmbeddedFile(GetEngineResources(), "shaders/S_Lit.hlsl");
+        REQUIRE(lit);
+        CHECK_FALSE(reflect(lit->Text()));
+    }
+
+    SECTION("VSMain moving the vertices over time")
+    {
+        CHECK(reflect(R"(
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position + sin(Time), 1.0); }
+float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+)"));
+    }
+
+    SECTION("PSDepth cutting out over time")
+    {
+        CHECK(reflect(R"(
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+void PSDepth(float4 position : SV_Position) { clip(sin(DeltaTime)); }
+)"));
+    }
+
+    SECTION("Only PSMain, which the shadows don't run")
+    {
+        CHECK_FALSE(reflect(R"(
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain() : SV_Target { return float4(sin(Time), 1.0, 1.0, 1.0); }
+)"));
+    }
+
+    SECTION("VSMain reading the frame block, but not the time")
+    {
+        CHECK_FALSE(reflect(R"(
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position * LightCount, 1.0); }
+float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+)"));
+    }
+}
+
 TEST_CASE("A shader with its material in space2, where it used to be, fails to import", "[shaders]")
 {
     constexpr std::string_view kShader = R"(

@@ -52,6 +52,10 @@ namespace crimson
         bool MaterialBlockInVertex = false;
         bool MaterialBlockInPixel = false;
 
+        // VSMain or PSDepth reads the frame's Time or DeltaTime, like a shader that sways in the wind. Its shadow can
+        // then change while nothing in the scene does, so it is drawn again every frame.
+        bool DepthReadsTime = false;
+
         std::unordered_map<std::string, ShaderPropertyInfo> Properties;
         std::unordered_map<std::string, ShaderMaterialTexture> Textures;
     };
