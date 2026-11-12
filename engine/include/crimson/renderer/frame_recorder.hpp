@@ -80,11 +80,19 @@ namespace crimson
         std::array<TextureHandle, kMaxPassReads> Reads{};
     };
 
+    // Part of a pass's target cleared at the start of the pass, after its own Clear
+    struct AreaClear
+    {
+        RenderRect Area;
+        ClearInfo Clear;
+    };
+
     // One pass of a recorded frame: draws, or a native callback in their place
     class PassRecord
     {
     public:
         [[nodiscard]] const PassInfo& GetInfo() const { return m_info; }
+        [[nodiscard]] std::span<const AreaClear> GetAreaClears() const { return m_clears; }
         [[nodiscard]] std::span<const DrawItem> GetDraws() const { return m_draws; }
 
         // Where the pass's own view is among the frame's views
@@ -99,6 +107,7 @@ namespace crimson
 
         PassInfo m_info;
         ViewId m_view = 0;
+        std::vector<AreaClear> m_clears;
         std::vector<DrawItem> m_draws;
         NativePassFn m_native;
     };
@@ -149,6 +158,13 @@ namespace crimson
     {
     public:
         PassBuilder(FramePacket& packet, uint32_t index) : m_packet(&packet), m_index(index) {}
+
+        // Clears part of the target before any of the pass's draws, clipped to the pass's area. Like a shadow tile that
+        // is drawn again while the rest of the atlas keeps what it had.
+        void ClearArea(const RenderRect& area, const ClearInfo& clear)
+        {
+            Record().m_clears.push_back({ area, clear });
+        }
 
         // A draw without a material is skipped, so a shader that failed to compile leaves the object out of the frame.
         // The recorded draw has the view it ends up with, the pass's in place of kPassView.
@@ -254,6 +270,7 @@ namespace crimson
             PassRecord& record = m_packet->m_passes[m_packet->m_passCount++];
             record.m_info = info;
             record.m_view = AddView(info.View);
+            record.m_clears.clear();
             record.m_draws.clear();
             record.m_native = nullptr;
             return record;

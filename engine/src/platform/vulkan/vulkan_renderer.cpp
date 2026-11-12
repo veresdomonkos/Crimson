@@ -304,6 +304,8 @@ namespace crimson::vulkan
         m_bound.DrawPushed = false;
 
         const RenderRect passArea = info.Viewport.value_or(RenderRect{ 0, 0, rt.Width, rt.Height });
+        ClearAreas(cmdBuffer, rt, pass.GetAreaClears(), passArea);
+
         const std::span<const DrawItem> draws = pass.GetDraws();
 
         BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
@@ -405,6 +407,46 @@ namespace crimson::vulkan
         cmdBuffer.beginRendering(rendering);
 
         SetViewportAndScissor(cmdBuffer, rect);
+    }
+
+    void VulkanRenderer::ClearAreas(const vk::raii::CommandBuffer& cmdBuffer, const VulkanRenderTarget& rt, std::span<const AreaClear> clears, const RenderRect& passArea)
+    {
+        for (const AreaClear& clear : clears)
+        {
+            const RenderRect area = Intersect(clear.Area, passArea);
+            if (IsEmpty(area))
+                continue;
+
+            m_clearAttachments.clear();
+
+            if (HasClearFlag(clear.Clear.Flags, ClearFlags::Color))
+            {
+                const glm::vec4& color = clear.Clear.Color;
+                for (uint32_t i = 0; i < rt.ColorAttachments.size(); ++i)
+                    m_clearAttachments.push_back({ vk::ImageAspectFlagBits::eColor, i, vk::ClearColorValue(color.r, color.g, color.b, color.a) });
+            }
+
+            if (rt.DepthAttachment)
+            {
+                // Only the aspects the image has, clearing a missing one is invalid
+                const vk::ImageAspectFlags aspects = m_resourceManager.GetTexture(rt.DepthAttachment).Aspect;
+                vk::ImageAspectFlags cleared{};
+
+                if (HasClearFlag(clear.Clear.Flags, ClearFlags::Depth) && (aspects & vk::ImageAspectFlagBits::eDepth))
+                    cleared |= vk::ImageAspectFlagBits::eDepth;
+                if (HasClearFlag(clear.Clear.Flags, ClearFlags::Stencil) && (aspects & vk::ImageAspectFlagBits::eStencil))
+                    cleared |= vk::ImageAspectFlagBits::eStencil;
+
+                if (cleared)
+                    m_clearAttachments.push_back({ cleared, 0, vk::ClearDepthStencilValue(clear.Clear.Depth, clear.Clear.Stencil) });
+            }
+
+            if (m_clearAttachments.empty())
+                continue;
+
+            const vk::ClearRect rect{ vk::Rect2D{ vk::Offset2D{ area.X, area.Y }, vk::Extent2D{ area.Width, area.Height } }, 0, 1 };
+            cmdBuffer.clearAttachments(m_clearAttachments, rect);
+        }
     }
 
     void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, std::span<const FrameView> views, const RenderRect& passArea)
