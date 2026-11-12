@@ -13,10 +13,7 @@
 #include <crimson/renderer/frame_recorder.hpp>
 #include <crimson/renderer/frame_validation.hpp>
 
-#include "support/log_counter.hpp"
-
 using namespace crimson;
-using crimson::tests::LogCounter;
 
 namespace
 {
@@ -288,42 +285,6 @@ TEST_CASE("Validation finds passes that sample what they shouldn't", "[frame]")
 
         FindPassProblems(packet.GetPasses(), targets, problems);
         CHECK(problems.empty());
-    }
-}
-
-TEST_CASE("A pass past the limit is dropped with one warning, and reads as an empty one", "[frame]")
-{
-    const LogCounter warnings(LogLevel::Warn, "passes in one frame");
-
-    FramePacket packet;
-    FrameRecorder frame(packet);
-
-    for (uint32_t i = 0; i < kMaxPassesPerFrame; ++i)
-        CHECK(frame.AddPass({}).IsValid());
-
-    PassBuilder dropped = frame.AddPass({ .Name = "Dropped" });
-    CHECK_FALSE(dropped.IsValid());
-
-    dropped.Draw(DrawItem{ .Material = kMaterial });
-    CHECK(dropped.GetDraws().empty());
-    CHECK(std::string_view(dropped.GetInfo().Name) == "Pass");
-
-    frame.AddNativePass({ .Name = "Dropped UI" }, [](const NativeContext&) {});
-
-    REQUIRE(packet.GetPasses().size() == kMaxPassesPerFrame);
-    CHECK_FALSE(packet.GetPasses().back().IsNative());
-    CHECK(warnings.Count() == 1);
-
-    SECTION("Not again on the next frame")
-    {
-        packet.Reset();
-        FrameRecorder next(packet);
-
-        for (uint32_t i = 0; i <= kMaxPassesPerFrame; ++i)
-            next.AddPass({});
-
-        CHECK(packet.GetPasses().size() == kMaxPassesPerFrame);
-        CHECK(warnings.Count() == 1);
     }
 }
 

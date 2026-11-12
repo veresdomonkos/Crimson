@@ -11,7 +11,6 @@
 
 #include <glm/glm.hpp>
 
-#include "crimson/core/log.hpp"
 #include "core.hpp"
 #include "frame_gpu_data.hpp"
 #include "mesh.hpp"
@@ -20,7 +19,6 @@
 
 namespace crimson
 {
-    constexpr uint32_t kMaxPassesPerFrame = 64;
     constexpr uint32_t kMaxFramesInFlight = 2;
     constexpr uint32_t kMaxPassReads = 4;
 
@@ -144,23 +142,19 @@ namespace crimson
         std::vector<GpuObject> m_objects;
         std::vector<FrameView> m_views;
         FrameLighting m_lighting;
-
-        // Recording runs every frame, so going over the pass limit is only said once. Reset leaves it set.
-        bool m_passLimitLogged = false;
     };
 
     // Adds draws to a pass. It refers to the pass by index, so it stays valid while more passes are added.
     class PassBuilder
     {
     public:
-        PassBuilder() = default;
         PassBuilder(FramePacket& packet, uint32_t index) : m_packet(&packet), m_index(index) {}
 
         // A draw without a material is skipped, so a shader that failed to compile leaves the object out of the frame.
         // The recorded draw has the view it ends up with, the pass's in place of kPassView.
         void Draw(const DrawItem& item)
         {
-            if (!m_packet || !item.Material)
+            if (!item.Material)
                 return;
 
             DrawItem& draw = Record().m_draws.emplace_back(item);
@@ -170,9 +164,6 @@ namespace crimson
         // One draw per submesh, each with its slot's material. They sort by the distance to the mesh's center.
         void DrawMesh(const Mesh& mesh, ObjectId object = 0, const DrawOptions& options = {})
         {
-            if (!m_packet)
-                return;
-
             assert(object < m_packet->m_objects.size() && "The object has to come from this frame's AddObject");
 
             const glm::vec3 localCenter = (mesh.Bounds.Min + mesh.Bounds.Max) * 0.5f;
@@ -187,13 +178,9 @@ namespace crimson
             }
         }
 
-        // False for a pass that was dropped, as the frame already had kMaxPassesPerFrame, which logs a warning
-        [[nodiscard]] bool IsValid() const { return m_packet != nullptr; }
-
-        [[nodiscard]] const PassInfo& GetInfo() const { return Read().m_info; }
-        [[nodiscard]] std::span<const DrawItem> GetDraws() const { return Read().m_draws; }
+        [[nodiscard]] const PassInfo& GetInfo() const { return Record().m_info; }
+        [[nodiscard]] std::span<const DrawItem> GetDraws() const { return Record().m_draws; }
     private:
-        // Only for a valid builder
         [[nodiscard]] PassRecord& Record() const { return m_packet->m_passes[m_index]; }
 
         [[nodiscard]] ViewId Resolve(ViewId view) const
@@ -205,15 +192,8 @@ namespace crimson
             return view;
         }
 
-        // A dropped pass reads as an empty one
-        [[nodiscard]] const PassRecord& Read() const
-        {
-            static const PassRecord dropped;
-            return m_packet ? Record() : dropped;
-        }
-
-        FramePacket* m_packet = nullptr;
-        uint32_t m_index = 0;
+        FramePacket* m_packet;
+        uint32_t m_index;
     };
 
     // Records a frame into a packet, from Renderer::BeginRecording to Renderer::Submit. Passes run in the order they are added.
@@ -234,15 +214,14 @@ namespace crimson
 
         PassBuilder AddPass(const PassInfo& info)
         {
-            PassRecord* record = NextRecord(info);
-            return record ? PassBuilder(*m_packet, m_packet->m_passCount - 1) : PassBuilder();
+            NextRecord(info);
+            return PassBuilder(*m_packet, m_packet->m_passCount - 1);
         }
 
         // The callback runs during Renderer::Submit, so it captures by value, or references what lives longer than a frame
         void AddNativePass(const PassInfo& info, NativePassFn fn)
         {
-            if (PassRecord* record = NextRecord(info))
-                record->m_native = std::move(fn);
+            NextRecord(info).m_native = std::move(fn);
         }
 
         // The id stays valid for this frame and can be drawn in any of its passes
@@ -267,18 +246,8 @@ namespace crimson
         [[nodiscard]] bool IsValid() const { return m_packet != nullptr; }
         [[nodiscard]] const FramePacket& GetPacket() const { return *m_packet; }
     private:
-        PassRecord* NextRecord(const PassInfo& info)
+        PassRecord& NextRecord(const PassInfo& info)
         {
-            // Not an assert, as a scene with enough shadowed lights could get here
-            if (m_packet->m_passCount >= kMaxPassesPerFrame)
-            {
-                if (!m_packet->m_passLimitLogged)
-                    LOG_WARN("[Frame] More than {} passes in one frame, the rest are dropped", kMaxPassesPerFrame);
-
-                m_packet->m_passLimitLogged = true;
-                return nullptr;
-            }
-
             if (m_packet->m_passCount == m_packet->m_passes.size())
                 m_packet->m_passes.emplace_back();
 
@@ -287,7 +256,7 @@ namespace crimson
             record.m_view = AddView(info.View);
             record.m_draws.clear();
             record.m_native = nullptr;
-            return &record;
+            return record;
         }
 
         FramePacket* m_packet;

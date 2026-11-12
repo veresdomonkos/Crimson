@@ -85,7 +85,6 @@ renderer.Submit(std::move(frame)); // false when the frame was dropped, like for
 ```
 
 - A pass is a `PassRecord`: its `PassInfo` and either draws or a native callback. Passes run in the order they are added.
-- A frame has at most `kMaxPassesPerFrame` (64) passes, far more than a frame is meant to need. A pass past that is dropped, and its `PassBuilder` reads as empty. The first time that happens it logs a warning.
 - `PassInfo` holds the pass's `Name` (shown in Tracy), its `Target` (the back buffer when empty), what to `Clear` it to, an optional `Viewport` to limit drawing and clearing to part of it, the `View` (camera) and the textures the pass samples in `Reads`.
 - A draw is a `DrawItem`: vertex buffer, index buffer, material, object, view and `ShaderVariant`. `PassBuilder::Draw` adds one, `DrawMesh(mesh, object, options)` one per submesh. A `PassBuilder` refers to its pass by index, so it stays valid while more passes are added.
 - The frame's views are a list like its objects. Every pass adds its `View` to it, and a draw uses that one unless it names another (`DrawItem::View`, `DrawOptions::View`) from `FrameRecorder::AddView(view, viewport)`. A view added with a viewport draws only to that part of the pass's target. That is how one pass draws many cameras, like the shadows. The pass's `Clear` is still for the pass's whole area.
