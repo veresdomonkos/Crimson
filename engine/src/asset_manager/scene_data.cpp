@@ -1,8 +1,11 @@
 #include "crimson/asset_manager/scene_data.hpp"
 
+#include <algorithm>
 #include <array>
 #include <charconv>
 #include <exception>
+#include <format>
+#include <stdexcept>
 
 #include <nlohmann/json.hpp>
 
@@ -16,6 +19,12 @@ namespace crimson
     static constexpr int kSceneVersion = 1;
 
     bool SceneNode::operator==(const SceneNode&) const = default;
+
+    const SceneComponent* SceneNode::FindComponent(std::string_view type) const
+    {
+        const auto found = std::ranges::find(Components, type, &SceneComponent::Type);
+        return found != Components.end() ? &*found : nullptr;
+    }
 
     namespace
     {
@@ -73,36 +82,20 @@ namespace crimson
             return { ShortNumber(value.x), ShortNumber(value.y), ShortNumber(value.z) };
         }
 
-        glm::vec3 ReadVec3(const nlohmann::json& j, const char* key, const glm::vec3& fallback)
+        glm::vec3 ReadVec3(const nlohmann::ordered_json& j)
+        {
+            return glm::vec3(j.at(0).get<float>(), j.at(1).get<float>(), j.at(2).get<float>());
+        }
+
+        glm::vec3 ReadVec3(const nlohmann::ordered_json& j, const char* key, const glm::vec3& fallback)
         {
             const auto it = j.find(key);
-            if (it == j.end())
-                return fallback;
-
-            return glm::vec3(it->at(0).get<float>(), it->at(1).get<float>(), it->at(2).get<float>());
-        }
-
-        std::string_view LightTypeName(LightType type)
-        {
-            switch (type)
-            {
-                case LightType::Directional: return "directional";
-                case LightType::Spot:        return "spot";
-                default:                     return "point";
-            }
-        }
-
-        LightType ParseLightType(const std::string& name, std::string_view file)
-        {
-            if (name == "directional") return LightType::Directional;
-            if (name == "spot")        return LightType::Spot;
-            if (name != "point")       LOG_WARN("[Scene] '{}': unknown light type '{}', using point", file, name);
-            return LightType::Point;
+            return it != j.end() ? ReadVec3(*it) : fallback;
         }
 
         // A missing asset is worth a warning only if the file named one
         template <AssetType T>
-        TypedAssetID<T> ReadRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view file)
+        AssetID ReadRef(const AssetManager& assets, const nlohmann::ordered_json& ref, std::string_view file)
         {
             const TypedAssetID<T> id = ResolveAssetRef<T>(assets, ref, file);
             if (!id && !ref.is_null())
@@ -111,7 +104,135 @@ namespace crimson
             return id;
         }
 
-        SceneNode ParseNode(const nlohmann::json& j, const AssetManager& assets, std::string_view file)
+        AssetID ReadRef(const AssetManager& assets, const nlohmann::ordered_json& ref, AssetType type, std::string_view file)
+        {
+            switch (type)
+            {
+                case AssetType::Texture:  return ReadRef<AssetType::Texture>(assets, ref, file);
+                case AssetType::Mesh:     return ReadRef<AssetType::Mesh>(assets, ref, file);
+                case AssetType::Shader:   return ReadRef<AssetType::Shader>(assets, ref, file);
+                case AssetType::Material: return ReadRef<AssetType::Material>(assets, ref, file);
+                case AssetType::Scene:    return ReadRef<AssetType::Scene>(assets, ref, file);
+                case AssetType::None:     break;
+            }
+
+            return AssetID{};
+        }
+
+        // A wrongly typed value throws, which makes the whole file fail to read, as for the node's own fields
+        FieldValue ReadValue(const FieldInfo& field, const nlohmann::ordered_json& j, const AssetManager& assets, std::string_view file)
+        {
+            switch (field.Type)
+            {
+                case FieldType::Bool:   return j.get<bool>();
+                case FieldType::Int:    return j.get<int32_t>();
+                case FieldType::Float:  return j.get<float>();
+                case FieldType::Vec3:
+                case FieldType::Color:  return ReadVec3(j);
+                case FieldType::String: return j.get<std::string>();
+                case FieldType::Asset:  return ReadRef(assets, j, field.Asset, file);
+                case FieldType::Enum:
+                {
+                    const std::string key = j.get<std::string>();
+                    const auto found = std::ranges::find(field.EnumKeys, key);
+                    if (found != field.EnumKeys.end())
+                        return static_cast<int32_t>(found - field.EnumKeys.begin());
+
+                    LOG_WARN("[Scene] '{}': unknown {} '{}', using the default", file, field.Key, key);
+                    return field.Default;
+                }
+                case FieldType::AssetList:
+                {
+                    std::vector<AssetID> ids;
+                    for (const nlohmann::ordered_json& ref : j)
+                        ids.push_back(ReadRef(assets, ref, field.Asset, file));
+                    return ids;
+                }
+            }
+
+            return field.Default;
+        }
+
+        nlohmann::ordered_json WriteValue(const FieldInfo& field, const FieldValue& value, const AssetManager& assets)
+        {
+            switch (field.Type)
+            {
+                case FieldType::Bool:   return std::get<bool>(value);
+                case FieldType::Int:    return std::get<int32_t>(value);
+                case FieldType::Float:  return ShortNumber(std::get<float>(value));
+                case FieldType::Vec3:
+                case FieldType::Color:  return WriteVec3(std::get<glm::vec3>(value));
+                case FieldType::String: return std::get<std::string>(value);
+                case FieldType::Asset:  return WriteAssetRef(assets, std::get<AssetID>(value));
+                case FieldType::Enum:
+                {
+                    const auto index = static_cast<size_t>(std::get<int32_t>(value));
+                    return index < field.EnumKeys.size() ? field.EnumKeys[index] : field.EnumKeys.at(static_cast<size_t>(std::get<int32_t>(field.Default)));
+                }
+                case FieldType::AssetList:
+                {
+                    nlohmann::ordered_json refs = nlohmann::ordered_json::array();
+                    for (const AssetID id : std::get<std::vector<AssetID>>(value))
+                        refs.push_back(WriteAssetRef(assets, id));
+                    return refs;
+                }
+            }
+
+            return nullptr;
+        }
+
+        // What a node has besides its components
+        bool IsNodeKey(std::string_view key)
+        {
+            constexpr std::array kNodeKeys = { "id", "name", "active", "position", "rotation", "scale", "instance", "children" };
+            return std::ranges::find(kNodeKeys, key) != kNodeKeys.end();
+        }
+
+        // A registered type whose fields aren't the node's own
+        const ComponentType* FindComponentType(const AssetManager& assets, std::string_view id)
+        {
+            const ComponentType* type = assets.Components().Find(id);
+            return type && !type->InlineInFile ? type : nullptr;
+        }
+
+        SceneComponent ReadSceneComponent(const std::string& id, const nlohmann::ordered_json& j, const AssetManager& assets, std::string_view file)
+        {
+            const ComponentType* type = FindComponentType(assets, id);
+            if (!type)
+                return SceneComponent{ .Type = id, .Raw = j.dump() };
+
+            if (!j.is_object())
+                throw std::runtime_error(std::format("'{}' isn't an object", id));
+
+            SceneComponent component{ .Type = id };
+
+            for (const FieldInfo& field : type->Fields)
+            {
+                const auto value = j.find(field.Key);
+                component.Values.push_back(value != j.end() ? ReadValue(field, *value, assets, file) : field.Default);
+            }
+
+            return component;
+        }
+
+        nlohmann::ordered_json WriteSceneComponent(const SceneComponent& component, const AssetManager& assets)
+        {
+            if (!component.Raw.empty())
+                return nlohmann::ordered_json::parse(component.Raw);
+
+            nlohmann::ordered_json j = nlohmann::ordered_json::object();
+
+            const ComponentType* type = FindComponentType(assets, component.Type);
+            if (!type)
+                return j;
+
+            for (size_t index = 0; index < std::min(type->Fields.size(), component.Values.size()); ++index)
+                j[type->Fields[index].Key] = WriteValue(type->Fields[index], component.Values[index], assets);
+
+            return j;
+        }
+
+        SceneNode ParseNode(const nlohmann::ordered_json& j, const AssetManager& assets, std::string_view file)
         {
             SceneNode node;
 
@@ -126,42 +247,19 @@ namespace crimson
             node.RotationDegrees = ReadVec3(j, "rotation", glm::vec3(0.0f));
             node.Scale = ReadVec3(j, "scale", glm::vec3(1.0f));
 
-            if (const auto light = j.find("light"); light != j.end())
+            // Everything else is a component, by its type's id
+            for (const auto& [key, value] : j.items())
             {
-                const LightComponent defaults;
-
-                node.Light = LightComponent{
-                    .Type = ParseLightType(light->value("type", std::string("point")), file),
-                    .Color = ReadVec3(*light, "color", defaults.Color),
-                    .Intensity = light->value("intensity", defaults.Intensity),
-                    .Range = light->value("range", defaults.Range),
-                    .InnerConeDegrees = light->value("innerCone", defaults.InnerConeDegrees),
-                    .OuterConeDegrees = light->value("outerCone", defaults.OuterConeDegrees),
-                    .CastsShadow = light->value("castsShadow", defaults.CastsShadow)
-                };
-            }
-
-            if (const auto renderer = j.find("meshRenderer"); renderer != j.end())
-            {
-                SceneMeshRenderer& mesh = node.MeshRenderer.emplace();
-                mesh.CastsShadows = renderer->value("castsShadows", true);
-
-                if (const auto ref = renderer->find("mesh"); ref != renderer->end())
-                    mesh.Mesh = ReadRef<AssetType::Mesh>(assets, *ref, file);
-
-                if (const auto materials = renderer->find("materials"); materials != renderer->end())
-                {
-                    for (const nlohmann::json& material : *materials)
-                        mesh.Materials.push_back(ReadRef<AssetType::Material>(assets, material, file));
-                }
+                if (!IsNodeKey(key))
+                    node.Components.push_back(ReadSceneComponent(key, value, assets, file));
             }
 
             if (const auto instance = j.find("instance"); instance != j.end())
-                node.Instance = ReadRef<AssetType::Scene>(assets, *instance, file);
+                node.Instance = assets.As<AssetType::Scene>(ReadRef<AssetType::Scene>(assets, *instance, file));
 
             if (const auto children = j.find("children"); children != j.end())
             {
-                for (const nlohmann::json& child : *children)
+                for (const nlohmann::ordered_json& child : *children)
                     node.Children.push_back(ParseNode(child, assets, file));
             }
 
@@ -179,32 +277,8 @@ namespace crimson
             j["rotation"] = WriteVec3(node.RotationDegrees);
             j["scale"] = WriteVec3(node.Scale);
 
-            if (node.Light)
-            {
-                j["light"] = {
-                    { "type", LightTypeName(node.Light->Type) },
-                    { "color", WriteVec3(node.Light->Color) },
-                    { "intensity", ShortNumber(node.Light->Intensity) },
-                    { "range", ShortNumber(node.Light->Range) },
-                    { "innerCone", ShortNumber(node.Light->InnerConeDegrees) },
-                    { "outerCone", ShortNumber(node.Light->OuterConeDegrees) },
-                    { "castsShadow", node.Light->CastsShadow }
-                };
-            }
-
-            if (node.MeshRenderer)
-            {
-                nlohmann::ordered_json materials = nlohmann::ordered_json::array();
-
-                for (const MaterialID material : node.MeshRenderer->Materials)
-                    materials.push_back(WriteAssetRef(assets, material));
-
-                j["meshRenderer"] = {
-                    { "mesh", WriteAssetRef(assets, node.MeshRenderer->Mesh) },
-                    { "materials", std::move(materials) },
-                    { "castsShadows", node.MeshRenderer->CastsShadows }
-                };
-            }
+            for (const SceneComponent& component : node.Components)
+                j[component.Type] = WriteSceneComponent(component, assets);
 
             if (node.Instance)
                 j["instance"] = WriteAssetRef(assets, node.Instance);
@@ -229,15 +303,28 @@ namespace crimson
 
             bool updated = false;
 
-            if (const auto renderer = node.find("meshRenderer"); renderer != node.end() && renderer->is_object())
+            // The asset fields of the components that are registered. Those of the others can't be told from other values.
+            for (auto& [key, component] : node.items())
             {
-                if (const auto mesh = renderer->find("mesh"); mesh != renderer->end())
-                    updated = UpdateAssetRef(*mesh, moved, assets);
+                const ComponentType* type = IsNodeKey(key) ? nullptr : FindComponentType(assets, key);
+                if (!type || !component.is_object())
+                    continue;
 
-                if (const auto materials = renderer->find("materials"); materials != renderer->end() && materials->is_array())
+                for (const FieldInfo& field : type->Fields)
                 {
-                    for (nlohmann::ordered_json& material : *materials)
-                        updated = UpdateAssetRef(material, moved, assets) || updated;
+                    const auto value = component.find(field.Key);
+                    if (value == component.end())
+                        continue;
+
+                    if (field.Type == FieldType::Asset)
+                    {
+                        updated = UpdateAssetRef(*value, moved, assets) || updated;
+                    }
+                    else if (field.Type == FieldType::AssetList && value->is_array())
+                    {
+                        for (nlohmann::ordered_json& ref : *value)
+                            updated = UpdateAssetRef(ref, moved, assets) || updated;
+                    }
                 }
             }
 
@@ -258,7 +345,7 @@ namespace crimson
     {
         try
         {
-            const nlohmann::json j = nlohmann::json::parse(text);
+            const nlohmann::ordered_json j = nlohmann::ordered_json::parse(text);
 
             const int version = j.value("version", kSceneVersion);
             if (version < 1 || version > kSceneVersion)
@@ -278,7 +365,7 @@ namespace crimson
 
             if (const auto entities = j.find("entities"); entities != j.end())
             {
-                for (const nlohmann::json& entity : *entities)
+                for (const nlohmann::ordered_json& entity : *entities)
                     data.Roots.push_back(ParseNode(entity, assets, name));
             }
 

@@ -18,11 +18,13 @@
 #include "asset_manager/engine_renames.hpp"
 
 #include "support/fake_gpu.hpp"
+#include "support/scene_fields.hpp"
 #include "support/log_counter.hpp"
 #include "support/temp_folder.hpp"
 
 using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
+using crimson::tests::FieldOf;
 using crimson::tests::LogCounter;
 using crimson::tests::TempFolder;
 
@@ -750,8 +752,8 @@ TEST_CASE("Engine assets saved under their old names still load", "[assets]")
 
         const auto data = ParseSceneData(text, assets, "test");
         REQUIRE(data);
-        CHECK(data->Roots.at(0).MeshRenderer->Mesh == cube);
-        CHECK(data->Roots.at(0).MeshRenderer->Materials.at(0) == assets.DefaultMaterial());
+        CHECK(FieldOf<AssetID>(assets, data->Roots.at(0), "meshRenderer", "mesh") == cube);
+        CHECK(FieldOf<std::vector<AssetID>>(assets, data->Roots.at(0), "meshRenderer", "materials").at(0) == assets.DefaultMaterial());
 
         const std::string written = WriteSceneData(*data, assets);
         CHECK_THAT(written, Catch::Matchers::ContainsSubstring("engine/meshes/SM_Cube.obj"));

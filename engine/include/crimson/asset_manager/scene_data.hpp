@@ -8,7 +8,7 @@
 #include <glm/glm.hpp>
 
 #include "crimson/asset_manager/asset_id.hpp"
-#include "crimson/scene/components.hpp"
+#include "crimson/scene/component_registry.hpp"
 #include "crimson/scene/tone_mapper.hpp"
 
 namespace crimson
@@ -25,15 +25,6 @@ namespace crimson
         bool operator==(const SceneEnvironment&) const = default;
     };
 
-    struct SceneMeshRenderer
-    {
-        MeshID Mesh;
-        std::vector<MaterialID> Materials; // an empty slot fills itself when the scene is loaded
-        bool CastsShadows = true;
-
-        bool operator==(const SceneMeshRenderer&) const = default;
-    };
-
     // One entity. An instance only has what can differ between instances, the rest comes from its scene when it is loaded.
     struct SceneNode
     {
@@ -44,10 +35,12 @@ namespace crimson
         glm::vec3 RotationDegrees{0.0f};
         glm::vec3 Scale{1.0f};
 
-        std::optional<LightComponent> Light;
-        std::optional<SceneMeshRenderer> MeshRenderer;
+        // In the order the file has them, each under its type's id. One whose type isn't registered is kept as it was.
+        std::vector<SceneComponent> Components;
         SceneID Instance;
         std::vector<SceneNode> Children;
+
+        [[nodiscard]] const SceneComponent* FindComponent(std::string_view type) const;
 
         bool operator==(const SceneNode&) const;
     };

@@ -198,10 +198,16 @@ namespace crimson::editor
         {
             missing += assets.IsMissing(node.Instance);
 
-            if (node.MeshRenderer)
+            // Whatever component they are in
+            for (const SceneComponent& component : node.Components)
             {
-                missing += assets.IsMissing(node.MeshRenderer->Mesh);
-                missing += std::ranges::count_if(node.MeshRenderer->Materials, [&](MaterialID material) { return assets.IsMissing(material); });
+                for (const FieldValue& value : component.Values)
+                {
+                    if (const AssetID* id = std::get_if<AssetID>(&value))
+                        missing += assets.IsMissing(*id);
+                    else if (const auto* ids = std::get_if<std::vector<AssetID>>(&value))
+                        missing += std::ranges::count_if(*ids, [&](AssetID id) { return assets.IsMissing(id); });
+                }
             }
 
             missing += CountMissing(node.Children, assets);
