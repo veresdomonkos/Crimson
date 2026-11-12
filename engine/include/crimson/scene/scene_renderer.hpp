@@ -21,13 +21,6 @@ namespace crimson
     // Empty slots get the material made for them (AssetManager::FindSlotMaterial), or else the default one.
     void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets);
 
-    // How many shadow views the last Record drew, and how many it kept from the frames before
-    struct ShadowStats
-    {
-        uint32_t Drawn = 0;
-        uint32_t Kept = 0;
-    };
-
     // Turns a scene into the frame's lighting data and render passes
     class SceneRenderer
     {

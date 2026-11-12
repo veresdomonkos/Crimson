@@ -32,6 +32,8 @@ namespace crimson::editor::ui
         ImGui::Text("Triangles: %llu", static_cast<unsigned long long>(m_stats.Render.Triangles));
         ImGui::Text("Passes: %u", m_stats.Render.Passes);
         ImGui::SetItemTooltip("Includes the editor UI pass. All other stats here exclude the UI");
+        ImGui::Text("Shadow views: %u drawn, %u kept", m_stats.Shadows.Drawn, m_stats.Shadows.Kept);
+        ImGui::SetItemTooltip("A shadow view is kept from the last frame while nothing it sees changed");
 
         ImGui::Separator();
         ImGui::Text("Pipeline binds: %u", m_stats.Render.PipelineBinds);

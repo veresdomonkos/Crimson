@@ -16,6 +16,13 @@ namespace crimson
         double WaitSeconds = 0.0; // blocked on fences, image acquire, present or swap
     };
 
+    // How many shadow views SceneRenderer's last Record drew, and how many it kept from the frames before
+    struct ShadowStats
+    {
+        uint32_t Drawn = 0;
+        uint32_t Kept = 0;
+    };
+
     class ScopedWaitTimer
     {
     public:
