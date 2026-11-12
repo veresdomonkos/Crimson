@@ -95,6 +95,34 @@ TEST_CASE("Building again starts over", "[shadows]")
     CHECK(lights[0].ShadowIndex == -1);
 }
 
+TEST_CASE("A shadow view looks from its light", "[shadows]")
+{
+    const ShadowAtlasSettings settings;
+
+    Light point = MakeLight(LightType::Point);
+    point.Position = glm::vec3(1.0f, 2.0f, 3.0f);
+
+    Light spot = MakeLight(LightType::Spot);
+    spot.Position = glm::vec3(-4.0f, 5.0f, 6.0f);
+
+    Light directional = MakeLight(LightType::Directional);
+    directional.Direction = glm::vec3(0.0f, 0.0f, -1.0f);
+
+    std::vector<Light> lights = { point, spot, directional };
+    std::vector<ShadowView> views;
+    BuildShadowViews(lights, settings, views);
+
+    REQUIRE(views.size() == 6 + 1 + 1);
+
+    for (uint32_t i = 0; i < 6; ++i)
+        CHECK(views[i].Eye == point.Position);
+
+    CHECK(views[6].Eye == spot.Position);
+
+    // A directional light has no position, it looks at the shadowed area from far back along its direction
+    CHECK(views[7].Eye == settings.DirectionalCenter + glm::vec3(0.0f, 0.0f, 1.0f) * settings.DirectionalDistance);
+}
+
 TEST_CASE("A light looking straight down still gets a usable view", "[shadows]")
 {
     Light light = MakeLight(LightType::Directional);

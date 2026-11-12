@@ -52,6 +52,9 @@ namespace crimson
     {
         GpuShadow Shadow;
         RenderRect Viewport;
+
+        // Where the light looks from, the camera of the shadow pass's draws for this view
+        glm::vec3 Eye{0.0f};
     };
 
     struct FrameLighting

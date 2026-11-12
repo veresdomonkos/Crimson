@@ -72,7 +72,7 @@ PassBuilder shadows = frame.AddPass({ .Name = "Shadows", .Target = shadowTarget,
 
 for (const ShadowView& shadow : frame.Lighting().Shadows)
 {
-    ViewId view = frame.AddView({ .ViewProj = shadow.Shadow.ViewProj }, shadow.Viewport);
+    ViewId view = frame.AddView({ .ViewProj = shadow.Shadow.ViewProj, .CameraPosition = shadow.Eye }, shadow.Viewport);
     shadows.DrawMesh(mesh, object, { .Variant = ShaderVariant::Depth, .View = view });
 }
 

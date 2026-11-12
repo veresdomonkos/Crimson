@@ -228,7 +228,7 @@ namespace crimson
 
         for (const ShadowView& shadow : frame.Lighting().Shadows)
         {
-            const ViewId view = frame.AddView({ .ViewProj = shadow.Shadow.ViewProj }, shadow.Viewport);
+            const ViewId view = frame.AddView({ .ViewProj = shadow.Shadow.ViewProj, .CameraPosition = shadow.Eye }, shadow.Viewport);
 
             for (const Drawable& drawable : m_drawables)
             {
