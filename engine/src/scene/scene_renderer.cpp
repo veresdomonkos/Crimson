@@ -47,6 +47,11 @@ namespace crimson
         m_shadowAtlas = resources.GetDepthAttachment(m_shadowTarget).value();
 
         renderer.SetShadowAtlas(m_shadowAtlas);
+
+        const uint32_t tilesPerRow = atlas.AtlasSize / atlas.TileSize;
+        const uint32_t tileCount = tilesPerRow * tilesPerRow;
+        if (tileCount > kMaxShadowViews)
+            LOG_WARN("[Shadows] The atlas has {} tiles, but a frame only has room for {} shadow views", tileCount, kMaxShadowViews);
     }
 
     SceneRenderer::~SceneRenderer()
@@ -141,11 +146,11 @@ namespace crimson
             });
         }
 
-        const uint32_t skipped = BuildShadowViews(lighting.Lights, m_atlas, lighting.Shadows);
+        const uint32_t skipped = BuildShadowViews(lighting.Lights, m_atlas, lighting.Shadows, kMaxShadowViews);
 
         // This runs every frame, so only say it when it starts happening
         if (skipped > 0 && !m_atlasFullLogged)
-            LOG_WARN("[Shadows] The atlas is full, {} lights will not cast shadows", skipped);
+            LOG_WARN("[Shadows] No room for more shadows, {} lights will not cast them", skipped);
 
         m_atlasFullLogged = skipped > 0;
     }

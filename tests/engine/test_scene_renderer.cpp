@@ -7,10 +7,12 @@
 #include <crimson/scene/scene_renderer.hpp>
 
 #include "support/fake_gpu.hpp"
+#include "support/log_counter.hpp"
 
 using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::FakeRenderer;
+using crimson::tests::LogCounter;
 using Catch::Approx;
 
 namespace
@@ -39,9 +41,11 @@ namespace
 
     struct Fixture
     {
+        explicit Fixture(ShadowAtlasSettings atlas = {}) : Subject(Gpu, Renderer, atlas) {}
+
         FakeGpuResourceManager Gpu;
         FakeRenderer Renderer;
-        SceneRenderer Subject{ Gpu, Renderer };
+        SceneRenderer Subject;
         Scene World;
         FrameLighting Lighting;
         PassInfo MainPass{ .Target = RenderTargetHandle{ 50, 1 } };
@@ -182,6 +186,51 @@ TEST_CASE("There is one pass per shadow view, then the main pass", "[scene rende
     CHECK(main.GetDraws()[0].Material == kMeshMaterial);
     CHECK(main.GetDraws()[1].Material == kMeshMaterial);
     CHECK(main.GetDraws()[0].Variant == ShaderVariant::Main);
+}
+
+TEST_CASE("An atlas with more tiles than a frame has passes keeps the main passes", "[scene renderer]")
+{
+    constexpr MaterialHandle kToneMapMaterial{ 104, 1 };
+
+    // 256 tiles, more than the frame could draw
+    const LogCounter tooBig(LogLevel::Warn, "only has room for");
+    Fixture fixture(ShadowAtlasSettings{ .AtlasSize = 8192, .TileSize = 512 });
+    CHECK(tooBig.Count() == 1);
+
+    fixture.Subject.SetToneMapMaterial(kToneMapMaterial, 64, 64);
+    fixture.Subject.SetOutlineMaterial(kOutlineMaterial, 64, 64);
+
+    // 120 views
+    constexpr uint32_t kLights = 20;
+    for (uint32_t i = 0; i < kLights; ++i)
+        AddLight(fixture.World, LightType::Point, true);
+
+    const Entity entity = AddMesh(fixture.World, "Mesh");
+
+    const LogCounter noRoom(LogLevel::Warn, "No room for more shadows");
+    const std::vector<const PassRecord*> passes = fixture.Record(entity);
+    fixture.Record(entity);
+
+    // Whole point lights only, six views each
+    constexpr uint32_t kShadowed = SceneRenderer::kMaxShadowViews / 6;
+    REQUIRE(fixture.Lighting.Shadows.size() == kShadowed * 6);
+
+    for (uint32_t i = 0; i < kLights; ++i)
+    {
+        CAPTURE(i);
+        CHECK((fixture.Lighting.Lights[i].ShadowIndex >= 0) == (i < kShadowed));
+    }
+
+    REQUIRE(passes.size() == kShadowed * 6 + 4);
+
+    const auto nameOf = [&](size_t fromEnd) { return std::string_view(passes[passes.size() - fromEnd]->GetInfo().Name); };
+    CHECK(nameOf(4) == "Outline Mask");
+    CHECK(nameOf(3) == "Scene");
+    CHECK(nameOf(2) == "Tone Mapping");
+    CHECK(nameOf(1) == "Outline");
+
+    // Said when it starts, not on every frame
+    CHECK(noRoom.Count() == 1);
 }
 
 TEST_CASE("Only active, loaded meshes are drawn", "[scene renderer]")
