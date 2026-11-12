@@ -29,13 +29,14 @@ One branch per issue, made from the issue so GitHub links the two:
 gh issue develop <number> --name feature/<short-name> --base main --checkout
 ```
 
-The prefix says what kind of change it is: `feature/`, `fix/`, `chore/` or `docs/`.
+The prefix says what kind of change it is: `feature/`, `fix/`, `refactor/`, `chore/` or `docs/`. The name after it is lowercase, with hyphens between words. Nothing is committed on `main` directly.
 
 ## Commits
 
-- **Subject:** lowercase, in the present tense, saying what the change does. For example, "keep a locked cursor where it was locked" or "cache the downloaded packages of the Linux CI jobs".
+- **Subject:** lowercase, in the present tense, saying what the change does. For example, "keep a locked cursor where it was locked" or "cache the downloaded packages of the Linux CI jobs". At most 100 characters, with no period at the end.
 - **Body:** why the change was needed, and anything that isn't obvious from the code. The last commit of an issue ends with `Fixes #<number>`.
 - **Size:** a commit should build on its own. A larger issue can be a few commits, one for each step.
+- **Checked:** the [git hooks](docs/development.md#git-hooks), which CMake turns on, refuse a commit with a wrong branch name, a subject that's too long or ends with a period, or wrong whitespace. CI checks the same on each pull request.
 
 ## Pull requests
 
@@ -43,7 +44,7 @@ The prefix says what kind of change it is: `feature/`, `fix/`, `chore/` or `docs
   - what changed and why
   - what was checked, and what was left to CI
   - `Fixes #<number>`
-- **CI:** it has to pass on all four jobs: Windows, Linux GCC, Linux with AddressSanitizer, and the Linux package.
+- **CI:** it has to pass on all five jobs: the conventions check, Windows, Linux GCC, Linux with AddressSanitizer, and the Linux package.
 - **Merging:** with a merge commit. Squash instead when the branch's history shouldn't land on `main`, for example when an early commit added files a later one moved to Git LFS.
 
 ## Code

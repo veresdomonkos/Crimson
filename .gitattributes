@@ -1,3 +1,21 @@
+# The repository keeps LF, whatever each machine's core.autocrlf is
+* text=auto
+
+# Git runs the hooks with sh, which fails on the CR after a CRLF shebang
+*.sh text eol=lf
+.githooks/* text eol=lf
+
+# What `git diff --check`, and with it the pre-commit hook, refuses in added lines. Other text files get the
+# default, trailing whitespace and CR.
+*.cpp whitespace=trailing-space,space-before-tab,tab-in-indent
+*.hpp whitespace=trailing-space,space-before-tab,tab-in-indent
+*.h whitespace=trailing-space,space-before-tab,tab-in-indent
+*.c whitespace=trailing-space,space-before-tab,tab-in-indent
+*.hlsl whitespace=trailing-space,space-before-tab,tab-in-indent
+*.hlsli whitespace=trailing-space,space-before-tab,tab-in-indent
+*.cmake whitespace=trailing-space,space-before-tab,tab-in-indent
+CMakeLists.txt whitespace=trailing-space,space-before-tab,tab-in-indent
+
 *.ttf filter=lfs diff=lfs merge=lfs -text
 *.otf filter=lfs diff=lfs merge=lfs -text
 *.obj filter=lfs diff=lfs merge=lfs -text

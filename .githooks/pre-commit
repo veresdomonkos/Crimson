@@ -1,0 +1,16 @@
+#!/bin/sh
+# Refuses a commit on main or on a branch named outside the conventions, and staged lines that break the
+# whitespace rules. The rules are in tools/check_conventions.sh.
+
+script="$(git rev-parse --show-toplevel)/tools/check_conventions.sh"
+status=0
+
+# Empty with a detached HEAD, like during a rebase, which replays commits that were checked when they were made
+branch=$(git symbolic-ref -q --short HEAD)
+if [ -n "$branch" ]; then
+    sh "$script" branch "$branch" || status=1
+fi
+
+sh "$script" files --cached || status=1
+
+exit $status

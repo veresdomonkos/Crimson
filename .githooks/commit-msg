@@ -1,0 +1,4 @@
+#!/bin/sh
+# Refuses a commit message outside the conventions. The rules are in tools/check_conventions.sh.
+
+exec sh "$(git rev-parse --show-toplevel)/tools/check_conventions.sh" message "$1"
