@@ -18,10 +18,12 @@
 #include "asset_manager/engine_renames.hpp"
 
 #include "support/fake_gpu.hpp"
+#include "support/log_counter.hpp"
 #include "support/temp_folder.hpp"
 
 using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
+using crimson::tests::LogCounter;
 using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
@@ -43,31 +45,6 @@ namespace
         };
         return std::string(reinterpret_cast<const char*>(kBytes.data()), kBytes.size());
     }
-
-    // Counts logged errors that mention a text, to tell apart "failed once" from "fails on every request"
-    class ErrorCounter
-    {
-    public:
-        explicit ErrorCounter(std::string text)
-            : m_text(std::move(text))
-        {
-            m_id = Logger::Subscribe([this](LogLevel level, const std::string& message)
-            {
-                if (m_started && level == LogLevel::Error && message.find(m_text) != std::string::npos)
-                    ++m_count;
-            });
-            m_started = true;
-        }
-
-        ~ErrorCounter() { Logger::Unsubscribe(m_id); }
-
-        [[nodiscard]] int Count() const { return m_count; }
-    private:
-        std::string m_text;
-        uint64_t m_id = 0;
-        bool m_started = false;
-        int m_count = 0;
-    };
 }
 
 TEST_CASE("Scanning finds a folder's assets and skips the rest", "[assets]")
@@ -368,7 +345,7 @@ TEST_CASE("A failed load is logged once and not tried again", "[assets]")
 
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
-    const ErrorCounter errors("Compilation failed");
+    const LogCounter errors(LogLevel::Error, "Compilation failed");
 
     for (int i = 0; i < 3; ++i)
     {
