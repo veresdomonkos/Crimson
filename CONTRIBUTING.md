@@ -36,7 +36,7 @@ The prefix says what kind of change it is: `feature/`, `fix/`, `refactor/`, `cho
 - **Subject:** lowercase, in the present tense, saying what the change does. For example, "keep a locked cursor where it was locked" or "cache the downloaded packages of the Linux CI jobs". At most 100 characters, with no period at the end.
 - **Body:** why the change was needed, and anything that isn't obvious from the code. The last commit of an issue ends with `Fixes #<number>`.
 - **Size:** a commit should build on its own. A larger issue can be a few commits, one for each step.
-- **Checked:** the [git hooks](docs/development.md#git-hooks), which CMake turns on, refuse a commit with a wrong branch name, subject or whitespace. CI checks the same on each pull request.
+- **Checked:** the [git hooks](docs/development.md#git-hooks), which CMake turns on, refuse a commit with a wrong branch name, a subject that's too long or ends with a period, or wrong whitespace. CI checks the same on each pull request.
 
 ## Pull requests
 

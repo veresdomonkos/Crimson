@@ -40,7 +40,7 @@ cmake --build build --target Editor
 Configuring CMake sets `core.hooksPath` to [`.githooks`](../.githooks), unless the checkout already has hooks of its own set. Without CMake, `git config core.hooksPath .githooks` does the same. The hooks refuse a commit that breaks the [conventions](../CONTRIBUTING.md):
 
 - **pre-commit:** a commit on `main`, a branch named outside them, and staged lines with trailing whitespace, a CR or tab indentation (in C++, HLSL and CMake files, set in [`.gitattributes`](../.gitattributes)). It also refuses a changed source or text file that doesn't end with a newline. Only the lines and files a commit changes are checked, so older code is left alone until it is edited.
-- **commit-msg:** a subject that doesn't start in lowercase, ends with a period or is over 100 characters, and a body without a blank line before it.
+- **commit-msg:** an empty subject, one that ends with a period or is over 100 characters, and a body without a blank line before it.
 
 The rules are in [`tools/check_conventions.sh`](../tools/check_conventions.sh), which the `conventions` CI job runs too, so `--no-verify` only moves the failure to the pull request. It can also run by hand:
 

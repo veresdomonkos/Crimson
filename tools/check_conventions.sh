@@ -57,11 +57,6 @@ check_message()
     fi
 
     case $subject in
-        [abcdefghijklmnopqrstuvwxyz0123456789\`]*) ;;
-        *) fail "$what: the subject has to start in lowercase, like \"keep a locked cursor where it was locked\": $subject" ;;
-    esac
-
-    case $subject in
         *.) fail "$what: the subject can't end with a period: $subject" ;;
     esac
 
