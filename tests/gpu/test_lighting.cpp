@@ -290,6 +290,51 @@ TEST_CASE_METHOD(ShadowFixture, "A mesh casts a shadow from a directional light"
     }
 }
 
+TEST_CASE_METHOD(ShadowFixture, "A shadow tile kept from the last frame still casts its shadow", "[lighting]")
+{
+    Lighting.AmbientColor = glm::vec3(0.1f);
+
+    AddLight({ .Type = LightType::Directional, .CastsShadow = true }, glm::vec3(0.0f), glm::vec3(1.0f, -1.0f, 0.0f));
+
+    const auto shadowed = [this]
+    {
+        const Image image = Render();
+        const float shadow = LinearBrightness(PixelAt(image, kInShadow));
+        const float light = LinearBrightness(PixelAt(image, kInLight));
+
+        CAPTURE(shadow, light);
+        return shadow < light / 2;
+    };
+
+    CHECK(shadowed());
+
+    SECTION("Nothing moved")
+    {
+        CHECK(shadowed());
+        CHECK(Subject->GetShadowStats().Kept == 1);
+        CHECK(Subject->GetShadowStats().Drawn == 0);
+    }
+
+    SECTION("The caster stopped casting, so its tile is cleared")
+    {
+        Roof.GetComponent<MeshRendererComponent>().CastsShadows = false;
+        CHECK_FALSE(shadowed());
+    }
+
+    SECTION("Another light's tile drawn again leaves this one as it was")
+    {
+        // Far to the side, dark, and out of the directional light's view
+        AddLight({ .Type = LightType::Spot, .Intensity = 0.0f, .Range = 3.0f, .CastsShadow = true }, glm::vec3(20.0f, 2.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+        const Entity stone = AddMesh("floor.obj", glm::vec3(20.0f, 0.5f, 0.0f), glm::vec3(0.2f));
+        CHECK(shadowed());
+
+        stone.GetComponent<TransformComponent>().Position.z = 0.3f;
+        CHECK(shadowed());
+        CHECK(Subject->GetShadowStats().Drawn == 1);
+        CHECK(Subject->GetShadowStats().Kept == 1);
+    }
+}
+
 TEST_CASE_METHOD(ShadowFixture, "A light that doesn't cast shadows goes through meshes", "[lighting]")
 {
     AddLight({ .Type = LightType::Directional, .CastsShadow = false }, glm::vec3(0.0f), glm::vec3(1.0f, -1.0f, 0.0f));

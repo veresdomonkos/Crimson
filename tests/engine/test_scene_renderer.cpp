@@ -1,10 +1,15 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <span>
 #include <string_view>
 #include <vector>
 
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <crimson/renderer/bounds.hpp>
 #include <crimson/scene/scene_renderer.hpp>
 
 #include "support/fake_gpu.hpp"
@@ -30,6 +35,7 @@ namespace
         renderer.Resolved.IndexBuffer = IndexBufferHandle{ 1, 1 };
         renderer.Resolved.Materials = { kMeshMaterial };
         renderer.Resolved.SubMeshes.push_back({ .IndexCount = 3 });
+        renderer.Resolved.Bounds = { glm::vec3(-0.5f), glm::vec3(0.5f) };
         return entity;
     }
 
@@ -38,6 +44,17 @@ namespace
         const Entity entity = scene.CreateEntity("Light");
         entity.AddComponent<LightComponent>(LightComponent{ .Type = type, .CastsShadow = castsShadow });
         return entity;
+    }
+
+    void MoveTo(Entity entity, const glm::vec3& position)
+    {
+        entity.GetComponent<TransformComponent>().Position = position;
+    }
+
+    const PassRecord* FindPass(const std::vector<const PassRecord*>& passes, std::string_view name)
+    {
+        const auto found = std::ranges::find_if(passes, [name](const PassRecord* pass) { return pass->GetInfo().Name == name; });
+        return found != passes.end() ? *found : nullptr;
     }
 
     struct Fixture
@@ -173,20 +190,27 @@ TEST_CASE("One pass draws every shadow view, then comes the main pass", "[scene 
     REQUIRE(passes.size() == 2);
     REQUIRE(fixture.Lighting.Shadows.size() == 1 + 6);
 
-    // The pass clears the whole atlas, its views keep to their tiles
+    // Each view clears its own tile and keeps to it, the rest of the atlas is left as it was
     const PassRecord& shadows = *passes[0];
     CHECK(std::string_view(shadows.GetInfo().Name) == "Shadows");
     CHECK_FALSE(shadows.GetInfo().Viewport);
-    CHECK(HasClearFlag(shadows.GetInfo().Clear.Flags, ClearFlags::Depth));
+    CHECK(shadows.GetInfo().Clear.Flags == ClearFlags::None);
 
     // The caster once in every view, in the order of the views
     REQUIRE(shadows.GetDraws().size() == fixture.Lighting.Shadows.size());
+    REQUIRE(shadows.GetAreaClears().size() == fixture.Lighting.Shadows.size());
 
     for (size_t i = 0; i < shadows.GetDraws().size(); ++i)
     {
         CAPTURE(i);
         const DrawItem& draw = shadows.GetDraws()[i];
         const ShadowView& shadow = fixture.Lighting.Shadows[i];
+
+        const AreaClear& clear = shadows.GetAreaClears()[i];
+        CHECK(clear.Clear.Flags == ClearFlags::Depth);
+        CHECK(clear.Area.X == shadow.Viewport.X);
+        CHECK(clear.Area.Y == shadow.Viewport.Y);
+        CHECK(clear.Area.Width == shadow.Viewport.Width);
 
         // The caster's own material, in its depth version, so its shader decides its shape in the shadow too
         CHECK(draw.Material == kMeshMaterial);
@@ -291,6 +315,217 @@ TEST_CASE("64 point lights are all shadowed in an atlas with room for them", "[s
         CHECK(light.ShadowIndex >= 0);
 
     CHECK(warnings.Count() == 0);
+}
+
+TEST_CASE("A shadow tile is only drawn again when something it sees changed", "[scene renderer]")
+{
+    Fixture fixture;
+
+    // A point light's views go +X -X +Y -Y +Z -Z. The caster is only in the +X one.
+    const Entity light = AddLight(fixture.World, LightType::Point, true);
+    const Entity caster = AddMesh(fixture.World, "Caster");
+    MoveTo(caster, glm::vec3(3.0f, 0.0f, 0.0f));
+
+    // Every tile is new on the first frame
+    const PassRecord* first = FindPass(fixture.Record(), "Shadows");
+    REQUIRE(first);
+    CHECK(first->GetAreaClears().size() == 6);
+    CHECK(fixture.Subject.GetShadowStats().Drawn == 6);
+    CHECK(fixture.Subject.GetShadowStats().Kept == 0);
+
+    const auto redrawn = [&fixture]
+    {
+        const std::vector<const PassRecord*> passes = fixture.Record();
+        const PassRecord* shadows = FindPass(passes, "Shadows");
+        const ShadowStats stats = fixture.Subject.GetShadowStats();
+
+        CHECK(stats.Drawn + stats.Kept == 6);
+        CHECK((shadows != nullptr) == (stats.Drawn > 0));
+        if (shadows)
+            CHECK(shadows->GetAreaClears().size() == stats.Drawn);
+
+        return stats.Drawn;
+    };
+
+    SECTION("Nothing changed, so there is no shadow pass")
+    {
+        CHECK(redrawn() == 0);
+        CHECK(redrawn() == 0);
+    }
+
+    SECTION("A caster that moves within its tile")
+    {
+        MoveTo(caster, glm::vec3(3.0f, 0.2f, 0.0f));
+        CHECK(redrawn() == 1);
+        CHECK(redrawn() == 0);
+    }
+
+    SECTION("A caster that moves to another tile redraws the one it left too")
+    {
+        MoveTo(caster, glm::vec3(0.0f, 0.0f, 3.0f));
+        CHECK(redrawn() == 2);
+    }
+
+    SECTION("A caster that is deleted")
+    {
+        fixture.World.DestroyEntity(caster);
+        CHECK(redrawn() == 1);
+    }
+
+    SECTION("A caster that is turned off")
+    {
+        caster.GetComponent<NameComponent>().Active = false;
+        CHECK(redrawn() == 1);
+    }
+
+    SECTION("A caster that stops casting")
+    {
+        caster.GetComponent<MeshRendererComponent>().CastsShadows = false;
+        CHECK(redrawn() == 1);
+    }
+
+    SECTION("A caster that is added")
+    {
+        MoveTo(AddMesh(fixture.World, "Another"), glm::vec3(-3.0f, 0.0f, 0.0f));
+        CHECK(redrawn() == 1);
+    }
+
+    SECTION("A non-caster that is added")
+    {
+        MoveTo(AddMesh(fixture.World, "Another", {}, false), glm::vec3(-3.0f, 0.0f, 0.0f));
+        CHECK(redrawn() == 0);
+    }
+
+    SECTION("A caster with another material")
+    {
+        caster.GetComponent<MeshRendererComponent>().Resolved.Materials = { kOutlineMaterial };
+        CHECK(redrawn() == 1);
+    }
+
+    SECTION("A caster with another mesh")
+    {
+        caster.GetComponent<MeshRendererComponent>().Resolved.VertexBuffer = VertexBufferHandle{ 2, 1 };
+        CHECK(redrawn() == 1);
+    }
+
+    SECTION("Any material edited, as it may be the caster's")
+    {
+        fixture.Gpu.SetMaterialPropertyByName(kMeshMaterial, "AlphaCutoff", 0.5f);
+        CHECK(redrawn() == 6);
+    }
+
+    SECTION("The light moved")
+    {
+        MoveTo(light, glm::vec3(0.0f, 1.0f, 0.0f));
+        CHECK(redrawn() == 6);
+    }
+
+    SECTION("The light's range changed")
+    {
+        light.GetComponent<LightComponent>().Range *= 2.0f;
+        CHECK(redrawn() == 6);
+    }
+
+    SECTION("Not for the light's color and intensity, which its shadow doesn't depend on")
+    {
+        light.GetComponent<LightComponent>().Color = glm::vec3(1.0f, 0.0f, 0.0f);
+        light.GetComponent<LightComponent>().Intensity *= 2.0f;
+        CHECK(redrawn() == 0);
+    }
+
+    SECTION("A dropped frame never reached the atlas, so the next one draws everything")
+    {
+        caster.GetComponent<MeshRendererComponent>().CastsShadows = false;
+        fixture.Renderer.DropNext = true;
+        CHECK(redrawn() == 1);
+        CHECK(redrawn() == 6);
+    }
+}
+
+TEST_CASE("A light whose views move to other tiles is drawn again there", "[scene renderer]")
+{
+    Fixture fixture;
+
+    const Entity atOrigin = AddLight(fixture.World, LightType::Spot, true);
+    const Entity aside = AddLight(fixture.World, LightType::Spot, true);
+    MoveTo(aside, glm::vec3(5.0f, 0.0f, 0.0f));
+
+    fixture.Record();
+    REQUIRE(fixture.Lighting.Shadows.size() == 2);
+
+    // The one in the first tile stops casting, and the other one takes its tile
+    REQUIRE(fixture.Lighting.Lights[0].ShadowIndex == 0);
+    const Entity inFirstTile = fixture.Lighting.Lights[0].Position == glm::vec3(0.0f) ? atOrigin : aside;
+    inFirstTile.GetComponent<LightComponent>().CastsShadow = false;
+
+    fixture.Record();
+
+    REQUIRE(fixture.Lighting.Shadows.size() == 1);
+    CHECK(fixture.Subject.GetShadowStats().Drawn == 1);
+    CHECK(fixture.Subject.GetShadowStats().Kept == 0);
+
+    SECTION("Both are drawn again when it casts again, the second tile as it came back into use")
+    {
+        inFirstTile.GetComponent<LightComponent>().CastsShadow = true;
+        fixture.Record();
+
+        CHECK(fixture.Subject.GetShadowStats().Drawn == 2);
+        CHECK(fixture.Subject.GetShadowStats().Kept == 0);
+    }
+}
+
+TEST_CASE("A caster whose depth version reads the time keeps its tiles drawing", "[scene renderer]")
+{
+    Fixture fixture;
+
+    const ShaderHandle swaying = fixture.Gpu.AddShader(ShaderInterface{ .DepthReadsTime = true });
+    const MaterialHandle material = fixture.Gpu.CreateMaterial(swaying, {});
+
+    AddLight(fixture.World, LightType::Point, true);
+
+    const Entity grass = AddMesh(fixture.World, "Grass");
+    grass.GetComponent<MeshRendererComponent>().Resolved.Materials = { material };
+    MoveTo(grass, glm::vec3(3.0f, 0.0f, 0.0f));
+
+    MoveTo(AddMesh(fixture.World, "Rock"), glm::vec3(-3.0f, 0.0f, 0.0f));
+
+    fixture.Record();
+
+    for (int frame = 0; frame < 3; ++frame)
+    {
+        CAPTURE(frame);
+        fixture.Record();
+        CHECK(fixture.Subject.GetShadowStats().Drawn == 1);
+        CHECK(fixture.Subject.GetShadowStats().Kept == 5);
+    }
+}
+
+TEST_CASE("A box is outside a view only when all of it is", "[bounds]")
+{
+    const glm::mat4 viewProj = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, 0.1f, 10.0f)
+        * glm::lookAt(glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+    const auto boxAt = [](const glm::vec3& center) { return MeshBounds{ center - 0.5f, center + 0.5f }; };
+
+    CHECK_FALSE(IsOutsideView(boxAt(glm::vec3(0.0f, 0.0f, -5.0f)), viewProj));
+    CHECK(IsOutsideView(boxAt(glm::vec3(0.0f, 0.0f, 5.0f)), viewProj));
+    CHECK(IsOutsideView(boxAt(glm::vec3(0.0f, 0.0f, -20.0f)), viewProj));
+    CHECK(IsOutsideView(boxAt(glm::vec3(10.0f, 0.0f, -5.0f)), viewProj));
+
+    // Partly in, at the side and across the far plane
+    CHECK_FALSE(IsOutsideView(boxAt(glm::vec3(5.3f, 0.0f, -5.0f)), viewProj));
+    CHECK_FALSE(IsOutsideView(boxAt(glm::vec3(0.0f, 0.0f, -10.2f)), viewProj));
+
+    SECTION("Transformed, the box holds the rotated one")
+    {
+        const glm::mat4 turned = glm::rotate(glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 0.0f, 0.0f)), glm::radians(45.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        const MeshBounds world = TransformBounds(boxAt(glm::vec3(0.0f)), turned);
+
+        CHECK(world.Min.x == Approx(1.0f - std::sqrt(0.5f)));
+        CHECK(world.Max.x == Approx(1.0f + std::sqrt(0.5f)));
+        CHECK(world.Min.y == Approx(-0.5f));
+        CHECK(world.Max.z == Approx(std::sqrt(0.5f)));
+    }
 }
 
 TEST_CASE("Only active, loaded meshes are drawn", "[scene renderer]")

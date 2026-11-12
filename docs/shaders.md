@@ -109,6 +109,7 @@ void PSDepth(VertexOutput input)
 - **It can use the material's properties and textures,** like `PSMain`, and what only it uses is still part of the material.
 - **It must not sample `ShadowAtlas`,** as the shadow pass is drawing into it.
 - **Every material draws there as opaque,** with its own cull mode, so a transparent mesh still casts its shadow.
+- **Reading `Time` or `DeltaTime` in it is noticed.** A shadow tile is kept from the last frame while nothing in it changed, but one with a mesh whose `VSMain` or `PSDepth` reads the time is drawn again every frame, so the shadow of a mesh that sways in the wind keeps moving with it.
 
 ## Color and light
 
