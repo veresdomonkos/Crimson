@@ -63,6 +63,10 @@ add_subdirectory(external/stb_image)
 
 add_subdirectory(external/tinyobjloader)
 
+#mikktspace, the tangents normal maps are baked against
+add_library(mikktspace STATIC external/MikkTSpace/mikktspace.c)
+target_include_directories(mikktspace PUBLIC external/MikkTSpace)
+
 #tracy
 option(CRIMSON_ENABLE_PROFILER "Enable Tracy profiling instrumentation" ON)
 set(TRACY_ENABLE ${CRIMSON_ENABLE_PROFILER} CACHE BOOL "" FORCE)

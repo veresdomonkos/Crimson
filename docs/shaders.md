@@ -48,7 +48,7 @@ Texture2D Bumps : register(t1, space2); // @default normal
 - **Discovery:** material properties and textures are found with SPIRV-Reflect, so the shader is the only place they're declared. The standard blocks are checked against the engine's structs.
 - **Samplers:** materials share the samplers in `space0`, and can't declare their own.
 - **Import errors:** a shader fails to import, with an error in the console, if it uses an unknown space or a standard resource whose type or size doesn't match the engine.
-- **Vertex inputs:** meshes give `POSITION` (float3), `NORMAL` (float3) and `TEXCOORD0` (float2), with no tangents and no vertex colors. Inputs take their locations from their order in the input struct.
+- **Vertex inputs:** meshes give `POSITION` (float3), `NORMAL` (float3), `TEXCOORD0` (float2) and `TANGENT` (float4: xyz along +U, w the side the bitangent is on, ±1, and 0 for a mesh without UVs). There are no vertex colors. Inputs take their locations from their order in the input struct, so declare them in this order; a shader can leave out the ones at the end.
 
 ### Annotations
 
@@ -86,11 +86,11 @@ Includes resolve relative to the shader's folder, then to the engine's shaders.
 | `EmissiveColor`, `EmissiveStrength` | black, 1 | linear, multiplied with `EmissiveMap` |
 | `AlphaCutoff` | 0.5 | for a cutout material, where the alpha of `Color` times `ColorMap` is under it there is nothing |
 
-Normal maps don't need tangents in the mesh, as the shader works out the directions from how position and UV change between pixels. A mesh without UVs stays flat.
+Normal maps use the mesh's tangents, which the importer works out with MikkTSpace, the same way Blender, Substance and other baking tools do, so baked normal maps match. A mesh without UVs has no tangents to go by and stays flat.
 
 ### Cutout
 
-A material whose render mode is **Cutout** has holes where its alpha is under its `AlphaCutoff`, for leaves, fences and chains. Unlike Transparent, it writes depth and needs no sorting. The engine only gives the shader the material's `AlphaCutoff` while its mode is Cutout, and 0 otherwise, so an opaque material never loses a pixel. A shader of your own can be cut out too, by declaring a `float AlphaCutoff` property and ending its pixel shader with `clip(alpha - AlphaCutoff)`. Put the `clip` last: a discarded pixel stops at once, and what comes after it in the pixels around it, such as the derivatives normal mapping uses, would be wrong. For the holes to show in the shadows and the selection outline too, give it a `PSDepth` that clips the same way, as `S_Lit` does.
+A material whose render mode is **Cutout** has holes where its alpha is under its `AlphaCutoff`, for leaves, fences and chains. Unlike Transparent, it writes depth and needs no sorting. The engine only gives the shader the material's `AlphaCutoff` while its mode is Cutout, and 0 otherwise, so an opaque material never loses a pixel. A shader of your own can be cut out too, by declaring a `float AlphaCutoff` property and ending its pixel shader with `clip(alpha - AlphaCutoff)`. Put the `clip` last: a discarded pixel stops at once, and what comes after it in the pixels around it, such as the derivatives that pick a texture's mip level, would be wrong. For the holes to show in the shadows and the selection outline too, give it a `PSDepth` that clips the same way, as `S_Lit` does.
 
 ## Depth passes
 

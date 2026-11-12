@@ -12,7 +12,12 @@ namespace crimson
         glm::vec3 Position;
         glm::vec3 Normal;
         glm::vec2 UV;
+
+        // xyz points along +U, and w is the side the bitangent (+V) is on, ±1 as mirrored UVs flip it.
+        // A mesh without UVs has nothing to go by, and gets w = 0.
+        glm::vec4 Tangent;
     };
+    static_assert(sizeof(MeshVertex) == 48, "No padding, so vertices can be compared byte by byte");
 
     struct SubMesh
     {

@@ -25,6 +25,7 @@ struct VertexInput
     float3 Position : POSITION;
     float3 Normal : NORMAL;
     float2 UV : TEXCOORD0;
+    float4 Tangent : TANGENT;
 };
 
 struct VertexOutput
@@ -33,6 +34,7 @@ struct VertexOutput
     float3 Normal : NORMAL;
     float3 WorldPosition : WORLDPOSITION;
     float2 UV : TEXCOORD0;
+    float4 Tangent : TANGENT;
 };
 
 VertexOutput VSMain(VertexInput input)
@@ -44,37 +46,25 @@ VertexOutput VSMain(VertexInput input)
     output.Normal = ObjectToWorldNormal(input.Normal);
     output.WorldPosition = worldPosition;
     output.UV = input.UV;
+    output.Tangent = float4(ObjectToWorldDirection(input.Tangent.xyz), input.Tangent.w);
     return output;
 }
 
-// Meshes have no tangents, so the normal map's directions come from how position and UV change between pixels
-float3 ApplyNormalMap(float3 normal, float3 worldPosition, float2 uv)
+// The tangent is the mesh's, along +U, with w the side the bitangent is on. A mesh without UVs has w = 0 and nothing to go by.
+float3 ApplyNormalMap(float3 normal, float4 tangent, float2 uv)
 {
+    if (abs(tangent.w) < 0.5)
+        return normal;
+
     float3 mapped = NormalMap.Sample(LinearWrap, uv).xyz * 2.0 - 1.0;
     mapped.xy *= NormalStrength;
 
-    const float3 dpx = ddx(worldPosition);
-    const float3 dpy = ddy(worldPosition);
-    const float2 dux = ddx(uv);
-    const float2 duy = ddy(uv);
-
-    const float3 perpY = cross(dpy, normal);
-    const float3 perpX = cross(normal, dpx);
-
-    const float3 tangent = perpY * dux.x + perpX * duy.x;
-    const float3 bitangent = perpY * dux.y + perpX * duy.y;
-
-    // A mesh without UVs has nothing to go by
-    const float scale = max(dot(tangent, tangent), dot(bitangent, bitangent));
-    const float determinant = dot(dpx, perpY);
-    if (scale <= 0.0 || determinant == 0.0)
-        return normal;
-
-    // The determinant's sign has to stay, as the backends rasterize with Y going opposite ways
-    const float invScale = sign(determinant) / sqrt(scale);
+    // Interpolation leaves it a little off the normal
+    const float3 t = normalize(tangent.xyz - normal * dot(normal, tangent.xyz));
+    const float3 b = cross(normal, t) * (tangent.w < 0.0 ? -1.0 : 1.0);
 
     // Green points up in the image, and V goes down it, as the first row of an image is at V = 0
-    return normalize(tangent * invScale * mapped.x - bitangent * invScale * mapped.y + normal * mapped.z);
+    return normalize(t * mapped.x - b * mapped.y + normal * mapped.z);
 }
 
 float4 PSMain(VertexOutput input) : SV_Target
@@ -88,7 +78,7 @@ float4 PSMain(VertexOutput input) : SV_Target
 
     Surface surface;
     surface.WorldPosition = input.WorldPosition;
-    surface.Normal = ApplyNormalMap(geometricNormal, input.WorldPosition, input.UV);
+    surface.Normal = ApplyNormalMap(geometricNormal, input.Tangent, input.UV);
     surface.GeometricNormal = geometricNormal;
     surface.Albedo = base.rgb;
     surface.Metallic = Metallic * metallicRoughness.b;
