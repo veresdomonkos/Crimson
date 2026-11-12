@@ -83,6 +83,7 @@ renderer.Submit(std::move(frame)); // false when the frame was dropped, like for
 ```
 
 - A pass is a `PassRecord`: its `PassInfo` and either draws or a native callback. Passes run in the order they are added.
+- A frame has at most `kMaxPassesPerFrame` (64) passes, as Vulkan's view buffer has a slot for each pass of each frame in flight. A pass past that is dropped, and its `PassBuilder` reads as empty. The first time that happens it logs a warning.
 - `PassInfo` holds the pass's `Name` (shown in Tracy), its `Target` (the back buffer when empty), what to `Clear` it to, an optional `Viewport` to limit drawing and clearing to part of it, the `View` (camera) and the textures the pass samples in `Reads`.
 - A draw is a `DrawItem`: vertex buffer, index buffer, material, object and `ShaderVariant`. `PassBuilder::Draw` adds one, `DrawMesh(mesh, object, options)` one per submesh. A `PassBuilder` refers to its pass by index, so it stays valid while more passes are added.
 - The renderers sort each pass's draws: opaque ones first, grouped by shader, material and buffers to rebind as little as possible, then transparent ones from the farthest to the nearest. `DrawMesh` sets a draw's `SortDepth` to the squared distance from the pass's camera to the center of the mesh's bounds. Meshes that cross each other can still blend in the wrong order, as each sorts as a whole.
@@ -107,7 +108,7 @@ Lights are kept in a GPU buffer, in the style of glTF's `KHR_lights_punctual`, a
 
 ### Shadows
 
-`BuildShadowViews` assigns tiles of one depth atlas to the lights with `CastsShadow` set: one for a directional or spot light, six for a point light. Each view is rendered by its own pass with `Viewport` set to its tile, and shaders pick the tile through the light's `ShadowIndex`. Shadows are filtered with PCF. The default atlas is 4096x4096 with 1024 tiles, and lights that don't fit log a warning and stay unshadowed. Directional lights cover one fixed area of the world, there are no cascades yet.
+`BuildShadowViews` assigns tiles of one depth atlas to the lights with `CastsShadow` set: one for a directional or spot light, six for a point light. Each view is rendered by its own pass with `Viewport` set to its tile, and shaders pick the tile through the light's `ShadowIndex`. Shadows are filtered with PCF. The default atlas is 4096x4096 with 1024 tiles. `SceneRenderer` keeps to `kMaxShadowViews` views, so the frame still has room for its other passes, and warns when it is made with an atlas that has more tiles than that. Lights that don't fit in the atlas, or past that limit, log a warning and stay unshadowed. Directional lights cover one fixed area of the world, there are no cascades yet.
 
 ### The selection outline
 

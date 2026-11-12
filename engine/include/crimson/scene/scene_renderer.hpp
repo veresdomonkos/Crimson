@@ -22,6 +22,10 @@ namespace crimson
     class SceneRenderer
     {
     public:
+        // Each shadow view is a pass. The rest of the frame keeps room for the Outline Mask, Scene, Tone Mapping and
+        // Outline passes, and for what the caller adds, like the editor's UI.
+        static constexpr uint32_t kMaxShadowViews = kMaxPassesPerFrame - 8;
+
         SceneRenderer(GpuResourceManager& resources, Renderer& renderer, ShadowAtlasSettings atlas = {});
         ~SceneRenderer();
 

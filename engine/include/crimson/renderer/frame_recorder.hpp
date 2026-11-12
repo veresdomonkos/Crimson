@@ -10,6 +10,7 @@
 
 #include <glm/glm.hpp>
 
+#include "crimson/core/log.hpp"
 #include "core.hpp"
 #include "frame_gpu_data.hpp"
 #include "mesh.hpp"
@@ -121,6 +122,9 @@ namespace crimson
         uint32_t m_passCount = 0;
         std::vector<GpuObject> m_objects;
         FrameLighting m_lighting;
+
+        // Recording runs every frame, so going over the pass limit is only said once. Reset leaves it set.
+        bool m_passLimitLogged = false;
     };
 
     // Adds draws to a pass. It refers to the pass by index, so it stays valid while more passes are added.
@@ -157,7 +161,7 @@ namespace crimson
             }
         }
 
-        // False for a pass that was dropped, as the frame already had kMaxPassesPerFrame
+        // False for a pass that was dropped, as the frame already had kMaxPassesPerFrame, which logs a warning
         [[nodiscard]] bool IsValid() const { return m_packet != nullptr; }
 
         [[nodiscard]] const PassInfo& GetInfo() const { return Read().m_info; }
@@ -222,9 +226,15 @@ namespace crimson
     private:
         PassRecord* NextRecord(const PassInfo& info)
         {
-            assert(m_packet->m_passCount < kMaxPassesPerFrame && "Too many passes in one frame");
+            // Not an assert, as a scene with enough shadowed lights could get here
             if (m_packet->m_passCount >= kMaxPassesPerFrame)
+            {
+                if (!m_packet->m_passLimitLogged)
+                    LOG_WARN("[Frame] More than {} passes in one frame, the rest are dropped", kMaxPassesPerFrame);
+
+                m_packet->m_passLimitLogged = true;
                 return nullptr;
+            }
 
             if (m_packet->m_passCount == m_packet->m_passes.size())
                 m_packet->m_passes.emplace_back();
