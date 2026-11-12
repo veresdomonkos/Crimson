@@ -36,7 +36,7 @@ float3 WorldToObjectDirection(float3 direction)
 
 float4 WorldToClip(float3 position)
 {
-    return mul(ViewProj, float4(position, 1.0));
+    return mul(GetView().ViewProj, float4(position, 1.0));
 }
 
 float4 ObjectToClip(float3 position)

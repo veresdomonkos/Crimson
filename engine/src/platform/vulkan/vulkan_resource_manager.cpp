@@ -33,23 +33,20 @@ namespace crimson::vulkan
 
     void VulkanResourceManager::CreateDescriptorPool()
     {
-        // Frame sets take one UBO, three storage buffers, the atlas and four samplers per frame in flight
-        std::array<vk::DescriptorPoolSize, 5> poolSizes{};
+        // Frame sets take one UBO, four storage buffers, the atlas and four samplers per frame in flight
+        std::array<vk::DescriptorPoolSize, 4> poolSizes{};
 
-        poolSizes[0].type = vk::DescriptorType::eUniformBufferDynamic;
-        poolSizes[0].descriptorCount = 1;
+        poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
+        poolSizes[0].descriptorCount = 100 + kMaxFramesInFlight;
 
-        poolSizes[1].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[1].descriptorCount = 100 + kMaxFramesInFlight;
+        poolSizes[1].type = vk::DescriptorType::eStorageBuffer;
+        poolSizes[1].descriptorCount = 4 * kMaxFramesInFlight;
 
-        poolSizes[2].type = vk::DescriptorType::eStorageBuffer;
-        poolSizes[2].descriptorCount = 3 * kMaxFramesInFlight;
+        poolSizes[2].type = vk::DescriptorType::eSampledImage;
+        poolSizes[2].descriptorCount = 100 + kMaxFramesInFlight;
 
-        poolSizes[3].type = vk::DescriptorType::eSampledImage;
-        poolSizes[3].descriptorCount = 100 + kMaxFramesInFlight;
-
-        poolSizes[4].type = vk::DescriptorType::eSampler;
-        poolSizes[4].descriptorCount = 4 * kMaxFramesInFlight;
+        poolSizes[3].type = vk::DescriptorType::eSampler;
+        poolSizes[3].descriptorCount = 4 * kMaxFramesInFlight;
 
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
@@ -115,6 +112,7 @@ namespace crimson::vulkan
             makeBinding(kShadowsBinding, vk::DescriptorType::eStorageBuffer),
             makeBinding(kObjectsBinding, vk::DescriptorType::eStorageBuffer),
             makeBinding(kShadowAtlasBinding, vk::DescriptorType::eSampledImage),
+            makeBinding(kViewsBinding, vk::DescriptorType::eStorageBuffer),
             makeBinding(kLinearWrapBinding, vk::DescriptorType::eSampler, &linearWrap),
             makeBinding(kLinearClampBinding, vk::DescriptorType::eSampler, &linearClamp),
             makeBinding(kPointClampBinding, vk::DescriptorType::eSampler, &pointClamp),
@@ -127,13 +125,8 @@ namespace crimson::vulkan
 
         m_frameSetLayout = m_device.GetDevice().createDescriptorSetLayout(frameInfo);
 
-        const vk::DescriptorSetLayoutBinding viewBinding = makeBinding(kViewBlockBinding, vk::DescriptorType::eUniformBufferDynamic);
-
-        vk::DescriptorSetLayoutCreateInfo viewInfo{};
-        viewInfo.bindingCount = 1;
-        viewInfo.pBindings = &viewBinding;
-
-        m_viewSetLayout = m_device.GetDevice().createDescriptorSetLayout(viewInfo);
+        // Space 1 has nothing in it, but a pipeline layout needs a set layout for every space up to the material's
+        m_unusedSetLayout = m_device.GetDevice().createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo{});
     }
 
     void VulkanResourceManager::CreateDefaultTexture()
@@ -278,11 +271,11 @@ namespace crimson::vulkan
             shader.MaterialSetLayout = m_device.GetDevice().createDescriptorSetLayout(layoutInfo);
 
             // Shared by all of the shader's pipelines, so switching between them keeps its material bound.
-            // The frame and view sets and the push constant are the same in every shader, so they stay valid across shaders.
-            const std::array<vk::DescriptorSetLayout, 3> setLayouts = { *m_frameSetLayout, *m_viewSetLayout, *shader.MaterialSetLayout };
+            // The frame set and the push constant are the same in every shader, so they stay valid across shaders.
+            const std::array<vk::DescriptorSetLayout, 3> setLayouts = { *m_frameSetLayout, *m_unusedSetLayout, *shader.MaterialSetLayout };
 
             vk::PushConstantRange pushConstant{};
-            pushConstant.stageFlags = vk::ShaderStageFlagBits::eVertex;
+            pushConstant.stageFlags = kDrawDataStages;
             pushConstant.offset = 0;
             pushConstant.size = sizeof(DrawData);
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <chrono>
 #include <optional>
+#include <span>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -21,12 +22,12 @@ namespace crimson
     };
     static_assert(sizeof(FrameBlock) == 32);
 
-    struct ViewBlock
+    struct GpuView
     {
         glm::mat4 ViewProj;
         glm::vec4 CameraPosition;
     };
-    static_assert(sizeof(ViewBlock) == 80);
+    static_assert(sizeof(GpuView) == 80);
 
     struct GpuShadow
     {
@@ -46,7 +47,7 @@ namespace crimson
     };
     static_assert(sizeof(GpuObject) == 128);
 
-    // One tile of the shadow atlas, rendered by its own pass
+    // One tile of the shadow atlas, with what a light sees from it
     struct ShadowView
     {
         GpuShadow Shadow;
@@ -91,17 +92,22 @@ namespace crimson
         std::chrono::steady_clock::time_point m_previous;
     };
 
-    // The frame's lighting and time in the form they are uploaded, the vectors keep their capacity between frames
+    // The frame's lighting, views and time in the form they are uploaded, the vectors keep their capacity between frames
     struct FrameGpuData
     {
         FrameBlock Block;
         std::vector<GpuLight> Lights;
         std::vector<GpuShadow> Shadows;
+        std::vector<GpuView> Views;
 
-        void Build(const FrameLighting& lighting, FrameTime time)
+        void Build(const FrameLighting& lighting, std::span<const FrameView> views, FrameTime time)
         {
             Block.Time = time.Time;
             Block.DeltaTime = time.DeltaTime;
+
+            Views.clear();
+            for (const FrameView& view : views)
+                Views.push_back({ view.View.ViewProj, glm::vec4(view.View.CameraPosition, 0.0f) });
 
             Lights.clear();
             for (const Light& light : lighting.Lights)

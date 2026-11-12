@@ -14,12 +14,7 @@ namespace crimson::opengl
     {
         uint32_t GetUniformBlockSlot(uint32_t space)
         {
-            switch (space)
-            {
-                case kFrameSpace: return kFrameBlockSlot;
-                case kViewSpace:  return kViewBlockSlot;
-                default:          return kMaterialBlockSlot;
-            }
+            return space == kFrameSpace ? kFrameBlockSlot : kMaterialBlockSlot;
         }
 
         uint32_t GetStorageBufferSlot(uint32_t binding)
@@ -28,6 +23,7 @@ namespace crimson::opengl
             {
                 case kLightsBinding:  return kLightsSlot;
                 case kShadowsBinding: return kShadowsSlot;
+                case kViewsBinding:   return kViewsSlot;
                 default:              return kObjectsSlot;
             }
         }

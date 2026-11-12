@@ -58,8 +58,9 @@ namespace crimson
 
     // Resources are grouped by how often they change, each group is an HLSL space and a descriptor set.
     // assets/shaders/crimson/bindings.hlsli declares the same layout for the shaders.
+    // Space 1 is left empty. It used to hold the pass's view, and materials stay where shaders already declare them.
     constexpr uint32_t kFrameSpace    = 0;
-    constexpr uint32_t kViewSpace     = 1;
+    constexpr uint32_t kUnusedSpace   = 1;
     constexpr uint32_t kMaterialSpace = 2;
 
     // HLSL numbers b, t and s registers separately but SPIR-V has one range, the compiler shifts them apart
@@ -72,16 +73,18 @@ namespace crimson
     constexpr uint32_t kShadowsBinding           = kTextureBindingShift + 1;
     constexpr uint32_t kObjectsBinding           = kTextureBindingShift + 2;
     constexpr uint32_t kShadowAtlasBinding       = kTextureBindingShift + 3;
+    constexpr uint32_t kViewsBinding             = kTextureBindingShift + 4;
     constexpr uint32_t kLinearWrapBinding        = kSamplerBindingShift + 0;
     constexpr uint32_t kLinearClampBinding       = kSamplerBindingShift + 1;
     constexpr uint32_t kPointClampBinding        = kSamplerBindingShift + 2;
     constexpr uint32_t kShadowCompareBinding     = kSamplerBindingShift + 3;
 
-    constexpr uint32_t kViewBlockBinding = 0;
-
-    // The per-draw push constant
+    // The per-draw push constant: where the draw's transform and its camera are in the frame's Objects and Views
     struct DrawData
     {
         uint32_t ObjectIndex = 0;
+        uint32_t ViewIndex = 0;
+
+        bool operator==(const DrawData&) const = default;
     };
 }

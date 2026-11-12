@@ -428,6 +428,94 @@ TEST_CASE("A mesh's draws sort by the distance from the camera to its center", "
     CHECK(pass.GetDraws()[1].SortDepth == 9.0f);
 }
 
+TEST_CASE("A draw uses its pass's view unless it names one", "[frame]")
+{
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    const ViewData camera{ .ViewProj = glm::mat4(2.0f), .CameraPosition = glm::vec3(1.0f, 2.0f, 3.0f) };
+    const RenderRect tile{ 64, 128, 32, 32 };
+
+    PassBuilder first = frame.AddPass({});
+    PassBuilder second = frame.AddPass({ .View = camera });
+    const ViewId extra = frame.AddView({ .ViewProj = glm::mat4(3.0f) }, tile);
+
+    second.Draw(DrawItem{ .Material = kMaterial });
+    second.Draw(DrawItem{ .Material = kMaterial, .View = extra });
+    second.Draw(DrawItem{ .Material = kMaterial });
+    first.Draw(DrawItem{ .Material = kMaterial });
+
+    const std::span<const PassRecord> passes = packet.GetPasses();
+    const std::span<const FrameView> views = packet.GetViews();
+
+    // One for each pass and the one that was added
+    REQUIRE(views.size() == 3);
+    CHECK(passes[0].GetView() != passes[1].GetView());
+
+    // The pass's view is the camera it was added with, and covers the pass's area
+    CHECK(views[passes[1].GetView()].View.ViewProj == camera.ViewProj);
+    CHECK(views[passes[1].GetView()].View.CameraPosition == camera.CameraPosition);
+    CHECK_FALSE(views[passes[1].GetView()].Viewport);
+
+    REQUIRE(views[extra].Viewport);
+    CHECK(views[extra].Viewport->X == tile.X);
+    CHECK(views[extra].Viewport->Y == tile.Y);
+    CHECK(views[extra].Viewport->Width == tile.Width);
+    CHECK(views[extra].Viewport->Height == tile.Height);
+
+    // Naming a view is for that draw only, the next one is back to the pass's
+    REQUIRE(second.GetDraws().size() == 3);
+    CHECK(second.GetDraws()[0].View == passes[1].GetView());
+    CHECK(second.GetDraws()[1].View == extra);
+    CHECK(second.GetDraws()[2].View == passes[1].GetView());
+
+    REQUIRE(first.GetDraws().size() == 1);
+    CHECK(first.GetDraws()[0].View == passes[0].GetView());
+}
+
+TEST_CASE("A mesh drawn with a view of its own sorts by the distance from that view", "[frame]")
+{
+    Mesh mesh;
+    mesh.Materials = { kMaterial };
+    mesh.SubMeshes = { { .MaterialSlot = 0 } };
+    mesh.Bounds = { glm::vec3(-1.0f), glm::vec3(1.0f) };
+
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    PassBuilder pass = frame.AddPass({ .View = { .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) } });
+    const ViewId far = frame.AddView({ .CameraPosition = glm::vec3(0.0f, 0.0f, 5.0f) });
+
+    pass.DrawMesh(mesh);
+    pass.DrawMesh(mesh, 0, { .View = far });
+
+    REQUIRE(pass.GetDraws().size() == 2);
+    CHECK(pass.GetDraws()[0].SortDepth == 4.0f);
+    CHECK(pass.GetDraws()[1].SortDepth == 25.0f);
+    CHECK(pass.GetDraws()[1].View == far);
+}
+
+TEST_CASE("The frame's views are uploaded in the order they were added", "[frame]")
+{
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    frame.AddPass({ .View = { .ViewProj = glm::mat4(2.0f), .CameraPosition = glm::vec3(1.0f, 2.0f, 3.0f) } });
+    frame.AddView({ .ViewProj = glm::mat4(3.0f) });
+
+    FrameGpuData data;
+    data.Build(FrameLighting{}, packet.GetViews(), FrameTime{});
+
+    REQUIRE(data.Views.size() == 2);
+    CHECK(data.Views[0].ViewProj == glm::mat4(2.0f));
+    CHECK(data.Views[0].CameraPosition == glm::vec4(1.0f, 2.0f, 3.0f, 0.0f));
+    CHECK(data.Views[1].ViewProj == glm::mat4(3.0f));
+
+    // Nothing is left over for the next frame
+    packet.Reset();
+    CHECK(packet.GetViews().empty());
+}
+
 TEST_CASE("The frame clock starts at 0 and counts the time between frames", "[frame]")
 {
     using namespace std::chrono_literals;
@@ -443,7 +531,7 @@ TEST_CASE("The frame clock starts at 0 and counts the time between frames", "[fr
 TEST_CASE("The frame block carries the frame's time", "[frame]")
 {
     FrameGpuData data;
-    data.Build(FrameLighting{}, FrameTime{ 2.5f, 0.125f });
+    data.Build(FrameLighting{}, {}, FrameTime{ 2.5f, 0.125f });
 
     CHECK(data.Block.Time == 2.5f);
     CHECK(data.Block.DeltaTime == 0.125f);

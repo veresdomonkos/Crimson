@@ -11,6 +11,7 @@
 #include <array>
 #include <limits>
 #include <optional>
+#include <span>
 #include <vector>
 
 namespace crimson::vulkan
@@ -32,8 +33,10 @@ namespace crimson::vulkan
         vk::Buffer IndexBuffer;
         vk::DescriptorSet MaterialSet;
         bool FrameSetBound = false;
-        bool ViewSetBound = false;
-        ObjectId Object = std::numeric_limits<ObjectId>::max();
+
+        // What the push constant holds. A view also sets the viewport, so it starts over with every pass.
+        DrawData Draw{ std::numeric_limits<ObjectId>::max(), kPassView };
+        bool DrawPushed = false;
     };
 
     // A host-visible buffer of one frame in flight that grows when its contents don't fit
@@ -54,6 +57,7 @@ namespace crimson::vulkan
         FrameStorageBuffer Lights;
         FrameStorageBuffer Shadows;
         FrameStorageBuffer Objects;
+        FrameStorageBuffer Views;
         vk::raii::DescriptorSet DescriptorSet{ nullptr };
     };
 
@@ -84,20 +88,17 @@ namespace crimson::vulkan
         void UploadStorageBuffer(const InFlightFrame& frame, FrameStorageBuffer& storage, uint32_t binding, const void* data, std::size_t size);
 
         void TransitionImage(const vk::raii::CommandBuffer& cmd, VulkanTexture& texture, vk::ImageLayout newLayout);
-        void ExecutePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, uint32_t passIndex);
-        void BeginPass(const vk::raii::CommandBuffer& cmdBuffer, const PassInfo& info, VulkanRenderTarget& rt, uint32_t passIndex);
+        void ExecutePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, std::span<const FrameView> views);
         void EndPass(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt);
-        void ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, uint32_t passIndex);
+
+        // passArea is where a draw lands when its view has no viewport of its own
+        void ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, std::span<const FrameView> views, const RenderRect& passArea);
         void ExecuteNativePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, VulkanRenderTarget& rt);
 
         void BeginRendering(const vk::raii::CommandBuffer& cmd, VulkanRenderTarget& rt, const ClearInfo& clear, const std::optional<RenderRect>& area);
 
         VulkanDevice& m_device;
         VulkanResourceManager& m_resourceManager;
-
-        vk::raii::DescriptorSet m_viewDescriptorSet{ nullptr };
-        AllocatedBuffer m_viewUBO;
-        vk::DeviceSize m_viewUboAlignment = 0;
 
         // The pool has to outlive the command buffers in m_inFlight
         vk::raii::CommandPool m_commandPool{ nullptr };

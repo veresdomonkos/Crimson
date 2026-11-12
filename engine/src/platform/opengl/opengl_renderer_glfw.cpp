@@ -14,12 +14,11 @@ namespace crimson::opengl
         glCreateBuffers(1, &m_frameUBO);
         glNamedBufferData(m_frameUBO, sizeof(FrameBlock), nullptr, GL_DYNAMIC_DRAW);
 
-        glCreateBuffers(1, &m_viewUBO);
-        glNamedBufferData(m_viewUBO, sizeof(ViewBlock), nullptr, GL_DYNAMIC_DRAW);
 
         glCreateBuffers(1, &m_lightsBuffer);
         glCreateBuffers(1, &m_shadowsBuffer);
         glCreateBuffers(1, &m_objectsBuffer);
+        glCreateBuffers(1, &m_viewsBuffer);
 
         TracyGpuContext;
     }
@@ -27,7 +26,7 @@ namespace crimson::opengl
     OpenGLRenderer::~OpenGLRenderer()
     {
         if (m_frameUBO != 0) { glDeleteBuffers(1, &m_frameUBO); m_frameUBO = 0; }
-        if (m_viewUBO != 0) { glDeleteBuffers(1, &m_viewUBO); m_viewUBO = 0; }
+        if (m_viewsBuffer != 0) { glDeleteBuffers(1, &m_viewsBuffer); m_viewsBuffer = 0; }
         if (m_lightsBuffer != 0) { glDeleteBuffers(1, &m_lightsBuffer); m_lightsBuffer = 0; }
         if (m_shadowsBuffer != 0) { glDeleteBuffers(1, &m_shadowsBuffer); m_shadowsBuffer = 0; }
         if (m_objectsBuffer != 0) { glDeleteBuffers(1, &m_objectsBuffer); m_objectsBuffer = 0; }
@@ -69,7 +68,7 @@ namespace crimson::opengl
         ResetBoundState();
 
         // Replacing the buffers' storage, so the frame before isn't waited on
-        m_gpuData.Build(packet.GetLighting(), m_clock.Tick(std::chrono::steady_clock::now()));
+        m_gpuData.Build(packet.GetLighting(), packet.GetViews(), m_clock.Tick(std::chrono::steady_clock::now()));
 
         glNamedBufferSubData(m_frameUBO, 0, sizeof(FrameBlock), &m_gpuData.Block);
         UploadStorageBuffer(m_lightsBuffer, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes(), sizeof(GpuLight));
@@ -77,6 +76,7 @@ namespace crimson::opengl
 
         const std::span<const GpuObject> objects = packet.GetObjects();
         UploadStorageBuffer(m_objectsBuffer, objects.data(), objects.size_bytes(), sizeof(GpuObject));
+        UploadStorageBuffer(m_viewsBuffer, m_gpuData.Views.data(), std::span(m_gpuData.Views).size_bytes(), sizeof(GpuView));
 
         BindFrameResources();
 
@@ -95,7 +95,7 @@ namespace crimson::opengl
         m_stats.Passes = static_cast<uint32_t>(passes.size());
 
         for (const PassRecord& pass : passes)
-            ExecutePass(pass);
+            ExecutePass(pass, packet.GetViews());
 
         CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
 
@@ -111,7 +111,7 @@ namespace crimson::opengl
         return true;
     }
 
-    void OpenGLRenderer::ExecutePass(const PassRecord& pass)
+    void OpenGLRenderer::ExecutePass(const PassRecord& pass, std::span<const FrameView> views)
     {
         const PassInfo& info = pass.GetInfo();
 
@@ -124,25 +124,18 @@ namespace crimson::opengl
             return;
         }
 
-        BeginPass(info);
+        const RenderRect passArea = BindTarget(info);
+
+        m_state.SetDepthTest(true);
+
+        // BindTarget set the viewport to the pass's area, which the first draw's view may not have
+        m_boundView = kPassView;
 
         const std::span<const DrawItem> draws = pass.GetDraws();
 
         BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
         for (const DrawSortEntry& sorted : m_drawOrder)
-            ExecuteDraw(draws[sorted.Index]);
-    }
-
-    void OpenGLRenderer::BeginPass(const PassInfo& info)
-    {
-        ViewBlock block{};
-        block.ViewProj = info.View.ViewProj;
-        block.CameraPosition = glm::vec4(info.View.CameraPosition, 0.0f);
-        glNamedBufferSubData(m_viewUBO, 0, sizeof(ViewBlock), &block);
-
-        BindTarget(info);
-
-        m_state.SetDepthTest(true);
+            ExecuteDraw(draws[sorted.Index], views, passArea);
     }
 
     void OpenGLRenderer::ExecuteNativePass(const PassRecord& pass)
@@ -156,7 +149,8 @@ namespace crimson::opengl
         ResetBoundState();
     }
 
-    void OpenGLRenderer::BindTarget(const PassInfo& info)
+    // Returns the part of the target the pass draws to
+    RenderRect OpenGLRenderer::BindTarget(const PassInfo& info)
     {
         // A pass without a target draws to the back buffer
         const auto& target = m_resourceManager.GetRenderTarget(info.Target ? info.Target : m_resourceManager.GetBackBufferHandle());
@@ -167,6 +161,7 @@ namespace crimson::opengl
         m_state.SetScissor(info.Viewport ? &rect : nullptr);
 
         ClearTarget(info.Clear);
+        return rect;
     }
 
     void OpenGLRenderer::ClearTarget(const ClearInfo& clear)
@@ -203,13 +198,13 @@ namespace crimson::opengl
     void OpenGLRenderer::BindFrameResources()
     {
         m_state.BindUniformBuffer(kFrameBlockSlot, m_frameUBO);
-        m_state.BindUniformBuffer(kViewBlockSlot, m_viewUBO);
         m_state.BindStorageBuffer(kLightsSlot, m_lightsBuffer);
         m_state.BindStorageBuffer(kShadowsSlot, m_shadowsBuffer);
         m_state.BindStorageBuffer(kObjectsSlot, m_objectsBuffer);
+        m_state.BindStorageBuffer(kViewsSlot, m_viewsBuffer);
     }
 
-    void OpenGLRenderer::ExecuteDraw(const DrawItem& info)
+    void OpenGLRenderer::ExecuteDraw(const DrawItem& info, std::span<const FrameView> views, const RenderRect& passArea)
     {
         CRIMSON_PROFILE_FUNCTION();
 
@@ -261,11 +256,27 @@ namespace crimson::opengl
             ++m_stats.MaterialBinds;
         }
 
-        // Each program has its own copy of the uniform
+        // A view draws to its own part of the target, like a shadow view to its tile of the atlas
+        const bool viewChanged = info.View != m_boundView;
+
+        if (viewChanged)
+        {
+            const RenderRect rect = views[info.View].Viewport.value_or(passArea);
+            glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
+            m_state.SetScissor(&rect);
+        }
+
+        // Each program has its own copy of the uniforms
         if (programChanged || info.Object != m_boundObject)
         {
             glUniform1ui(program.ObjectIndexLocation, info.Object);
             m_boundObject = info.Object;
+        }
+
+        if (programChanged || viewChanged)
+        {
+            glUniform1ui(program.ViewIndexLocation, info.View);
+            m_boundView = info.View;
         }
 
         if (info.VertexBuffer != m_boundVertexBuffer || info.IndexBuffer != m_boundIndexBuffer)

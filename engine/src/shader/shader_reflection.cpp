@@ -28,11 +28,11 @@ namespace crimson
             { "Shadows",       kFrameSpace, kShadowsBinding,       SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuShadow) },
             { "Objects",       kFrameSpace, kObjectsBinding,       SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuObject) },
             { "ShadowAtlas",   kFrameSpace, kShadowAtlasBinding,   SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  0 },
+            { "Views",         kFrameSpace, kViewsBinding,         SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuView) },
             { "LinearWrap",    kFrameSpace, kLinearWrapBinding,    SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
             { "LinearClamp",   kFrameSpace, kLinearClampBinding,   SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
             { "PointClamp",    kFrameSpace, kPointClampBinding,    SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
             { "ShadowCompare", kFrameSpace, kShadowCompareBinding, SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
-            { "ViewBlock",     kViewSpace,  kViewBlockBinding,     SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER, sizeof(ViewBlock) },
         };
 
         std::size_t ReflectedSize(const SpvReflectDescriptorBinding& binding)
@@ -143,9 +143,14 @@ namespace crimson
                 {
                     valid = AddMaterialResource(*binding, vertex, result) && valid;
                 }
-                else if (binding->set == kFrameSpace || binding->set == kViewSpace)
+                else if (binding->set == kFrameSpace)
                 {
                     valid = CheckStandardResource(*binding) && valid;
+                }
+                else if (binding->set == kUnusedSpace)
+                {
+                    LOG_ERROR("[Shader] '{}' is in space{}, which is empty. The camera comes from GetView() in crimson/bindings.hlsli", GetResourceName(*binding), binding->set);
+                    valid = false;
                 }
                 else
                 {

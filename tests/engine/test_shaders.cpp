@@ -259,6 +259,53 @@ float4 PSMain() : SV_Target
     CHECK(shader->Textures.at("Bumps").Default == ShaderTextureDefault::Normal);
 }
 
+TEST_CASE("A shader gets its camera from GetView, in either stage", "[shaders]")
+{
+    constexpr std::string_view kShader = R"(
+#include "crimson/bindings.hlsli"
+
+float4 VSMain(float3 position : POSITION) : SV_Position
+{
+    return mul(GetView().ViewProj, float4(position, 1.0));
+}
+
+float4 PSMain() : SV_Target
+{
+    return float4(GetView().CameraPosition.xyz, 1.0);
+}
+)";
+
+    const auto binary = CompileHlslShader("view.hlsl", std::string(kShader), {});
+    REQUIRE(binary);
+    CHECK(ReflectShaderInterface(*binary));
+
+    // Both stages have to end up with the same uniform for the draw's indices
+    std::vector<opengl::GlslTextureUnit> units;
+    const auto vertex = opengl::TranslateSpirvToGlsl(binary->Vertex, units);
+    const auto pixel = opengl::TranslateSpirvToGlsl(binary->Pixel, units);
+    REQUIRE(vertex);
+    REQUIRE(pixel);
+    CHECK(vertex->find(opengl::kDrawUniformName) != std::string::npos);
+    CHECK(pixel->find(opengl::kDrawUniformName) != std::string::npos);
+}
+
+TEST_CASE("Nothing can be declared in space1, where the view used to be", "[shaders]")
+{
+    constexpr std::string_view kShader = R"(
+cbuffer ViewBlock : register(b0, space1)
+{
+    float4x4 ViewProj;
+};
+
+float4 VSMain(float3 position : POSITION) : SV_Position { return mul(ViewProj, float4(position, 1.0)); }
+float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+)";
+
+    const auto binary = CompileHlslShader("old_view.hlsl", std::string(kShader), {});
+    REQUIRE(binary);
+    CHECK_FALSE(ReflectShaderInterface(*binary));
+}
+
 TEST_CASE("Shaders can use the math constants and the space helpers", "[shaders]")
 {
     constexpr std::string_view kShader = R"(

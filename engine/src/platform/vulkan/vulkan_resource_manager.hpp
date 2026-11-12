@@ -12,6 +12,9 @@
 
 namespace crimson::vulkan
 {
+    // The stages that read the push constant: the vertex shader for the object and the view, the pixel shader for the view
+    constexpr vk::ShaderStageFlags kDrawDataStages = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+
     class VulkanResourceManager : public ResourceManagerBase<VulkanResourceTraits>
     {
     public:
@@ -56,7 +59,6 @@ namespace crimson::vulkan
 
         [[nodiscard]] vk::DescriptorPool GetDescriptorPool() const { return *m_descriptorPool; }
         [[nodiscard]] vk::DescriptorSetLayout GetFrameSetLayout() const { return *m_frameSetLayout; }
-        [[nodiscard]] vk::DescriptorSetLayout GetViewSetLayout() const { return *m_viewSetLayout; }
 
         VulkanGraphicsPipeline& GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info);
     protected:
@@ -92,7 +94,7 @@ namespace crimson::vulkan
         vk::raii::Sampler m_pointClampSampler{ nullptr };
         vk::raii::Sampler m_shadowCompareSampler{ nullptr };
         vk::raii::DescriptorSetLayout m_frameSetLayout{ nullptr };
-        vk::raii::DescriptorSetLayout m_viewSetLayout{ nullptr };
+        vk::raii::DescriptorSetLayout m_unusedSetLayout{ nullptr };
         vk::raii::DescriptorPool m_descriptorPool{ nullptr };
         TextureHandle m_defaultTexture; // what a material's textures show until they are set
         VulkanSurface m_primarySurface;

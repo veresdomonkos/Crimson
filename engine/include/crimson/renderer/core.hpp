@@ -58,10 +58,19 @@ namespace crimson
         uint32_t Stencil = 0;
     };
 
-    // The camera a pass draws with, what goes into the view block
+    // A camera to draw with, what a shader gets from GetView()
     struct ViewData
     {
         glm::mat4 ViewProj{1.0f};
         glm::vec3 CameraPosition{0.0f};
+    };
+
+    // One of a frame's views, and the part of the target its draws land in
+    struct FrameView
+    {
+        ViewData View;
+
+        // The area of the draw's pass when not set
+        std::optional<RenderRect> Viewport;
     };
 }
