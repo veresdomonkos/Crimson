@@ -129,6 +129,8 @@ float4 PSMain(VertexOutput input) : SV_Target
     AssetManager::AssetManager(GpuResourceManager& gpuResources, fs::path root)
         : m_gpuResources(gpuResources), m_root(fs::absolute(std::move(root)).lexically_normal())
     {
+        RegisterNativeComponents(m_components);
+
         AddImporter(std::make_unique<TextureImporter>());
         AddImporter(std::make_unique<ShaderImporter>());
         AddImporter(std::make_unique<MaterialImporter>());
@@ -648,7 +650,9 @@ float4 PSMain(VertexOutput input) : SV_Target
         sun.Name = "Sun";
         sun.Position = glm::vec3(0.0f, 8.0f, 0.0f);
         sun.RotationDegrees = glm::degrees(glm::eulerAngles(glm::quatLookAt(glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)), glm::vec3(0.0f, 1.0f, 0.0f))));
-        sun.Light = LightComponent{ .Type = LightType::Directional, .Intensity = 1.2f, .CastsShadow = true };
+        const LightComponent light{ .Type = LightType::Directional, .Intensity = 1.2f, .CastsShadow = true };
+        const ComponentType& lightType = *m_components.Find("light");
+        sun.Components.push_back(SceneComponent{ .Type = lightType.Id, .Values = ReadFields(lightType, &light) });
 
         SceneData data;
         data.Roots.push_back(std::move(sun));

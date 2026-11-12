@@ -47,6 +47,7 @@ namespace crimson
         }
 
         [[nodiscard]] entt::entity GetHandle() const { return m_handle; }
+        [[nodiscard]] Scene* GetScene() const { return m_scene; }
 
         explicit operator bool() const { return m_scene && m_scene->GetRegistry().valid(m_handle); }
         bool operator==(const Entity& other) const { return m_handle == other.m_handle && m_scene == other.m_scene; }

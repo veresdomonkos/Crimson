@@ -13,10 +13,12 @@
 #include <crimson/scene/scene_serializer.hpp>
 
 #include "support/fake_gpu.hpp"
+#include "support/scene_fields.hpp"
 #include "support/temp_folder.hpp"
 
 using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
+using crimson::tests::FieldOf;
 using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
@@ -124,7 +126,7 @@ TEST_CASE_METHOD(Fixture, "Scene files written by hand work", "[scene data]")
     CHECK(data->Roots[0].Id);
     CHECK(data->Roots[0].Active);
     CHECK(data->Roots[0].Scale == glm::vec3(1.0f));
-    CHECK(data->Roots[0].MeshRenderer->Mesh == assets.Find<AssetType::Mesh>("thing.obj"));
+    CHECK(FieldOf<AssetID>(assets, data->Roots[0], "meshRenderer", "mesh") == assets.Find<AssetType::Mesh>("thing.obj"));
 }
 
 TEST_CASE_METHOD(Fixture, "A broken scene file doesn't load", "[scene data]")
@@ -136,6 +138,8 @@ TEST_CASE_METHOD(Fixture, "A broken scene file doesn't load", "[scene data]")
     CHECK_FALSE(ParseSceneData(R"({ "version": 0 })", assets, "test"));
     CHECK_FALSE(ParseSceneData(SceneWith(R"({ "position": "here" })"), assets, "test"));
     CHECK_FALSE(ParseSceneData(SceneWith(R"({ "id": "not hex" })"), assets, "test"));
+    CHECK_FALSE(ParseSceneData(SceneWith(R"({ "light": 5 })"), assets, "test"));
+    CHECK_FALSE(ParseSceneData(SceneWith(R"({ "light": { "intensity": "bright" } })"), assets, "test"));
 }
 
 TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[scene data]")
@@ -151,7 +155,7 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
     REQUIRE(renderer.MaterialAssets[0] == assets.DefaultMaterial());
 
     const SceneData data = CaptureScene(scene, {}, assets);
-    CHECK_FALSE(data.Roots[0].MeshRenderer->Materials[0]);
+    CHECK_FALSE(FieldOf<std::vector<AssetID>>(assets, data.Roots[0], "meshRenderer", "materials")[0]);
 
     // So a material made for the slot afterwards gets used
     Temp.Write("materials/Paint.mat", kMaterial);
@@ -392,8 +396,8 @@ TEST_CASE_METHOD(Fixture, "A scene keeps its references to missing files", "[sce
 
         const SceneData captured = CaptureScene(scene, {}, assets);
         REQUIRE(captured.Roots.size() == 2);
-        CHECK(assets.GetMissing(captured.Roots[0].MeshRenderer->Mesh)->Path == "thing.obj");
-        CHECK(assets.GetMissing(captured.Roots[0].MeshRenderer->Materials.at(0))->Path == "thing.mat");
+        CHECK(assets.GetMissing(FieldOf<AssetID>(assets, captured.Roots[0], "meshRenderer", "mesh"))->Path == "thing.obj");
+        CHECK(assets.GetMissing(FieldOf<std::vector<AssetID>>(assets, captured.Roots[0], "meshRenderer", "materials").at(0))->Path == "thing.mat");
         CHECK(assets.GetMissing(captured.Roots[1].Instance)->Path == "crate.scene");
 
         REQUIRE(assets.SaveScene(assets.Find<AssetType::Scene>("level.scene"), captured));
@@ -450,7 +454,7 @@ TEST_CASE_METHOD(Fixture, "Scenes are assets", "[scene data]")
         const auto data = assets.ReadSceneFile(id);
         REQUIRE(data);
         REQUIRE(data->Roots.size() == 1);
-        CHECK(data->Roots[0].Light->Type == LightType::Directional);
+        CHECK(FieldOf<int32_t>(assets, data->Roots[0], "light", "type") == static_cast<int32_t>(LightType::Directional));
     }
 
     SECTION("Saving replaces the file")
@@ -503,9 +507,9 @@ TEST_CASE_METHOD(Fixture, "Moving a file updates the scenes referencing it", "[s
     const auto data = reopened.ReadSceneFile(reopened.Find<AssetType::Scene>("level.scene"));
 
     REQUIRE(data);
-    CHECK(data->Roots[0].MeshRenderer->Mesh == mesh);
-    CHECK(data->Roots[0].MeshRenderer->Materials[0] == material);
-    CHECK_FALSE(data->Roots[0].MeshRenderer->Materials[1]);
+    CHECK(FieldOf<AssetID>(assets, data->Roots[0], "meshRenderer", "mesh") == mesh);
+    CHECK(FieldOf<std::vector<AssetID>>(assets, data->Roots[0], "meshRenderer", "materials")[0] == material);
+    CHECK_FALSE(FieldOf<std::vector<AssetID>>(assets, data->Roots[0], "meshRenderer", "materials")[1]);
     CHECK(data->Roots[0].Children[0].Instance == source);
 }
 
@@ -524,5 +528,108 @@ TEST_CASE_METHOD(Fixture, "A renamed folder keeps a scene's references working",
     const auto data = reopened.ReadSceneFile(reopened.Find<AssetType::Scene>("renamed/crate.scene"));
 
     REQUIRE(data);
-    CHECK(data->Roots[0].MeshRenderer->Mesh == mesh);
+    CHECK(FieldOf<AssetID>(assets, data->Roots[0], "meshRenderer", "mesh") == mesh);
+}
+
+TEST_CASE_METHOD(Fixture, "A component that isn't registered is kept as it was", "[scene data]")
+{
+    const std::string text = SceneWith(R"({ "name": "Door", "health": { "max": 3, "armor": [ 1, 2 ] }, "light": { "type": "spot" } })");
+    AssetManager assets(Gpu, Temp.Path());
+
+    const auto data = ParseSceneData(text, assets, "test");
+    REQUIRE(data);
+
+    const SceneComponent* health = data->Roots[0].FindComponent("health");
+    REQUIRE(health);
+    CHECK(health->Values.empty());
+    CHECK_FALSE(health->Raw.empty());
+
+    SECTION("Writing the file again keeps it")
+    {
+        const std::string written = WriteSceneData(*data, assets);
+        CHECK(written.find(R"("max": 3)") != std::string::npos);
+
+        const auto again = ParseSceneData(written, assets, "test");
+        REQUIRE(again);
+        CHECK(*again == *data);
+    }
+
+    SECTION("Loading the scene and saving it again keeps it")
+    {
+        Scene scene;
+        InstantiateScene(*data, scene, {}, assets, {});
+
+        const SceneData captured = CaptureScene(scene, {}, assets);
+        REQUIRE(captured.Roots.size() == 1);
+        REQUIRE(captured.Roots[0].FindComponent("health"));
+        CHECK(*captured.Roots[0].FindComponent("health") == *health);
+        CHECK(captured.Roots[0].FindComponent("light"));
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "A component registered at runtime is saved and loaded with its values", "[scene data]")
+{
+    Temp.Write("sword.obj", kTriangleObj);
+    AssetManager assets(Gpu, Temp.Path());
+    const MeshID sword = assets.Find<AssetType::Mesh>("sword.obj");
+
+    const ComponentType* health = assets.Components().RegisterRuntime("health", "Health", {
+        FieldInfo{ .Key = "max", .Label = "Max", .Type = FieldType::Int, .Default = int32_t{ 3 } },
+        FieldInfo{ .Key = "weapon", .Label = "Weapon", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh }
+    });
+    REQUIRE(health);
+
+    Scene scene;
+    const Entity guard = scene.CreateEntity("Guard");
+    health->Add(guard);
+    WriteComponent(*health, guard, { int32_t{ 10 }, AssetID(sword) });
+
+    const std::string text = WriteSceneData(CaptureScene(scene, {}, assets), assets);
+    CHECK(text.find(R"("health")") != std::string::npos);
+
+    const auto data = ParseSceneData(text, assets, "test");
+    REQUIRE(data);
+    CHECK(FieldOf<int32_t>(assets, data->Roots[0], "health", "max") == 10);
+    CHECK(FieldOf<AssetID>(assets, data->Roots[0], "health", "weapon") == sword);
+
+    Scene loaded;
+    InstantiateScene(*data, loaded, {}, assets, {});
+
+    const Entity loadedGuard = loaded.GetEntity(loaded.GetRoots()[0]);
+    REQUIRE(health->Has(loadedGuard));
+    CHECK(std::get<int32_t>(ReadComponent(*health, loadedGuard)[0]) == 10);
+    CHECK(std::get<AssetID>(ReadComponent(*health, loadedGuard)[1]) == sword);
+
+    SECTION("Where it isn't registered, the file keeps it as it was")
+    {
+        AssetManager other(Gpu, Temp.Path());
+
+        const auto unregistered = ParseSceneData(text, other, "test");
+        REQUIRE(unregistered);
+        CHECK_FALSE(unregistered->Roots[0].FindComponent("health")->Raw.empty());
+        CHECK(WriteSceneData(*unregistered, other) == text);
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "A light's fields are read from a file as they were written before", "[scene data]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+
+    const auto data = ParseSceneData(SceneWith(R"({ "light": { "type": "spot", "color": [ 1.0, 0.5, 0.2 ], "intensity": 10.0, "range": 12.0,
+        "innerCone": 20.0, "outerCone": 35.0, "castsShadow": true } })"), assets, "test");
+    REQUIRE(data);
+
+    Scene scene;
+    InstantiateScene(*data, scene, {}, assets, {});
+
+    const LightComponent& light = scene.GetEntity(scene.GetRoots()[0]).GetComponent<LightComponent>();
+    CHECK(light == LightComponent{ .Type = LightType::Spot, .Color = glm::vec3(1.0f, 0.5f, 0.2f), .Intensity = 10.0f, .Range = 12.0f,
+                                   .InnerConeDegrees = 20.0f, .OuterConeDegrees = 35.0f, .CastsShadow = true });
+
+    SECTION("A type it doesn't know is a point light, with a warning")
+    {
+        const auto unknown = ParseSceneData(SceneWith(R"({ "light": { "type": "laser" } })"), assets, "test");
+        REQUIRE(unknown);
+        CHECK(FieldOf<int32_t>(assets, unknown->Roots[0], "light", "type") == static_cast<int32_t>(LightType::Point));
+    }
 }

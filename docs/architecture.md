@@ -137,7 +137,26 @@ scene.SetParent(light, {}); // back to the top level, it stays where it is in th
 | `LightComponent` | type, color, intensity, range, cone angles and whether it casts a shadow. It points along its transform's -Z axis. |
 | `MeshRendererComponent` | mesh and material assets, and whether it casts shadows |
 
-Every entity has the first three, and the others are optional. Meshes and renderers share one component because there is only one kind of renderer so far. It can be split when something else needs a mesh, such as skinned meshes. The Inspector, the scene files and the renderer each know these types by hand today; #61 moves them to a registry, so components can also come from scripts.
+Every entity has the first three, and the others are optional. Meshes and renderers share one component because there is only one kind of renderer so far. It can be split when something else needs a mesh, such as skinned meshes.
+
+### Components
+
+What scene files know of a component, they know from its registration in `ComponentRegistry`, which the asset manager owns (`AssetManager::Components`). A `ComponentType` has a stable id that files use, a name, and its fields: each with a key, a label, a type (`FieldType`), a default, an asset type for references, enum keys and labels, and a range. It also knows how to add, get and remove the component on an entity. Fields are read and written as `FieldValue`s, so code that works on components in general, such as saving, never names a C++ type.
+
+```cpp
+registry.RegisterNative<LightComponent>("light", "Light")
+    .Field<&LightComponent::Intensity>({ .Key = "intensity", .Label = "Intensity", .Type = FieldType::Float })
+    .Constrain([](LightComponent& light) { /* keep the fields consistent after an edit */ });
+
+registry.RegisterRuntime("health", "Health", { FieldInfo{ .Key = "max", .Label = "Max", .Type = FieldType::Int, .Default = int32_t{ 3 } } });
+```
+
+- **Native components** register their fields through pointers to their members, which also give their defaults. Enums are stored as their index, and asset references as `AssetID`s, typed again when they are set. `native_components.cpp` registers Transform, Light and Mesh Renderer; Name, Relationship, Scene Instance and Instanced are part of what a node is rather than components a file lists.
+- **Runtime components** have no C++ type, like those a script will define (#36). Their values are a `RuntimeComponent` in a pool of the scene's named after their id.
+- **Hooks:** `Constrain` keeps fields consistent, `OnLoaded` runs after the component was made from a file (a mesh renderer loads its assets), and `OnCaptured` adjusts what is saved.
+- `ReadComponent`, `WriteComponent` and `CopyComponent` work on any registered component.
+
+The renderer, picking and the camera still use the C++ types directly, as they are what the components are for rather than ways to edit or save them.
 
 `SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLighting`, gives every active renderer an object transform, and records the passes under [Rendering](#rendering).
 
@@ -163,6 +182,8 @@ A scene is saved as a `.scene` asset: readable JSON with the entities nested the
 ```
 
 There are no prefabs, as any scene can be used inside another one as an instance. An instance is an entity with the other scene's roots as its children. Its own name, transform and active flag are saved with it, while what is under it comes from the other scene's file each time the scene opens, and can't be changed from here. There are no per-instance overrides yet (#20). A scene that would end up containing itself can't be dropped in, and one written that way by hand leaves that instance empty.
+
+Each component is a key of its entity, by its type's id, with its fields by their keys. A field the file doesn't have gets its default, and the transform's fields are the entity's own (`position`, `rotation`, `scale`). A component whose type isn't registered, such as one from a script that isn't loaded, is kept as it was: on the entity in `UnknownComponents`, and written back the same when the scene is saved. When a referenced asset moves, the references in the asset fields of the registered components are updated.
 
 Hand-written references can be plain paths. Saving writes both the id and the path, and an empty material slot stays empty in the file, so it can still find its material. A reference that can't be resolved is logged, and is gone once the scene is saved again. A file that can't be read, including one from a newer version, opens no scene at all, so that saving can't overwrite it.
 

@@ -6,7 +6,6 @@
 
 #include "crimson/asset_manager/asset_manager.hpp"
 #include "crimson/core/log.hpp"
-#include "crimson/scene/scene_renderer.hpp"
 
 namespace crimson
 {
@@ -31,19 +30,19 @@ namespace crimson
                 return node;
             }
 
-            if (const auto* light = entity.TryGetComponent<LightComponent>())
-                node.Light = *light;
-
-            if (const auto* renderer = entity.TryGetComponent<MeshRendererComponent>())
+            for (const ComponentType& type : assets.Components().Types())
             {
-                SceneMeshRenderer& mesh = node.MeshRenderer.emplace();
-                mesh.Mesh = renderer->MeshAsset;
-                mesh.CastsShadows = renderer->CastsShadows;
+                if (type.InlineInFile || !type.Has(entity))
+                    continue;
 
-                // The default is what an empty slot ends up with, and left empty it can still find the material made for it
-                for (const MaterialID material : renderer->MaterialAssets)
-                    mesh.Materials.push_back(material == assets.DefaultMaterial() ? MaterialID{} : material);
+                SceneComponent& component = node.Components.emplace_back(SceneComponent{ .Type = type.Id, .Values = ReadComponent(type, entity) });
+
+                if (type.OnCaptured)
+                    type.OnCaptured(component.Values, assets);
             }
+
+            if (const auto* unknown = entity.TryGetComponent<UnknownComponents>())
+                node.Components.insert(node.Components.end(), unknown->Components.begin(), unknown->Components.end());
 
             for (const entt::entity child : entity.GetComponent<RelationshipComponent>().Children)
                 node.Children.push_back(CaptureNode(scene.GetEntity(child), scene, assets));
@@ -74,16 +73,21 @@ namespace crimson
                 if (readOnly)
                     Target.GetRegistry().emplace<InstancedComponent>(entity.GetHandle()); // empty, so AddComponent has no reference to give
 
-                if (node.Light)
-                    entity.AddComponent<LightComponent>(*node.Light);
-
-                if (node.MeshRenderer)
+                for (const SceneComponent& component : node.Components)
                 {
-                    auto& renderer = entity.AddComponent<MeshRendererComponent>();
-                    renderer.MeshAsset = node.MeshRenderer->Mesh;
-                    renderer.MaterialAssets = node.MeshRenderer->Materials;
-                    renderer.CastsShadows = node.MeshRenderer->CastsShadows;
-                    ResolveMeshRenderer(renderer, Assets);
+                    const ComponentType* type = Assets.Components().Find(component.Type);
+
+                    // Kept as it was read, to be saved again
+                    if (!type || type->InlineInFile || !component.Raw.empty())
+                    {
+                        Target.GetRegistry().get_or_emplace<UnknownComponents>(entity.GetHandle()).Components.push_back(component);
+                        continue;
+                    }
+
+                    WriteComponent(*type, entity, component.Values);
+
+                    if (type->OnLoaded)
+                        type->OnLoaded(entity, Assets);
                 }
 
                 if (node.Instance)

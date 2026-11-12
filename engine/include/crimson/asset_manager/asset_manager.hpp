@@ -14,6 +14,7 @@
 #include "crimson/asset_manager/asset_importer.hpp"
 #include "crimson/asset_manager/material_data.hpp"
 #include "crimson/asset_manager/scene_data.hpp"
+#include "crimson/scene/component_registry.hpp"
 
 namespace crimson
 {
@@ -102,6 +103,10 @@ namespace crimson
         LoadResult<T> Load(std::string_view path) { return Load(FindOrWarn<T>(path)); }
 
         [[nodiscard]] MaterialID DefaultMaterial() const;
+
+        // The kinds of components the project's scenes can have, the engine's own and any registered since
+        [[nodiscard]] ComponentRegistry& Components() { return m_components; }
+        [[nodiscard]] const ComponentRegistry& Components() const { return m_components; }
 
         // The material made for one of a mesh's slots: materials/<slot>.mat, next to the mesh. Invalid if there is none.
         [[nodiscard]] MaterialID FindSlotMaterial(MeshID mesh, std::string_view slot) const;
@@ -195,6 +200,7 @@ namespace crimson
         void WarnWrongType(std::string_view path, AssetType wanted) const;
 
         GpuResourceManager& m_gpuResources;
+        ComponentRegistry m_components{ *this };
         std::filesystem::path m_root;
 
         std::vector<std::unique_ptr<AssetImporterBase>> m_importers;
