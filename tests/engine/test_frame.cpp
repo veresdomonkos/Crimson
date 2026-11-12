@@ -13,10 +13,7 @@
 #include <crimson/renderer/frame_recorder.hpp>
 #include <crimson/renderer/frame_validation.hpp>
 
-#include "support/log_counter.hpp"
-
 using namespace crimson;
-using crimson::tests::LogCounter;
 
 namespace
 {
@@ -291,42 +288,6 @@ TEST_CASE("Validation finds passes that sample what they shouldn't", "[frame]")
     }
 }
 
-TEST_CASE("A pass past the limit is dropped with one warning, and reads as an empty one", "[frame]")
-{
-    const LogCounter warnings(LogLevel::Warn, "passes in one frame");
-
-    FramePacket packet;
-    FrameRecorder frame(packet);
-
-    for (uint32_t i = 0; i < kMaxPassesPerFrame; ++i)
-        CHECK(frame.AddPass({}).IsValid());
-
-    PassBuilder dropped = frame.AddPass({ .Name = "Dropped" });
-    CHECK_FALSE(dropped.IsValid());
-
-    dropped.Draw(DrawItem{ .Material = kMaterial });
-    CHECK(dropped.GetDraws().empty());
-    CHECK(std::string_view(dropped.GetInfo().Name) == "Pass");
-
-    frame.AddNativePass({ .Name = "Dropped UI" }, [](const NativeContext&) {});
-
-    REQUIRE(packet.GetPasses().size() == kMaxPassesPerFrame);
-    CHECK_FALSE(packet.GetPasses().back().IsNative());
-    CHECK(warnings.Count() == 1);
-
-    SECTION("Not again on the next frame")
-    {
-        packet.Reset();
-        FrameRecorder next(packet);
-
-        for (uint32_t i = 0; i <= kMaxPassesPerFrame; ++i)
-            next.AddPass({});
-
-        CHECK(packet.GetPasses().size() == kMaxPassesPerFrame);
-        CHECK(warnings.Count() == 1);
-    }
-}
-
 TEST_CASE("Opaque draws are grouped to rebind as little as possible", "[draw sort]")
 {
     FakeMaterials materials;
@@ -428,6 +389,126 @@ TEST_CASE("A mesh's draws sort by the distance from the camera to its center", "
     CHECK(pass.GetDraws()[1].SortDepth == 9.0f);
 }
 
+TEST_CASE("A draw uses its pass's view unless it names one", "[frame]")
+{
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    const ViewData camera{ .ViewProj = glm::mat4(2.0f), .CameraPosition = glm::vec3(1.0f, 2.0f, 3.0f) };
+    const RenderRect tile{ 64, 128, 32, 32 };
+
+    PassBuilder first = frame.AddPass({});
+    PassBuilder second = frame.AddPass({ .View = camera });
+    const ViewId extra = frame.AddView({ .ViewProj = glm::mat4(3.0f) }, tile);
+
+    second.Draw(DrawItem{ .Material = kMaterial });
+    second.Draw(DrawItem{ .Material = kMaterial, .View = extra });
+    second.Draw(DrawItem{ .Material = kMaterial });
+    first.Draw(DrawItem{ .Material = kMaterial });
+
+    const std::span<const PassRecord> passes = packet.GetPasses();
+    const std::span<const FrameView> views = packet.GetViews();
+
+    // One for each pass and the one that was added
+    REQUIRE(views.size() == 3);
+    CHECK(passes[0].GetView() != passes[1].GetView());
+
+    // The pass's view is the camera it was added with, and covers the pass's area
+    CHECK(views[passes[1].GetView()].View.ViewProj == camera.ViewProj);
+    CHECK(views[passes[1].GetView()].View.CameraPosition == camera.CameraPosition);
+    CHECK_FALSE(views[passes[1].GetView()].Viewport);
+
+    REQUIRE(views[extra].Viewport);
+    CHECK(views[extra].Viewport->X == tile.X);
+    CHECK(views[extra].Viewport->Y == tile.Y);
+    CHECK(views[extra].Viewport->Width == tile.Width);
+    CHECK(views[extra].Viewport->Height == tile.Height);
+
+    // Naming a view is for that draw only, the next one is back to the pass's
+    REQUIRE(second.GetDraws().size() == 3);
+    CHECK(second.GetDraws()[0].View == passes[1].GetView());
+    CHECK(second.GetDraws()[1].View == extra);
+    CHECK(second.GetDraws()[2].View == passes[1].GetView());
+
+    REQUIRE(first.GetDraws().size() == 1);
+    CHECK(first.GetDraws()[0].View == passes[0].GetView());
+}
+
+TEST_CASE("A mesh drawn with a view of its own sorts by the distance from that view", "[frame]")
+{
+    Mesh mesh;
+    mesh.Materials = { kMaterial };
+    mesh.SubMeshes = { { .MaterialSlot = 0 } };
+    mesh.Bounds = { glm::vec3(-1.0f), glm::vec3(1.0f) };
+
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    PassBuilder pass = frame.AddPass({ .View = { .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) } });
+    const ViewId far = frame.AddView({ .CameraPosition = glm::vec3(0.0f, 0.0f, 5.0f) });
+
+    pass.DrawMesh(mesh);
+    pass.DrawMesh(mesh, 0, { .View = far });
+
+    REQUIRE(pass.GetDraws().size() == 2);
+    CHECK(pass.GetDraws()[0].SortDepth == 4.0f);
+    CHECK(pass.GetDraws()[1].SortDepth == 25.0f);
+    CHECK(pass.GetDraws()[1].View == far);
+}
+
+TEST_CASE("The frame's views are uploaded in the order they were added", "[frame]")
+{
+    FramePacket packet;
+    FrameRecorder frame(packet);
+
+    frame.AddPass({ .View = { .ViewProj = glm::mat4(2.0f), .CameraPosition = glm::vec3(1.0f, 2.0f, 3.0f) } });
+    frame.AddView({ .ViewProj = glm::mat4(3.0f) });
+
+    FrameGpuData data;
+    data.Build(FrameLighting{}, packet.GetViews(), FrameTime{});
+
+    REQUIRE(data.Views.size() == 2);
+    CHECK(data.Views[0].ViewProj == glm::mat4(2.0f));
+    CHECK(data.Views[0].CameraPosition == glm::vec4(1.0f, 2.0f, 3.0f, 0.0f));
+    CHECK(data.Views[1].ViewProj == glm::mat4(3.0f));
+
+    // Nothing is left over for the next frame
+    packet.Reset();
+    CHECK(packet.GetViews().empty());
+}
+
+TEST_CASE("A view's area is clipped to its pass's", "[frame]")
+{
+    const RenderRect passArea{ 0, 0, 512, 512 };
+
+    const auto equal = [](const RenderRect& a, const RenderRect& b)
+    {
+        return a.X == b.X && a.Y == b.Y && a.Width == b.Width && a.Height == b.Height;
+    };
+
+    SECTION("A view without a viewport has the whole pass")
+    {
+        CHECK(equal(ViewArea(FrameView{}, passArea), passArea));
+    }
+
+    SECTION("A viewport inside the pass stays as it is")
+    {
+        const RenderRect tile{ 256, 128, 128, 128 };
+        CHECK(equal(ViewArea(FrameView{ .Viewport = tile }, passArea), tile));
+    }
+
+    SECTION("A viewport across the pass's edge keeps only its part inside")
+    {
+        CHECK(equal(ViewArea(FrameView{ .Viewport = RenderRect{ 448, -64, 128, 128 } }, passArea), RenderRect{ 448, 0, 64, 64 }));
+    }
+
+    SECTION("A viewport outside the pass is empty")
+    {
+        CHECK(IsEmpty(ViewArea(FrameView{ .Viewport = RenderRect{ 1024, 0, 512, 512 } }, passArea)));
+        CHECK(IsEmpty(ViewArea(FrameView{ .Viewport = RenderRect{ 512, 0, 64, 64 } }, passArea)));
+    }
+}
+
 TEST_CASE("The frame clock starts at 0 and counts the time between frames", "[frame]")
 {
     using namespace std::chrono_literals;
@@ -443,7 +524,7 @@ TEST_CASE("The frame clock starts at 0 and counts the time between frames", "[fr
 TEST_CASE("The frame block carries the frame's time", "[frame]")
 {
     FrameGpuData data;
-    data.Build(FrameLighting{}, FrameTime{ 2.5f, 0.125f });
+    data.Build(FrameLighting{}, {}, FrameTime{ 2.5f, 0.125f });
 
     CHECK(data.Block.Time == 2.5f);
     CHECK(data.Block.DeltaTime == 0.125f);

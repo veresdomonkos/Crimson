@@ -218,6 +218,7 @@ namespace crimson::opengl
 
         OpenGLProgram result{ .GLHandle = program };
         result.ObjectIndexLocation = glGetUniformLocation(program, fmt::format("{}.ObjectIndex", kDrawUniformName).c_str());
+        result.ViewIndexLocation = glGetUniformLocation(program, fmt::format("{}.ViewIndex", kDrawUniformName).c_str());
 
         for (const GlslTextureUnit& unit : textureUnits)
         {

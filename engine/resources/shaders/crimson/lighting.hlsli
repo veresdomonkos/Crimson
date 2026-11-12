@@ -28,7 +28,7 @@ struct Surface
 // The light leaving the surface towards the camera, in linear light
 float3 ComputeLighting(Surface surface)
 {
-    const float3 view = normalize(CameraPosition - surface.WorldPosition);
+    const float3 view = normalize(GetView().CameraPosition.xyz - surface.WorldPosition);
     const float NdotV = max(dot(surface.Normal, view), 0.0001);
 
     const float roughness = clamp(surface.Roughness, MIN_ROUGHNESS, 1.0);

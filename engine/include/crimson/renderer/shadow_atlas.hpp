@@ -1,7 +1,6 @@
 #pragma once
 #include <algorithm>
 #include <array>
-#include <limits>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -28,18 +27,16 @@ namespace crimson
 
     // Assigns atlas tiles to the lights with CastsShadow set and fills views with one view per tile.
     // A directional or spot light takes one tile, a point light six, in the order +X -X +Y -Y +Z -Z.
-    // There are at most maxViews of them, as each is drawn by a pass of its own.
-    // Returns how many lights didn't fit, those don't cast shadows.
-    inline uint32_t BuildShadowViews(std::vector<Light>& lights, const ShadowAtlasSettings& settings, std::vector<ShadowView>& views,
-                                     uint32_t maxViews = std::numeric_limits<uint32_t>::max())
+    // Returns how many lights didn't fit in the atlas, those don't cast shadows.
+    inline uint32_t BuildShadowViews(std::vector<Light>& lights, const ShadowAtlasSettings& settings, std::vector<ShadowView>& views)
     {
         const uint32_t tilesPerRow = settings.AtlasSize / settings.TileSize;
-        const uint32_t room = std::min(tilesPerRow * tilesPerRow, maxViews);
+        const uint32_t room = tilesPerRow * tilesPerRow;
 
         uint32_t skipped = 0;
         views.clear();
 
-        const auto addView = [&](const glm::mat4& viewProj, float depthBias)
+        const auto addView = [&](const glm::mat4& viewProj, const glm::vec3& eye, float depthBias)
         {
             const uint32_t index = static_cast<uint32_t>(views.size());
             const uint32_t x = index % tilesPerRow * settings.TileSize;
@@ -53,6 +50,7 @@ namespace crimson
             view.Shadow.NormalBias = settings.NormalBias;
             view.Shadow.TexelSize = 1.0f / atlasSize;
             view.Viewport = RenderRect{ static_cast<int32_t>(x), static_cast<int32_t>(y), settings.TileSize, settings.TileSize };
+            view.Eye = eye;
             views.push_back(view);
         };
 
@@ -86,7 +84,7 @@ namespace crimson
                     const float radius = settings.DirectionalRadius;
                     const glm::mat4 view = glm::lookAt(eye, settings.DirectionalCenter, stableUp(direction));
                     const glm::mat4 projection = glm::orthoRH_ZO(-radius, radius, -radius, radius, 0.1f, settings.DirectionalDistance * 2.0f);
-                    addView(projection * view, settings.DirectionalDepthBias);
+                    addView(projection * view, eye, settings.DirectionalDepthBias);
                     break;
                 }
                 case LightType::Spot:
@@ -94,7 +92,7 @@ namespace crimson
                     const glm::vec3 direction = glm::normalize(light.Direction);
                     const glm::mat4 view = glm::lookAt(light.Position, light.Position + direction, stableUp(direction));
                     const glm::mat4 projection = glm::perspectiveRH_ZO(light.OuterConeAngle * 2.0f, 1.0f, 0.1f, light.Range);
-                    addView(projection * view, settings.PerspectiveDepthBias);
+                    addView(projection * view, light.Position, settings.PerspectiveDepthBias);
                     break;
                 }
                 case LightType::Point:
@@ -106,7 +104,7 @@ namespace crimson
                     const glm::mat4 projection = glm::perspectiveRH_ZO(glm::radians(90.0f), 1.0f, 0.1f, light.Range);
 
                     for (const glm::vec3& direction : directions)
-                        addView(projection * glm::lookAt(light.Position, light.Position + direction, stableUp(direction)), settings.PerspectiveDepthBias);
+                        addView(projection * glm::lookAt(light.Position, light.Position + direction, stableUp(direction)), light.Position, settings.PerspectiveDepthBias);
 
                     break;
                 }

@@ -2,12 +2,12 @@
 // with each one's own depth pass, which is 1 where there are none.
 #include "crimson/bindings.hlsli"
 
-cbuffer MaterialBlock : register(b0, space2)
+cbuffer MaterialBlock : register(b0, space1)
 {
     float4 OutlineColor;
 };
 
-Texture2D OutlineMask : register(t0, space2);
+Texture2D OutlineMask : register(t0, space1);
 
 struct VertexOutput
 {

@@ -30,20 +30,20 @@ namespace crimson
     static constexpr std::string_view kDefaultShaderPath = "engine/shaders/S_Lit.hlsl";
 
     // What a new shader starts as: lit like the default one, with fewer slots, to have something to change
-    static constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space2,
-// and its textures in space2 too. A comment like "@default 0.5 @range 0 1" sets how a property starts.
+    static constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space1,
+// and its textures in space1 too. A comment like "@default 0.5 @range 0 1" sets how a property starts.
 // Time and DeltaTime, in seconds, come from crimson/bindings.hlsli. crimson/lighting.hlsli also brings
 // crimson/math.hlsli (PI, TAU, EPSILON, ...) and crimson/transforms.hlsli (ObjectToWorldPosition, WorldToClip, ...).
 #include "crimson/lighting.hlsli"
 
-cbuffer MaterialBlock : register(b0, space2)
+cbuffer MaterialBlock : register(b0, space1)
 {
     float4 Color; // @default 1 1 1 1
     float Metallic; // @default 0 @range 0 1
     float Roughness; // @default 0.5 @range 0 1
 };
 
-Texture2D ColorMap : register(t0, space2);
+Texture2D ColorMap : register(t0, space1);
 
 struct VertexInput
 {

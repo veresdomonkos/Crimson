@@ -22,10 +22,6 @@ namespace crimson
     class SceneRenderer
     {
     public:
-        // Each shadow view is a pass. The rest of the frame keeps room for the Outline Mask, Scene, Tone Mapping and
-        // Outline passes, and for what the caller adds, like the editor's UI.
-        static constexpr uint32_t kMaxShadowViews = kMaxPassesPerFrame - 8;
-
         SceneRenderer(GpuResourceManager& resources, Renderer& renderer, ShadowAtlasSettings atlas = {});
         ~SceneRenderer();
 
@@ -48,7 +44,8 @@ namespace crimson
         // Fills the frame's lighting, call before Record with the scene's world transforms up to date
         void BuildLighting(Scene& scene, FrameLighting& lighting);
 
-        // Records one shadow pass per shadow view of the frame's lighting, then the main pass described by mainPass, then the tone mapping.
+        // Records one shadow pass that draws every shadow view of the frame's lighting into its tile of the atlas, if there
+        // are any, then the main pass described by mainPass, then the tone mapping.
         // The main pass is named "Scene", and samples the shadow atlas besides what mainPass.Reads lists.
         // Clear colors are in linear light when tone mapping is enabled.
         // The outlined entity and its children get an outline, if there is one and outlines are enabled.
@@ -63,6 +60,7 @@ namespace crimson
         };
 
         void CreateScreenTriangle();
+        void RecordShadows(FrameRecorder& frame);
         void RecordOutlineMask(FrameRecorder& frame, const PassInfo& mainPass);
 
         GpuResourceManager& m_resources;

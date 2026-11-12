@@ -6,6 +6,15 @@
 
 namespace crimson::vulkan
 {
+    namespace
+    {
+        void SetViewportAndScissor(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
+        {
+            cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
+            cmdBuffer.setScissor(0, vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } });
+        }
+    }
+
     VulkanRenderer::VulkanRenderer(VulkanDevice& device, VulkanResourceManager& resourceManager)
         : m_device(device), m_resourceManager(resourceManager)
     {
@@ -59,40 +68,6 @@ namespace crimson::vulkan
         const vk::raii::Device& device = m_device.GetDevice();
         const VmaAllocator allocator = m_device.GetAllocator();
 
-        const vk::DeviceSize minUboAlignment = m_device.GetProperties().limits.minUniformBufferOffsetAlignment;
-        m_viewUboAlignment = (sizeof(ViewBlock) + minUboAlignment - 1) & ~(minUboAlignment - 1);
-
-        m_viewUBO = CreateAllocatedBuffer(allocator, m_viewUboAlignment * kMaxPassesPerFrame * kMaxFramesInFlight, vk::BufferUsageFlagBits::eUniformBuffer, BufferMemory::HostMapped);
-
-        if (!m_viewUBO)
-        {
-            LOG_ERROR("[Vulkan Renderer] Failed to create the view UBO");
-            return;
-        }
-
-        const vk::DescriptorSetLayout viewLayout = m_resourceManager.GetViewSetLayout();
-
-        vk::DescriptorSetAllocateInfo viewAllocInfo{};
-        viewAllocInfo.descriptorPool = m_resourceManager.GetDescriptorPool();
-        viewAllocInfo.descriptorSetCount = 1;
-        viewAllocInfo.pSetLayouts = &viewLayout;
-
-        m_viewDescriptorSet = std::move(device.allocateDescriptorSets(viewAllocInfo).front());
-
-        vk::DescriptorBufferInfo viewBufferInfo{};
-        viewBufferInfo.buffer = m_viewUBO.Get();
-        viewBufferInfo.offset = 0;
-        viewBufferInfo.range = sizeof(ViewBlock);
-
-        vk::WriteDescriptorSet viewWrite{};
-        viewWrite.dstSet = *m_viewDescriptorSet;
-        viewWrite.dstBinding = kViewBlockBinding;
-        viewWrite.descriptorType = vk::DescriptorType::eUniformBufferDynamic;
-        viewWrite.descriptorCount = 1;
-        viewWrite.pBufferInfo = &viewBufferInfo;
-
-        device.updateDescriptorSets(viewWrite, nullptr);
-
         const vk::DescriptorSetLayout frameLayout = m_resourceManager.GetFrameSetLayout();
 
         for (InFlightFrame& resources : m_inFlight)
@@ -131,6 +106,7 @@ namespace crimson::vulkan
             UploadStorageBuffer(resources, resources.Lights, kLightsBinding, nullptr, kInitialStorageSize);
             UploadStorageBuffer(resources, resources.Shadows, kShadowsBinding, nullptr, kInitialStorageSize);
             UploadStorageBuffer(resources, resources.Objects, kObjectsBinding, nullptr, kInitialStorageSize);
+            UploadStorageBuffer(resources, resources.Views, kViewsBinding, nullptr, kInitialStorageSize);
         }
     }
 
@@ -298,7 +274,7 @@ namespace crimson::vulkan
         texture.Layout = newLayout;
     }
 
-    void VulkanRenderer::ExecutePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, uint32_t passIndex)
+    void VulkanRenderer::ExecutePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, std::span<const FrameView> views)
     {
         const PassInfo& info = pass.GetInfo();
 
@@ -322,34 +298,19 @@ namespace crimson::vulkan
             return;
         }
 
-        BeginPass(cmdBuffer, info, rt, passIndex);
+        BeginRendering(cmdBuffer, rt, info.Clear, info.Viewport);
 
+        // BeginRendering set the viewport to the pass's area, which the first draw's view may not have
+        m_bound.DrawPushed = false;
+
+        const RenderRect passArea = info.Viewport.value_or(RenderRect{ 0, 0, rt.Width, rt.Height });
         const std::span<const DrawItem> draws = pass.GetDraws();
 
         BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
         for (const DrawSortEntry& sorted : m_drawOrder)
-            ExecuteDraw(cmdBuffer, draws[sorted.Index], target, passIndex);
+            ExecuteDraw(cmdBuffer, draws[sorted.Index], target, views, passArea);
 
         EndPass(cmdBuffer, rt);
-    }
-
-    void VulkanRenderer::BeginPass(const vk::raii::CommandBuffer& cmdBuffer, const PassInfo& info, VulkanRenderTarget& rt, uint32_t passIndex)
-    {
-        if (m_viewUBO)
-        {
-            ViewBlock block{};
-            block.ViewProj = info.View.ViewProj;
-            block.CameraPosition = glm::vec4(info.View.CameraPosition, 0.0f);
-
-            const uint32_t globalPassIndex = (m_inFlightIndex * kMaxPassesPerFrame) + passIndex;
-            const vk::DeviceSize offset = globalPassIndex * m_viewUboAlignment;
-            std::memcpy(static_cast<char*>(m_viewUBO.Mapped()) + offset, &block, sizeof(ViewBlock));
-        }
-
-        BeginRendering(cmdBuffer, rt, info.Clear, info.Viewport);
-
-        // The view block's dynamic offset is different for every pass
-        m_bound.ViewSetBound = false;
     }
 
     void VulkanRenderer::EndPass(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt)
@@ -443,13 +404,16 @@ namespace crimson::vulkan
 
         cmdBuffer.beginRendering(rendering);
 
-        cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
-        cmdBuffer.setScissor(0, rendering.renderArea);
+        SetViewportAndScissor(cmdBuffer, rect);
     }
 
-    void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, uint32_t passIndex)
+    void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, std::span<const FrameView> views, const RenderRect& passArea)
     {
         CRIMSON_PROFILE_FUNCTION();
+
+        // A view whose part of the target is outside the pass's draws nothing
+        const RenderRect viewArea = ViewArea(views[draw.View], passArea);
+        if (IsEmpty(viewArea)) return;
 
         VulkanVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(draw.VertexBuffer);
         VulkanIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(draw.IndexBuffer);
@@ -480,7 +444,7 @@ namespace crimson::vulkan
             ++m_stats.PipelineBinds;
         }
 
-        // Each shader has its own layout. The frame and view sets and the push constant are the same
+        // Each shader has its own layout. The frame set and the push constant are the same
         // in all of them and stay valid, but the material set differs, so a new layout invalidates it.
         if (m_bound.Layout != pipeline.Layout)
         {
@@ -512,15 +476,6 @@ namespace crimson::vulkan
             m_bound.FrameSetBound = true;
         }
 
-        if (!m_bound.ViewSetBound)
-        {
-            const uint32_t globalPassIndex = (m_inFlightIndex * kMaxPassesPerFrame) + passIndex;
-            const uint32_t dynamicOffset = static_cast<uint32_t>(globalPassIndex * m_viewUboAlignment);
-
-            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, kViewSpace, *m_viewDescriptorSet, dynamicOffset);
-            m_bound.ViewSetBound = true;
-        }
-
         if (m_bound.MaterialSet != *material.DescriptorSet)
         {
             cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, kMaterialSpace, *material.DescriptorSet, nullptr);
@@ -528,11 +483,17 @@ namespace crimson::vulkan
             ++m_stats.MaterialBinds;
         }
 
-        if (m_bound.Object != draw.Object)
+        const DrawData drawData{ draw.Object, draw.View };
+
+        // A view draws to its own part of the target, like a shadow view to its tile of the atlas
+        if (!m_bound.DrawPushed || m_bound.Draw.ViewIndex != drawData.ViewIndex)
+            SetViewportAndScissor(cmdBuffer, viewArea);
+
+        if (!m_bound.DrawPushed || m_bound.Draw != drawData)
         {
-            const DrawData drawData{ draw.Object };
-            cmdBuffer.pushConstants<DrawData>(pipeline.Layout, vk::ShaderStageFlagBits::eVertex, 0, drawData);
-            m_bound.Object = draw.Object;
+            cmdBuffer.pushConstants<DrawData>(pipeline.Layout, kDrawDataStages, 0, drawData);
+            m_bound.Draw = drawData;
+            m_bound.DrawPushed = true;
         }
 
         const uint32_t total = static_cast<uint32_t>(indexBuffer.Size / Index::Size(indexBuffer.Type));
@@ -578,8 +539,8 @@ namespace crimson::vulkan
         const std::span<const PassRecord> passes = packet.GetPasses();
         m_stats.Passes = static_cast<uint32_t>(passes.size());
 
-        for (uint32_t i = 0; i < passes.size(); ++i)
-            ExecutePass(cmdBuffer, passes[i], i);
+        for (const PassRecord& pass : passes)
+            ExecutePass(cmdBuffer, pass, packet.GetViews());
 
         CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
 
@@ -605,7 +566,7 @@ namespace crimson::vulkan
 
         // The slot's last frame is done, so nothing reads its buffers anymore, and nothing has bound its set yet,
         // so they can still grow
-        m_gpuData.Build(packet.GetLighting(), m_clock.Tick(std::chrono::steady_clock::now()));
+        m_gpuData.Build(packet.GetLighting(), packet.GetViews(), m_clock.Tick(std::chrono::steady_clock::now()));
 
         std::memcpy(frame.FrameBlockBuffer.Mapped(), &m_gpuData.Block, sizeof(FrameBlock));
         UploadStorageBuffer(frame, frame.Lights, kLightsBinding, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes());
@@ -613,6 +574,7 @@ namespace crimson::vulkan
 
         const std::span<const GpuObject> objects = packet.GetObjects();
         UploadStorageBuffer(frame, frame.Objects, kObjectsBinding, objects.data(), objects.size_bytes());
+        UploadStorageBuffer(frame, frame.Views, kViewsBinding, m_gpuData.Views.data(), std::span(m_gpuData.Views).size_bytes());
 
         uint32_t imageIndex = 0;
         vk::Result result = vk::Result::eSuccess;

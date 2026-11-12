@@ -6,6 +6,7 @@
 #include "crimson/renderer/frame_validation.hpp"
 #include "crimson/renderer/renderer.hpp"
 
+#include <span>
 #include <vector>
 
 namespace crimson::opengl
@@ -20,17 +21,17 @@ namespace crimson::opengl
         bool Submit(FrameRecorder frame) override;
         void SetShadowAtlas(TextureHandle shadowAtlas) override;
     private:
-        void ExecutePass(const PassRecord& pass);
-        void BeginPass(const PassInfo& info);
+        void ExecutePass(const PassRecord& pass, std::span<const FrameView> views);
         void ExecuteNativePass(const PassRecord& pass);
-        void BindTarget(const PassInfo& info);
+        RenderRect BindTarget(const PassInfo& info);
         void ClearTarget(const ClearInfo& clear);
-        void ExecuteDraw(const DrawItem& info);
+        // passArea is where a draw lands when its view has no viewport of its own
+        void ExecuteDraw(const DrawItem& info, std::span<const FrameView> views, const RenderRect& passArea);
         void ResetBoundState();
         void BindFrameResources();
     private:
         GLuint m_frameUBO = 0;
-        GLuint m_viewUBO = 0;
+        GLuint m_viewsBuffer = 0;
         GLuint m_lightsBuffer = 0;
         GLuint m_shadowsBuffer = 0;
         GLuint m_objectsBuffer = 0;
@@ -47,5 +48,8 @@ namespace crimson::opengl
         VertexBufferHandle m_boundVertexBuffer;
         IndexBufferHandle m_boundIndexBuffer;
         ObjectId m_boundObject = 0;
+
+        // A view also sets the viewport, so it starts over with every pass
+        ViewId m_boundView = kPassView;
     };
 }

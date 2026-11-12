@@ -67,11 +67,13 @@ frame.Lighting().Lights = lights; // starts empty every frame
 
 ObjectId object = frame.AddObject(transform); // usable in every pass of this frame
 
-for (const ShadowView& view : frame.Lighting().Shadows)
+// One pass draws all of the shadow views, each into its own tile of the atlas
+PassBuilder shadows = frame.AddPass({ .Name = "Shadows", .Target = shadowTarget, .Clear = { .Flags = ClearFlags::Depth } });
+
+for (const ShadowView& shadow : frame.Lighting().Shadows)
 {
-    PassBuilder shadow = frame.AddPass({ .Name = "Shadows", .Target = shadowTarget, .Clear = { .Flags = ClearFlags::Depth },
-                                         .Viewport = view.Viewport, .View = { .ViewProj = view.Shadow.ViewProj } });
-    shadow.DrawMesh(mesh, object, { .Variant = ShaderVariant::Depth });
+    ViewId view = frame.AddView({ .ViewProj = shadow.Shadow.ViewProj, .CameraPosition = shadow.Eye }, shadow.Viewport);
+    shadows.DrawMesh(mesh, object, { .Variant = ShaderVariant::Depth, .View = view });
 }
 
 frame.AddPass({ .Name = "Scene", .Target = sceneTarget, .View = camera, .Reads = { shadowAtlas } }).DrawMesh(mesh, object);
@@ -83,12 +85,12 @@ renderer.Submit(std::move(frame)); // false when the frame was dropped, like for
 ```
 
 - A pass is a `PassRecord`: its `PassInfo` and either draws or a native callback. Passes run in the order they are added.
-- A frame has at most `kMaxPassesPerFrame` (64) passes, as Vulkan's view buffer has a slot for each pass of each frame in flight. A pass past that is dropped, and its `PassBuilder` reads as empty. The first time that happens it logs a warning.
 - `PassInfo` holds the pass's `Name` (shown in Tracy), its `Target` (the back buffer when empty), what to `Clear` it to, an optional `Viewport` to limit drawing and clearing to part of it, the `View` (camera) and the textures the pass samples in `Reads`.
-- A draw is a `DrawItem`: vertex buffer, index buffer, material, object and `ShaderVariant`. `PassBuilder::Draw` adds one, `DrawMesh(mesh, object, options)` one per submesh. A `PassBuilder` refers to its pass by index, so it stays valid while more passes are added.
-- The renderers sort each pass's draws: opaque ones first, grouped by shader, material and buffers to rebind as little as possible, then transparent ones from the farthest to the nearest. `DrawMesh` sets a draw's `SortDepth` to the squared distance from the pass's camera to the center of the mesh's bounds. Meshes that cross each other can still blend in the wrong order, as each sorts as a whole.
+- A draw is a `DrawItem`: vertex buffer, index buffer, material, object, view and `ShaderVariant`. `PassBuilder::Draw` adds one, `DrawMesh(mesh, object, options)` one per submesh. A `PassBuilder` refers to its pass by index, so it stays valid while more passes are added.
+- The frame's views are a list like its objects. Every pass adds its `View` to it, and a draw uses that one unless it names another (`DrawItem::View`, `DrawOptions::View`) from `FrameRecorder::AddView(view, viewport)`. A view added with a viewport draws only to that part of the pass's target, clipped to the pass's own area, and a view outside that area draws nothing. That is how one pass draws many cameras, like the shadows. The pass's `Clear` is still for the pass's whole area.
+- The renderers sort each pass's draws: opaque ones first, grouped by shader, material and buffers to rebind as little as possible, then transparent ones from the farthest to the nearest. `DrawMesh` sets a draw's `SortDepth` to the squared distance from its view's camera to the center of the mesh's bounds. Meshes that cross each other can still blend in the wrong order, as each sorts as a whole.
 - A native pass runs a callback with `NativeContext` (device, command buffer, color format) between engine-managed layout transitions. ImGui is rendered this way, so the engine itself has no UI concepts. The callback runs inside `Submit`, so it captures by value or references what outlives the frame.
-- Each draw indexes a per-frame buffer of object transforms, filled by `AddObject`.
+- Each draw indexes a per-frame buffer of object transforms, filled by `AddObject`, and one of views. Both indices reach the shader in the draw's push constant.
 - In debug builds `Submit` checks the passes' `Reads`, and logs once when a pass samples its own target or a texture that a later pass writes.
 - Vulkan layout transitions and barriers are handled by the renderer, a pass's `Reads` are made readable before it starts; OpenGL needs none.
 - The renderer keeps one `FramePacket` per frame in flight (`kMaxFramesInFlight`), and reuses their memory. Frame-in-flight synchronisation (fences, semaphores, per-frame buffers) is internal to the Vulkan renderer.
@@ -108,7 +110,7 @@ Lights are kept in a GPU buffer, in the style of glTF's `KHR_lights_punctual`, a
 
 ### Shadows
 
-`BuildShadowViews` assigns tiles of one depth atlas to the lights with `CastsShadow` set: one for a directional or spot light, six for a point light. Each view is rendered by its own pass with `Viewport` set to its tile, and shaders pick the tile through the light's `ShadowIndex`. Shadows are filtered with PCF. The default atlas is 4096x4096 with 1024 tiles. `SceneRenderer` keeps to `kMaxShadowViews` views, so the frame still has room for its other passes, and warns when it is made with an atlas that has more tiles than that. Lights that don't fit in the atlas, or past that limit, log a warning and stay unshadowed. Directional lights cover one fixed area of the world, there are no cascades yet.
+`BuildShadowViews` assigns tiles of one depth atlas to the lights with `CastsShadow` set: one for a directional or spot light, six for a point light. One pass draws them all: it clears the atlas, and each shadow view is a view of the frame with its tile as the viewport, which the casters are drawn with. So the atlas is the only limit on how many lights are shadowed, and every caster is drawn once for every view, as nothing is culled per view yet. Shaders pick the tile through the light's `ShadowIndex`. Shadows are filtered with PCF. The default atlas is 4096x4096 with 1024 tiles. Lights that don't fit in the atlas log a warning and stay unshadowed. Directional lights cover one fixed area of the world, there are no cascades yet.
 
 ### The selection outline
 

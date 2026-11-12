@@ -337,6 +337,41 @@ TEST_CASE_METHOD(ShadowFixture, "A point light casts a shadow", "[lighting]")
     CHECK(seam < light / 2);
 }
 
+TEST_CASE_METHOD(ShadowFixture, "The last of 64 shadowed point lights still casts its shadow", "[lighting]")
+{
+    // 1024 tiles, for 384 views. Far more than a frame has passes, they are all drawn by one.
+    Gpu().Device->WaitIdle();
+    Subject.reset();
+    Subject = std::make_unique<SceneRenderer>(*Gpu().GPUResources, *Gpu().Renderer, ShadowAtlasSettings{ .AtlasSize = 4096, .TileSize = 128 });
+    Subject->SetToneMapMaterial(Assets->Load<AssetType::Material>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
+
+    Lighting.AmbientColor = glm::vec3(0.1f);
+
+    // These take the first 378 tiles and give no light
+    for (int i = 0; i < 63; ++i)
+        AddLight({ .Type = LightType::Point, .Intensity = 0.0f, .Range = 20.0f, .CastsShadow = true }, glm::vec3(0.0f, 3.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+
+    AddLight({ .Type = LightType::Point, .Intensity = 12.0f, .Range = 20.0f, .CastsShadow = true },
+        glm::vec3(-1.0f, 2.0f, 0.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+
+    const Image image = Render();
+
+    REQUIRE(Lighting.Lights.size() == 64);
+    for (const Light& light : Lighting.Lights)
+        CHECK(light.ShadowIndex >= 0);
+
+    const float light = LinearBrightness(PixelAt(image, kInLight));
+
+    // On two of the last light's six views, as in the test above
+    for (const float x : { 0.9f, 1.1f })
+    {
+        const float shadow = LinearBrightness(PixelAt(image, glm::vec3(x, 0.0f, 0.0f)));
+
+        CAPTURE(x, shadow, light);
+        CHECK(shadow < light / 2);
+    }
+}
+
 namespace
 {
     // With UVs: U goes along +X and V along +Y

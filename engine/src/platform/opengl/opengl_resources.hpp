@@ -70,6 +70,7 @@ namespace crimson::opengl
     {
         GLuint GLHandle = 0;
         GLint ObjectIndexLocation = -1;
+        GLint ViewIndexLocation = -1; // also -1 for a shader that doesn't use the view
         std::vector<OpenGLShaderTextureUnit> TextureUnits;
     };
 
