@@ -4,6 +4,7 @@
 #include <array>
 #include <cfloat>
 #include <cmath>
+#include <string>
 
 #include <imgui.h>
 
@@ -106,6 +107,33 @@ namespace crimson::editor::ui::props
     {
         BeginRow(label);
         bool changed = ImGui::DragFloat("##Value", &value, speed, min, max);
+        ResetTarget();
+
+        changed |= ApplyReset(EndRow(reset != nullptr), value, reset);
+        return changed;
+    }
+
+    bool Int(const char* label, int& value, float speed, int min, int max, const int* reset)
+    {
+        BeginRow(label);
+        bool changed = ImGui::DragInt("##Value", &value, speed, min, max);
+        ResetTarget();
+
+        changed |= ApplyReset(EndRow(reset != nullptr), value, reset);
+        return changed;
+    }
+
+    bool String(const char* label, std::string& value, const std::string* reset)
+    {
+        BeginRow(label);
+
+        std::array<char, 256> buffer{};
+        value.copy(buffer.data(), buffer.size() - 1);
+
+        bool changed = ImGui::InputText("##Value", buffer.data(), buffer.size());
+        if (changed)
+            value = buffer.data();
+
         ResetTarget();
 
         changed |= ApplyReset(EndRow(reset != nullptr), value, reset);

@@ -10,6 +10,7 @@
 #include <crimson/scene/scene_renderer.hpp>
 
 #include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/component_fields.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
@@ -39,38 +40,16 @@ namespace crimson::editor::ui
         return open;
     }
 
-    // Returns true when another asset was picked
+    // A typed id through the combo that works on any type
     template <AssetType T>
     static bool DrawAssetCombo(const char* label, const AssetManager& assets, TypedAssetID<T>& current)
     {
-        bool changed = false;
+        AssetID id = current;
+        if (!DrawAssetCombo(label, assets, T, id))
+            return false;
 
-        if (BeginAssetCombo(label, assets, current))
-        {
-            for (const AssetInfo* info : assets.List(T))
-            {
-                if (IsInternal(*info))
-                    continue;
-
-                const bool selected = info->Id == current;
-
-                if (ImGui::Selectable(info->Path.c_str(), selected))
-                {
-                    changed = !selected;
-                    current = assets.As<T>(info->Id);
-                }
-            }
-
-            ImGui::EndCombo();
-        }
-
-        if (const TypedAssetID<T> dropped = AcceptAssetOnLastItem<T>(assets); dropped && dropped != current)
-        {
-            current = dropped;
-            changed = true;
-        }
-
-        return changed;
+        current = assets.As<T>(id);
+        return true;
     }
 
     void InspectorPanel::OnImGui()
@@ -87,9 +66,11 @@ namespace crimson::editor::ui
             ImGui::BeginDisabled(entity.HasComponent<InstancedComponent>());
 
             DrawHeader(entity);
-            DrawTransform(entity);
-            DrawLight(entity);
-            DrawMeshRenderer(entity);
+
+            for (const ComponentType& type : m_context.Assets.Components().Types())
+                DrawComponent(entity, type);
+
+            DrawUnknownComponents(entity);
 
             // An instance's own components wouldn't be saved
             if (!entity.HasComponent<SceneInstanceComponent>())
@@ -122,15 +103,44 @@ namespace crimson::editor::ui
             name.Name = buffer.data();
     }
 
-    void InspectorPanel::DrawTransform(Entity entity)
+    void InspectorPanel::DrawComponent(Entity entity, const ComponentType& type)
     {
-        bool removed = false;
-        if (!BeginComponentSection(kIconTransform, "Transform", false, removed))
+        void* component = type.Get(entity);
+        if (!component)
             return;
 
-        static const TransformComponent kDefaults;
-        auto& transform = entity.GetComponent<TransformComponent>();
+        const char* icon = ComponentIcon(type, component);
 
+        // What can be added can be removed, which every entity's own, like the transform, can't
+        bool removed = false;
+        if (BeginComponentSection(icon ? icon : kIconEntity, type.Name.c_str(), type.Addable, removed))
+        {
+            if (type.Id == "transform")
+            {
+                DrawTransform(*static_cast<TransformComponent*>(component));
+            }
+            else if (type.Id == "meshRenderer")
+            {
+                DrawMeshRenderer(*static_cast<MeshRendererComponent*>(component));
+            }
+            else if (props::BeginTable(type.Id.c_str()))
+            {
+                DrawComponentFields(type, component, m_context.Assets);
+                props::EndTable();
+            }
+
+            ImGui::TreePop();
+        }
+
+        if (removed)
+            type.Remove(entity);
+    }
+
+    void InspectorPanel::DrawTransform(TransformComponent& transform)
+    {
+        static const TransformComponent kDefaults;
+
+        // Not from its fields, for the uniform scale, which belongs to the editor rather than the transform
         if (props::BeginTable("##Transform"))
         {
             props::Vec3("Position", transform.Position, 0.05f, &kDefaults.Position);
@@ -153,106 +163,62 @@ namespace crimson::editor::ui
             props::Checkbox("Uniform Scale", m_uniformScale);
             props::EndTable();
         }
-
-        ImGui::TreePop();
     }
 
-    void InspectorPanel::DrawLight(Entity entity)
+    void InspectorPanel::DrawMeshRenderer(MeshRendererComponent& renderer)
     {
-        auto* light = entity.TryGetComponent<LightComponent>();
-        if (!light)
-            return;
+        static const MeshRendererComponent kDefaults;
+        bool changed = false;
 
-        bool removed = false;
-        const char* icon = light->Type == LightType::Directional ? kIconDirectionalLight : light->Type == LightType::Spot ? kIconSpotLight : kIconPointLight;
-        if (BeginComponentSection(icon, "Light", true, removed))
+        // Not from its fields, as its slots are named after the mesh's and can't be reset to one material
+        if (props::BeginTable("##MeshRenderer"))
         {
-            static const LightComponent kDefaults;
-            constexpr std::array kTypeNames = { "Directional", "Point", "Spot" };
+            props::BeginRow("Mesh");
+            changed |= DrawAssetCombo("##Asset", m_context.Assets, renderer.MeshAsset);
+            props::EndRow(false);
 
-            if (props::BeginTable("##Light"))
+            for (size_t slot = 0; slot < renderer.MaterialAssets.size(); ++slot)
             {
-                const int defaultType = static_cast<int>(kDefaults.Type);
-                int type = static_cast<int>(light->Type);
-                if (props::Combo("Type", type, kTypeNames.data(), static_cast<int>(kTypeNames.size()), &defaultType))
-                    light->Type = static_cast<LightType>(type);
+                const std::string label = slot < renderer.Resolved.MaterialSlots.size()
+                    ? renderer.Resolved.MaterialSlots[slot]
+                    : "Material " + std::to_string(slot);
 
-                props::Color("Color", &light->Color.x, 3, &kDefaults.Color.x);
-                props::Float("Intensity", light->Intensity, 0.01f, 0.0f, 1000.0f, &kDefaults.Intensity);
+                // Without one of its own, a slot goes back to the material that fits it, or the default one
+                ImGui::PushID(static_cast<int>(slot));
+                props::BeginRow(label.c_str());
+                MaterialID& material = renderer.MaterialAssets[slot];
+                changed |= DrawAssetCombo("##Asset", m_context.Assets, material);
+                props::ResetTarget();
 
-                if (light->Type != LightType::Directional)
-                    props::Float("Range", light->Range, 0.05f, 0.01f, 10000.0f, &kDefaults.Range);
-
-                if (light->Type == LightType::Spot)
+                if (props::EndRow(true) && material)
                 {
-                    props::Float("Outer Cone", light->OuterConeDegrees, 0.25f, 1.0f, 89.0f, &kDefaults.OuterConeDegrees);
-                    props::Float("Inner Cone", light->InnerConeDegrees, 0.25f, 0.0f, light->OuterConeDegrees, &kDefaults.InnerConeDegrees);
-                    light->InnerConeDegrees = std::min(light->InnerConeDegrees, light->OuterConeDegrees);
+                    material = {};
+                    changed = true;
                 }
 
-                props::Checkbox("Casts Shadow", light->CastsShadow, &kDefaults.CastsShadow);
-                props::EndTable();
+                ImGui::PopID();
             }
 
-            ImGui::TreePop();
+            props::Checkbox("Casts Shadows", renderer.CastsShadows, &kDefaults.CastsShadows);
+            props::EndTable();
         }
 
-        if (removed)
-            entity.RemoveComponent<LightComponent>();
+        if (changed)
+            ResolveMeshRenderer(renderer, m_context.Assets);
     }
 
-    void InspectorPanel::DrawMeshRenderer(Entity entity)
+    void InspectorPanel::DrawUnknownComponents(Entity entity)
     {
-        auto* renderer = entity.TryGetComponent<MeshRendererComponent>();
-        if (!renderer)
+        const auto* unknown = entity.TryGetComponent<UnknownComponents>();
+        if (!unknown)
             return;
 
-        bool removed = false;
-        if (BeginComponentSection(kIconMesh, "Mesh Renderer", true, removed))
+        // Like one from a script that isn't loaded. It can't be shown, but the scene keeps it.
+        for (const SceneComponent& component : unknown->Components)
         {
-            static const MeshRendererComponent kDefaults;
-            bool changed = false;
-
-            if (props::BeginTable("##MeshRenderer"))
-            {
-                props::BeginRow("Mesh");
-                changed |= DrawAssetCombo("##Asset", m_context.Assets, renderer->MeshAsset);
-                props::EndRow(false);
-
-                for (size_t slot = 0; slot < renderer->MaterialAssets.size(); ++slot)
-                {
-                    const std::string label = slot < renderer->Resolved.MaterialSlots.size()
-                        ? renderer->Resolved.MaterialSlots[slot]
-                        : "Material " + std::to_string(slot);
-
-                    // Without one of its own, a slot goes back to the material that fits it, or the default one
-                    ImGui::PushID(static_cast<int>(slot));
-                    props::BeginRow(label.c_str());
-                    MaterialID& material = renderer->MaterialAssets[slot];
-                    changed |= DrawAssetCombo("##Asset", m_context.Assets, material);
-                    props::ResetTarget();
-
-                    if (props::EndRow(true) && material)
-                    {
-                        material = {};
-                        changed = true;
-                    }
-
-                    ImGui::PopID();
-                }
-
-                props::Checkbox("Casts Shadows", renderer->CastsShadows, &kDefaults.CastsShadows);
-                props::EndTable();
-            }
-
-            ImGui::TreePop();
-
-            if (changed)
-                ResolveMeshRenderer(*renderer, m_context.Assets);
+            ImGui::TextDisabled("%s  %s", kIconWarning, component.Type.c_str());
+            ImGui::SetItemTooltip("A component this editor doesn't know. It stays as it is when the scene is saved.");
         }
-
-        if (removed)
-            entity.RemoveComponent<MeshRendererComponent>();
     }
 
     void InspectorPanel::DrawSceneInstance(Entity entity)
@@ -285,14 +251,26 @@ namespace crimson::editor::ui
 
         if (ImGui::BeginPopup("AddComponent"))
         {
-            const bool hasLight = entity.HasComponent<LightComponent>();
-            const bool hasRenderer = entity.HasComponent<MeshRendererComponent>();
+            for (const ComponentType& type : m_context.Assets.Components().Types())
+            {
+                if (!type.Addable)
+                    continue;
 
-            if (ImGui::MenuItem("Light", nullptr, false, !hasLight))
-                entity.AddComponent<LightComponent>();
+                // Between frames, as a component may load assets once it is there
+                if (ImGui::MenuItem(type.Name.c_str(), nullptr, false, !type.Has(entity)))
+                {
+                    m_context.Deferred.emplace_back([this, &type, entity]
+                    {
+                        if (!entity || type.Has(entity))
+                            return;
 
-            if (ImGui::MenuItem("Mesh Renderer", nullptr, false, !hasRenderer))
-                entity.AddComponent<MeshRendererComponent>();
+                        type.Add(entity);
+
+                        if (type.OnLoaded)
+                            type.OnLoaded(entity, m_context.Assets);
+                    });
+                }
+            }
 
             ImGui::EndPopup();
         }
