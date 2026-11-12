@@ -1,6 +1,21 @@
 cmake_minimum_required(VERSION 3.22)
 project(Crimson LANGUAGES CXX C)
 
+# Turns on the git hooks that check the conventions in CONTRIBUTING.md, unless the checkout already has other hooks set
+find_package(Git QUIET)
+if (PROJECT_IS_TOP_LEVEL AND GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" config core.hooksPath
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        OUTPUT_VARIABLE CRIMSON_HOOKS_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+
+    if (CRIMSON_HOOKS_PATH STREQUAL "")
+        execute_process(COMMAND "${GIT_EXECUTABLE}" config core.hooksPath .githooks WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+        message(STATUS "Git hooks: turned on the ones in .githooks")
+    endif()
+endif()
+
 # GLFW
 add_subdirectory(external/glfw)
 
