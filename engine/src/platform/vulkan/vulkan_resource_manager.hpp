@@ -94,7 +94,6 @@ namespace crimson::vulkan
         vk::raii::Sampler m_pointClampSampler{ nullptr };
         vk::raii::Sampler m_shadowCompareSampler{ nullptr };
         vk::raii::DescriptorSetLayout m_frameSetLayout{ nullptr };
-        vk::raii::DescriptorSetLayout m_unusedSetLayout{ nullptr };
         vk::raii::DescriptorPool m_descriptorPool{ nullptr };
         TextureHandle m_defaultTexture; // what a material's textures show until they are set
         VulkanSurface m_primarySurface;

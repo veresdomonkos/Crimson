@@ -20,7 +20,7 @@ namespace crimson
 
     // What a comment after a material property or texture declares, like Unity's Properties block:
     //   float Roughness; // @default 0.5 @range 0 1
-    //   Texture2D NormalMap : register(t1, space2); // @default normal
+    //   Texture2D NormalMap : register(t1, space1); // @default normal
     struct ShaderAnnotation
     {
         std::vector<float> Default;
@@ -58,10 +58,8 @@ namespace crimson
 
     // Resources are grouped by how often they change, each group is an HLSL space and a descriptor set.
     // assets/shaders/crimson/bindings.hlsli declares the same layout for the shaders.
-    // Space 1 is left empty. It used to hold the pass's view, and materials stay where shaders already declare them.
     constexpr uint32_t kFrameSpace    = 0;
-    constexpr uint32_t kUnusedSpace   = 1;
-    constexpr uint32_t kMaterialSpace = 2;
+    constexpr uint32_t kMaterialSpace = 1;
 
     // HLSL numbers b, t and s registers separately but SPIR-V has one range, the compiler shifts them apart
     constexpr uint32_t kTextureBindingShift = 16;

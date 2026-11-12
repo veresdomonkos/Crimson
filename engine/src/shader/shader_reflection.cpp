@@ -147,11 +147,6 @@ namespace crimson
                 {
                     valid = CheckStandardResource(*binding) && valid;
                 }
-                else if (binding->set == kUnusedSpace)
-                {
-                    LOG_ERROR("[Shader] '{}' is in space{}, which is empty. The camera comes from GetView() in crimson/bindings.hlsli", GetResourceName(*binding), binding->set);
-                    valid = false;
-                }
                 else
                 {
                     LOG_ERROR("[Shader] '{}' is in space{}, only spaces 0 to {} exist", GetResourceName(*binding), binding->set, kMaterialSpace);

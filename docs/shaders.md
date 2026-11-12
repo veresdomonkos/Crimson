@@ -24,8 +24,7 @@ Resources are grouped by how often they change:
 | Space | Scope | Resources |
 |:------|:------|:----------|
 | `space0` | per frame | `FrameBlock` (`AmbientColor`, `Time` and `DeltaTime` in seconds), `Lights`, `Shadows`, `Objects`, `Views`, `ShadowAtlas` and the samplers `LinearWrap`, `LinearClamp`, `PointClamp`, `ShadowCompare` |
-| `space1` | | empty, nothing can be declared in it |
-| `space2` | per material, **optional** | one constant buffer (`b0`) and any textures (`t0` and up), both looked up by name |
+| `space1` | per material, **optional** | one constant buffer (`b0`) and any textures (`t0` and up), both looked up by name |
 | push constant | per draw | `DrawData` (`ObjectIndex`, `ViewIndex`) |
 
 A draw's object and camera are entries of the frame's `Objects` and `Views`, picked by the draw's indices. `GetObjectData()` returns the object's `Transform` and `NormalMatrix`, and `GetView()` the camera's `ViewProj` and `CameraPosition`, in either stage. The camera is the scene's in the main pass and a light's in the shadow pass, so a shader never reads `Views` by an index of its own. `WorldToClip` and the other helpers in `crimson/transforms.hlsli` already go through them.
@@ -35,14 +34,14 @@ A draw's object and camera are entries of the frame's `Objects` and `Views`, pic
 ```hlsl
 #include "crimson/lighting.hlsli"
 
-cbuffer MaterialBlock : register(b0, space2)
+cbuffer MaterialBlock : register(b0, space1)
 {
     float4 Color; // @default 1 1 1 1
     float Roughness; // @default 0.5 @range 0 1
 };
 
-Texture2D Albedo : register(t0, space2);
-Texture2D Bumps : register(t1, space2); // @default normal
+Texture2D Albedo : register(t0, space1);
+Texture2D Bumps : register(t1, space1); // @default normal
 
 // VSMain uses GetObjectData() and GetView(), PSMain fills in a Surface for ComputeLighting() and uses Albedo.Sample(LinearWrap, uv)
 ```

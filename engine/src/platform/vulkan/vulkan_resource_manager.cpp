@@ -124,9 +124,6 @@ namespace crimson::vulkan
         frameInfo.pBindings = frameBindings.data();
 
         m_frameSetLayout = m_device.GetDevice().createDescriptorSetLayout(frameInfo);
-
-        // Space 1 has nothing in it, but a pipeline layout needs a set layout for every space up to the material's
-        m_unusedSetLayout = m_device.GetDevice().createDescriptorSetLayout(vk::DescriptorSetLayoutCreateInfo{});
     }
 
     void VulkanResourceManager::CreateDefaultTexture()
@@ -272,7 +269,7 @@ namespace crimson::vulkan
 
             // Shared by all of the shader's pipelines, so switching between them keeps its material bound.
             // The frame set and the push constant are the same in every shader, so they stay valid across shaders.
-            const std::array<vk::DescriptorSetLayout, 3> setLayouts = { *m_frameSetLayout, *m_unusedSetLayout, *shader.MaterialSetLayout };
+            const std::array<vk::DescriptorSetLayout, 2> setLayouts = { *m_frameSetLayout, *shader.MaterialSetLayout };
 
             vk::PushConstantRange pushConstant{};
             pushConstant.stageFlags = kDrawDataStages;

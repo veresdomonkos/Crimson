@@ -85,8 +85,8 @@ TEST_CASE("A shader can have its own depth version, for the shadows and the outl
     SECTION("What only it uses is part of the material")
     {
         const auto binary = CompileHlslShader("depth_only", std::string(kMinimalShader) + R"(
-cbuffer MaterialBlock : register(b0, space2) { float Cutoff; };
-Texture2D Mask : register(t0, space2);
+cbuffer MaterialBlock : register(b0, space1) { float Cutoff; };
+Texture2D Mask : register(t0, space1);
 void PSDepth(float4 position : SV_Position) { clip(Mask.Load(int3(0, 0, 0)).a - Cutoff); }
 )", {});
         REQUIRE(binary);
@@ -195,7 +195,7 @@ TEST_CASE("Annotations are read from the comments after declarations", "[shaders
 {
     const auto annotations = ParseShaderAnnotations(R"(
 // A comment @default 3 on its own line isn't about anything
-cbuffer MaterialBlock : register(b0, space2)
+cbuffer MaterialBlock : register(b0, space1)
 {
     float4 Color; // @default 1 0.5 0 1
     float Roughness; // The surface's roughness. @default 0.5 @range 0 1
@@ -203,7 +203,7 @@ cbuffer MaterialBlock : register(b0, space2)
     float Broken; // @default soon @range 1
 };
 
-Texture2D NormalMap : register(t1, space2); // @default normal
+Texture2D NormalMap : register(t1, space1); // @default normal
 )");
 
     REQUIRE(annotations.contains("Color"));
@@ -229,15 +229,15 @@ TEST_CASE("Annotations reach the shader's interface", "[shaders]")
     const auto binary = CompileHlslShader("annotated", R"(
 #include "crimson/bindings.hlsli"
 
-cbuffer MaterialBlock : register(b0, space2)
+cbuffer MaterialBlock : register(b0, space1)
 {
     float4 Tint; // @default 1 1 1 1
     float Amount; // @default 0.25 @range 0 2
     float WrongSize; // @default 1 2
 };
 
-Texture2D Plain : register(t0, space2);
-Texture2D Bumps : register(t1, space2); // @default normal
+Texture2D Plain : register(t0, space1);
+Texture2D Bumps : register(t1, space1); // @default normal
 
 float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
 
@@ -289,19 +289,16 @@ float4 PSMain() : SV_Target
     CHECK(pixel->find(opengl::kDrawUniformName) != std::string::npos);
 }
 
-TEST_CASE("Nothing can be declared in space1, where the view used to be", "[shaders]")
+TEST_CASE("A shader with its material in space2, where it used to be, fails to import", "[shaders]")
 {
     constexpr std::string_view kShader = R"(
-cbuffer ViewBlock : register(b0, space1)
-{
-    float4x4 ViewProj;
-};
+cbuffer MaterialBlock : register(b0, space2) { float4 Color; };
 
-float4 VSMain(float3 position : POSITION) : SV_Position { return mul(ViewProj, float4(position, 1.0)); }
-float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain() : SV_Target { return Color; }
 )";
 
-    const auto binary = CompileHlslShader("old_view.hlsl", std::string(kShader), {});
+    const auto binary = CompileHlslShader("old_spaces.hlsl", std::string(kShader), {});
     REQUIRE(binary);
     CHECK_FALSE(ReflectShaderInterface(*binary));
 }

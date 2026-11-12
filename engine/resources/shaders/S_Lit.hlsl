@@ -2,7 +2,7 @@
 // Colors are linear. Turn sRGB off on the textures in every slot but ColorMap and EmissiveMap.
 #include "crimson/lighting.hlsli"
 
-cbuffer MaterialBlock : register(b0, space2)
+cbuffer MaterialBlock : register(b0, space1)
 {
     float4 Color; // @default 1 1 1 1
     float Metallic; // @default 0 @range 0 1
@@ -14,11 +14,11 @@ cbuffer MaterialBlock : register(b0, space2)
     float AlphaCutoff; // @default 0.5 @range 0 1
 };
 
-Texture2D ColorMap : register(t0, space2);
-Texture2D NormalMap : register(t1, space2); // @default normal
-Texture2D MetallicRoughnessMap : register(t2, space2); // green is roughness, blue is metallic
-Texture2D OcclusionMap : register(t3, space2); // red
-Texture2D EmissiveMap : register(t4, space2);
+Texture2D ColorMap : register(t0, space1);
+Texture2D NormalMap : register(t1, space1); // @default normal
+Texture2D MetallicRoughnessMap : register(t2, space1); // green is roughness, blue is metallic
+Texture2D OcclusionMap : register(t3, space1); // red
+Texture2D EmissiveMap : register(t4, space1);
 
 struct VertexInput
 {

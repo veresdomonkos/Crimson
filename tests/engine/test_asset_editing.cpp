@@ -760,13 +760,13 @@ TEST_CASE("A material starts from what its shader declares", "[asset editing]")
     temp.Write("annotated.hlsl", R"(
 #include "crimson/bindings.hlsli"
 
-cbuffer MaterialBlock : register(b0, space2)
+cbuffer MaterialBlock : register(b0, space1)
 {
     float Amount; // @default 0.25
     float Other; // @default 0.75
 };
 
-Texture2D Bumps : register(t0, space2); // @default normal
+Texture2D Bumps : register(t0, space1); // @default normal
 
 float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
 float4 PSMain() : SV_Target { return Amount * Other * Bumps.Sample(LinearWrap, float2(0, 0)); }
@@ -837,7 +837,7 @@ namespace
 #include "crimson/bindings.hlsli"
 #include "helper.hlsli"
 
-cbuffer MaterialBlock : register(b0, space2)
+cbuffer MaterialBlock : register(b0, space1)
 {
     float Amount; // @default 0.25
 )";

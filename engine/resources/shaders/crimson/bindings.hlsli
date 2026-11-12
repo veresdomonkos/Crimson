@@ -3,8 +3,7 @@
 
 // The engine's standard resources, grouped by how often they change. Matches engine/include/crimson/renderer/frame_data.hpp.
 //   space0  per frame     lights, shadows, object transforms, views, the shadow atlas and the shared samplers
-//   space1                empty
-//   space2  per material  declared by each shader: one cbuffer and any number of textures
+//   space1  per material  declared by each shader: one cbuffer and any number of textures
 // Each draw says which of the frame's objects and views it is drawn with, see GetObjectData() and GetView().
 
 struct GpuLight

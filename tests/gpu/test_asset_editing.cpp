@@ -27,7 +27,7 @@ namespace
     constexpr std::string_view kUnlitShader = R"(
 #include "crimson/bindings.hlsli"
 
-Texture2D Picture : register(t0, space2);
+Texture2D Picture : register(t0, space1);
 
 struct VertexInput
 {

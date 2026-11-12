@@ -27,7 +27,7 @@ namespace
     constexpr std::string_view kFlatShader = R"(
 #include "crimson/bindings.hlsli"
 
-cbuffer MaterialBlock : register(b0, space2) { float4 Color; };
+cbuffer MaterialBlock : register(b0, space1) { float4 Color; };
 
 float4 VSMain(float3 position : POSITION) : SV_Position
 {
@@ -40,7 +40,7 @@ float4 PSMain() : SV_Target { return Color; }
     constexpr std::string_view kTexturedShader = R"(
 #include "crimson/bindings.hlsli"
 
-Texture2D Albedo : register(t0, space2);
+Texture2D Albedo : register(t0, space1);
 
 struct VertexInput
 {

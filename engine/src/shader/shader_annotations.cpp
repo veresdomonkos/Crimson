@@ -13,7 +13,7 @@ namespace crimson
 {
     namespace
     {
-        // "float Roughness;" and "Texture2D NormalMap : register(t1, space2);" both end their name before these
+        // "float Roughness;" and "Texture2D NormalMap : register(t1, space1);" both end their name before these
         std::string_view DeclaredName(std::string_view code)
         {
             code = code.substr(0, code.find_first_of(":;[="));

@@ -9,7 +9,7 @@ namespace crimson::opengl
 {
     // OpenGL has no descriptor sets, each resource kind has one flat range of slots
     constexpr uint32_t kFrameBlockSlot    = 0;
-    constexpr uint32_t kMaterialBlockSlot = 2;
+    constexpr uint32_t kMaterialBlockSlot = 1;
 
     constexpr uint32_t kLightsSlot  = 0;
     constexpr uint32_t kShadowsSlot = 1;

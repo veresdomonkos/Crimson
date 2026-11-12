@@ -1,13 +1,13 @@
 // Drawn over the whole screen, turns the linear HDR scene into sRGB encoded colors for the display
 #include "crimson/bindings.hlsli"
 
-cbuffer MaterialBlock : register(b0, space2)
+cbuffer MaterialBlock : register(b0, space1)
 {
     float Exposure;
     float ToneMapper; // SceneRenderer's ToneMapper enum
 };
 
-Texture2D SceneColor : register(t0, space2);
+Texture2D SceneColor : register(t0, space1);
 
 struct VertexOutput
 {
