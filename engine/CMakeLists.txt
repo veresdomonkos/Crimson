@@ -47,6 +47,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/core/profiler.hpp
         include/crimson/renderer/render_stats.hpp
         include/crimson/renderer/material_settings.hpp
+        include/crimson/scene/component_registry.hpp
         include/crimson/scene/components.hpp
         include/crimson/scene/entity.hpp
         include/crimson/scene/scene.hpp
@@ -114,6 +115,8 @@ set(ENGINE_IMPLEMENTATION
         src/asset_manager/importers/mesh_tangents.cpp
         src/asset_manager/importers/shader_importer.cpp
         src/asset_manager/importers/scene_importer.cpp
+        src/scene/component_registry.cpp
+        src/scene/native_components.cpp
         src/scene/scene.cpp
         src/scene/scene_renderer.cpp
         src/scene/scene_serializer.cpp

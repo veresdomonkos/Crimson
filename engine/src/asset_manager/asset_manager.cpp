@@ -129,6 +129,8 @@ float4 PSMain(VertexOutput input) : SV_Target
     AssetManager::AssetManager(GpuResourceManager& gpuResources, fs::path root)
         : m_gpuResources(gpuResources), m_root(fs::absolute(std::move(root)).lexically_normal())
     {
+        RegisterNativeComponents(m_components);
+
         AddImporter(std::make_unique<TextureImporter>());
         AddImporter(std::make_unique<ShaderImporter>());
         AddImporter(std::make_unique<MaterialImporter>());
