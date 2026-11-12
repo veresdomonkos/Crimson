@@ -47,11 +47,6 @@ namespace crimson
         m_shadowAtlas = resources.GetDepthAttachment(m_shadowTarget).value();
 
         renderer.SetShadowAtlas(m_shadowAtlas);
-
-        const uint32_t tilesPerRow = atlas.AtlasSize / atlas.TileSize;
-        const uint32_t tileCount = tilesPerRow * tilesPerRow;
-        if (tileCount > kMaxShadowViews)
-            LOG_WARN("[Shadows] The atlas has {} tiles, but a frame only has room for {} shadow views", tileCount, kMaxShadowViews);
     }
 
     SceneRenderer::~SceneRenderer()
@@ -146,7 +141,7 @@ namespace crimson
             });
         }
 
-        const uint32_t skipped = BuildShadowViews(lighting.Lights, m_atlas, lighting.Shadows, kMaxShadowViews);
+        const uint32_t skipped = BuildShadowViews(lighting.Lights, m_atlas, lighting.Shadows);
 
         // This runs every frame, so only say it when it starts happening
         if (skipped > 0 && !m_atlasFullLogged)
@@ -179,24 +174,7 @@ namespace crimson
             m_drawables.push_back({ &renderer.Resolved, frame.AddObject(transform.World), renderer.CastsShadows, isOutlined });
         }
 
-        for (const ShadowView& view : frame.Lighting().Shadows)
-        {
-            const PassInfo info{
-                .Name = "Shadows",
-                .Target = m_shadowTarget,
-                .Clear = { .Flags = ClearFlags::Depth },
-                .Viewport = view.Viewport,
-                .View = { .ViewProj = view.Shadow.ViewProj }
-            };
-
-            PassBuilder pass = frame.AddPass(info);
-
-            for (const Drawable& drawable : m_drawables)
-            {
-                if (drawable.CastsShadows)
-                    pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth });
-            }
-        }
+        RecordShadows(frame);
 
         if (anyOutlined)
             RecordOutlineMask(frame, mainPass);
@@ -236,6 +214,27 @@ namespace crimson
         {
             const PassInfo outlineInfo{ .Name = "Outline", .Target = mainPass.Target, .Viewport = mainPass.Viewport, .Reads = { m_outlineMask } };
             frame.AddPass(outlineInfo).Draw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, m_outlineMaterial });
+        }
+    }
+
+    void SceneRenderer::RecordShadows(FrameRecorder& frame)
+    {
+        if (frame.Lighting().Shadows.empty())
+            return;
+
+        // One pass for the whole atlas, so the number of shadows isn't limited by the frame's passes.
+        // It clears every tile, and each view then draws into its own.
+        PassBuilder pass = frame.AddPass({ .Name = "Shadows", .Target = m_shadowTarget, .Clear = { .Flags = ClearFlags::Depth } });
+
+        for (const ShadowView& shadow : frame.Lighting().Shadows)
+        {
+            const ViewId view = frame.AddView({ .ViewProj = shadow.Shadow.ViewProj }, shadow.Viewport);
+
+            for (const Drawable& drawable : m_drawables)
+            {
+                if (drawable.CastsShadows)
+                    pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth, .View = view });
+            }
         }
     }
 

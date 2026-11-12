@@ -1,7 +1,6 @@
 #pragma once
 #include <algorithm>
 #include <array>
-#include <limits>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -28,13 +27,11 @@ namespace crimson
 
     // Assigns atlas tiles to the lights with CastsShadow set and fills views with one view per tile.
     // A directional or spot light takes one tile, a point light six, in the order +X -X +Y -Y +Z -Z.
-    // There are at most maxViews of them, as each is drawn by a pass of its own.
-    // Returns how many lights didn't fit, those don't cast shadows.
-    inline uint32_t BuildShadowViews(std::vector<Light>& lights, const ShadowAtlasSettings& settings, std::vector<ShadowView>& views,
-                                     uint32_t maxViews = std::numeric_limits<uint32_t>::max())
+    // Returns how many lights didn't fit in the atlas, those don't cast shadows.
+    inline uint32_t BuildShadowViews(std::vector<Light>& lights, const ShadowAtlasSettings& settings, std::vector<ShadowView>& views)
     {
         const uint32_t tilesPerRow = settings.AtlasSize / settings.TileSize;
-        const uint32_t room = std::min(tilesPerRow * tilesPerRow, maxViews);
+        const uint32_t room = tilesPerRow * tilesPerRow;
 
         uint32_t skipped = 0;
         views.clear();

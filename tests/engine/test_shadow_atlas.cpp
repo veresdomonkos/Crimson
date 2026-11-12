@@ -57,25 +57,6 @@ TEST_CASE("Lights that don't fit in the atlas don't cast shadows", "[shadows]")
     CHECK(lights[2].ShadowIndex == 1);
 }
 
-TEST_CASE("Views stop at maxViews, like at a full atlas", "[shadows]")
-{
-    // The default atlas has 16 tiles, the limit leaves 7
-    std::vector<Light> lights = {
-        MakeLight(LightType::Point),
-        MakeLight(LightType::Spot),
-        MakeLight(LightType::Point),
-        MakeLight(LightType::Spot)
-    };
-    std::vector<ShadowView> views;
-
-    CHECK(BuildShadowViews(lights, ShadowAtlasSettings{}, views, 7) == 2);
-    CHECK(views.size() == 7);
-    CHECK(lights[0].ShadowIndex == 0);
-    CHECK(lights[1].ShadowIndex == 6);
-    CHECK(lights[2].ShadowIndex == -1);
-    CHECK(lights[3].ShadowIndex == -1);
-}
-
 TEST_CASE("Tiles don't overlap and stay inside the atlas", "[shadows]")
 {
     const ShadowAtlasSettings settings;

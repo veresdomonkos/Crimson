@@ -1,6 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -155,7 +156,7 @@ TEST_CASE("Lighting comes from the active lights' transforms", "[scene renderer]
     }
 }
 
-TEST_CASE("There is one pass per shadow view, then the main pass", "[scene renderer]")
+TEST_CASE("One pass draws every shadow view, then comes the main pass", "[scene renderer]")
 {
     Fixture fixture;
 
@@ -167,17 +168,38 @@ TEST_CASE("There is one pass per shadow view, then the main pass", "[scene rende
     AddMesh(fixture.World, "Non-caster", {}, false);
 
     const std::vector<const PassRecord*> passes = fixture.Record();
+    const std::span<const FrameView> views = fixture.Renderer.Submitted->GetViews();
 
-    REQUIRE(passes.size() == 1 + 6 + 1);
+    REQUIRE(passes.size() == 2);
+    REQUIRE(fixture.Lighting.Shadows.size() == 1 + 6);
 
-    for (size_t i = 0; i + 1 < passes.size(); ++i)
+    // The pass clears the whole atlas, its views keep to their tiles
+    const PassRecord& shadows = *passes[0];
+    CHECK(std::string_view(shadows.GetInfo().Name) == "Shadows");
+    CHECK_FALSE(shadows.GetInfo().Viewport);
+    CHECK(HasClearFlag(shadows.GetInfo().Clear.Flags, ClearFlags::Depth));
+
+    // The caster once in every view, in the order of the views
+    REQUIRE(shadows.GetDraws().size() == fixture.Lighting.Shadows.size());
+
+    for (size_t i = 0; i < shadows.GetDraws().size(); ++i)
     {
         CAPTURE(i);
-        REQUIRE(passes[i]->GetDraws().size() == 1);
+        const DrawItem& draw = shadows.GetDraws()[i];
+        const ShadowView& shadow = fixture.Lighting.Shadows[i];
 
         // The caster's own material, in its depth version, so its shader decides its shape in the shadow too
-        CHECK(passes[i]->GetDraws()[0].Material == kMeshMaterial);
-        CHECK(passes[i]->GetDraws()[0].Variant == ShaderVariant::Depth);
+        CHECK(draw.Material == kMeshMaterial);
+        CHECK(draw.Variant == ShaderVariant::Depth);
+
+        REQUIRE(draw.View < views.size());
+        CHECK(draw.View != shadows.GetView());
+        CHECK(views[draw.View].View.ViewProj == shadow.Shadow.ViewProj);
+
+        REQUIRE(views[draw.View].Viewport);
+        CHECK(views[draw.View].Viewport->X == shadow.Viewport.X);
+        CHECK(views[draw.View].Viewport->Y == shadow.Viewport.Y);
+        CHECK(views[draw.View].Viewport->Width == shadow.Viewport.Width);
     }
 
     const PassRecord& main = *passes.back();
@@ -186,22 +208,36 @@ TEST_CASE("There is one pass per shadow view, then the main pass", "[scene rende
     CHECK(main.GetDraws()[0].Material == kMeshMaterial);
     CHECK(main.GetDraws()[1].Material == kMeshMaterial);
     CHECK(main.GetDraws()[0].Variant == ShaderVariant::Main);
+    CHECK(main.GetDraws()[0].View == main.GetView());
 }
 
-TEST_CASE("An atlas with more tiles than a frame has passes keeps the main passes", "[scene renderer]")
+TEST_CASE("Without shadowed lights there is no shadow pass", "[scene renderer]")
+{
+    Fixture fixture;
+
+    AddLight(fixture.World, LightType::Point, false);
+    AddMesh(fixture.World, "Caster");
+
+    const std::vector<const PassRecord*> passes = fixture.Record();
+
+    REQUIRE(passes.size() == 1);
+    CHECK(std::string_view(passes[0]->GetInfo().Name) == "Scene");
+}
+
+TEST_CASE("Shadowed lights are limited by the atlas, not by the frame's passes", "[scene renderer]")
 {
     constexpr MaterialHandle kToneMapMaterial{ 104, 1 };
 
-    // 256 tiles, more than the frame could draw
-    const LogCounter tooBig(LogLevel::Warn, "only has room for");
+    // 256 tiles, far more than a frame has passes
+    const LogCounter warnings(LogLevel::Warn, "[Shadows]");
     Fixture fixture(ShadowAtlasSettings{ .AtlasSize = 8192, .TileSize = 512 });
-    CHECK(tooBig.Count() == 1);
 
     fixture.Subject.SetToneMapMaterial(kToneMapMaterial, 64, 64);
     fixture.Subject.SetOutlineMaterial(kOutlineMaterial, 64, 64);
 
-    // 120 views
-    constexpr uint32_t kLights = 20;
+    // Six views each. 42 fill 252 of the tiles, and the last two don't fit in the 4 that are left.
+    constexpr uint32_t kLights = 44;
+    constexpr uint32_t kShadowed = 42;
     for (uint32_t i = 0; i < kLights; ++i)
         AddLight(fixture.World, LightType::Point, true);
 
@@ -211,8 +247,6 @@ TEST_CASE("An atlas with more tiles than a frame has passes keeps the main passe
     const std::vector<const PassRecord*> passes = fixture.Record(entity);
     fixture.Record(entity);
 
-    // Whole point lights only, six views each
-    constexpr uint32_t kShadowed = SceneRenderer::kMaxShadowViews / 6;
     REQUIRE(fixture.Lighting.Shadows.size() == kShadowed * 6);
 
     for (uint32_t i = 0; i < kLights; ++i)
@@ -221,16 +255,42 @@ TEST_CASE("An atlas with more tiles than a frame has passes keeps the main passe
         CHECK((fixture.Lighting.Lights[i].ShadowIndex >= 0) == (i < kShadowed));
     }
 
-    REQUIRE(passes.size() == kShadowed * 6 + 4);
+    REQUIRE(passes.size() == 5);
+    CHECK(std::string_view(passes[0]->GetInfo().Name) == "Shadows");
+    CHECK(std::string_view(passes[1]->GetInfo().Name) == "Outline Mask");
+    CHECK(std::string_view(passes[2]->GetInfo().Name) == "Scene");
+    CHECK(std::string_view(passes[3]->GetInfo().Name) == "Tone Mapping");
+    CHECK(std::string_view(passes[4]->GetInfo().Name) == "Outline");
 
-    const auto nameOf = [&](size_t fromEnd) { return std::string_view(passes[passes.size() - fromEnd]->GetInfo().Name); };
-    CHECK(nameOf(4) == "Outline Mask");
-    CHECK(nameOf(3) == "Scene");
-    CHECK(nameOf(2) == "Tone Mapping");
-    CHECK(nameOf(1) == "Outline");
+    CHECK(passes[0]->GetDraws().size() == kShadowed * 6);
 
-    // Said when it starts, not on every frame
+    // Only the full atlas is worth a warning, said when it starts and not on every frame
     CHECK(noRoom.Count() == 1);
+    CHECK(warnings.Count() == 1);
+}
+
+TEST_CASE("64 point lights are all shadowed in an atlas with room for them", "[scene renderer]")
+{
+    // 576 tiles for 384 views
+    Fixture fixture(ShadowAtlasSettings{ .AtlasSize = 12288, .TileSize = 512 });
+
+    constexpr uint32_t kLights = 64;
+    for (uint32_t i = 0; i < kLights; ++i)
+        AddLight(fixture.World, LightType::Point, true);
+
+    AddMesh(fixture.World, "Mesh");
+
+    const LogCounter warnings(LogLevel::Warn, "[Shadows]");
+    const std::vector<const PassRecord*> passes = fixture.Record();
+
+    REQUIRE(passes.size() == 2);
+    CHECK(fixture.Lighting.Shadows.size() == kLights * 6);
+    CHECK(passes[0]->GetDraws().size() == kLights * 6);
+
+    for (const Light& light : fixture.Lighting.Lights)
+        CHECK(light.ShadowIndex >= 0);
+
+    CHECK(warnings.Count() == 0);
 }
 
 TEST_CASE("Only active, loaded meshes are drawn", "[scene renderer]")
