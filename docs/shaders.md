@@ -23,10 +23,12 @@ Resources are grouped by how often they change:
 
 | Space | Scope | Resources |
 |:------|:------|:----------|
-| `space0` | per frame | `FrameBlock` (`AmbientColor`, `Time` and `DeltaTime` in seconds), `Lights`, `Shadows`, `Objects`, `ShadowAtlas` and the samplers `LinearWrap`, `LinearClamp`, `PointClamp`, `ShadowCompare` |
-| `space1` | per pass | `ViewBlock` (`ViewProj`, `CameraPosition`) |
+| `space0` | per frame | `FrameBlock` (`AmbientColor`, `Time` and `DeltaTime` in seconds), `Lights`, `Shadows`, `Objects`, `Views`, `ShadowAtlas` and the samplers `LinearWrap`, `LinearClamp`, `PointClamp`, `ShadowCompare` |
+| `space1` | | empty, nothing can be declared in it |
 | `space2` | per material, **optional** | one constant buffer (`b0`) and any textures (`t0` and up), both looked up by name |
-| push constant | per draw | `DrawData` (`ObjectIndex`) |
+| push constant | per draw | `DrawData` (`ObjectIndex`, `ViewIndex`) |
+
+A draw's object and camera are entries of the frame's `Objects` and `Views`, picked by the draw's indices. `GetObjectData()` returns the object's `Transform` and `NormalMatrix`, and `GetView()` the camera's `ViewProj` and `CameraPosition`, in either stage. The camera is the scene's in the main pass and a light's in the shadow pass, so a shader never reads `Views` by an index of its own. `WorldToClip` and the other helpers in `crimson/transforms.hlsli` already go through them.
 
 `crimson/bindings.hlsli` declares the standard ones, so shaders include it instead of restating them, and a material shader declares only its own:
 
@@ -42,7 +44,7 @@ cbuffer MaterialBlock : register(b0, space2)
 Texture2D Albedo : register(t0, space2);
 Texture2D Bumps : register(t1, space2); // @default normal
 
-// VSMain uses GetObjectData() and ViewProj, PSMain fills in a Surface for ComputeLighting() and uses Albedo.Sample(LinearWrap, uv)
+// VSMain uses GetObjectData() and GetView(), PSMain fills in a Surface for ComputeLighting() and uses Albedo.Sample(LinearWrap, uv)
 ```
 
 - **Discovery:** material properties and textures are found with SPIRV-Reflect, so the shader is the only place they're declared. The standard blocks are checked against the engine's structs.
