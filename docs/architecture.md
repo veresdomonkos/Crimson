@@ -156,6 +156,8 @@ registry.RegisterRuntime("health", "Health", { FieldInfo{ .Key = "max", .Label =
 - **Hooks:** `Constrain` keeps fields consistent, `OnLoaded` runs after the component was made from a file (a mesh renderer loads its assets), and `OnCaptured` adjusts what is saved.
 - `ReadComponent`, `WriteComponent` and `CopyComponent` work on any registered component.
 
+In the editor, the Inspector draws each registered component an entity has from its fields (`ui::DrawComponentFields`): a row per visible field, by its type, that resets to its default. Transform and Mesh Renderer have a look of their own, for the uniform scale and the material slots named after the mesh's. **Add Component** lists the types that can be added, and a component the editor doesn't know shows as a line that says it is kept. Icons come from `ui::ComponentIcon`, which the Hierarchy uses too.
+
 The renderer, picking and the camera still use the C++ types directly, as they are what the components are for rather than ways to edit or save them.
 
 `SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLighting`, gives every active renderer an object transform, and records the passes under [Rendering](#rendering).
@@ -258,7 +260,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 |:------|:-------------|
 | **Scene** | the scene's render target, with an [ImGuizmo](https://github.com/CedricGuillemet/ImGuizmo) gizmo on the selection and a toolbar for its tool and axes. Picking raycasts the meshes' bounds. |
 | **Hierarchy** | the entity tree, with search, rename in place and the create menu. Dragging onto an entity reparents, and onto the empty area makes a root. |
-| **Inspector** | the selected entity or asset. Entities show their components. Materials show their shader's properties and textures, and edits reach the file on **Save** (`AssetEdits`). Textures show their import settings, and meshes and shaders their details. |
+| **Inspector** | the selected entity or asset. Entities show their components, drawn from their registered fields (see [Components](#components)), and **Add Component** lists what is registered. Materials show their shader's properties and textures, and edits reach the file on **Save** (`AssetEdits`). Textures show their import settings, and meshes and shaders their details. |
 | **Assets** | the project's files and the engine's, with a folder tree, a grid, search, and dragging into the Inspector or the Scene view. In the Scene view, a mesh makes a new entity, a material goes on the entity under the mouse, and a scene becomes an instance. Shaders open in the External Script Editor, other files in the system's program (`system_shell.hpp`). Files changed outside the editor appear when it regains focus. |
 | **Console** | the log, grouped and filtered by level |
 | **Render Settings** | exposure, tone mapper and ambient light, saved with the scene |
