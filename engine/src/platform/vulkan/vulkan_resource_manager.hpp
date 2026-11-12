@@ -43,9 +43,6 @@ namespace crimson::vulkan
 
         MaterialHandle CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings) override;
         void DestroyMaterial(MaterialHandle handle) override;
-        void SetMaterialSettings(MaterialHandle handle, const MaterialSettings& settings) override { m_materials.Get(handle).Settings = settings; }
-
-        void SetMaterialTexture(MaterialHandle handle, std::string_view name, TextureHandle texture) override;
 
         TextureHandle CreateTexture(const TextureInfo& info, const void* data) override;
         void DestroyTexture(TextureHandle handle) override;
@@ -62,7 +59,9 @@ namespace crimson::vulkan
 
         VulkanGraphicsPipeline& GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info);
     protected:
+        void SetMaterialSettingsImpl(MaterialHandle handle, const MaterialSettings& settings) override { m_materials.Get(handle).Settings = settings; }
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
+        void SetMaterialTextureImpl(MaterialHandle material, std::string_view name, TextureHandle texture) override;
 
     private:
         void CreateDescriptorPool();

@@ -118,6 +118,7 @@ namespace crimson::opengl
         TracyGpuCollect;
 
         m_lastStats = m_stats;
+        ++m_submittedFrames;
         return true;
     }
 
@@ -136,9 +137,20 @@ namespace crimson::opengl
 
         const RenderRect passArea = BindTarget(info);
 
+        for (const AreaClear& clear : pass.GetAreaClears())
+        {
+            const RenderRect area = Intersect(clear.Area, passArea);
+            if (IsEmpty(area))
+                continue;
+
+            // glClear only stays inside the scissor
+            SetViewportAndScissor(m_state, area, true);
+            ClearTarget(clear.Clear);
+        }
+
         m_state.SetDepthTest(true);
 
-        // BindTarget set the viewport to the pass's area, which the first draw's view may not have
+        // The viewport is the pass's area or the last cleared one, which the first draw's view may not have
         m_boundView = kPassView;
 
         const std::span<const DrawItem> draws = pass.GetDraws();

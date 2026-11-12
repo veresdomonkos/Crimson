@@ -15,6 +15,7 @@ namespace crimson::editor
 
         // Last finished frame
         RenderStats Render;
+        ShadowStats Shadows;
 
         double LastFrameTime = 0.0;
         double WindowSeconds = 0.0;

@@ -412,6 +412,7 @@ namespace crimson::editor
         FrameStats& stats = m_frameStats;
 
         stats.Render = m_services.Graphics.Renderer->GetStats();
+        stats.Shadows = m_sceneRenderer->GetShadowStats();
 
         if (stats.LastFrameTime > 0.0)
         {

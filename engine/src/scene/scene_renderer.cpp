@@ -3,13 +3,38 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <cstring>
+#include <type_traits>
 
 #include "crimson/asset_manager/asset_manager.hpp"
 #include "crimson/core/log.hpp"
+#include "crimson/renderer/bounds.hpp"
 #include "crimson/scene/entity.hpp"
 
 namespace crimson
 {
+    namespace
+    {
+        // FNV-1a. A collision would keep a tile that changed, which 64 bits make unlikely enough.
+        constexpr uint64_t kHashSeed = 14695981039346656037ull;
+
+        // Only for types without padding, which would make equal values hash differently
+        template <typename T>
+        void Hash(uint64_t& hash, const T& value)
+        {
+            static_assert(std::is_trivially_copyable_v<T>);
+
+            std::array<unsigned char, sizeof(T)> bytes;
+            std::memcpy(bytes.data(), &value, sizeof(T));
+
+            for (const unsigned char byte : bytes)
+            {
+                hash ^= byte;
+                hash *= 1099511628211ull;
+            }
+        }
+    }
+
     void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets)
     {
         renderer.Resolved = {};
@@ -40,7 +65,7 @@ namespace crimson
     }
 
     SceneRenderer::SceneRenderer(GpuResourceManager& resources, Renderer& renderer, ShadowAtlasSettings atlas)
-        : m_resources(resources), m_atlas(atlas)
+        : m_resources(resources), m_renderer(renderer), m_atlas(atlas)
     {
         const RenderTargetInfo info{ .Width = atlas.AtlasSize, .Height = atlas.AtlasSize, .DepthFormat = TextureFormat::Depth32F };
         m_shadowTarget = resources.CreateRenderTarget(info);
@@ -171,7 +196,10 @@ namespace crimson
             }
 
             anyOutlined = anyOutlined || isOutlined;
-            m_drawables.push_back({ &renderer.Resolved, frame.AddObject(transform.World), renderer.CastsShadows, isOutlined });
+
+            Drawable& drawable = m_drawables.emplace_back(Drawable{ &renderer.Resolved, frame.AddObject(transform.World), renderer.CastsShadows, isOutlined });
+            if (drawable.CastsShadows)
+                AddShadowCaster(drawable, transform.World);
         }
 
         RecordShadows(frame);
@@ -217,24 +245,113 @@ namespace crimson
         }
     }
 
+    void SceneRenderer::AddShadowCaster(Drawable& drawable, const glm::mat4& world)
+    {
+        const Mesh& mesh = *drawable.Mesh;
+
+        drawable.WorldBounds = TransformBounds(mesh.Bounds, world);
+
+        // Everything that the depth pass draws it with, so a moved, swapped or edited mesh changes it
+        uint64_t signature = kHashSeed;
+        Hash(signature, world);
+        Hash(signature, mesh.VertexBuffer.GetRaw());
+        Hash(signature, mesh.IndexBuffer.GetRaw());
+
+        for (const SubMesh& subMesh : mesh.SubMeshes)
+        {
+            Hash(signature, subMesh.FirstIndex);
+            Hash(signature, subMesh.IndexCount);
+
+            const MaterialHandle material = mesh.Materials[subMesh.MaterialSlot];
+            Hash(signature, material.GetRaw());
+            drawable.ShadowChangesOverTime = drawable.ShadowChangesOverTime || DepthReadsTime(material);
+        }
+
+        drawable.ShadowSignature = signature;
+    }
+
+    bool SceneRenderer::DepthReadsTime(MaterialHandle material)
+    {
+        // A changed material may have a new shader
+        if (m_depthReadsTimeRevision != m_resources.GetMaterialRevision())
+        {
+            m_depthReadsTime.clear();
+            m_depthReadsTimeRevision = m_resources.GetMaterialRevision();
+        }
+
+        const auto [found, added] = m_depthReadsTime.try_emplace(material.GetRaw(), false);
+        if (added)
+        {
+            const ShaderHandle shader = m_resources.GetMaterialShader(material);
+            found->second = shader && m_resources.GetShaderInterface(shader).DepthReadsTime;
+        }
+
+        return found->second;
+    }
+
     void SceneRenderer::RecordShadows(FrameRecorder& frame)
     {
-        if (frame.Lighting().Shadows.empty())
-            return;
+        // A dropped frame's tiles never reached the atlas
+        if (m_renderer.GetSubmittedFrames() != m_expectedFrames)
+            m_shadowTiles.clear();
 
-        // One pass for the whole atlas, so the number of shadows isn't limited by the frame's passes.
-        // It clears every tile, and each view then draws into its own.
-        PassBuilder pass = frame.AddPass({ .Name = "Shadows", .Target = m_shadowTarget, .Clear = { .Flags = ClearFlags::Depth } });
+        m_expectedFrames = m_renderer.GetSubmittedFrames() + 1;
+        m_shadowStats = {};
 
-        for (const ShadowView& shadow : frame.Lighting().Shadows)
+        const std::vector<ShadowView>& shadows = frame.Lighting().Shadows;
+
+        // A tile that comes back into use is drawn again, whatever was left in it
+        m_shadowTiles.resize(shadows.size());
+
+        // One pass for the whole atlas, so the number of shadows isn't limited by the frame's passes. It is only added
+        // for a tile that changed, which it clears, and the others keep what the frames before drew.
+        std::optional<PassBuilder> pass;
+
+        for (size_t index = 0; index < shadows.size(); ++index)
         {
+            const ShadowView& shadow = shadows[index];
+
+            uint64_t signature = kHashSeed;
+            Hash(signature, shadow.Shadow.ViewProj);
+            Hash(signature, shadow.Viewport);
+            Hash(signature, m_resources.GetMaterialRevision());
+
+            bool changesOverTime = false;
+
+            // A caster that left the view changes it as much as one that came in
+            for (const Drawable& drawable : m_drawables)
+            {
+                if (!drawable.CastsShadows || IsOutsideView(drawable.WorldBounds, shadow.Shadow.ViewProj))
+                    continue;
+
+                Hash(signature, drawable.ShadowSignature);
+                changesOverTime = changesOverTime || drawable.ShadowChangesOverTime;
+            }
+
+            std::optional<uint64_t>& tile = m_shadowTiles[index];
+
+            if (tile == signature)
+            {
+                ++m_shadowStats.Kept;
+                continue;
+            }
+
+            if (!pass)
+                pass = frame.AddPass({ .Name = "Shadows", .Target = m_shadowTarget });
+
+            pass->ClearArea(shadow.Viewport, { .Flags = ClearFlags::Depth });
+
             const ViewId view = frame.AddView({ .ViewProj = shadow.Shadow.ViewProj, .CameraPosition = shadow.Eye }, shadow.Viewport);
 
             for (const Drawable& drawable : m_drawables)
             {
                 if (drawable.CastsShadows)
-                    pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth, .View = view });
+                    pass->DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth, .View = view });
             }
+
+            // One that moves with the time is drawn again next frame too
+            tile = changesOverTime ? std::nullopt : std::optional(signature);
+            ++m_shadowStats.Drawn;
         }
     }
 

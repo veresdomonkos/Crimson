@@ -362,7 +362,7 @@ namespace crimson::vulkan
         m_materials.Unregister(handle);
     }
 
-    void VulkanResourceManager::SetMaterialTexture(MaterialHandle handle, std::string_view name, TextureHandle textureHandle)
+    void VulkanResourceManager::SetMaterialTextureImpl(MaterialHandle handle, std::string_view name, TextureHandle textureHandle)
     {
         VulkanMaterial& material = m_materials.Get(handle);
         VulkanShader& shader = m_shaders.Get(material.Shader);

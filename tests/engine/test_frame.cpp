@@ -96,6 +96,29 @@ TEST_CASE("A pass builder stays valid while more passes are added", "[frame]")
     CHECK(packet.GetPasses()[0].GetDraws()[0].Material == kMaterial);
 }
 
+TEST_CASE("A pass keeps the areas it clears, until its record is reused", "[frame]")
+{
+    FramePacket packet;
+
+    {
+        FrameRecorder frame(packet);
+        PassBuilder pass = frame.AddPass({});
+        pass.ClearArea({ 0, 0, 16, 16 }, { .Flags = ClearFlags::Depth });
+        pass.ClearArea({ 16, 0, 16, 16 }, { .Flags = ClearFlags::Depth, .Depth = 0.5f });
+
+        const std::span<const AreaClear> clears = packet.GetPasses()[0].GetAreaClears();
+        REQUIRE(clears.size() == 2);
+        CHECK(clears[1].Area.X == 16);
+        CHECK(clears[1].Clear.Depth == 0.5f);
+    }
+
+    packet.Reset();
+
+    FrameRecorder frame(packet);
+    frame.AddPass({});
+    CHECK(packet.GetPasses()[0].GetAreaClears().empty());
+}
+
 TEST_CASE("A draw without a material is left out", "[frame]")
 {
     FramePacket packet;

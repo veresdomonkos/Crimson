@@ -3,6 +3,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <crimson/renderer/renderer.hpp>
@@ -65,17 +66,20 @@ namespace crimson::tests
             DestroyOrder.emplace_back("material");
         }
 
-        void SetMaterialSettings(MaterialHandle material, const MaterialSettings& settings) override
+        [[nodiscard]] ShaderHandle GetMaterialShader(MaterialHandle material) const override
         {
-            Materials[material.GetRaw()].Settings = settings;
+            const auto found = Materials.find(material.GetRaw());
+            return found != Materials.end() ? found->second.Shader : ShaderHandle::Invalid();
         }
 
-        void SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture) override
+        // A shader with this interface, without compiling one
+        ShaderHandle AddShader(const ShaderInterface& shaderInterface)
         {
-            if (texture)
-                Materials[material.GetRaw()].Textures[std::string(name)] = texture;
-            else
-                Materials[material.GetRaw()].Textures.erase(std::string(name));
+            ++LiveShaders;
+
+            const ShaderHandle handle{ m_nextId++, 1 };
+            m_shaderInterfaces[handle.GetRaw()] = shaderInterface;
+            return handle;
         }
 
         TextureHandle CreateTexture(const TextureInfo& info, const void*) override
@@ -112,9 +116,22 @@ namespace crimson::tests
         std::map<uint64_t, MaterialRecord> Materials;
         TextureInfo LastTextureInfo{};
     protected:
+        void SetMaterialSettingsImpl(MaterialHandle material, const MaterialSettings& settings) override
+        {
+            Materials[material.GetRaw()].Settings = settings;
+        }
+
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override
         {
             Materials[handle.GetRaw()].Properties[std::string(name)] = std::vector<std::byte>(data.begin(), data.end());
+        }
+
+        void SetMaterialTextureImpl(MaterialHandle material, std::string_view name, TextureHandle texture) override
+        {
+            if (texture)
+                Materials[material.GetRaw()].Textures[std::string(name)] = texture;
+            else
+                Materials[material.GetRaw()].Textures.erase(std::string(name));
         }
     private:
         uint32_t m_nextId = 1;
@@ -130,6 +147,11 @@ namespace crimson::tests
         bool Submit(FrameRecorder frame) override
         {
             Submitted = &frame.GetPacket();
+
+            if (std::exchange(DropNext, false))
+                return false;
+
+            ++m_submittedFrames;
             return true;
         }
 
@@ -138,5 +160,8 @@ namespace crimson::tests
         // Stays valid until another frame is recorded into the same packet
         const FramePacket* Submitted = nullptr;
         TextureHandle ShadowAtlas;
+
+        // Makes the next Submit drop its frame, like an out of date swapchain does
+        bool DropNext = false;
     };
 }

@@ -1,6 +1,7 @@
 #include "shader_reflection.hpp"
 
 #include <span>
+#include <string_view>
 #include <vector>
 
 #include <spirv_reflect.h>
@@ -121,7 +122,26 @@ namespace crimson
             }
         }
 
-        bool ReflectStage(std::span<const uint32_t> spirv, bool vertex, ShaderInterface& result)
+        // Whether the stage reads the frame's Time or DeltaTime, so what it draws can change while nothing else does
+        bool ReadsTime(const SpvReflectDescriptorBinding& binding)
+        {
+            if (binding.set != kFrameSpace || binding.binding != kFrameBlockBinding || !binding.accessed)
+                return false;
+
+            for (uint32_t i = 0; i < binding.block.member_count; ++i)
+            {
+                const SpvReflectBlockVariable& member = binding.block.members[i];
+                const std::string_view name = member.name ? member.name : "";
+
+                if ((name == "Time" || name == "DeltaTime") && !(member.flags & SPV_REFLECT_VARIABLE_FLAGS_UNUSED))
+                    return true;
+            }
+
+            return false;
+        }
+
+        // A depth stage is one of the depth version's, VSMain or PSDepth
+        bool ReflectStage(std::span<const uint32_t> spirv, bool vertex, bool depth, ShaderInterface& result)
         {
             SpvReflectShaderModule module;
             if (spvReflectCreateShaderModule(spirv.size_bytes(), spirv.data(), &module) != SPV_REFLECT_RESULT_SUCCESS)
@@ -146,6 +166,7 @@ namespace crimson
                 else if (binding->set == kFrameSpace)
                 {
                     valid = CheckStandardResource(*binding) && valid;
+                    result.DepthReadsTime = result.DepthReadsTime || (depth && ReadsTime(*binding));
                 }
                 else
                 {
@@ -177,11 +198,11 @@ namespace crimson
     {
         ShaderInterface result;
 
-        if (!ReflectStage(binary.Vertex, true, result) || !ReflectStage(binary.Pixel, false, result))
+        if (!ReflectStage(binary.Vertex, true, true, result) || !ReflectStage(binary.Pixel, false, false, result))
             return std::nullopt;
 
         // What only PSDepth uses has to be in the material's layout too
-        if (!binary.PixelDepth.empty() && !ReflectStage(binary.PixelDepth, false, result))
+        if (!binary.PixelDepth.empty() && !ReflectStage(binary.PixelDepth, false, true, result))
             return std::nullopt;
 
         for (const auto& [name, annotation] : binary.Annotations)

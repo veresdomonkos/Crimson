@@ -87,7 +87,7 @@ renderer.Submit(std::move(frame)); // false when the frame was dropped, like for
 - A pass is a `PassRecord`: its `PassInfo` and either draws or a native callback. Passes run in the order they are added.
 - `PassInfo` holds the pass's `Name` (shown in Tracy), its `Target` (the back buffer when empty), what to `Clear` it to, an optional `Viewport` to limit drawing and clearing to part of it, the `View` (camera) and the textures the pass samples in `Reads`.
 - A draw is a `DrawItem`: vertex buffer, index buffer, material, object, view and `ShaderVariant`. `PassBuilder::Draw` adds one, `DrawMesh(mesh, object, options)` one per submesh. A `PassBuilder` refers to its pass by index, so it stays valid while more passes are added.
-- The frame's views are a list like its objects. Every pass adds its `View` to it, and a draw uses that one unless it names another (`DrawItem::View`, `DrawOptions::View`) from `FrameRecorder::AddView(view, viewport)`. A view added with a viewport draws only to that part of the pass's target, clipped to the pass's own area, and a view outside that area draws nothing. That is how one pass draws many cameras, like the shadows. The pass's `Clear` is still for the pass's whole area.
+- The frame's views are a list like its objects. Every pass adds its `View` to it, and a draw uses that one unless it names another (`DrawItem::View`, `DrawOptions::View`) from `FrameRecorder::AddView(view, viewport)`. A view added with a viewport draws only to that part of the pass's target, clipped to the pass's own area, and a view outside that area draws nothing. That is how one pass draws many cameras, like the shadows. The pass's `Clear` is still for the pass's whole area; `PassBuilder::ClearArea(area, clear)` clears only part of it, after the pass's own `Clear` and before its draws, so the shadows can redraw one tile and keep the rest.
 - The renderers sort each pass's draws: opaque ones first, grouped by shader, material and buffers to rebind as little as possible, then transparent ones from the farthest to the nearest. `DrawMesh` sets a draw's `SortDepth` to the squared distance from its view's camera to the center of the mesh's bounds. Meshes that cross each other can still blend in the wrong order, as each sorts as a whole.
 - A native pass runs a callback with `NativeContext` (device, command buffer, color format) between engine-managed layout transitions. ImGui is rendered this way, so the engine itself has no UI concepts. The callback runs inside `Submit`, so it captures by value or references what outlives the frame.
 - Each draw indexes a per-frame buffer of object transforms, filled by `AddObject`, and one of views. Both indices reach the shader in the draw's push constant.
@@ -110,7 +110,14 @@ Lights are kept in a GPU buffer, in the style of glTF's `KHR_lights_punctual`, a
 
 ### Shadows
 
-`BuildShadowViews` assigns tiles of one depth atlas to the lights with `CastsShadow` set: one for a directional or spot light, six for a point light. One pass draws them all: it clears the atlas, and each shadow view is a view of the frame with its tile as the viewport, which the casters are drawn with. So the atlas is the only limit on how many lights are shadowed, and every caster is drawn once for every view, as nothing is culled per view yet. Shaders pick the tile through the light's `ShadowIndex`. Shadows are filtered with PCF. The default atlas is 4096x4096 with 1024 tiles. Lights that don't fit in the atlas log a warning and stay unshadowed. Directional lights cover one fixed area of the world, there are no cascades yet.
+`BuildShadowViews` assigns tiles of one depth atlas to the lights with `CastsShadow` set: one for a directional or spot light, six for a point light. One pass draws them all: each shadow view is a view of the frame with its tile as the viewport, which the casters are drawn with. So the atlas is the only limit on how many lights are shadowed, and every caster is drawn once for every view that is drawn, as nothing is culled per view yet. Shaders pick the tile through the light's `ShadowIndex`. Shadows are filtered with PCF. The default atlas is 4096x4096 with 1024 tiles. Lights that don't fit in the atlas log a warning and stay unshadowed. Directional lights cover one fixed area of the world, there are no cascades yet.
+
+Tiles are kept between frames. Each frame, `SceneRenderer` hashes what decides a tile's contents into a signature: the view's matrix and tile, the material revision (`GpuResourceManager::GetMaterialRevision`, which any material edit bumps), and the transform, buffers, submeshes and materials of every caster whose world bounds aren't wholly outside the view. A tile whose signature matches last frame's keeps what is in the atlas. Only the others are cleared (`PassBuilder::ClearArea`) and drawn, and a frame where nothing changed has no shadow pass at all. As the signature is built from the scene each frame, undo, deleting an entity or reloading the scene need nothing of their own, and a caster that left a tile changes it just like one that came in. A light that moves to another tile is drawn again there, as the tile's view changed. Three things redraw tiles regardless:
+- a dropped frame, which `Renderer::GetSubmittedFrames` shows, as its tiles never reached the atlas: the next frame draws all of them
+- any material edit, as there is no telling which tiles used it: every tile is drawn again
+- a caster whose shader reads the time in its depth version (`ShaderInterface::DepthReadsTime`): the tiles it is in are drawn every frame
+
+The editor's Stats panel shows how many shadow views the last frame drew and how many it kept.
 
 ### The selection outline
 
@@ -241,7 +248,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 | **Assets** | the project's files and the engine's, with a folder tree, a grid, search, and dragging into the Inspector or the Scene view. In the Scene view, a mesh makes a new entity, a material goes on the entity under the mouse, and a scene becomes an instance. Shaders open in the External Script Editor, other files in the system's program (`system_shell.hpp`). Files changed outside the editor appear when it regains focus. |
 | **Console** | the log, grouped and filtered by level |
 | **Render Settings** | exposure, tone mapper and ambient light, saved with the scene |
-| **Stats** | FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts |
+| **Stats** | FPS, frame, CPU and wait times, draw calls, triangles, passes, shadow views drawn and kept, and bind counts |
 | **Shadow Map** | the shadow atlas |
 
 ### Look and layout

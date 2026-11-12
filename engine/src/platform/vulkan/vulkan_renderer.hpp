@@ -97,6 +97,9 @@ namespace crimson::vulkan
 
         void BeginRendering(const vk::raii::CommandBuffer& cmd, VulkanRenderTarget& rt, const ClearInfo& clear, const std::optional<RenderRect>& area);
 
+        // Inside the rendering BeginRendering started
+        void ClearAreas(const vk::raii::CommandBuffer& cmd, const VulkanRenderTarget& rt, std::span<const AreaClear> clears, const RenderRect& passArea);
+
         VulkanDevice& m_device;
         VulkanResourceManager& m_resourceManager;
 
@@ -106,6 +109,7 @@ namespace crimson::vulkan
         uint32_t m_inFlightIndex = 0;
 
         std::vector<DrawSortEntry> m_drawOrder;
+        std::vector<vk::ClearAttachment> m_clearAttachments;
         BoundDrawState m_bound;
         FrameValidator m_validator;
 

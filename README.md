@@ -67,7 +67,7 @@ It needs a C++23 compiler, CMake 3.22+, the [Vulkan SDK](https://vulkan.lunarg.c
 | **Assets** | the project's files. Drag them into the scene or the Inspector, and right-click for more. **Show Engine Content** adds the engine's built-in ones under an Engine root of their own, named with a prefix for their kind: `S_Lit.hlsl`, `M_Default.mat`, `SM_Cube.obj`. |
 | **Console** | everything the engine logs |
 | **Render Settings** | exposure, tone mapping and ambient light, saved with the scene |
-| **Stats** | frame times, draw calls and triangles |
+| **Stats** | frame times, draw calls, triangles and the shadow views drawn and kept |
 
 ## Editor controls
 

@@ -17,6 +17,11 @@ namespace crimson
         using Material = PlatformResourceTraits::Material;
         using Texture = PlatformResourceTraits::Texture;
     public:
+        [[nodiscard]] ShaderHandle GetMaterialShader(MaterialHandle handle) const override
+        {
+            return m_materials.Contains(handle) ? m_materials.Get(handle).Shader : ShaderHandle::Invalid();
+        }
+
         RenderTarget& GetRenderTarget(RenderTargetHandle handle) { return m_renderTargets.Get(handle); }
         VertexBuffer& GetVertexBuffer(VertexBufferHandle handle) { return m_vertexBuffers.Get(handle); }
         IndexBuffer& GetIndexBuffer(IndexBufferHandle handle) { return m_indexBuffers.Get(handle); }
