@@ -477,6 +477,38 @@ TEST_CASE("The frame's views are uploaded in the order they were added", "[frame
     CHECK(packet.GetViews().empty());
 }
 
+TEST_CASE("A view's area is clipped to its pass's", "[frame]")
+{
+    const RenderRect passArea{ 0, 0, 512, 512 };
+
+    const auto equal = [](const RenderRect& a, const RenderRect& b)
+    {
+        return a.X == b.X && a.Y == b.Y && a.Width == b.Width && a.Height == b.Height;
+    };
+
+    SECTION("A view without a viewport has the whole pass")
+    {
+        CHECK(equal(ViewArea(FrameView{}, passArea), passArea));
+    }
+
+    SECTION("A viewport inside the pass stays as it is")
+    {
+        const RenderRect tile{ 256, 128, 128, 128 };
+        CHECK(equal(ViewArea(FrameView{ .Viewport = tile }, passArea), tile));
+    }
+
+    SECTION("A viewport across the pass's edge keeps only its part inside")
+    {
+        CHECK(equal(ViewArea(FrameView{ .Viewport = RenderRect{ 448, -64, 128, 128 } }, passArea), RenderRect{ 448, 0, 64, 64 }));
+    }
+
+    SECTION("A viewport outside the pass is empty")
+    {
+        CHECK(IsEmpty(ViewArea(FrameView{ .Viewport = RenderRect{ 1024, 0, 512, 512 } }, passArea)));
+        CHECK(IsEmpty(ViewArea(FrameView{ .Viewport = RenderRect{ 512, 0, 64, 64 } }, passArea)));
+    }
+}
+
 TEST_CASE("The frame clock starts at 0 and counts the time between frames", "[frame]")
 {
     using namespace std::chrono_literals;

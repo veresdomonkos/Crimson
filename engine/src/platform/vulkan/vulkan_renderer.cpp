@@ -6,6 +6,15 @@
 
 namespace crimson::vulkan
 {
+    namespace
+    {
+        void SetViewportAndScissor(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
+        {
+            cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
+            cmdBuffer.setScissor(0, vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } });
+        }
+    }
+
     VulkanRenderer::VulkanRenderer(VulkanDevice& device, VulkanResourceManager& resourceManager)
         : m_device(device), m_resourceManager(resourceManager)
     {
@@ -395,13 +404,16 @@ namespace crimson::vulkan
 
         cmdBuffer.beginRendering(rendering);
 
-        cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
-        cmdBuffer.setScissor(0, rendering.renderArea);
+        SetViewportAndScissor(cmdBuffer, rect);
     }
 
     void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, std::span<const FrameView> views, const RenderRect& passArea)
     {
         CRIMSON_PROFILE_FUNCTION();
+
+        // A view whose part of the target is outside the pass's draws nothing
+        const RenderRect viewArea = ViewArea(views[draw.View], passArea);
+        if (IsEmpty(viewArea)) return;
 
         VulkanVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(draw.VertexBuffer);
         VulkanIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(draw.IndexBuffer);
@@ -475,12 +487,7 @@ namespace crimson::vulkan
 
         // A view draws to its own part of the target, like a shadow view to its tile of the atlas
         if (!m_bound.DrawPushed || m_bound.Draw.ViewIndex != drawData.ViewIndex)
-        {
-            const RenderRect rect = views[draw.View].Viewport.value_or(passArea);
-
-            cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
-            cmdBuffer.setScissor(0, vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } });
-        }
+            SetViewportAndScissor(cmdBuffer, viewArea);
 
         if (!m_bound.DrawPushed || m_bound.Draw != drawData)
         {

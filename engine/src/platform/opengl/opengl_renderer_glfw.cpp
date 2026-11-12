@@ -8,6 +8,16 @@
 
 namespace crimson::opengl
 {
+    namespace
+    {
+        // The scissor is only left off when the rect is the whole target
+        void SetViewportAndScissor(OpenGLStateCache& state, const RenderRect& rect, bool scissor)
+        {
+            glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
+            state.SetScissor(scissor ? &rect : nullptr);
+        }
+    }
+
     OpenGLRenderer::OpenGLRenderer(OpenGLDevice &device, OpenGLResourceManager &resourceManager)
         :m_device(device), m_resourceManager(resourceManager)
     {
@@ -157,8 +167,7 @@ namespace crimson::opengl
         m_state.BindFramebuffer(target.FrameBufferHandle);
 
         const RenderRect rect = info.Viewport.value_or(RenderRect{ 0, 0, target.Width, target.Height });
-        glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
-        m_state.SetScissor(info.Viewport ? &rect : nullptr);
+        SetViewportAndScissor(m_state, rect, info.Viewport.has_value());
 
         ClearTarget(info.Clear);
         return rect;
@@ -207,6 +216,10 @@ namespace crimson::opengl
     void OpenGLRenderer::ExecuteDraw(const DrawItem& info, std::span<const FrameView> views, const RenderRect& passArea)
     {
         CRIMSON_PROFILE_FUNCTION();
+
+        // A view whose part of the target is outside the pass's draws nothing
+        const RenderRect viewArea = ViewArea(views[info.View], passArea);
+        if (IsEmpty(viewArea)) return;
 
         OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(info.IndexBuffer);
         OpenGLMaterial& material = m_resourceManager.GetMaterial(info.Material);
@@ -260,11 +273,7 @@ namespace crimson::opengl
         const bool viewChanged = info.View != m_boundView;
 
         if (viewChanged)
-        {
-            const RenderRect rect = views[info.View].Viewport.value_or(passArea);
-            glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
-            m_state.SetScissor(&rect);
-        }
+            SetViewportAndScissor(m_state, viewArea, true);
 
         // Each program has its own copy of the uniforms
         if (programChanged || info.Object != m_boundObject)
