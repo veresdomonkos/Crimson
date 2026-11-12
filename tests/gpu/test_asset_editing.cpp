@@ -45,7 +45,7 @@ struct VertexOutput
 VertexOutput VSMain(VertexInput input)
 {
     VertexOutput output;
-    output.ClipPosition = mul(ViewProj, mul(GetObjectData().Transform, float4(input.Position, 1.0)));
+    output.ClipPosition = mul(GetView().ViewProj, mul(GetObjectData().Transform, float4(input.Position, 1.0)));
     output.UV = input.UV;
     return output;
 }
@@ -166,7 +166,7 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
     {
         Project.Write("green.hlsl", R"(
 #include "crimson/bindings.hlsli"
-float4 VSMain(float3 position : POSITION) : SV_Position { return mul(ViewProj, mul(GetObjectData().Transform, float4(position, 1.0))); }
+float4 VSMain(float3 position : POSITION) : SV_Position { return mul(GetView().ViewProj, mul(GetObjectData().Transform, float4(position, 1.0))); }
 float4 PSMain() : SV_Target { return float4(0.0, 1.0, 0.0, 1.0); }
 )");
         assets.Refresh();

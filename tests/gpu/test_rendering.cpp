@@ -31,7 +31,7 @@ cbuffer MaterialBlock : register(b0, space1) { float4 Color; };
 
 float4 VSMain(float3 position : POSITION) : SV_Position
 {
-    return mul(ViewProj, mul(GetObjectData().Transform, float4(position, 1.0)));
+    return mul(GetView().ViewProj, mul(GetObjectData().Transform, float4(position, 1.0)));
 }
 
 float4 PSMain() : SV_Target { return Color; }
@@ -58,7 +58,7 @@ struct VertexOutput
 VertexOutput VSMain(VertexInput input)
 {
     VertexOutput output;
-    output.ClipPosition = mul(ViewProj, mul(GetObjectData().Transform, float4(input.Position, 1.0)));
+    output.ClipPosition = mul(GetView().ViewProj, mul(GetObjectData().Transform, float4(input.Position, 1.0)));
     output.UV = input.UV;
     return output;
 }
@@ -408,7 +408,7 @@ TEST_CASE_METHOD(Fixture, "Shaders get the time and the time since the frame bef
 
 float4 VSMain(float3 position : POSITION) : SV_Position
 {
-    return mul(ViewProj, mul(GetObjectData().Transform, float4(position, 1.0)));
+    return mul(GetView().ViewProj, mul(GetObjectData().Transform, float4(position, 1.0)));
 }
 
 float4 PSMain() : SV_Target { return float4(DeltaTime >= 0.02 ? 1.0 : 0.0, Time >= DeltaTime ? 1.0 : 0.0, 0.0, 1.0); }
