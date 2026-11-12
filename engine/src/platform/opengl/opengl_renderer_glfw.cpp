@@ -118,6 +118,7 @@ namespace crimson::opengl
         TracyGpuCollect;
 
         m_lastStats = m_stats;
+        ++m_submittedFrames;
         return true;
     }
 

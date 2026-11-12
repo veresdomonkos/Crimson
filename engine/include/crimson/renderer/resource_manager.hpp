@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -35,7 +36,15 @@ namespace crimson
 
         virtual MaterialHandle CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings) = 0;
         virtual void DestroyMaterial(MaterialHandle handle) = 0;
-        virtual void SetMaterialSettings(MaterialHandle handle, const MaterialSettings& settings) = 0;
+
+        // An invalid handle for a material that doesn't exist
+        [[nodiscard]] virtual ShaderHandle GetMaterialShader(MaterialHandle handle) const = 0;
+
+        void SetMaterialSettings(MaterialHandle handle, const MaterialSettings& settings)
+        {
+            ++m_materialRevision;
+            SetMaterialSettingsImpl(handle, settings);
+        }
 
         template<MaterialProperty T>
         void SetMaterialPropertyByName(MaterialHandle handle, std::string_view name, const T& value)
@@ -44,10 +53,20 @@ namespace crimson
                 reinterpret_cast<const std::byte*>(&value),
                 sizeof(T)
             );
+            ++m_materialRevision;
             SetMaterialPropertyByNameImpl(handle, name, bytes);
         }
+
         // An invalid texture goes back to the default white one. Can't be called inside a frame.
-        virtual void SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture) = 0;
+        void SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture)
+        {
+            ++m_materialRevision;
+            SetMaterialTextureImpl(material, name, texture);
+        }
+
+        // Goes up whenever any material's settings, properties or textures change. What was drawn with a material
+        // before then, like a shadow tile that is kept between frames, may look different now.
+        [[nodiscard]] uint64_t GetMaterialRevision() const { return m_materialRevision; }
 
         virtual TextureHandle CreateTexture(const TextureInfo& info, const void* data) = 0;
         virtual void DestroyTexture(TextureHandle handle) = 0;
@@ -62,6 +81,10 @@ namespace crimson
         [[nodiscard]] virtual TextureHandle GetColorAttachment(RenderTargetHandle handle, uint32_t index) const = 0;
         [[nodiscard]] virtual std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const = 0;
     protected:
+        virtual void SetMaterialSettingsImpl(MaterialHandle handle, const MaterialSettings& settings) = 0;
         virtual void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) = 0;
+        virtual void SetMaterialTextureImpl(MaterialHandle material, std::string_view name, TextureHandle texture) = 0;
+    private:
+        uint64_t m_materialRevision = 0;
     };
 }

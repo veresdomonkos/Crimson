@@ -307,7 +307,7 @@ namespace crimson::opengl
         m_materials.Unregister(handle);
     }
 
-    void OpenGLResourceManager::SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture)
+    void OpenGLResourceManager::SetMaterialTextureImpl(MaterialHandle material, std::string_view name, TextureHandle texture)
     {
         OpenGLMaterial& mat = m_materials.Get(material);
         if (mat.Shader == ShaderHandle::Invalid())

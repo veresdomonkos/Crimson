@@ -708,6 +708,7 @@ namespace crimson::vulkan
         }
 
         m_lastStats = m_stats;
+        ++m_submittedFrames;
         m_inFlightIndex = (m_inFlightIndex + 1) % kMaxFramesInFlight;
     }
 }

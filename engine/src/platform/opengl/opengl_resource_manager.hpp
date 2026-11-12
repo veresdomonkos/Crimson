@@ -32,8 +32,6 @@ namespace crimson::opengl
 
         MaterialHandle CreateMaterial(ShaderHandle shaderHandle, const MaterialSettings& settings) override;
         void DestroyMaterial(MaterialHandle handle) override;
-        void SetMaterialSettings(MaterialHandle handle, const MaterialSettings& settings) override { m_materials.Get(handle).Settings = settings; }
-        void SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture) override;
 
         TextureHandle CreateTexture(const TextureInfo& info, const void* data) override;
         void DestroyTexture(TextureHandle handle) override;
@@ -48,7 +46,9 @@ namespace crimson::opengl
         [[nodiscard]] RenderTargetHandle GetBackBufferHandle() const { return m_backBufferHandle; }
         [[nodiscard]] GLuint GetDefaultTexture() const { return m_textures.Get(m_defaultTexture).GLHandle; }
     protected:
+        void SetMaterialSettingsImpl(MaterialHandle handle, const MaterialSettings& settings) override { m_materials.Get(handle).Settings = settings; }
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
+        void SetMaterialTextureImpl(MaterialHandle material, std::string_view name, TextureHandle texture) override;
     private:
         static GLuint CompileShader(GLenum type, std::string_view source);
         [[nodiscard]] std::optional<OpenGLProgram> LinkProgram(std::span<const uint32_t> vertexSpirv, std::span<const uint32_t> pixelSpirv) const;

@@ -40,10 +40,15 @@ namespace crimson
 
         // Stats of the last submitted frame
         [[nodiscard]] RenderStats GetStats() const { return m_lastStats; }
+
+        // How many frames Submit rendered, not counting the dropped ones. What a frame drew into a target that is kept
+        // between frames, like the shadow atlas, is only there if it went up by one.
+        [[nodiscard]] uint64_t GetSubmittedFrames() const { return m_submittedFrames; }
     protected:
         FramePacketRing<kMaxFramesInFlight> m_packets;
         RenderStats m_stats;
         RenderStats m_lastStats;
+        uint64_t m_submittedFrames = 0;
         FrameGpuData m_gpuData;
         FrameClock m_clock;
     };
