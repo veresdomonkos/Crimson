@@ -9,6 +9,7 @@
 #include <crimson/scene/scene_renderer.hpp>
 
 #include "gpu/gpu_test.hpp"
+#include "support/scene_fields.hpp"
 #include "support/temp_folder.hpp"
 
 using namespace crimson;
@@ -78,7 +79,7 @@ namespace
             auto& renderer = entity.AddComponent<MeshRendererComponent>();
             renderer.MeshAsset = Assets->Find<AssetType::Mesh>(mesh);
             renderer.MaterialAssets = { Assets->Find<AssetType::Material>("white.mat") };
-            ResolveMeshRenderer(renderer, *Assets);
+            ResolveAssets(*Assets, renderer);
             REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
 
             return entity;
@@ -396,7 +397,7 @@ namespace
             auto& renderer = entity.AddComponent<MeshRendererComponent>();
             renderer.MeshAsset = Assets->Find<AssetType::Mesh>("textured_wall.obj");
             renderer.MaterialAssets = { Assets->Find<AssetType::Material>(name) };
-            ResolveMeshRenderer(renderer, *Assets);
+            ResolveAssets(*Assets, renderer);
             REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
 
             return entity;
@@ -545,7 +546,7 @@ TEST_CASE_METHOD(MaterialFixture, "A normal map bends the light the same way on 
 
         auto& renderer = AddMesh("wall.obj").GetComponent<MeshRendererComponent>();
         renderer.MaterialAssets = { Assets->Find<AssetType::Material>("nouv.mat") };
-        ResolveMeshRenderer(renderer, *Assets);
+        ResolveAssets(*Assets, renderer);
 
         const float right = render(kFromRight);
         const float left = render(kFromLeft);
@@ -668,7 +669,7 @@ namespace
     {
         auto& renderer = entity.GetComponent<MeshRendererComponent>();
         renderer.MaterialAssets = { assets.Find<AssetType::Material>(path) };
-        ResolveMeshRenderer(renderer, assets);
+        ResolveAssets(assets, renderer);
     }
 }
 

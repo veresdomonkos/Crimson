@@ -20,12 +20,16 @@ add_executable(CrimsonTests
         editor/test_recent_projects.cpp
         editor/test_asset_edits.cpp
         editor/test_asset_browser.cpp
+        editor/test_component_fields.cpp
         editor/test_system_shell.cpp
         editor/test_script_editor.cpp
 )
 
 # The engine's src folder is for the parts of the backends that run without a GPU, such as GLSL translation
 target_include_directories(CrimsonTests PRIVATE . ${CMAKE_SOURCE_DIR}/engine/src)
+
+# For the tests that read the sample projects
+target_compile_definitions(CrimsonTests PRIVATE CRIMSON_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 
 target_link_libraries(CrimsonTests
         PRIVATE

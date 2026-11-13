@@ -1,10 +1,10 @@
 #include "crimson_editor/ui/scene_viewport_panel.hpp"
 
+#include <algorithm>
 #include <filesystem>
 
 #include <glm/gtc/type_ptr.hpp>
 
-#include <crimson/scene/scene_renderer.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 
 #include "crimson_editor/ui/asset_drag.hpp"
@@ -19,6 +19,19 @@ namespace crimson::editor::ui
 
         const float toGround = direction.y < -0.0001f ? -origin.y / direction.y : -1.0f;
         return origin + direction * (toGround > 0.0f ? toGround : kDistanceWithoutGround);
+    }
+
+    // Whether dropping an asset of this type does anything: a scene is instanced, others need a component that makes an
+    // entity from them or takes them
+    static bool CanDrop(const ComponentRegistry& components, AssetType type)
+    {
+        if (type == AssetType::Scene || FindSpawnField(components, type))
+            return true;
+
+        return std::ranges::any_of(components.Types(), [type](const ComponentType& component)
+        {
+            return std::ranges::any_of(component.Fields, [type](const FieldInfo& field) { return field.DropTarget && field.Asset == type; });
+        });
     }
 
     void SceneViewportPanel::OnImageDrawn(const ImVec2& position, const ImVec2& size)
@@ -80,11 +93,25 @@ namespace crimson::editor::ui
 
     void SceneViewportPanel::HandleAssetDrop(const ImVec2& position, const ImVec2& size)
     {
-        const MeshID mesh = AcceptAssetOnLastItem<AssetType::Mesh>(m_context.Assets);
-        const MaterialID material = AcceptAssetOnLastItem<AssetType::Material>(m_context.Assets);
-        const SceneID scene = AcceptAssetOnLastItem<AssetType::Scene>(m_context.Assets);
+        const ComponentRegistry& components = m_context.Assets.Components();
 
-        if (!mesh && !material && !scene)
+        AssetID dropped;
+        AssetType droppedType = AssetType::None;
+
+        for (size_t index = 1; index < kAssetTypeCount; ++index)
+        {
+            const auto type = static_cast<AssetType>(index);
+            if (!CanDrop(components, type))
+                continue;
+
+            if (const AssetID id = AcceptAssetOnLastItem(m_context.Assets, type))
+            {
+                dropped = id;
+                droppedType = type;
+            }
+        }
+
+        if (!dropped)
             return;
 
         glm::vec3 direction;
@@ -93,29 +120,28 @@ namespace crimson::editor::ui
 
         const glm::vec3 origin = m_camera.GetPosition();
 
-        m_context.Deferred.emplace_back([this, mesh, material, scene, origin, direction]
+        m_context.Deferred.emplace_back([this, dropped, droppedType, origin, direction]
         {
-            if (mesh)
-                CreateEntityFromMesh(mesh, origin, direction);
-            else if (scene)
-                CreateInstanceOfScene(scene, origin, direction);
+            if (droppedType == AssetType::Scene)
+                CreateInstanceOfScene(m_context.Assets.As<AssetType::Scene>(dropped), origin, direction);
+            else if (const FieldRef spawn = FindSpawnField(m_context.Assets.Components(), droppedType))
+                CreateEntityFromAsset(spawn, dropped, origin, direction);
             else
-                AssignMaterialToEntity(material, origin, direction);
+                AssignAssetToEntity(dropped, droppedType, origin, direction);
         });
     }
 
-    void SceneViewportPanel::CreateEntityFromMesh(MeshID mesh, const glm::vec3& origin, const glm::vec3& direction)
+    void SceneViewportPanel::CreateEntityFromAsset(FieldRef spawn, AssetID asset, const glm::vec3& origin, const glm::vec3& direction)
     {
-        const AssetInfo* info = m_context.Assets.GetInfo(mesh);
+        const AssetInfo* info = m_context.Assets.GetInfo(asset);
         if (!info)
             return;
 
         const Entity entity = m_context.ActiveScene.CreateEntity(std::filesystem::path(info->Path).stem().string());
         entity.GetComponent<TransformComponent>().Position = GetDropPosition(origin, direction);
 
-        auto& renderer = entity.AddComponent<MeshRendererComponent>();
-        renderer.MeshAsset = mesh;
-        ResolveMeshRenderer(renderer, m_context.Assets);
+        CreateComponent(*spawn.Type, entity, m_context.Assets);
+        AssignAsset(*spawn.Type, spawn.Field, entity, asset, m_context.Assets);
 
         m_context.SelectEntity(entity);
     }
@@ -130,18 +156,14 @@ namespace crimson::editor::ui
         m_context.SelectEntity(entity);
     }
 
-    void SceneViewportPanel::AssignMaterialToEntity(MaterialID material, const glm::vec3& origin, const glm::vec3& direction)
+    void SceneViewportPanel::AssignAssetToEntity(AssetID asset, AssetType type, const glm::vec3& origin, const glm::vec3& direction)
     {
         const Entity entity = m_context.ActiveScene.Raycast(origin, direction);
         if (!entity || entity.HasComponent<InstancedComponent>())
             return;
 
-        auto* renderer = entity.TryGetComponent<MeshRendererComponent>();
-        if (!renderer || renderer->MaterialAssets.empty())
-            return;
-
-        renderer->MaterialAssets[0] = material;
-        ResolveMeshRenderer(*renderer, m_context.Assets);
+        if (const FieldRef target = FindDropField(m_context.Assets.Components(), entity, type))
+            AssignAsset(*target.Type, target.Field, entity, asset, m_context.Assets);
     }
 
     void SceneViewportPanel::HandleShortcuts()

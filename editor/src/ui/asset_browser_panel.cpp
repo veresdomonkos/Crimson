@@ -591,7 +591,7 @@ namespace crimson::editor::ui
                             return;
 
                         ++m_context.AssetsVersion;
-                        m_context.ResolveMeshRenderers();
+                        ResolveSceneAssets(m_context.ActiveScene, m_context.Assets);
                     });
                 }
 

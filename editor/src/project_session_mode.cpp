@@ -37,7 +37,6 @@ namespace crimson::editor
           m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, *m_services.Graphics.Imgui)),
           m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
-                     .ResolveMeshRenderers = [this] { ResolveAllMeshRenderers(); },
                      .OpenScene = [this](SceneID id) { OpenScene(id); },
                      .OpenCodeFile = [this](const std::filesystem::path& file) { OpenInScriptEditor(m_services.Settings.GetScriptEditor(), file, m_project.Root()); } }
     {
@@ -121,13 +120,7 @@ namespace crimson::editor
         m_context.Deferred.clear();
 
         if (m_assetEdits->Apply())
-            ResolveAllMeshRenderers();
-    }
-
-    void ProjectSessionMode::ResolveAllMeshRenderers()
-    {
-        for (auto [handle, renderer] : m_scene.GetRegistry().view<MeshRendererComponent>().each())
-            ResolveMeshRenderer(renderer, *m_assetManager);
+            ResolveSceneAssets(m_scene, *m_assetManager);
     }
 
     void ProjectSessionMode::ForgetAssets(std::span<const AssetID> removed)
@@ -143,7 +136,7 @@ namespace crimson::editor
 
         // The scene's references to what went keep its id, to be saved and to work again when it comes back, which a
         // refresh with nothing removed can be. Also for materials that went away because a shader they used is gone.
-        ResolveAllMeshRenderers();
+        ResolveSceneAssets(m_scene, *m_assetManager);
 
         const auto isRemoved = [removed](AssetID id) { return std::ranges::find(removed, id) != removed.end(); };
 
@@ -405,7 +398,7 @@ namespace crimson::editor
             m_sinceShaderCheck = 0.0f;
 
             if (!m_assetManager->ReloadChangedShaders().empty())
-                ResolveAllMeshRenderers();
+                ResolveSceneAssets(m_scene, *m_assetManager);
         }
 
         m_cameraController->Update(deltaTime);

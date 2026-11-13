@@ -59,14 +59,14 @@ namespace crimson
     };
 
     // One component for what Unity splits into a mesh filter and a mesh renderer.
-    // Call ResolveMeshRenderer after changing the assets.
+    // Call ResolveComponentAssets (or ResolveSceneAssets) after changing the assets.
     struct MeshRendererComponent
     {
         MeshID MeshAsset;
         std::vector<MaterialID> MaterialAssets; // one per material slot of the mesh
         bool CastsShadows = true;
 
-        // The loaded assets, set by ResolveMeshRenderer
+        // The loaded assets, set when its assets are resolved
         Mesh Resolved;
     };
 

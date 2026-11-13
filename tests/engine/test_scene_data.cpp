@@ -19,6 +19,7 @@
 using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::FieldOf;
+using crimson::tests::ResolveAssets;
 using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
@@ -82,7 +83,7 @@ TEST_CASE_METHOD(Fixture, "A scene survives being saved and loaded", "[scene dat
     renderer.MeshAsset = assets.Find<AssetType::Mesh>("meshes/thing.obj");
     renderer.MaterialAssets = { assets.Find<AssetType::Material>("materials/thing.mat") };
     renderer.CastsShadows = false;
-    ResolveMeshRenderer(renderer, assets);
+    ResolveAssets(assets, renderer);
 
     const SceneEnvironment environment{ .Ambient = glm::vec3(0.2f), .Exposure = 2.5f, .Mapper = ToneMapper::None };
     const SceneData saved = CaptureScene(scene, environment, assets);
@@ -125,7 +126,7 @@ TEST_CASE_METHOD(Fixture, "Scene files written by hand work", "[scene data]")
     REQUIRE(data->Roots.size() == 1);
     CHECK(data->Roots[0].Id);
     CHECK(data->Roots[0].Active);
-    CHECK(data->Roots[0].Scale == glm::vec3(1.0f));
+    CHECK(FieldOf<glm::vec3>(assets, data->Roots[0], "transform", "scale") == glm::vec3(1.0f));
     CHECK(FieldOf<AssetID>(assets, data->Roots[0], "meshRenderer", "mesh") == assets.Find<AssetType::Mesh>("thing.obj"));
 }
 
@@ -151,7 +152,7 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
     Scene scene;
     auto& renderer = scene.CreateEntity("Mesh").AddComponent<MeshRendererComponent>();
     renderer.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
-    ResolveMeshRenderer(renderer, assets);
+    ResolveAssets(assets, renderer);
     REQUIRE(renderer.MaterialAssets[0] == assets.DefaultMaterial());
 
     const SceneData data = CaptureScene(scene, {}, assets);
@@ -178,20 +179,20 @@ TEST_CASE_METHOD(Fixture, "A slot on the default material finds one made for it,
     Scene scene;
     auto& onDefault = scene.CreateEntity("Default").AddComponent<MeshRendererComponent>();
     onDefault.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
-    ResolveMeshRenderer(onDefault, assets);
+    ResolveAssets(assets, onDefault);
     REQUIRE(onDefault.MaterialAssets[0] == assets.DefaultMaterial());
 
     auto& chosen = scene.CreateEntity("Chosen").AddComponent<MeshRendererComponent>();
     chosen.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
     chosen.MaterialAssets = { assets.Find<AssetType::Material>("other.mat") };
-    ResolveMeshRenderer(chosen, assets);
+    ResolveAssets(assets, chosen);
 
     // As the editor's Create Materials from .mtl does
     Temp.Write("materials/Paint.mat", kMaterial);
     assets.Refresh();
 
-    ResolveMeshRenderer(onDefault, assets);
-    ResolveMeshRenderer(chosen, assets);
+    ResolveAssets(assets, onDefault);
+    ResolveAssets(assets, chosen);
 
     CHECK(onDefault.MaterialAssets[0] == assets.FindId("materials/Paint.mat"));
     CHECK(chosen.MaterialAssets[0] == assets.FindId("other.mat"));
@@ -234,7 +235,7 @@ TEST_CASE_METHOD(Fixture, "An instance's entities come from its scene", "[scene 
         const SceneData data = CaptureScene(scene, {}, assets);
 
         REQUIRE(data.Roots.size() == 1);
-        CHECK(data.Roots[0].Position == glm::vec3(9.0f));
+        CHECK(FieldOf<glm::vec3>(assets, data.Roots[0], "transform", "position") == glm::vec3(9.0f));
         CHECK(data.Roots[0].Instance == assets.Find<AssetType::Scene>("crate.scene"));
         CHECK(data.Roots[0].Children.empty());
     }
@@ -632,4 +633,108 @@ TEST_CASE_METHOD(Fixture, "A light's fields are read from a file as they were wr
         REQUIRE(unknown);
         CHECK(FieldOf<int32_t>(assets, unknown->Roots[0], "light", "type") == static_cast<int32_t>(LightType::Point));
     }
+}
+
+TEST_CASE_METHOD(Fixture, "A transform's keys stay at the node's level", "[scene data]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+
+    const auto data = ParseSceneData(SceneWith(R"({ "name": "A", "position": [1, 2, 3], "scale": [2, 2, 2] })"), assets, "test");
+    REQUIRE(data);
+    REQUIRE(data->Roots.size() == 1);
+
+    CHECK(FieldOf<glm::vec3>(assets, data->Roots[0], "transform", "position") == glm::vec3(1.0f, 2.0f, 3.0f));
+    CHECK(FieldOf<glm::vec3>(assets, data->Roots[0], "transform", "rotation") == glm::vec3(0.0f));
+    CHECK(FieldOf<glm::vec3>(assets, data->Roots[0], "transform", "scale") == glm::vec3(2.0f));
+
+    const std::string text = WriteSceneData(*data, assets);
+    CHECK(text.find("\"position\": [1.0, 2.0, 3.0]") != std::string::npos);
+    CHECK(text.find("\"transform\"") == std::string::npos);
+
+    CHECK(ParseSceneData(text, assets, "test") == *data);
+}
+
+TEST_CASE_METHOD(Fixture, "Every kind of field survives saving and loading", "[scene data]")
+{
+    Temp.Write("meshes/thing.obj", kTriangleObj);
+    Temp.Write("materials/thing.mat", kMaterial);
+    AssetManager assets(Gpu, Temp.Path());
+
+    const ComponentType* everything = assets.Components().RegisterRuntime("everything", "Everything", {
+        FieldInfo{ .Key = "flag", .Label = "Flag", .Type = FieldType::Bool, .Default = false },
+        FieldInfo{ .Key = "count", .Label = "Count", .Type = FieldType::Int, .Default = int32_t{ 0 } },
+        FieldInfo{ .Key = "amount", .Label = "Amount", .Type = FieldType::Float, .Default = 0.0f },
+        FieldInfo{ .Key = "offset", .Label = "Offset", .Type = FieldType::Vec3, .Default = glm::vec3(0.0f) },
+        FieldInfo{ .Key = "tint", .Label = "Tint", .Type = FieldType::Color, .Default = glm::vec3(1.0f) },
+        FieldInfo{ .Key = "title", .Label = "Title", .Type = FieldType::String, .Default = std::string() },
+        FieldInfo{ .Key = "kind", .Label = "Kind", .Type = FieldType::Enum, .Default = int32_t{ 0 }, .EnumOptions = { { "first", "First" }, { "second", "Second" } } },
+        FieldInfo{ .Key = "mesh", .Label = "Mesh", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh },
+        FieldInfo{ .Key = "materials", .Label = "Materials", .Type = FieldType::AssetList, .Default = std::vector<AssetID>(), .Asset = AssetType::Material }
+    });
+    REQUIRE(everything);
+
+    const ComponentRegistry& components = assets.Components();
+
+    SceneNode node{ .Id = AssetID::Generate(), .Name = "Thing" };
+    node.Components.push_back(components.Compose("transform", { { "position", glm::vec3(1.0f, 2.0f, 3.0f) } }));
+    node.Components.push_back(components.Compose("everything", {
+        { "flag", true },
+        { "count", int32_t{ 7 } },
+        { "amount", 1.25f },
+        { "offset", glm::vec3(1.0f, -2.0f, 3.5f) },
+        { "tint", glm::vec3(0.5f, 0.25f, 0.125f) },
+        { "title", std::string("hello") },
+        { "kind", int32_t{ 1 } },
+        { "mesh", AssetID(assets.Find<AssetType::Mesh>("meshes/thing.obj")) },
+        { "materials", std::vector<AssetID>{ assets.Find<AssetType::Material>("materials/thing.mat"), AssetID{} } } }));
+
+    SceneData data;
+    data.Roots.push_back(node);
+
+    const std::string text = WriteSceneData(data, assets);
+    CHECK(text.find("\"kind\": \"second\"") != std::string::npos);
+
+    const auto parsed = ParseSceneData(text, assets, "test");
+    REQUIRE(parsed);
+    CHECK(*parsed == data);
+}
+
+TEST_CASE_METHOD(Fixture, "A file saved before reads and writes back the same", "[scene data]")
+{
+    std::ifstream stream(std::string(CRIMSON_SOURCE_DIR) + "/samples/Demo/assets/scenes/demo.scene", std::ios::binary);
+    REQUIRE(stream);
+
+    // Git may have checked it out with CRLF
+    std::string text((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+    std::erase(text, '\r');
+
+    AssetManager assets(Gpu, Temp.Path());
+
+    const auto data = ParseSceneData(text, assets, "demo.scene");
+    REQUIRE(data);
+    CHECK_FALSE(data->Roots.empty());
+    CHECK(WriteSceneData(*data, assets) == text);
+}
+
+TEST_CASE_METHOD(Fixture, "Moving a file updates a runtime component's asset field", "[scene data]")
+{
+    Temp.Write("meshes/thing.obj", kTriangleObj);
+    AssetManager assets(Gpu, Temp.Path());
+
+    REQUIRE(assets.Components().RegisterRuntime("holder", "Holder", {
+        FieldInfo{ .Key = "mesh", .Label = "Mesh", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh },
+        FieldInfo{ .Key = "title", .Label = "Title", .Type = FieldType::String, .Default = std::string() }
+    }));
+
+    const std::string text = SceneWith(R"({ "name": "A", "holder": { "mesh": "old/thing.obj", "title": "old/thing.obj" } })");
+    const std::unordered_map<std::string, AssetID> moved = { { "old/thing.obj", assets.Find<AssetType::Mesh>("meshes/thing.obj") } };
+
+    const auto updated = UpdateSceneReferences(text, moved, assets);
+    REQUIRE(updated);
+    CHECK(updated->find("\"path\": \"meshes/thing.obj\"") != std::string::npos);
+
+    // A string field that only looks like a reference is left alone
+    CHECK(updated->find("\"title\": \"old/thing.obj\"") != std::string::npos);
+
+    CHECK_FALSE(UpdateSceneReferences(*updated, moved, assets));
 }

@@ -1,16 +1,16 @@
 #pragma once
-#include <cassert>
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <initializer_list>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
+#include <entt/core/type_info.hpp>
 #include <glm/glm.hpp>
 
 #include "crimson/asset_manager/asset_id.hpp"
@@ -28,6 +28,13 @@ namespace crimson
     // The empty value of the alternative a field of this type holds
     [[nodiscard]] FieldValue EmptyValue(FieldType type);
 
+    // One value of an Enum field, in the order of the values
+    struct EnumOption
+    {
+        std::string Key;   // in files, like "directional"
+        std::string Label; // in the Inspector, like "Directional"
+    };
+
     struct FieldInfo
     {
         std::string Key;   // in files, like "innerCone"
@@ -36,12 +43,23 @@ namespace crimson
         FieldValue Default;
 
         AssetType Asset = AssetType::None;  // what an Asset or AssetList field points to
-        std::vector<std::string> EnumKeys;   // in files, by value
-        std::vector<std::string> EnumLabels; // in the Inspector, the same order
+        std::vector<EnumOption> EnumOptions;
 
         // For the Inspector: what a number can be, and how fast it changes when dragged
         std::optional<std::pair<float, float>> Range;
         float Speed = 0.01f;
+
+        // For a Vec3 the Inspector offers to change along all axes together, like a scale
+        bool UniformToggle = false;
+
+        // For an Asset or AssetList field: dropping an asset of its type in the Scene view makes an entity with this
+        // component (SpawnsFrom), or sets it on the entity under the mouse (DropTarget, the first entry of a list)
+        bool SpawnsFrom = false;
+        bool DropTarget = false;
+
+        // What an empty reference ends up as once the component's assets are resolved. It is saved as empty, so that
+        // it can still be replaced by something that fits better when the file is loaded again.
+        std::function<AssetID(const AssetManager& assets)> Fallback;
 
         std::function<FieldValue(const void* component)> Get;
         std::function<void(void* component, const FieldValue& value)> Set;
@@ -49,10 +67,21 @@ namespace crimson
         // Whether it means anything with the component's other values, like a light's range with a directional one.
         // Always when not set.
         std::function<bool(const void* component)> Visible;
+
+        // The name of an AssetList's entry in the Inspector, like a mesh's material slot. "<Label> <index>" when not set.
+        std::function<std::string(const void* component, size_t index)> ItemLabel;
+    };
+
+    // A ready-made setup of a component, offered by the editor when creating an entity, like a light of one type
+    struct ComponentPreset
+    {
+        std::string Menu; // the submenu, like "Light"
+        std::string Name; // the entry, and what the entity is called
+        std::function<void(void* component, const AssetManager& assets)> Apply;
     };
 
     // A kind of component, which scene files and the editor know by its fields. A C++ type registers with
-    // ComponentRegistry::RegisterNative, one that only exists as data, like a script's, with RegisterRuntime.
+    // ComponentRegistry::Register (component_builder.hpp), one that only exists as data, like a script's, with RegisterRuntime.
     struct ComponentType
     {
         std::string Id;   // in files, never to change once something was saved with it
@@ -61,6 +90,7 @@ namespace crimson
 
         bool Addable = true;       // through the editor's Add Component, which a transform isn't as every entity has one
         bool InlineInFile = false; // its fields are the node's own in scene files, like the transform's
+        entt::id_type NativeType = 0; // of its C++ type, 0 for one that only exists as data
 
         std::function<bool(Entity)> Has;
         std::function<void*(Entity)> Get; // null if the entity doesn't have it
@@ -70,11 +100,13 @@ namespace crimson
         // Runs after its fields are set, to keep them consistent, like a spot light's inner cone inside its outer one
         std::function<void(void* component)> Constrain;
 
-        // After it was created from a scene file or the editor, like a mesh renderer loading its assets
-        std::function<void(Entity entity, AssetManager& assets)> OnLoaded;
+        // Loads what its asset fields refer to, like a mesh renderer's mesh. Runs after they changed, and once it is made.
+        std::function<void(void* component, AssetManager& assets)> ResolveAssets;
 
-        // Before its values are saved, like a mesh renderer leaving a slot empty that only has the default material
-        std::function<void(std::vector<FieldValue>& values, const AssetManager& assets)> OnCaptured;
+        // The Lucide name of its icon, which can depend on its values. Empty for none.
+        std::function<std::string_view(const void* component)> Icon;
+
+        std::vector<ComponentPreset> Presets;
 
         // Its index in Fields, if it has one with that key
         [[nodiscard]] std::optional<size_t> FindField(std::string_view key) const;
@@ -103,28 +135,8 @@ namespace crimson
         std::vector<SceneComponent> Components;
     };
 
-    class ComponentRegistry;
-
-    // Adds the fields of a C++ component, read and written through pointers to its members
     template <typename T>
-    class NativeComponentBuilder
-    {
-    public:
-        NativeComponentBuilder(ComponentType& type, const AssetManager& assets) : m_type(type), m_assets(assets) {}
-
-        // The field's Get, Set and Default come from the member. An enum member is an Enum field, a TypedAssetID an
-        // Asset one, and a vector of them an AssetList.
-        template <auto Member>
-        NativeComponentBuilder& Field(FieldInfo info);
-
-        NativeComponentBuilder& InlineInFile() { m_type.InlineInFile = true; m_type.Addable = false; return *this; }
-        NativeComponentBuilder& Constrain(std::function<void(T&)> constrain);
-        NativeComponentBuilder& OnLoaded(std::function<void(Entity, AssetManager&)> onLoaded) { m_type.OnLoaded = std::move(onLoaded); return *this; }
-        NativeComponentBuilder& OnCaptured(std::function<void(std::vector<FieldValue>&, const AssetManager&)> onCaptured) { m_type.OnCaptured = std::move(onCaptured); return *this; }
-    private:
-        ComponentType& m_type;
-        const AssetManager& m_assets;
-    };
+    class ComponentBuilder;
 
     // The kinds of components scene files and the editor know. The asset manager owns one, with the engine's own
     // components in it, as asset references in fields are checked against it.
@@ -136,8 +148,9 @@ namespace crimson
         ComponentRegistry(const ComponentRegistry&) = delete;
         ComponentRegistry& operator=(const ComponentRegistry&) = delete;
 
+        // A C++ component, whose fields are added through the builder it gives. Defined in component_builder.hpp.
         template <typename T>
-        NativeComponentBuilder<T> RegisterNative(std::string id, std::string name);
+        ComponentBuilder<T> Register(std::string id, std::string name);
 
         // A component that only exists as data. Its values are kept by the scene, and the fields' Get and Set are made
         // here. A field's default of another alternative than its type holds becomes the empty one.
@@ -146,11 +159,32 @@ namespace crimson
 
         [[nodiscard]] const ComponentType* Find(std::string_view id) const;
 
+        // The type registered for a C++ component
+        template <typename T>
+        [[nodiscard]] const ComponentType* Find() const
+        {
+            for (const ComponentType& type : m_types)
+            {
+                if (type.NativeType == entt::type_hash<T>::value())
+                    return &type;
+            }
+
+            return nullptr;
+        }
+
         // In the order they were registered, which is the order an entity's components are saved and shown in
         [[nodiscard]] const std::deque<ComponentType>& Types() const { return m_types; }
 
         // A field's value in a component read from a file, if its type is registered and has that field
         [[nodiscard]] const FieldValue* FieldOf(const SceneComponent& component, std::string_view key) const;
+
+        // What a node of a scene file has for itself, which a component's id can't be: its id, name, active, instance
+        // and children, and the fields of the components that are inline
+        [[nodiscard]] bool IsNodeKey(std::string_view key) const;
+
+        // A component as a scene file has it, with the fields' defaults except for the values given by field key.
+        // A type or key that isn't registered is an error.
+        [[nodiscard]] SceneComponent Compose(std::string_view id, std::initializer_list<std::pair<std::string_view, FieldValue>> overrides) const;
     private:
         ComponentType* Add(std::string id, std::string name);
 
@@ -170,109 +204,36 @@ namespace crimson
 
     void CopyComponent(const ComponentType& type, Entity from, Entity to);
 
-    // ---
+    // Adds the component with its fields' defaults, and resolves its assets
+    void CreateComponent(const ComponentType& type, Entity entity, AssetManager& assets);
 
-    namespace detail
+    // Does nothing for a type without assets to resolve
+    void ResolveComponentAssets(const ComponentType& type, void* component, AssetManager& assets);
+
+    // Every component of the scene that has assets to resolve
+    void ResolveSceneAssets(Scene& scene, AssetManager& assets);
+
+    // The component as a scene file saves it: with its fallback assets left empty
+    [[nodiscard]] SceneComponent CaptureComponent(const ComponentType& type, Entity entity, const AssetManager& assets);
+
+    // Adds the component the preset is of, sets it up with the preset and resolves its assets
+    void ApplyPreset(const ComponentType& type, const ComponentPreset& preset, Entity entity, AssetManager& assets);
+
+    // A field of a type of component
+    struct FieldRef
     {
-        template <typename T>
-        struct IsTypedAssetID : std::false_type {};
+        const ComponentType* Type = nullptr;
+        size_t Field = 0;
 
-        template <AssetType A>
-        struct IsTypedAssetID<TypedAssetID<A>> : std::true_type {};
+        explicit operator bool() const { return Type != nullptr; }
+    };
 
-        template <typename T>
-        struct IsTypedAssetList : std::false_type {};
+    // The first field that makes an entity from a dropped asset of this type, or none
+    [[nodiscard]] FieldRef FindSpawnField(const ComponentRegistry& registry, AssetType asset);
 
-        template <AssetType A>
-        struct IsTypedAssetList<std::vector<TypedAssetID<A>>> : std::true_type {};
+    // The first field of a component the entity has that a dropped asset of this type is set on, or none
+    [[nodiscard]] FieldRef FindDropField(const ComponentRegistry& registry, Entity entity, AssetType asset);
 
-        template <typename Class, typename Member>
-        Member MemberOf(Member Class::*);
-
-        // Templated on the asset manager too, so it is only looked into where a field is registered, which includes it
-        template <AssetType Type, typename Assets>
-        TypedAssetID<Type> As(const Assets& assets, AssetID id)
-        {
-            return assets.template As<Type>(id);
-        }
-    }
-
-    template <typename T>
-    template <auto Member>
-    NativeComponentBuilder<T>& NativeComponentBuilder<T>::Field(FieldInfo info)
-    {
-        using M = decltype(detail::MemberOf(Member));
-        const AssetManager* assets = &m_assets;
-
-        info.Get = [](const void* component) -> FieldValue
-        {
-            const M& value = static_cast<const T*>(component)->*Member;
-
-            if constexpr (std::is_enum_v<M>)
-                return static_cast<int32_t>(value);
-            else if constexpr (detail::IsTypedAssetID<M>::value)
-                return AssetID(value);
-            else if constexpr (detail::IsTypedAssetList<M>::value)
-                return std::vector<AssetID>(value.begin(), value.end());
-            else
-                return value;
-        };
-
-        info.Set = [assets](void* component, const FieldValue& value)
-        {
-            M& member = static_cast<T*>(component)->*Member;
-
-            if constexpr (std::is_enum_v<M>)
-            {
-                member = static_cast<M>(std::get<int32_t>(value));
-            }
-            else if constexpr (detail::IsTypedAssetID<M>::value)
-            {
-                member = detail::As<M::Type>(*assets, std::get<AssetID>(value));
-            }
-            else if constexpr (detail::IsTypedAssetList<M>::value)
-            {
-                using Element = typename M::value_type;
-                member.clear();
-                for (const AssetID id : std::get<std::vector<AssetID>>(value))
-                    member.push_back(detail::As<Element::Type>(*assets, id));
-            }
-            else
-            {
-                member = std::get<M>(value);
-            }
-        };
-
-        if constexpr (detail::IsTypedAssetID<M>::value)
-            info.Asset = M::Type;
-        else if constexpr (detail::IsTypedAssetList<M>::value)
-            info.Asset = M::value_type::Type;
-
-        const T defaults{};
-        info.Default = info.Get(&defaults);
-
-        m_type.Fields.push_back(std::move(info));
-        return *this;
-    }
-
-    template <typename T>
-    NativeComponentBuilder<T>& NativeComponentBuilder<T>::Constrain(std::function<void(T&)> constrain)
-    {
-        m_type.Constrain = [constrain = std::move(constrain)](void* component) { constrain(*static_cast<T*>(component)); };
-        return *this;
-    }
-
-    template <typename T>
-    NativeComponentBuilder<T> ComponentRegistry::RegisterNative(std::string id, std::string name)
-    {
-        ComponentType* type = Add(std::move(id), std::move(name));
-        assert(type && "A component's id is already taken");
-
-        type->Has = [](Entity entity) { return entity.HasComponent<T>(); };
-        type->Get = [](Entity entity) -> void* { return entity.TryGetComponent<T>(); };
-        type->Add = [](Entity entity) { entity.AddComponent<T>(); };
-        type->Remove = [](Entity entity) { entity.RemoveComponent<T>(); };
-
-        return NativeComponentBuilder<T>(*type, m_assets);
-    }
+    // Sets an Asset field, or the first entry of an AssetList one, then constrains the component and resolves its assets
+    void AssignAsset(const ComponentType& type, size_t field, Entity entity, AssetID asset, AssetManager& assets);
 }

@@ -26,6 +26,7 @@ using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::FieldOf;
 using crimson::tests::LogCounter;
+using crimson::tests::ResolveAssets;
 using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
@@ -627,7 +628,7 @@ TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
 
     SECTION("Without one it is the default material")
     {
-        ResolveMeshRenderer(renderer, assets);
+        ResolveAssets(assets, renderer);
 
         REQUIRE(renderer.MaterialAssets.size() == 2);
         CHECK(renderer.MaterialAssets[0] == stone);
@@ -638,7 +639,7 @@ TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
     SECTION("A chosen material wins")
     {
         renderer.MaterialAssets = { assets.Find<AssetType::Material>("mine.mat") };
-        ResolveMeshRenderer(renderer, assets);
+        ResolveAssets(assets, renderer);
 
         REQUIRE(renderer.MaterialAssets.size() == 2);
         CHECK(renderer.MaterialAssets[0] == assets.Find<AssetType::Material>("mine.mat"));
@@ -657,14 +658,14 @@ TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
 
     SECTION("No mesh gives nothing to draw")
     {
-        ResolveMeshRenderer(renderer, assets);
+        ResolveAssets(assets, renderer);
         CHECK(renderer.Resolved.SubMeshes.empty());
     }
 
     SECTION("An empty slot gets the default material")
     {
         renderer.MeshAsset = assets.Find<AssetType::Mesh>("tri.obj");
-        ResolveMeshRenderer(renderer, assets);
+        ResolveAssets(assets, renderer);
 
         REQUIRE(renderer.MaterialAssets.size() == 1);
         CHECK(renderer.MaterialAssets[0] == assets.DefaultMaterial());
@@ -675,7 +676,7 @@ TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
     {
         renderer.MeshAsset = assets.Find<AssetType::Mesh>("tri.obj");
         renderer.MaterialAssets = { assets.Find<AssetType::Material>("mine.mat") };
-        ResolveMeshRenderer(renderer, assets);
+        ResolveAssets(assets, renderer);
 
         CHECK(renderer.Resolved.Materials[0] == assets.Load<AssetType::Material>("mine.mat"));
     }
@@ -684,7 +685,7 @@ TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
     {
         renderer.MeshAsset = assets.Find<AssetType::Mesh>("tri.obj");
         renderer.MaterialAssets = { assets.Find<AssetType::Material>("mine.mat"), assets.Find<AssetType::Material>("mine.mat"), assets.Find<AssetType::Material>("mine.mat") };
-        ResolveMeshRenderer(renderer, assets);
+        ResolveAssets(assets, renderer);
 
         CHECK(renderer.MaterialAssets.size() == 1);
     }
@@ -692,11 +693,11 @@ TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
     SECTION("Resolving again clears the old result when the mesh is removed")
     {
         renderer.MeshAsset = assets.Find<AssetType::Mesh>("tri.obj");
-        ResolveMeshRenderer(renderer, assets);
+        ResolveAssets(assets, renderer);
         REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
 
         renderer.MeshAsset = {};
-        ResolveMeshRenderer(renderer, assets);
+        ResolveAssets(assets, renderer);
         CHECK(renderer.Resolved.SubMeshes.empty());
     }
 }

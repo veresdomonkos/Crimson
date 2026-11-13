@@ -47,6 +47,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/core/profiler.hpp
         include/crimson/renderer/render_stats.hpp
         include/crimson/renderer/material_settings.hpp
+        include/crimson/scene/component_builder.hpp
         include/crimson/scene/component_registry.hpp
         include/crimson/scene/components.hpp
         include/crimson/scene/entity.hpp

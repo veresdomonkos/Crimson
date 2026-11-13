@@ -1,10 +1,13 @@
 #pragma once
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
 
 #include <entt/entity/registry.hpp>
 #include <glm/glm.hpp>
+
+#include "crimson/renderer/mesh.hpp"
 
 namespace crimson
 {
@@ -35,6 +38,10 @@ namespace crimson
         // The nearest active mesh renderer whose bounds the ray hits, or an invalid entity.
         // Uses the world transforms of the last UpdateWorldTransforms.
         [[nodiscard]] Entity Raycast(const glm::vec3& origin, const glm::vec3& direction);
+
+        // The box around the entity's resolved mesh, in the world, or nothing without one.
+        // Uses the world transforms of the last UpdateWorldTransforms.
+        [[nodiscard]] std::optional<MeshBounds> WorldBounds(Entity entity) const;
 
         // Call once a frame before reading TransformComponent::World or ActiveInHierarchy
         void UpdateWorldTransforms();

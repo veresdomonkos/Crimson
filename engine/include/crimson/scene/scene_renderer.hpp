@@ -14,10 +14,6 @@ namespace crimson
     class AssetManager;
     class Scene;
 
-    // Loads the renderer's mesh and materials into Resolved and sizes MaterialAssets to the mesh's slots.
-    // Empty slots get the material made for them (AssetManager::FindSlotMaterial), or else the default one.
-    void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets);
-
     // Turns a scene into the frame's lighting data and render passes
     class SceneRenderer
     {

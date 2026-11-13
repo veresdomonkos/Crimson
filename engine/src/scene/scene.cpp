@@ -185,6 +185,29 @@ namespace crimson
         return closest == entt::null ? Entity{} : Entity{ closest, this };
     }
 
+    std::optional<MeshBounds> Scene::WorldBounds(Entity entity) const
+    {
+        const auto* renderer = entity.TryGetComponent<MeshRendererComponent>();
+        const auto* transform = entity.TryGetComponent<TransformComponent>();
+        if (!renderer || !transform || renderer->Resolved.SubMeshes.empty())
+            return std::nullopt;
+
+        const MeshBounds& local = renderer->Resolved.Bounds;
+        MeshBounds bounds{ glm::vec3(std::numeric_limits<float>::max()), glm::vec3(std::numeric_limits<float>::lowest()) };
+
+        // The box turns with the entity, so it is the one around all of its corners
+        for (int corner = 0; corner < 8; ++corner)
+        {
+            const glm::vec3 point((corner & 1) ? local.Max.x : local.Min.x, (corner & 2) ? local.Max.y : local.Min.y, (corner & 4) ? local.Max.z : local.Min.z);
+            const glm::vec3 world(transform->World * glm::vec4(point, 1.0f));
+
+            bounds.Min = glm::min(bounds.Min, world);
+            bounds.Max = glm::max(bounds.Max, world);
+        }
+
+        return bounds;
+    }
+
     void Scene::UpdateWorldTransforms()
     {
         for (const entt::entity root : m_roots)

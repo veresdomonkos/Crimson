@@ -7,8 +7,6 @@
 
 #include <imgui.h>
 
-#include <crimson/scene/scene_renderer.hpp>
-
 #include "crimson_editor/ui/component_fields.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
@@ -16,22 +14,6 @@
 namespace crimson::editor::ui
 {
     static constexpr const char* kEntityPayload = "CRIMSON_ENTITY";
-
-    // The engine's built-in meshes, in engine/resources/meshes
-    struct BuiltInMesh
-    {
-        const char* Name;
-        const char* Path;
-    };
-
-    static constexpr BuiltInMesh kBuiltInMeshes[] = {
-        { "Cube",     "engine/meshes/SM_Cube.obj" },
-        { "Sphere",   "engine/meshes/SM_Sphere.obj" },
-        { "Cylinder", "engine/meshes/SM_Cylinder.obj" },
-        { "Capsule",  "engine/meshes/SM_Capsule.obj" },
-        { "Plane",    "engine/meshes/SM_Plane.obj" },
-        { "Quad",     "engine/meshes/SM_Quad.obj" },
-    };
 
     // What kind of entity it is, at a glance
     static const char* EntityIcon(Entity entity, const ComponentRegistry& components)
@@ -340,9 +322,9 @@ namespace crimson::editor::ui
 
     void HierarchyPanel::DrawCreateMenu(Entity parent)
     {
-        const auto create = [this, parent](const char* name, std::function<void(Entity)> setup)
+        const auto create = [this, parent](std::string name, std::function<void(Entity)> setup)
         {
-            m_deferred.emplace_back([this, parent, name, setup = std::move(setup)]
+            m_deferred.emplace_back([this, parent, name = std::move(name), setup = std::move(setup)]
             {
                 const Entity created = m_context.ActiveScene.CreateEntity(name, parent);
                 if (setup)
@@ -352,43 +334,36 @@ namespace crimson::editor::ui
             });
         };
 
-        const auto createLight = [&create](const char* name, LightType type)
-        {
-            create(name, [type](Entity entity)
-            {
-                entity.AddComponent<LightComponent>().Type = type;
-            });
-        };
-
         if (ImGui::MenuItem("Create Empty"))
             create("Entity", nullptr);
 
-        if (ImGui::BeginMenu("Create 3D Object"))
-        {
-            for (const BuiltInMesh& mesh : kBuiltInMeshes)
-            {
-                const MeshID id = m_context.Assets.Find<AssetType::Mesh>(mesh.Path);
+        // A submenu for each menu the components' presets name, in the order the components were registered
+        const ComponentRegistry& components = m_context.Assets.Components();
 
-                // The default material fills the mesh's one slot when it is resolved
-                if (ImGui::MenuItem(mesh.Name, nullptr, false, static_cast<bool>(id)))
+        std::vector<std::string_view> menus;
+        for (const ComponentType& type : components.Types())
+        {
+            for (const ComponentPreset& preset : type.Presets)
+            {
+                if (std::ranges::find(menus, preset.Menu) == menus.end())
+                    menus.push_back(preset.Menu);
+            }
+        }
+
+        for (const std::string_view menu : menus)
+        {
+            if (!ImGui::BeginMenu(("Create " + std::string(menu)).c_str()))
+                continue;
+
+            for (const ComponentType& type : components.Types())
+            {
+                for (const ComponentPreset& preset : type.Presets)
                 {
-                    create(mesh.Name, [this, id](Entity entity)
-                    {
-                        auto& renderer = entity.AddComponent<MeshRendererComponent>();
-                        renderer.MeshAsset = id;
-                        ResolveMeshRenderer(renderer, m_context.Assets);
-                    });
+                    if (preset.Menu == menu && ImGui::MenuItem(preset.Name.c_str()))
+                        create(preset.Name, [this, &type, &preset](Entity entity) { ApplyPreset(type, preset, entity, m_context.Assets); });
                 }
             }
 
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("Create Light"))
-        {
-            if (ImGui::MenuItem("Directional")) createLight("Directional Light", LightType::Directional);
-            if (ImGui::MenuItem("Point"))       createLight("Point Light", LightType::Point);
-            if (ImGui::MenuItem("Spot"))        createLight("Spot Light", LightType::Spot);
             ImGui::EndMenu();
         }
     }

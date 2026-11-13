@@ -8,6 +8,14 @@
 
 namespace crimson::tests
 {
+    // What the editor does after a mesh renderer's assets changed, through the registry
+    inline void ResolveAssets(AssetManager& assets, MeshRendererComponent& renderer)
+    {
+        const ComponentType* type = assets.Components().Find<MeshRendererComponent>();
+        REQUIRE(type);
+        ResolveComponentAssets(*type, &renderer, assets);
+    }
+
     // A field of one of a node's components, as a file has it or as the scene was captured
     template <typename T>
     const T& FieldOf(const AssetManager& assets, const SceneNode& node, std::string_view type, std::string_view key)

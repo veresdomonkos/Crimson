@@ -648,11 +648,9 @@ float4 PSMain(VertexOutput input) : SV_Target
         SceneNode sun;
         sun.Id = AssetID::Generate();
         sun.Name = "Sun";
-        sun.Position = glm::vec3(0.0f, 8.0f, 0.0f);
-        sun.RotationDegrees = glm::degrees(glm::eulerAngles(glm::quatLookAt(glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)), glm::vec3(0.0f, 1.0f, 0.0f))));
-        const LightComponent light{ .Type = LightType::Directional, .Intensity = 1.2f, .CastsShadow = true };
-        const ComponentType& lightType = *m_components.Find("light");
-        sun.Components.push_back(SceneComponent{ .Type = lightType.Id, .Values = ReadFields(lightType, &light) });
+        const glm::vec3 rotation = glm::degrees(glm::eulerAngles(glm::quatLookAt(glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)), glm::vec3(0.0f, 1.0f, 0.0f))));
+        sun.Components.push_back(m_components.Compose("transform", { { "position", glm::vec3(0.0f, 8.0f, 0.0f) }, { "rotation", rotation } }));
+        sun.Components.push_back(m_components.Compose("light", { { "type", static_cast<int32_t>(LightType::Directional) }, { "intensity", 1.2f }, { "castsShadow", true } }));
 
         SceneData data;
         data.Roots.push_back(std::move(sun));
