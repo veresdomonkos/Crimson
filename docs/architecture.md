@@ -141,22 +141,31 @@ Every entity has the first three, and the others are optional. Meshes and render
 
 ### Components
 
-What scene files know of a component, they know from its registration in `ComponentRegistry`, which the asset manager owns (`AssetManager::Components`). A `ComponentType` has a stable id that files use, a name, and its fields: each with a key, a label, a type (`FieldType`), a default, an asset type for references, enum keys and labels, and a range. It also knows how to add, get and remove the component on an entity. Fields are read and written as `FieldValue`s, so code that works on components in general, such as saving, never names a C++ type.
+What scene files know of a component, they know from its registration in `ComponentRegistry`, which the asset manager owns (`AssetManager::Components`). A `ComponentType` has a stable id that files use, a name, and its fields: each with a key, a label, a type (`FieldType`), a default, an asset type for references, enum options, and a range. It also knows how to add, get and remove the component on an entity, and what the editor does with it: its icon, its presets, and which assets can be dropped on it. Fields are read and written as `FieldValue`s, so code that works on components in general, such as saving and the Inspector, never names a C++ type.
+
+A C++ component registers with `ComponentRegistry::Register<T>` (`component_builder.hpp`, which only registration code includes). The builder has a method for each kind of field, and the member's type picks the field's kind, so one of a type no kind holds doesn't compile.
 
 ```cpp
-registry.RegisterNative<LightComponent>("light", "Light")
-    .Field<&LightComponent::Intensity>({ .Key = "intensity", .Label = "Intensity", .Type = FieldType::Float })
-    .Constrain([](LightComponent& light) { /* keep the fields consistent after an edit */ });
+auto renderer = registry.Register<MeshRendererComponent>("meshRenderer", "Mesh Renderer");
+renderer.Icon("box")
+    .Asset("mesh", "Mesh", &MeshRendererComponent::MeshAsset, { .SpawnsFrom = true })
+    .AssetList("materials", "Materials", &MeshRendererComponent::MaterialAssets,
+               { .ItemLabel = SlotName, .Fallback = DefaultMaterialOf, .DropTarget = true })
+    .Field("castsShadows", "Casts Shadows", &MeshRendererComponent::CastsShadows)
+    .ResolveAssets(ResolveMeshRenderer)
+    .Preset("3D Object", "Cube", [](MeshRendererComponent& component, const AssetManager& assets) { /* sets its mesh */ });
 
 registry.RegisterRuntime("health", "Health", { FieldInfo{ .Key = "max", .Label = "Max", .Type = FieldType::Int, .Default = int32_t{ 3 } } });
 ```
 
-- **Native components** register their fields through pointers to their members, which also give their defaults. Enums are stored as their index, and asset references as `AssetID`s, typed again when they are set. `native_components.cpp` registers Transform, Light and Mesh Renderer; Name, Relationship, Scene Instance and Instanced are part of what a node is rather than components a file lists.
+- **Native components** register their fields through pointers to their members, which also give their defaults: `Field` for a bool, int, float, vector or string, and `Color`, `Enum`, `Asset` and `AssetList` for the others. Enums are stored as their index, and asset references as `AssetID`s, typed again when they are set. `native_components.cpp` registers Transform, Light and Mesh Renderer; Name, Relationship, Scene Instance and Instanced are part of what a node is rather than components a file lists. `ComponentRegistry::Find<T>()` finds the type of a C++ component.
 - **Runtime components** have no C++ type, like those a script will define (#36). Their values are a `RuntimeComponent` in a pool of the scene's named after their id.
-- **Hooks:** `Constrain` keeps fields consistent, `OnLoaded` runs after the component was made from a file (a mesh renderer loads its assets), and `OnCaptured` adjusts what is saved.
+- **Options of a field:** `Range` and `Speed`, `VisibleIf` for what only matters with the component's other values, `ItemLabel` to name a list's entries (a mesh's material slots), and `UniformToggle` for a vector that can change along all axes together.
+- **What the editor does with a component:** `Icon` names a Lucide icon, which can depend on the values. `Preset` adds a way to set it up to the Create menu, under the menu name it is given. `SpawnsFrom` makes an asset dropped in the Scene view an entity with the component, and `DropTarget` sets it on the entity under the mouse.
+- **Hooks:** `Constrain` keeps fields consistent, and `ResolveAssets` loads what its asset fields refer to (a mesh renderer loads its mesh and materials) after they changed or the component was made. `Fallback` is what an empty reference ends up as, such as a mesh renderer's default material, which is saved as empty. The component's other code never has to name them: `CreateComponent`, `ApplyPreset`, `AssignAsset`, `CaptureComponent` and `ResolveSceneAssets` do.
 - `ReadComponent`, `WriteComponent` and `CopyComponent` work on any registered component.
 
-In the editor, the Inspector draws each registered component an entity has from its fields (`ui::DrawComponentFields`): a row per visible field, by its type, that resets to its default. Transform and Mesh Renderer have a look of their own, for the uniform scale and the material slots named after the mesh's. **Add Component** lists the types that can be added, and a component the editor doesn't know shows as a line that says it is kept. Icons come from `ui::ComponentIcon`, which the Hierarchy uses too.
+In the editor, the Inspector draws each registered component an entity has from its fields (`ui::DrawComponentFields`): a row per visible field, by its type, that resets to its default. No component has a look of its own, so a new one gets the same rows, entry names and uniform toggle by registering them. Edits that change assets are resolved after the frame, as resolving may load them. **Add Component** lists the types that can be added, and a component the editor doesn't know shows as a line that says it is kept. Icons come from `ui::ComponentIcon`, which the Hierarchy uses too.
 
 The renderer, picking and the camera still use the C++ types directly, as they are what the components are for rather than ways to edit or save them.
 
@@ -185,7 +194,7 @@ A scene is saved as a `.scene` asset: readable JSON with the entities nested the
 
 There are no prefabs, as any scene can be used inside another one as an instance. An instance is an entity with the other scene's roots as its children. Its own name, transform and active flag are saved with it, while what is under it comes from the other scene's file each time the scene opens, and can't be changed from here. There are no per-instance overrides yet (#20). A scene that would end up containing itself can't be dropped in, and one written that way by hand leaves that instance empty.
 
-Each component is a key of its entity, by its type's id, with its fields by their keys. A field the file doesn't have gets its default, and the transform's fields are the entity's own (`position`, `rotation`, `scale`). A component whose type isn't registered, such as one from a script that isn't loaded, is kept as it was: on the entity in `UnknownComponents`, and written back the same when the scene is saved. When a referenced asset moves, the references in the asset fields of the registered components are updated.
+Each component is a key of its entity, by its type's id, with its fields by their keys. A field the file doesn't have gets its default. The transform is a component like the others in a `SceneNode`, but a type can be part of the node (`PartOfNode`), which puts its fields among the node's own keys (`position`, `rotation`, `scale`). The ids of components can't be one of those keys, or `id`, `name`, `active`, `instance` or `children`. A component whose type isn't registered, such as one from a script that isn't loaded, is kept as it was: on the entity in `UnknownComponents`, and written back the same when the scene is saved. When a referenced asset moves, the references in the asset fields of the registered components are updated.
 
 Hand-written references can be plain paths. Saving writes both the id and the path, and an empty material slot stays empty in the file, so it can still find its material. A reference that can't be resolved is logged, and is gone once the scene is saved again. A file that can't be read, including one from a newer version, opens no scene at all, so that saving can't overwrite it.
 
@@ -259,9 +268,9 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 | Panel | What it does |
 |:------|:-------------|
 | **Scene** | the scene's render target, with an [ImGuizmo](https://github.com/CedricGuillemet/ImGuizmo) gizmo on the selection and a toolbar for its tool and axes. Picking raycasts the meshes' bounds. |
-| **Hierarchy** | the entity tree, with search, rename in place and the create menu. Dragging onto an entity reparents, and onto the empty area makes a root. |
+| **Hierarchy** | the entity tree, with search, rename in place and the create menu, which has a submenu for each menu name the components' presets use. Dragging onto an entity reparents, and onto the empty area makes a root. |
 | **Inspector** | the selected entity or asset. Entities show their components, drawn from their registered fields (see [Components](#components)), and **Add Component** lists what is registered. Materials show their shader's properties and textures, and edits reach the file on **Save** (`AssetEdits`). Textures show their import settings, and meshes and shaders their details. |
-| **Assets** | the project's files and the engine's, with a folder tree, a grid, search, and dragging into the Inspector or the Scene view. In the Scene view, a mesh makes a new entity, a material goes on the entity under the mouse, and a scene becomes an instance. Shaders open in the External Script Editor, other files in the system's program (`system_shell.hpp`). Files changed outside the editor appear when it regains focus. |
+| **Assets** | the project's files and the engine's, with a folder tree, a grid, search, and dragging into the Inspector or the Scene view. In the Scene view, what a component registered as `SpawnsFrom` (a mesh) makes a new entity, what one registered as `DropTarget` (a material) goes on the entity under the mouse, and a scene becomes an instance. Shaders open in the External Script Editor, other files in the system's program (`system_shell.hpp`). Files changed outside the editor appear when it regains focus. |
 | **Console** | the log, grouped and filtered by level |
 | **Render Settings** | exposure, tone mapper and ambient light, saved with the scene |
 | **Stats** | FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts |
