@@ -7,7 +7,6 @@
 #include <system_error>
 #include <type_traits>
 #include <utility>
-#include <glm/gtc/quaternion.hpp>
 #include "crimson/asset_manager/importers/material_importer.hpp"
 #include "crimson/asset_manager/importers/mesh_importer.hpp"
 #include "crimson/asset_manager/importers/scene_importer.hpp"
@@ -19,76 +18,16 @@
 #include "crimson/core/log.hpp"
 
 #include "engine_renames.hpp"
-#include "mtl_materials.hpp"
+#include "file_write.hpp"
 
 namespace fs = std::filesystem;
 
 namespace crimson
 {
     static constexpr std::string_view kEnginePathPrefix = "engine/";
-    static constexpr std::string_view kDefaultMaterialPath = "engine/materials/M_Default.mat";
-    static constexpr std::string_view kDefaultShaderPath = "engine/shaders/S_Lit.hlsl";
 
-    // What a new shader starts as: lit like the default one, with fewer slots, to have something to change
-    static constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space1,
-// and its textures in space1 too. A comment like "@default 0.5 @range 0 1" sets how a property starts.
-// Time and DeltaTime, in seconds, come from crimson/bindings.hlsli. crimson/lighting.hlsli also brings
-// crimson/math.hlsli (PI, TAU, EPSILON, ...) and crimson/transforms.hlsli (ObjectToWorldPosition, WorldToClip, ...).
-#include "crimson/lighting.hlsli"
-
-cbuffer MaterialBlock : register(b0, space1)
-{
-    float4 Color; // @default 1 1 1 1
-    float Metallic; // @default 0 @range 0 1
-    float Roughness; // @default 0.5 @range 0 1
-};
-
-Texture2D ColorMap : register(t0, space1);
-
-struct VertexInput
-{
-    float3 Position : POSITION;
-    float3 Normal : NORMAL;
-    float2 UV : TEXCOORD0;
-};
-
-struct VertexOutput
-{
-    float4 ClipPosition : SV_Position;
-    float3 Normal : NORMAL;
-    float3 WorldPosition : WORLDPOSITION;
-    float2 UV : TEXCOORD0;
-};
-
-VertexOutput VSMain(VertexInput input)
-{
-    const float3 worldPosition = ObjectToWorldPosition(input.Position);
-
-    VertexOutput output;
-    output.ClipPosition = WorldToClip(worldPosition);
-    output.Normal = ObjectToWorldNormal(input.Normal);
-    output.WorldPosition = worldPosition;
-    output.UV = input.UV;
-    return output;
-}
-
-float4 PSMain(VertexOutput input) : SV_Target
-{
-    const float4 base = Color * ColorMap.Sample(LinearWrap, input.UV);
-    const float3 normal = normalize(input.Normal);
-
-    Surface surface;
-    surface.WorldPosition = input.WorldPosition;
-    surface.Normal = normal;
-    surface.GeometricNormal = normal;
-    surface.Albedo = base.rgb;
-    surface.Metallic = Metallic;
-    surface.Roughness = Roughness;
-    surface.Occlusion = 1.0;
-
-    return float4(ComputeLighting(surface), base.a);
-}
-)";
+    // Each can use the ones after it
+    static constexpr std::array kUnloadOrder = { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader };
 
     // FNV-1a. An engine resource has no meta to store an id in, and scenes must find it again in any project.
     static AssetID EngineResourceId(std::string_view path)
@@ -153,30 +92,11 @@ float4 PSMain(VertexOutput input) : SV_Target
 
     AssetManager::~AssetManager()
     {
-        // Each one can be used by the ones before it
-        for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader })
-            m_stores[static_cast<size_t>(type)]->UnloadAll(m_gpuResources);
+        for (const AssetType type : kUnloadOrder)
+            StoreOf(type)->UnloadAll(m_gpuResources);
 
-        if (m_flatNormal)
-            m_gpuResources.DestroyTexture(m_flatNormal);
-    }
-
-    TextureHandle AssetManager::EmptySlotTexture(ShaderHandle shader, const std::string& slot)
-    {
-        const auto& textures = m_gpuResources.GetShaderInterface(shader).Textures;
-        const auto it = textures.find(slot);
-
-        if (it == textures.end() || it->second.Default != ShaderTextureDefault::Normal)
-            return TextureHandle::Invalid();
-
-        if (!m_flatNormal)
-        {
-            // Pointing straight out of the surface
-            constexpr std::array<unsigned char, 4> pixel = { 128, 128, 255, 255 };
-            m_flatNormal = m_gpuResources.CreateTexture({ .Width = 1, .Height = 1, .Format = TextureFormat::RGBA8, .Usage = TextureUsage::Sampled }, pixel.data());
-        }
-
-        return m_flatNormal;
+        for (const auto& importer : m_importers)
+            importer->ReleaseShared(m_gpuResources);
     }
 
     void AssetManager::AddImporter(std::unique_ptr<AssetImporterBase> importer)
@@ -258,7 +178,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     void AssetManager::RegisterFile(const fs::path& file, std::unordered_set<AssetID>& seen)
     {
         const std::string extension = NormalizeExt(file);
-        if (extension == ".meta" || extension == ".hlsli")
+        if (extension == ".meta" || extension == ".saving" || extension == ".hlsli")
             return;
 
         std::string path = fs::relative(file, m_root).generic_string();
@@ -423,16 +343,16 @@ float4 PSMain(VertexOutput input) : SV_Target
         return store && store->IsLoaded(id);
     }
 
-    MaterialID AssetManager::DefaultMaterial() const
-    {
-        return Find<AssetType::Material>(kDefaultMaterialPath);
-    }
-
     template <AssetType T>
     AssetStore<T>& AssetManager::Store()
     {
         // Each one is made for its own place, in the constructor
         return static_cast<AssetStore<T>&>(*m_stores[static_cast<size_t>(T)]);
+    }
+
+    AssetStoreBase* AssetManager::StoreOf(AssetType type)
+    {
+        return m_stores[static_cast<size_t>(type)].get();
     }
 
     template <AssetType T>
@@ -451,43 +371,15 @@ float4 PSMain(VertexOutput input) : SV_Target
     }
 
     template <AssetType T>
-    std::optional<LoadedAsset<T>> AssetManager::Import(const Record& record, typename AssetStore<T>::Slot& slot)
-    {
-        ImportContext ctx{ m_gpuResources, *this };
-        const AssetSource source = SourceOf(record);
-
-        // Before the import, for a save during it to count as a change
-        std::error_code error;
-        if constexpr (T == AssetType::Shader)
-        {
-            if (!record.Embedded)
-                slot.State.FileTime = fs::last_write_time(source.File, error);
-        }
-
-        std::optional<LoadedAsset<T>> loaded = slot.Importer->Load(source, ctx);
-
-        if constexpr (T == AssetType::Shader)
-        {
-            slot.State.Dependencies.clear();
-
-            for (fs::path& dependency : ctx.Dependencies)
-            {
-                const fs::file_time_type time = fs::last_write_time(dependency, error);
-                slot.State.Dependencies.emplace_back(std::move(dependency), time);
-            }
-        }
-
-        return loaded;
-    }
-
-    template <AssetType T>
     LoadResult<T> AssetManager::Load(TypedAssetID<T> id)
     {
         auto* slot = SlotFor<T>(id);
 
         if (slot && !slot->Tried())
         {
-            slot->Loaded = Import<T>(m_assets.at(id), *slot);
+            ImportContext ctx{ m_gpuResources, *this };
+
+            slot->Loaded = slot->Import(SourceOf(m_assets.at(id)), ctx);
             slot->Failed = !slot->Loaded;
 
             if (slot->Failed)
@@ -502,10 +394,60 @@ float4 PSMain(VertexOutput input) : SV_Target
             return loaded ? *loaded : LoadedAsset<T>::Invalid();
     }
 
+    template <AssetType T>
+    const AssetData<T>* AssetManager::GetData(TypedAssetID<T> id)
+    {
+        auto* slot = SlotFor<T>(id);
+        if (!slot)
+            return nullptr;
+
+        if (!slot->Data)
+            slot->Data = Read(id);
+
+        return slot->Data ? &*slot->Data : nullptr;
+    }
+
+    template <AssetType T>
+    AssetUpdate AssetManager::Apply(TypedAssetID<T> id, const AssetData<T>& data)
+    {
+        const AssetInfo* info = GetInfo(id);
+        if (!info || info->ReadOnly)
+            return AssetUpdate::Failed;
+
+        Load(id);
+        const AssetData<T>* current = GetData(id);
+
+        auto& slot = *SlotFor<T>(id);
+        ImportContext ctx{ m_gpuResources, *this };
+
+        if (slot.Loaded && current && slot.Importer->Update(*slot.Loaded, *current, data, ctx))
+        {
+            slot.Data = data;
+            slot.Uses = std::move(ctx.Uses);
+            return AssetUpdate::Updated;
+        }
+
+        ctx.Uses.clear();
+
+        std::optional<LoadedAsset<T>> replacement = slot.Importer->Create(data, SourceOf(m_assets.at(id)), ctx);
+        if (!replacement)
+            return AssetUpdate::Failed;
+
+        slot.Unload(m_gpuResources);
+        slot.Loaded = std::move(replacement);
+        slot.Failed = false;
+        slot.Data = data;
+        slot.Uses = std::move(ctx.Uses);
+        return AssetUpdate::Replaced;
+    }
+
     template TextureHandle AssetManager::Load(TextureID);
     template ShaderHandle AssetManager::Load(ShaderID);
     template MaterialHandle AssetManager::Load(MaterialID);
     template const Mesh* AssetManager::Load(MeshID);
+
+    template const MaterialData* AssetManager::GetData(MaterialID);
+    template AssetUpdate AssetManager::Apply(MaterialID, const MaterialData&);
 
     void AssetManager::WarnWrongType(std::string_view path, AssetType wanted) const
     {
@@ -555,22 +497,16 @@ float4 PSMain(VertexOutput input) : SV_Target
 
         for (const auto& [id, record] : m_assets)
         {
-            const bool isMaterial = record.Info.Type == AssetType::Material;
-            if ((!isMaterial && record.Info.Type != AssetType::Scene) || record.Info.ReadOnly)
+            if (record.Info.ReadOnly)
                 continue;
 
             const fs::path file = m_root / fs::path(record.Info.Path);
-            const std::optional<std::string> text = AssetSource{ record.Info, file, nullptr }.Read();
-            if (!text)
-                continue;
 
-            const std::optional<std::string> updated = isMaterial
-                ? UpdateMaterialReferences(*text, moved, *this)
-                : UpdateSceneReferences(*text, moved, *this);
+            const std::optional<std::string> updated = record.Importer->UpdateReferences(AssetSource{ record.Info, file, nullptr }, moved, *this);
             if (!updated)
                 continue;
 
-            if (std::ofstream stream(file, std::ios::binary); !(stream << *updated))
+            if (!WriteFileSafely(file, *updated))
                 LOG_ERROR("[Assets] Can't write {}", record.Info.Path);
             else
                 LOG_INFO("[Assets] Updated the references in {}", record.Info.Path);
@@ -579,47 +515,69 @@ float4 PSMain(VertexOutput input) : SV_Target
 
     void AssetManager::RemoveAssets(std::span<const AssetID> ids)
     {
-        const auto isRemoved = [ids](AssetID id) { return std::ranges::find(ids, id) != ids.end(); };
+        std::vector<std::pair<AssetID, AssetType>> removed;
 
-        // Materials first, as they can use the textures and shaders being removed
-        for (auto& [id, material] : Store<AssetType::Material>())
+        // What the users say names the removed ones as their files do, which is lost once those are gone
+        for (const AssetID id : ids)
         {
-            // Read from its file if nothing asked for it yet. Its slot is there already, so none is added meanwhile.
-            if (isRemoved(id) || !material.Loaded || !GetMaterialData(MaterialID(id)))
-                continue;
-
-            MaterialData& data = *material.State.Data;
-
-            if (isRemoved(data.Shader))
+            for (const auto& store : m_stores)
             {
-                material.Unload(m_gpuResources);
-                material.State.Data.reset();
-                continue;
-            }
+                if (!store)
+                    continue;
 
-            // The texture stays in the data as a missing one, for it to work again if the file comes back
-            for (const auto& [slot, texture] : data.Textures)
-            {
-                if (isRemoved(texture))
-                    m_gpuResources.SetMaterialTexture(*material.Loaded, slot, EmptySlotTexture(Load(data.Shader), slot));
+                for (const AssetID user : store->UsersOf(id))
+                {
+                    if (const auto it = m_assets.find(user); it != m_assets.end())
+                        store->ReadData(user, SourceOf(it->second), *this);
+                }
             }
         }
 
-        for (const AssetType type : { AssetType::Scene, AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader })
+        for (const AssetID id : ids)
         {
-            for (const AssetID id : ids)
+            const auto it = m_assets.find(id);
+            if (it == m_assets.end())
+                continue;
+
+            RememberMissing(id, { .Path = it->second.Info.Path, .Type = it->second.Info.Type });
+            removed.emplace_back(id, it->second.Info.Type);
+
+            m_idsByPath.erase(it->second.Info.Path);
+            m_assets.erase(it);
+        }
+
+        // Before they are forgotten, as what uses them has to move off them first
+        for (const auto& [id, type] : removed)
+            UpdateUsersOf(id, true, nullptr);
+
+        for (const AssetType type : kUnloadOrder)
+        {
+            for (const auto& [id, removedType] : removed)
             {
-                const auto it = m_assets.find(id);
-                if (it == m_assets.end() || it->second.Info.Type != type)
+                if (removedType == type)
+                    StoreOf(type)->Forget(id, m_gpuResources);
+            }
+        }
+    }
+
+    void AssetManager::UpdateUsersOf(AssetID used, bool removed, std::vector<AssetID>* replaced)
+    {
+        for (const auto& store : m_stores)
+        {
+            if (!store)
+                continue;
+
+            // Collected first, as updating one can load others
+            for (const AssetID user : store->UsersOf(used))
+            {
+                const auto it = m_assets.find(user);
+                if (it == m_assets.end())
                     continue;
 
-                RememberMissing(id, { .Path = it->second.Info.Path, .Type = it->second.Info.Type });
+                ImportContext ctx{ m_gpuResources, *this };
 
-                if (AssetStoreBase* store = m_stores[static_cast<size_t>(type)].get())
-                    store->Forget(id, m_gpuResources);
-
-                m_idsByPath.erase(it->second.Info.Path);
-                m_assets.erase(it);
+                if (store->UpdateUser(user, used, removed, SourceOf(it->second), ctx) && replaced)
+                    replaced->push_back(user);
             }
         }
     }
@@ -634,104 +592,13 @@ float4 PSMain(VertexOutput input) : SV_Target
         return std::ranges::none_of(parsed, [](const fs::path& part) { return part == ".."; });
     }
 
-    MaterialID AssetManager::CreateMaterial(std::string_view path)
+    AssetID AssetManager::CreateFile(std::string_view path, AssetType type, std::optional<std::string> contents)
     {
-        MaterialData data;
-        data.Shader = Find<AssetType::Shader>(kDefaultShaderPath);
-        data.Properties["Color"] = { 1.0f, 1.0f, 1.0f, 1.0f };
+        const auto importer = m_importersByExtension.find(NormalizeExt(fs::path(path)));
 
-        return As<AssetType::Material>(CreateAssetFile(path, ".mat", WriteMaterialData(data, *this)));
-    }
-
-    SceneID AssetManager::CreateScene(std::string_view path)
-    {
-        SceneNode sun;
-        sun.Id = AssetID::Generate();
-        sun.Name = "Sun";
-        const glm::vec3 rotation = glm::degrees(glm::eulerAngles(glm::quatLookAt(glm::normalize(glm::vec3(-0.5f, -1.0f, -0.3f)), glm::vec3(0.0f, 1.0f, 0.0f))));
-        sun.Components.push_back(m_components.Compose("transform", { { "position", glm::vec3(0.0f, 8.0f, 0.0f) }, { "rotation", rotation } }));
-        sun.Components.push_back(m_components.Compose("light", { { "type", static_cast<int32_t>(LightType::Directional) }, { "intensity", 1.2f }, { "castsShadow", true } }));
-
-        SceneData data;
-        data.Roots.push_back(std::move(sun));
-
-        return As<AssetType::Scene>(CreateAssetFile(path, ".scene", WriteSceneData(data, *this)));
-    }
-
-    ShaderID AssetManager::CreateShader(std::string_view path)
-    {
-        return As<AssetType::Shader>(CreateAssetFile(path, ".hlsl", std::string(kNewShaderSource)));
-    }
-
-    // The folder an asset is in, with a slash at the end, or empty at the top
-    static std::string FolderOf(const std::string& path)
-    {
-        const size_t folderEnd = path.rfind('/');
-        return folderEnd == std::string::npos ? std::string{} : path.substr(0, folderEnd + 1);
-    }
-
-    // Where the material for one of a mesh's slots goes
-    static std::string SlotMaterialPath(const std::string& meshPath, std::string_view slot)
-    {
-        return FolderOf(meshPath) + "materials/" + std::string(slot) + ".mat";
-    }
-
-    SlotMaterials AssetManager::CreateSlotMaterials(MeshID mesh)
-    {
-        SlotMaterials result;
-
-        const AssetInfo* info = GetInfo(mesh);
-        if (!info || info->Type != AssetType::Mesh || info->ReadOnly || NormalizeExt(fs::path(info->Path)) != ".obj")
+        if (!IsUsableAssetPath(path) || importer == m_importersByExtension.end() || importer->second->Type() != type)
         {
-            LOG_ERROR("[Assets] Only a project's .obj meshes can get materials from their .mtl");
-            return result;
-        }
-
-        // Copied, as creating files adds assets, which can move the info
-        const std::string meshPath = info->Path;
-        std::vector<TextureID> dataTextures;
-
-        for (const tinyobj::material_t& mtl : ReadMtlMaterials(m_root / fs::path(meshPath)))
-        {
-            const std::string path = SlotMaterialPath(meshPath, mtl.name);
-
-            std::error_code error;
-            if (FindId(path) || fs::exists(m_root / fs::path(path), error))
-            {
-                ++result.Kept;
-                continue;
-            }
-
-            MtlMaterial material = MaterialFromMtl(mtl, FolderOf(meshPath), *this);
-
-            if (const MaterialID created = As<AssetType::Material>(CreateAssetFile(path, ".mat", WriteMaterialData(material.Data, *this))))
-            {
-                result.Created.push_back(created);
-                std::ranges::move(material.DataTextures, std::back_inserter(dataTextures));
-            }
-        }
-
-        // Normal maps hold directions, which sRGB decoding would bend
-        for (const TextureID texture : dataTextures)
-        {
-            const AssetInfo* textureInfo = GetInfo(texture);
-            if (!textureInfo || textureInfo->ReadOnly || !textureInfo->Settings.value("srgb", true))
-                continue;
-
-            nlohmann::json settings = textureInfo->Settings;
-            settings["srgb"] = false;
-            ReimportTexture(texture, std::move(settings));
-        }
-
-        LOG_INFO("[Assets] {}: made {} slot materials, and kept {} that were there", meshPath, result.Created.size(), result.Kept);
-        return result;
-    }
-
-    AssetID AssetManager::CreateAssetFile(std::string_view path, std::string_view extension, const std::string& contents)
-    {
-        if (!IsUsableAssetPath(path) || NormalizeExt(fs::path(path)) != extension)
-        {
-            LOG_ERROR("[Assets] Can't create a {} file at '{}'", extension, path);
+            LOG_ERROR("[Assets] Can't create a {} file at '{}'", ToString(type), path);
             return {};
         }
 
@@ -744,9 +611,18 @@ float4 PSMain(VertexOutput input) : SV_Target
             return {};
         }
 
+        if (!contents)
+            contents = importer->second->NewFile(*this);
+
+        if (!contents)
+        {
+            LOG_ERROR("[Assets] A {} can't be made without contents", ToString(type));
+            return {};
+        }
+
         fs::create_directories(file.parent_path(), error);
 
-        if (std::ofstream stream(file, std::ios::binary); !(stream << contents))
+        if (!WriteFileSafely(file, *contents))
         {
             LOG_ERROR("[Assets] Can't write '{}'", path);
             return {};
@@ -837,134 +713,23 @@ float4 PSMain(VertexOutput input) : SV_Target
         return true;
     }
 
-    MaterialID AssetManager::FindSlotMaterial(MeshID mesh, std::string_view slot) const
-    {
-        const AssetInfo* info = GetInfo(mesh);
-        if (!info || info->Type != AssetType::Mesh)
-            return {};
-
-        return Find<AssetType::Material>(SlotMaterialPath(info->Path, slot));
-    }
-
-    TextureHandle AssetManager::CreateTexturePreview(TextureID id) const
+    std::optional<std::string> AssetManager::ReadSource(AssetID id) const
     {
         const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.Type != AssetType::Texture)
-            return TextureHandle::Invalid();
-
-        const AssetSource source = SourceOf(it->second);
-
-        const std::optional<std::string> file = source.Read();
-        if (!file)
-            return TextureHandle::Invalid();
-
-        const TextureLoadOptions options{ .GenerateMips = true, .FlipY = source.Info.Settings.value("flipY", false) };
-        return CreateTextureFromMemory(m_gpuResources, std::as_bytes(std::span(*file)), options);
+        return it != m_assets.end() ? SourceOf(it->second).Read() : std::nullopt;
     }
 
-    std::optional<MaterialData> AssetManager::ReadMaterialFile(MaterialID id) const
+    bool AssetManager::WriteFile(AssetID id, const std::string& contents)
     {
         const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.Type != AssetType::Material)
-            return std::nullopt;
 
-        const AssetSource source = SourceOf(it->second);
-
-        const std::optional<std::string> text = source.Read();
-        return text ? ParseMaterialData(*text, *this, source.Info.Path) : std::nullopt;
-    }
-
-    std::optional<SceneData> AssetManager::ReadSceneFile(SceneID id) const
-    {
-        const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.Type != AssetType::Scene)
-            return std::nullopt;
-
-        const AssetSource source = SourceOf(it->second);
-
-        const std::optional<std::string> text = source.Read();
-        return text ? ParseSceneData(*text, *this, source.Info.Path) : std::nullopt;
-    }
-
-    const MaterialData* AssetManager::GetMaterialData(MaterialID id)
-    {
-        auto* slot = SlotFor<AssetType::Material>(id);
-        if (!slot)
-            return nullptr;
-
-        if (!slot->State.Data)
-            slot->State.Data = ReadMaterialFile(id);
-
-        return slot->State.Data ? &*slot->State.Data : nullptr;
-    }
-
-    MaterialApplyResult AssetManager::ApplyMaterial(MaterialID id, const MaterialData& data)
-    {
-        const AssetInfo* info = GetInfo(id);
-        if (!info || info->ReadOnly)
-            return MaterialApplyResult::Failed;
-
-        const MaterialHandle current = Load(id);
-        const MaterialData* currentData = GetMaterialData(id);
-
-        auto& slot = *SlotFor<AssetType::Material>(id);
-        ImportContext ctx{ m_gpuResources, *this };
-
-        // A material's GPU resources are laid out for its shader, so another shader needs a new material
-        if (!current || !currentData || currentData->Shader != data.Shader)
+        if (it == m_assets.end() || it->second.Info.ReadOnly)
         {
-            const MaterialHandle replacement = CreateMaterialFromData(data, ctx, info->Path);
-            if (!replacement)
-                return MaterialApplyResult::Failed;
-
-            slot.Unload(m_gpuResources);
-            slot.Loaded = replacement;
-            slot.Failed = false;
-            slot.State.Data = data;
-            return MaterialApplyResult::Replaced;
-        }
-
-        // Only what changed: replacing a texture has to wait for the GPU, and a dragged color slider gets here every frame
-        // The defaults first, for a property that is no longer in the data to go back to its default
-        const ShaderHandle shader = Load(data.Shader);
-        ApplyShaderPropertyDefaults(shader, current, ctx);
-
-        MaterialData values = data;
-        values.Textures.clear();
-        ApplyMaterialValues(values, current, ctx);
-
-        for (const auto& [name, texture] : data.Textures)
-        {
-            const auto previous = currentData->Textures.find(name);
-            if (previous != currentData->Textures.end() && previous->second == texture)
-                continue;
-
-            if (const TextureHandle handle = Load(texture))
-                m_gpuResources.SetMaterialTexture(current, name, handle);
-        }
-
-        for (const auto& [name, texture] : currentData->Textures)
-        {
-            if (!data.Textures.contains(name))
-                m_gpuResources.SetMaterialTexture(current, name, EmptySlotTexture(shader, name));
-        }
-
-        slot.State.Data = data;
-        return MaterialApplyResult::Updated;
-    }
-
-    bool AssetManager::SaveMaterial(MaterialID id, const MaterialData& data)
-    {
-        const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.Type != AssetType::Material || it->second.Info.ReadOnly)
-        {
-            LOG_ERROR("[Assets] This material can't be saved");
+            LOG_ERROR("[Assets] {} can't be saved", it != m_assets.end() ? it->second.Info.Path : "This asset");
             return false;
         }
 
-        const fs::path file = m_root / fs::path(it->second.Info.Path);
-
-        if (std::ofstream stream(file, std::ios::binary); !(stream << WriteMaterialData(data, *this)))
+        if (!WriteFileSafely(m_root / fs::path(it->second.Info.Path), contents))
         {
             LOG_ERROR("[Assets] Can't write {}", it->second.Info.Path);
             return false;
@@ -973,51 +738,12 @@ float4 PSMain(VertexOutput input) : SV_Target
         return true;
     }
 
-    bool AssetManager::SaveScene(SceneID id, const SceneData& data)
-    {
-        const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.Type != AssetType::Scene)
-        {
-            LOG_ERROR("[Assets] This scene can't be saved");
-            return false;
-        }
-
-        // A scene is a lot of work, so a write that fails halfway shouldn't take the old file with it
-        const fs::path file = m_root / fs::path(it->second.Info.Path);
-        fs::path temporary = file;
-        temporary += ".saving";
-
-        {
-            std::ofstream stream(temporary, std::ios::binary);
-            stream << WriteSceneData(data, *this);
-            stream.close();
-
-            if (!stream)
-            {
-                LOG_ERROR("[Assets] Can't write {}", it->second.Info.Path);
-                return false;
-            }
-        }
-
-        std::error_code error;
-        fs::rename(temporary, file, error);
-
-        if (error)
-        {
-            LOG_ERROR("[Assets] Can't write {}: {}", it->second.Info.Path, error.message());
-            fs::remove(temporary, error);
-            return false;
-        }
-
-        return true;
-    }
-
-    bool AssetManager::ReimportTexture(TextureID id, nlohmann::json settings)
+    bool AssetManager::Reimport(AssetID id, nlohmann::json settings)
     {
         const auto it = m_assets.find(id);
         if (it == m_assets.end() || it->second.Info.ReadOnly)
         {
-            LOG_ERROR("[Assets] This texture can't be reimported");
+            LOG_ERROR("[Assets] This asset can't be reimported");
             return false;
         }
 
@@ -1027,120 +753,55 @@ float4 PSMain(VertexOutput input) : SV_Target
         if (!meta::Write(meta::MetaPathFor(m_root / fs::path(record.Info.Path)), record.Info))
             LOG_ERROR("[Assets] Failed to write the meta file of {}", record.Info.Path);
 
-        auto& slot = *SlotFor<AssetType::Texture>(id);
+        AssetStoreBase* store = StoreOf(record.Info.Type);
+        if (!store)
+            return true;
 
         // Not in use yet, so the next load picks the settings up
-        if (!slot.Loaded)
+        if (!store->IsLoaded(id))
         {
-            slot.Failed = false;
+            store->Retry(id);
             return true;
         }
 
-        const std::optional<TextureHandle> replacement = Import<AssetType::Texture>(record, slot);
-        if (!replacement)
-        {
-            LOG_ERROR("[Assets] Failed to reimport {}", record.Info.Path);
-            return false;
-        }
-
-        for (auto& [materialId, material] : Store<AssetType::Material>())
-        {
-            if (!material.Loaded)
-                continue;
-
-            const MaterialData* data = GetMaterialData(MaterialID(materialId));
-            if (!data)
-                continue;
-
-            for (const auto& [name, used] : data->Textures)
-                if (used == id)
-                    m_gpuResources.SetMaterialTexture(*material.Loaded, name, *replacement);
-        }
-
-        slot.Unload(m_gpuResources);
-        slot.Loaded = replacement;
-        return true;
+        return !Reload(id).empty();
     }
 
-    // A file that can't be looked at counts as unchanged, as it may be in the middle of being saved
-    static bool HasChanged(const fs::path& file, fs::file_time_type time)
+    std::vector<AssetID> AssetManager::ReloadChanged()
     {
-        std::error_code error;
-        const fs::file_time_type now = fs::last_write_time(file, error);
-        return !error && now != time;
-    }
+        std::vector<AssetID> changed;
 
-    std::vector<AssetID> AssetManager::ReloadChangedShaders()
-    {
+        // One that was never loaded gets the new version when it is
+        for (const auto& [id, record] : m_assets)
+        {
+            const AssetStoreBase* store = StoreOf(record.Info.Type);
+
+            if (!record.Info.ReadOnly && record.Importer->ReloadsWhenChanged() && store && store->HasChangedOnDisk(id))
+                changed.push_back(id);
+        }
+
         std::vector<AssetID> reloaded;
 
-        for (auto& [id, shader] : Store<AssetType::Shader>())
-        {
-            // One that was never loaded gets the new version when it is
-            const Record& record = m_assets.at(id);
-            if (record.Info.ReadOnly || !shader.Tried())
-                continue;
-
-            const bool changed = HasChanged(m_root / fs::path(record.Info.Path), shader.State.FileTime)
-                || std::ranges::any_of(shader.State.Dependencies, [](const auto& dependency) { return HasChanged(dependency.first, dependency.second); });
-
-            if (changed)
-                std::ranges::move(ReloadShader(id, record), std::back_inserter(reloaded));
-        }
+        for (const AssetID id : changed)
+            std::ranges::move(Reload(id), std::back_inserter(reloaded));
 
         return reloaded;
     }
 
-    std::vector<AssetID> AssetManager::ReloadShader(AssetID id, const Record& record)
+    std::vector<AssetID> AssetManager::Reload(AssetID id)
     {
-        auto& shader = *SlotFor<AssetType::Shader>(id);
-        const std::optional<ShaderHandle> replacement = Import<AssetType::Shader>(record, shader);
+        const Record& record = m_assets.at(id);
+        ImportContext ctx{ m_gpuResources, *this };
 
-        if (!replacement)
+        std::vector<AssetID> replaced = { id };
+
+        if (!StoreOf(record.Info.Type)->Reload(id, SourceOf(record), ctx, [&] { UpdateUsersOf(id, false, &replaced); }))
         {
-            LOG_ERROR("[Assets] {} changed but doesn't compile, so the last version that did stays", record.Info.Path);
+            LOG_ERROR("[Assets] {} changed but doesn't load, so the last version that did stays", record.Info.Path);
             return {};
         }
 
-        // In place before the materials are made again, as they get their shader from here
-        std::optional<ShaderHandle> previous = std::exchange(shader.Loaded, replacement);
-        shader.Failed = false;
-
-        std::vector<AssetID> reloaded = { id };
-        ImportContext ctx{ m_gpuResources, *this };
-
-        for (auto& [materialId, material] : Store<AssetType::Material>())
-        {
-            if (!material.Tried())
-                continue;
-
-            // What the material is using, unsaved edits included
-            const MaterialData* data = GetMaterialData(MaterialID(materialId));
-            if (!data || data->Shader != id)
-                continue;
-
-            // It may have failed because of the shader, so it gets another go on its next load
-            if (material.Failed)
-            {
-                material.Failed = false;
-                continue;
-            }
-
-            const MaterialHandle recreated = CreateMaterialFromData(*data, ctx, m_assets.at(materialId).Info.Path);
-
-            // The old one can't stay, as its shader is about to go
-            material.Unload(m_gpuResources);
-            if (recreated)
-                material.Loaded = recreated;
-            material.Failed = !recreated;
-
-            reloaded.push_back(materialId);
-        }
-
-        if (previous)
-            shader.Importer->Unload(*previous, m_gpuResources);
-
         LOG_INFO("[Assets] Reloaded {}", record.Info.Path);
-        return reloaded;
+        return replaced;
     }
 }

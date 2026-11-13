@@ -444,7 +444,7 @@ namespace crimson::editor::ui
             {
                 // Its id is about to stop working, and the next draw gets a new one
                 m_context.Thumbnails.Release(id);
-                m_context.Assets.ReimportTexture(id, settings);
+                m_context.Assets.Reimport(id, settings);
             });
         }
 

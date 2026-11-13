@@ -2,6 +2,7 @@
 #include <fstream>
 #include <exception>
 #include "crimson/core/log.hpp"
+#include "file_write.hpp"
 
 namespace crimson::meta
 {
@@ -43,9 +44,6 @@ namespace crimson::meta
         j["importerVersion"]= m.ImporterVersion;
         j["settings"] = m.Settings;
 
-        std::ofstream file(metaPath);
-        if (!file) return false;
-        file << j.dump(2);
-        return true;
+        return WriteFileSafely(metaPath, j.dump(2));
     }
 }

@@ -37,6 +37,7 @@ set(ENGINE_PUBLIC_HEADERS
         include/crimson/asset_manager/asset_manager.hpp
         include/crimson/asset_manager/material_data.hpp
         include/crimson/asset_manager/scene_data.hpp
+        include/crimson/asset_manager/slot_materials.hpp
         include/crimson/asset_manager/importers/texture_importer.hpp
         include/crimson/asset_manager/importers/material_importer.hpp
         include/crimson/asset_manager/importers/shader_importer.hpp
@@ -100,6 +101,8 @@ set(ENGINE_IMPLEMENTATION
 		src/platform/opengl/opengl_device.cpp
         src/asset_manager/asset_id.cpp
         src/asset_manager/meta_file.cpp
+        src/asset_manager/file_write.hpp
+        src/asset_manager/file_write.cpp
         include/crimson/asset_manager/asset_importer.hpp
         src/asset_manager/asset_manager.cpp
         src/asset_manager/material_data.cpp
@@ -108,6 +111,7 @@ set(ENGINE_IMPLEMENTATION
         src/asset_manager/asset_ref.cpp
         src/asset_manager/mtl_materials.hpp
         src/asset_manager/mtl_materials.cpp
+        src/asset_manager/slot_materials.cpp
         include/crimson/asset_manager/importers/texture_importer.hpp
         src/asset_manager/importers/texture_importer.cpp
         src/asset_manager/importers/material_importer.cpp

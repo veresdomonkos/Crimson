@@ -13,13 +13,16 @@
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/asset_manager/meta_file.hpp>
 
 #include "support/fake_gpu.hpp"
+#include "support/log_counter.hpp"
 #include "support/temp_folder.hpp"
 
 using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
+using crimson::tests::LogCounter;
 using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
@@ -121,7 +124,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
         shader = assets.Find<AssetType::Shader>("own.hlsl");
 
         const MaterialID material = assets.Find<AssetType::Material>("mine.mat");
-        REQUIRE(assets.SaveMaterial(material, *assets.GetMaterialData(material)));
+        REQUIRE(assets.Save(material, *assets.GetData(material)));
     }
 
     const std::string saved = ReadFile(materialFile);
@@ -141,14 +144,14 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
         AssetManager assets(Gpu, Temp.Path());
         const MaterialID material = assets.Find<AssetType::Material>("mine.mat");
 
-        const MaterialData* data = assets.GetMaterialData(material);
+        const MaterialData* data = assets.GetData(material);
         REQUIRE(data);
         CHECK(data->Shader == shader);
         CHECK(data->Textures.at("ColorMap") == texture);
         CHECK(assets.IsMissing(shader));
         CHECK(assets.GetMissing(texture)->Path == "image.bmp");
 
-        REQUIRE(assets.SaveMaterial(material, *data));
+        REQUIRE(assets.Save(material, *data));
         CHECK(ReadFile(materialFile) == saved);
     }
 
@@ -160,7 +163,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
         const MaterialID material = assets.Find<AssetType::Material>("mine.mat");
 
         CHECK(assets.Load(material));
-        CHECK(assets.GetMaterialData(material)->Textures.at("ColorMap") == texture);
+        CHECK(assets.GetData(material)->Textures.at("ColorMap") == texture);
         CHECK_FALSE(assets.IsMissing(texture));
     }
 }
@@ -174,13 +177,13 @@ TEST_CASE_METHOD(Fixture, "A saved reference survives its file being renamed", "
     const MaterialID material = assets.Find<AssetType::Material>("mine.mat");
     const TextureID texture = assets.Find<AssetType::Texture>("old.bmp");
 
-    MaterialData data = *assets.GetMaterialData(material);
+    MaterialData data = *assets.GetData(material);
     data.Textures["ColorMap"] = texture;
-    REQUIRE(assets.SaveMaterial(material, data));
+    REQUIRE(assets.Save(material, data));
 
     REQUIRE(assets.Rename(texture, "folder/new.bmp"));
 
-    const auto read = assets.ReadMaterialFile(material);
+    const auto read = assets.Read(material);
     REQUIRE(read);
     CHECK(read->Textures.at("ColorMap") == texture);
 }
@@ -203,7 +206,7 @@ TEST_CASE_METHOD(Fixture, "Moving a texture updates the materials referencing it
         CHECK(text.find("old.bmp") == std::string::npos);
 
         AssetManager reopened(Gpu, Temp.Path());
-        const auto read = reopened.ReadMaterialFile(reopened.Find<AssetType::Material>("mine.mat"));
+        const auto read = reopened.Read(reopened.Find<AssetType::Material>("mine.mat"));
         REQUIRE(read);
         CHECK(read->Textures.at("ColorMap") == texture);
     }
@@ -211,7 +214,7 @@ TEST_CASE_METHOD(Fixture, "Moving a texture updates the materials referencing it
     SECTION("A reference with an id gets the new path too")
     {
         const MaterialID material = assets.Find<AssetType::Material>("mine.mat");
-        REQUIRE(assets.SaveMaterial(material, *assets.GetMaterialData(material)));
+        REQUIRE(assets.Save(material, *assets.GetData(material)));
         REQUIRE(ReadFile(file).find("\"old.bmp\"") != std::string::npos);
 
         REQUIRE(assets.Rename(texture, "folder/new.bmp"));
@@ -242,7 +245,7 @@ TEST_CASE_METHOD(Fixture, "Moving a shader updates the materials referencing it"
     REQUIRE(assets.Rename(shader, "shaders/new.hlsl"));
 
     AssetManager reopened(Gpu, Temp.Path());
-    const auto read = reopened.ReadMaterialFile(reopened.Find<AssetType::Material>("mine.mat"));
+    const auto read = reopened.Read(reopened.Find<AssetType::Material>("mine.mat"));
     REQUIRE(read);
     CHECK(read->Shader == shader);
 }
@@ -259,7 +262,7 @@ TEST_CASE_METHOD(Fixture, "A renamed folder keeps the references inside it worki
     CHECK(assets.Refresh().empty());
 
     AssetManager reopened(Gpu, Temp.Path());
-    const auto read = reopened.ReadMaterialFile(reopened.Find<AssetType::Material>("renamed/materials/arch.mat"));
+    const auto read = reopened.Read(reopened.Find<AssetType::Material>("renamed/materials/arch.mat"));
     REQUIRE(read);
     CHECK(read->Textures.at("ColorMap") == texture);
 }
@@ -278,7 +281,7 @@ TEST_CASE_METHOD(Fixture, "A file moved outside the editor updates the materials
     CHECK(assets.Refresh().empty());
 
     AssetManager reopened(Gpu, Temp.Path());
-    const auto read = reopened.ReadMaterialFile(reopened.Find<AssetType::Material>("mine.mat"));
+    const auto read = reopened.Read(reopened.Find<AssetType::Material>("mine.mat"));
     REQUIRE(read);
     CHECK(read->Textures.at("ColorMap") == texture);
 }
@@ -332,15 +335,15 @@ TEST_CASE_METHOD(Fixture, "Moving a file leaves everything else in materials alo
 
         REQUIRE(assets.Load(material));
 
-        MaterialData edited = *assets.GetMaterialData(material);
+        MaterialData edited = *assets.GetData(material);
         edited.Properties["Roughness"] = { 0.2f };
-        REQUIRE(assets.ApplyMaterial(material, edited) != MaterialApplyResult::Failed);
+        REQUIRE(assets.Apply(material, edited) != AssetUpdate::Failed);
 
         REQUIRE(assets.Rename(assets.Find<AssetType::Texture>("old.bmp"), "new.bmp"));
 
-        CHECK(*assets.GetMaterialData(material) == edited);
+        CHECK(*assets.GetData(material) == edited);
 
-        const auto read = assets.ReadMaterialFile(material);
+        const auto read = assets.Read(material);
         REQUIRE(read);
         CHECK(read->Properties.at("Roughness") == std::vector{ 0.8f });
     }
@@ -455,7 +458,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 
         CHECK_FALSE(Gpu.Materials.at(texturedHandle.GetRaw()).Textures.contains("ColorMap"));
         CHECK(assets.Load(textured) == texturedHandle);
-        CHECK(assets.GetMaterialData(textured)->Textures.at("ColorMap") == texture);
+        CHECK(assets.GetData(textured)->Textures.at("ColorMap") == texture);
         CHECK(assets.IsMissing(texture));
         CHECK(Gpu.LiveTextures == 1); // only the flat normal the shader's empty slot uses
 
@@ -489,24 +492,24 @@ TEST_CASE_METHOD(Fixture, "New materials", "[asset editing]")
 
     SECTION("Work right away, on the engine's shader")
     {
-        const MaterialID id = assets.CreateMaterial("folder/new.mat");
+        const MaterialID id = assets.Create<AssetType::Material>("folder/new.mat");
 
         REQUIRE(id);
         CHECK(fs::exists(Temp.Path() / "folder/new.mat"));
         CHECK(fs::exists(Temp.Path() / "folder/new.mat.meta"));
         CHECK(assets.GetInfo(id)->Type == AssetType::Material);
         CHECK(assets.Load(id));
-        CHECK(assets.GetMaterialData(id)->Shader == assets.Find<AssetType::Shader>("engine/shaders/S_Lit.hlsl"));
+        CHECK(assets.GetData(id)->Shader == assets.Find<AssetType::Shader>("engine/shaders/S_Lit.hlsl"));
     }
 
     SECTION("Refuse bad places")
     {
         const std::string before = ReadFile(Temp.Path() / "taken.mat");
 
-        CHECK_FALSE(assets.CreateMaterial("taken.mat"));
-        CHECK_FALSE(assets.CreateMaterial("engine/mine.mat"));
-        CHECK_FALSE(assets.CreateMaterial("../outside.mat"));
-        CHECK_FALSE(assets.CreateMaterial("no_extension"));
+        CHECK_FALSE(assets.Create<AssetType::Material>("taken.mat"));
+        CHECK_FALSE(assets.Create<AssetType::Material>("engine/mine.mat"));
+        CHECK_FALSE(assets.Create<AssetType::Material>("../outside.mat"));
+        CHECK_FALSE(assets.Create<AssetType::Material>("no_extension"));
 
         CHECK(ReadFile(Temp.Path() / "taken.mat") == before);
         CHECK_FALSE(fs::exists(Temp.Path().parent_path() / "outside.mat"));
@@ -520,7 +523,7 @@ TEST_CASE_METHOD(Fixture, "New shaders", "[asset editing]")
 
     SECTION("Compile right away, with properties to set")
     {
-        const ShaderID id = assets.CreateShader("folder/new.hlsl");
+        const ShaderID id = assets.Create<AssetType::Shader>("folder/new.hlsl");
 
         REQUIRE(id);
         CHECK(fs::exists(Temp.Path() / "folder/new.hlsl.meta"));
@@ -537,12 +540,73 @@ TEST_CASE_METHOD(Fixture, "New shaders", "[asset editing]")
 
     SECTION("Refuse bad places")
     {
-        CHECK_FALSE(assets.CreateShader("taken.hlsl"));
-        CHECK_FALSE(assets.CreateShader("engine/mine.hlsl"));
-        CHECK_FALSE(assets.CreateShader("wrong.mat"));
+        CHECK_FALSE(assets.Create<AssetType::Shader>("taken.hlsl"));
+        CHECK_FALSE(assets.Create<AssetType::Shader>("engine/mine.hlsl"));
+        CHECK_FALSE(assets.Create<AssetType::Shader>("wrong.mat"));
 
         CHECK(ReadFile(Temp.Path() / "taken.hlsl") == "// mine");
     }
+}
+
+TEST_CASE_METHOD(Fixture, "Only some types can be made new", "[asset editing]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+
+    // A texture has no starting contents
+    const LogCounter errors(LogLevel::Error, "can't be made without contents");
+    CHECK_FALSE(assets.Create<AssetType::Texture>("a.png"));
+    CHECK(errors.Count() == 1);
+    CHECK_FALSE(fs::exists(Temp.Path() / "a.png"));
+
+    // The extension has to be one of the type
+    CHECK_FALSE(assets.Create<AssetType::Scene>("x.mat"));
+    CHECK_FALSE(fs::exists(Temp.Path() / "x.mat"));
+}
+
+TEST_CASE_METHOD(Fixture, "A save that fails leaves the file as it was", "[asset editing]")
+{
+    Temp.Write("mine.mat", kMainMaterial);
+    Temp.Write("level.scene", R"({ "version": 1, "entities": [ { "name": "Old" } ] })");
+
+    // A folder in the temporary file's place makes the write fail
+    fs::create_directories(Temp.Path() / "mine.mat.saving");
+    fs::create_directories(Temp.Path() / "level.scene.saving");
+
+    AssetManager assets(Gpu, Temp.Path());
+    const std::string materialBefore = ReadFile(Temp.Path() / "mine.mat");
+    const std::string sceneBefore = ReadFile(Temp.Path() / "level.scene");
+
+    const LogCounter errors(LogLevel::Error, "Can't write");
+
+    SECTION("A material")
+    {
+        const MaterialID id = assets.Find<AssetType::Material>("mine.mat");
+        CHECK_FALSE(assets.Save(id, MaterialData{}));
+        CHECK(errors.Count() == 1);
+        CHECK(ReadFile(Temp.Path() / "mine.mat") == materialBefore);
+    }
+
+    SECTION("A scene")
+    {
+        const SceneID id = assets.Find<AssetType::Scene>("level.scene");
+        CHECK_FALSE(assets.Save(id, SceneData{}));
+        CHECK(errors.Count() == 1);
+        CHECK(ReadFile(Temp.Path() / "level.scene") == sceneBefore);
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "Saving leaves no temporary file", "[asset editing]")
+{
+    Temp.Write("mine.mat", kMainMaterial);
+    AssetManager assets(Gpu, Temp.Path());
+    const MaterialID id = assets.Find<AssetType::Material>("mine.mat");
+
+    MaterialData data = *assets.GetData(id);
+    data.Properties["Color"] = { 1.0f, 0.0f, 0.0f, 1.0f };
+
+    REQUIRE(assets.Save(id, data));
+    CHECK_FALSE(fs::exists(Temp.Path() / "mine.mat.saving"));
+    CHECK(assets.Read(id)->Properties.at("Color") == data.Properties.at("Color"));
 }
 
 TEST_CASE_METHOD(Fixture, "Renaming moves the file and its meta", "[asset editing]")
@@ -599,14 +663,14 @@ TEST_CASE_METHOD(Fixture, "Deleting removes the file, its meta and what it loade
 TEST_CASE_METHOD(Fixture, "Engine assets can't be changed", "[asset editing]")
 {
     AssetManager assets(Gpu, Temp.Path());
-    const MaterialID id = assets.DefaultMaterial();
+    const MaterialID id = DefaultMaterial(assets);
 
     REQUIRE(assets.GetInfo(id)->ReadOnly);
     CHECK(assets.GetFilePath(id).empty());
     CHECK_FALSE(assets.Rename(id, "mine.mat"));
     CHECK_FALSE(assets.Delete(id));
-    CHECK_FALSE(assets.SaveMaterial(id, MaterialData{}));
-    CHECK(assets.ApplyMaterial(id, MaterialData{}) == MaterialApplyResult::Failed);
+    CHECK_FALSE(assets.Save(id, MaterialData{}));
+    CHECK(assets.Apply(id, MaterialData{}) == AssetUpdate::Failed);
     CHECK(assets.GetInfo(id));
 }
 
@@ -626,28 +690,44 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     REQUIRE(handle);
 
     const std::string fileBefore = ReadFile(file);
-    MaterialData data = *assets.GetMaterialData(id);
+    MaterialData data = *assets.GetData(id);
 
     SECTION("Settings and properties keep the handle")
     {
         data.Settings.Cull = CullMode::None;
         data.Properties["Color"] = { 1.0f, 0.0f, 0.0f, 1.0f };
 
-        CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+        CHECK(assets.Apply(id, data) == AssetUpdate::Updated);
         CHECK(assets.Load(id) == handle);
         CHECK(Gpu.Materials.at(handle.GetRaw()).Settings.Cull == CullMode::None);
-        CHECK(*assets.GetMaterialData(id) == data);
+        CHECK(*assets.GetData(id) == data);
         CHECK(ReadFile(file) == fileBefore);
+    }
+
+    SECTION("A color dragged every frame never rebuilds the material")
+    {
+        const int liveMaterials = Gpu.LiveMaterials;
+        const auto destroyedMaterials = std::ranges::count(Gpu.DestroyOrder, "material");
+
+        for (int i = 0; i < 10; ++i)
+        {
+            data.Properties["Color"] = { 0.1f * static_cast<float>(i), 0.0f, 0.0f, 1.0f };
+            REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
+        }
+
+        CHECK(assets.Load(id) == handle);
+        CHECK(Gpu.LiveMaterials == liveMaterials);
+        CHECK(std::ranges::count(Gpu.DestroyOrder, "material") == destroyedMaterials);
     }
 
     SECTION("Textures can be set and cleared")
     {
         data.Textures["ColorMap"] = assets.Find<AssetType::Texture>("image.bmp");
-        REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+        REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
         CHECK(Gpu.Materials.at(handle.GetRaw()).Textures.contains("ColorMap"));
 
         data.Textures.clear();
-        REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+        REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
         CHECK_FALSE(Gpu.Materials.at(handle.GetRaw()).Textures.contains("ColorMap"));
     }
 
@@ -655,7 +735,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     {
         data.Shader = assets.Find<AssetType::Shader>("own.hlsl");
 
-        CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Replaced);
+        CHECK(assets.Apply(id, data) == AssetUpdate::Replaced);
         CHECK(assets.Load(id) != handle);
         CHECK(Gpu.LiveMaterials == 1);
     }
@@ -667,17 +747,17 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 
         data.Shader = assets.Find<AssetType::Shader>("broken.hlsl");
 
-        CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Failed);
+        CHECK(assets.Apply(id, data) == AssetUpdate::Failed);
         CHECK(assets.Load(id) == handle);
-        CHECK(assets.GetMaterialData(id)->Shader == assets.Find<AssetType::Shader>("engine/shaders/S_Lit.hlsl"));
+        CHECK(assets.GetData(id)->Shader == assets.Find<AssetType::Shader>("engine/shaders/S_Lit.hlsl"));
     }
 
     SECTION("Reading the file again gets back what was saved")
     {
         data.Properties["Color"] = { 1.0f, 0.0f, 0.0f, 1.0f };
-        REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+        REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
 
-        const auto saved = assets.ReadMaterialFile(id);
+        const auto saved = assets.Read(id);
         REQUIRE(saved);
         CHECK(saved->Properties.at("Color") != data.Properties.at("Color"));
     }
@@ -685,10 +765,10 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     SECTION("Saving is what a new manager sees")
     {
         data.Properties["Color"] = { 1.0f, 0.0f, 0.0f, 1.0f };
-        REQUIRE(assets.SaveMaterial(id, data));
+        REQUIRE(assets.Save(id, data));
 
         AssetManager reopened(Gpu, Temp.Path());
-        CHECK(reopened.GetMaterialData(id)->Properties.at("Color") == data.Properties.at("Color"));
+        CHECK(reopened.GetData(id)->Properties.at("Color") == data.Properties.at("Color"));
     }
 }
 
@@ -705,7 +785,7 @@ TEST_CASE_METHOD(Fixture, "Reimporting a texture", "[asset editing]")
 
     SECTION("Before it is loaded, only stores the settings")
     {
-        REQUIRE(assets.ReimportTexture(id, settings));
+        REQUIRE(assets.Reimport(id, settings));
 
         CHECK(Gpu.LiveTextures == 0);
         CHECK(assets.GetInfo(id)->Settings.at("flipY") == true);
@@ -713,7 +793,7 @@ TEST_CASE_METHOD(Fixture, "Reimporting a texture", "[asset editing]")
 
     SECTION("Keeps the settings for next time")
     {
-        REQUIRE(assets.ReimportTexture(id, settings));
+        REQUIRE(assets.Reimport(id, settings));
         CHECK(AssetManager(Gpu, Temp.Path()).GetInfo(id)->Settings.at("flipY") == true);
     }
 
@@ -723,12 +803,13 @@ TEST_CASE_METHOD(Fixture, "Reimporting a texture", "[asset editing]")
         const TextureHandle before = assets.Load(id);
         REQUIRE(Gpu.Materials.at(material.GetRaw()).Textures.at("ColorMap") == before);
 
-        REQUIRE(assets.ReimportTexture(id, settings));
+        REQUIRE(assets.Reimport(id, settings));
 
         const TextureHandle after = assets.Load(id);
         CHECK(after != before);
         CHECK(Gpu.LiveTextures == 2); // with the flat normal the shader's empty slot uses
         CHECK(Gpu.Materials.at(material.GetRaw()).Textures.at("ColorMap") == after);
+        CHECK(Gpu.TexturesFreedWhileUsed == 0); // the swap came before the free
     }
 
     SECTION("A file that can no longer be read keeps the old one")
@@ -736,7 +817,7 @@ TEST_CASE_METHOD(Fixture, "Reimporting a texture", "[asset editing]")
         const TextureHandle before = assets.Load(id);
         Temp.Write("image.bmp", "not an image");
 
-        CHECK_FALSE(assets.ReimportTexture(id, settings));
+        CHECK_FALSE(assets.Reimport(id, settings));
         CHECK(assets.Load(id) == before);
     }
 }
@@ -799,29 +880,29 @@ float4 PSMain() : SV_Target { return Amount * Other * Bumps.Sample(LinearWrap, f
 
         SECTION("Assigning a texture and clearing it again goes back to the flat normal")
         {
-            MaterialData data = *assets.GetMaterialData(id);
+            MaterialData data = *assets.GetData(id);
             data.Textures["Bumps"] = assets.Find<AssetType::Texture>("image.bmp");
-            REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
             CHECK(gpu.Materials.at(handle.GetRaw()).Textures.at("Bumps") != flatNormal);
 
             data.Textures.clear();
-            REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
             CHECK(gpu.Materials.at(handle.GetRaw()).Textures.at("Bumps") == flatNormal);
         }
 
         SECTION("Removing a property from the data goes back to its default")
         {
-            MaterialData data = *assets.GetMaterialData(id);
+            MaterialData data = *assets.GetData(id);
             data.Properties.erase("Other");
-            REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
             CHECK(propertyOf("Other") == 0.75f);
         }
 
         SECTION("Deleting the assigned texture goes back to the flat normal too")
         {
-            MaterialData data = *assets.GetMaterialData(id);
+            MaterialData data = *assets.GetData(id);
             data.Textures["Bumps"] = assets.Find<AssetType::Texture>("image.bmp");
-            REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
 
             REQUIRE(assets.Delete(assets.Find<AssetType::Texture>("image.bmp")));
             CHECK(gpu.Materials.at(handle.GetRaw()).Textures.at("Bumps") == flatNormal);
@@ -876,7 +957,7 @@ TEST_CASE_METHOD(Fixture, "Changed shaders are reloaded along with their materia
 
         SECTION("Nothing changed, nothing happens")
         {
-            CHECK(assets.ReloadChangedShaders().empty());
+            CHECK(assets.ReloadChanged().empty());
             CHECK(assets.Load(material) == before);
         }
 
@@ -885,7 +966,7 @@ TEST_CASE_METHOD(Fixture, "Changed shaders are reloaded along with their materia
             Temp.Write("mine.hlsl", std::string(kShaderHeader) + "    float Extra; // @default 3\n" + std::string(kShaderFooter));
             Touch(shaderFile);
 
-            const std::vector<AssetID> reloaded = assets.ReloadChangedShaders();
+            const std::vector<AssetID> reloaded = assets.ReloadChanged();
             CHECK(reloaded.size() == 2);
             CHECK(Contains(reloaded, shader));
             CHECK(Contains(reloaded, material));
@@ -896,6 +977,7 @@ TEST_CASE_METHOD(Fixture, "Changed shaders are reloaded along with their materia
             CHECK(after != before);
             CHECK(Gpu.Materials.at(after.GetRaw()).Shader == shaderAfter);
             CHECK(assets.GetShaderInterface(shaderAfter).Properties.contains("Extra"));
+            CHECK(Gpu.ShadersFreedWhileUsed == 0);
             CHECK(Gpu.LiveShaders == 1);
             CHECK(Gpu.LiveMaterials == 1);
 
@@ -904,19 +986,19 @@ TEST_CASE_METHOD(Fixture, "Changed shaders are reloaded along with their materia
             std::memcpy(&value, amount.data(), sizeof(float));
             CHECK(value == 0.5f);
 
-            CHECK(assets.ReloadChangedShaders().empty());
+            CHECK(assets.ReloadChanged().empty());
         }
 
         SECTION("Unsaved material edits survive it")
         {
-            MaterialData data = *assets.GetMaterialData(material);
+            MaterialData data = *assets.GetData(material);
             data.Properties["Amount"] = { 0.125f };
-            REQUIRE(assets.ApplyMaterial(material, data) == MaterialApplyResult::Updated);
+            REQUIRE(assets.Apply(material, data) == AssetUpdate::Updated);
 
             Touch(shaderFile);
-            REQUIRE_FALSE(assets.ReloadChangedShaders().empty());
+            REQUIRE_FALSE(assets.ReloadChanged().empty());
 
-            CHECK(assets.GetMaterialData(material)->Properties.at("Amount") == std::vector{ 0.125f });
+            CHECK(assets.GetData(material)->Properties.at("Amount") == std::vector{ 0.125f });
         }
 
         SECTION("Editing a file it includes counts too")
@@ -924,7 +1006,7 @@ TEST_CASE_METHOD(Fixture, "Changed shaders are reloaded along with their materia
             Temp.Write("helper.hlsli", "#define HELPER_VALUE 2.0\n");
             Touch(helperFile);
 
-            CHECK(Contains(assets.ReloadChangedShaders(), shader));
+            CHECK(Contains(assets.ReloadChanged(), shader));
         }
 
         SECTION("A broken edit keeps the old version, and fixing it reloads")
@@ -932,17 +1014,17 @@ TEST_CASE_METHOD(Fixture, "Changed shaders are reloaded along with their materia
             Temp.Write("mine.hlsl", "this does not compile");
             Touch(shaderFile);
 
-            CHECK(assets.ReloadChangedShaders().empty());
+            CHECK(assets.ReloadChanged().empty());
             CHECK(assets.Load(shader) == shaderBefore);
             CHECK(assets.Load(material) == before);
 
             // Not tried again until it changes again
-            CHECK(assets.ReloadChangedShaders().empty());
+            CHECK(assets.ReloadChanged().empty());
 
             Temp.Write("mine.hlsl", std::string(kShaderHeader) + std::string(kShaderFooter));
             Touch(shaderFile, std::chrono::seconds(4));
 
-            CHECK(Contains(assets.ReloadChangedShaders(), material));
+            CHECK(Contains(assets.ReloadChanged(), material));
         }
     }
 
@@ -963,7 +1045,7 @@ TEST_CASE_METHOD(Fixture, "A shader that failed to load works once it is fixed",
     Temp.Write("mine.hlsl", std::string(kShaderHeader) + std::string(kShaderFooter));
     Touch(shaderFile);
 
-    CHECK(Contains(assets.ReloadChangedShaders(), assets.Find<AssetType::Shader>("mine.hlsl")));
+    CHECK(Contains(assets.ReloadChanged(), assets.Find<AssetType::Shader>("mine.hlsl")));
     CHECK(assets.Load(material));
 }
 
@@ -1011,7 +1093,7 @@ TEST_CASE_METHOD(SlotFixture, "An .obj's .mtl gives its slots materials", "[asse
     AssetManager assets(Gpu, Temp.Path());
     const MeshID mesh = assets.Find<AssetType::Mesh>("model/model.obj");
 
-    const SlotMaterials result = assets.CreateSlotMaterials(mesh);
+    const SlotMaterials result = CreateSlotMaterials(assets, mesh);
     CHECK(result.Created.size() == 3);
     CHECK(result.Kept == 0);
 
@@ -1020,7 +1102,7 @@ TEST_CASE_METHOD(SlotFixture, "An .obj's .mtl gives its slots materials", "[asse
 
     SECTION("Textures, without the gray an exporter puts next to them")
     {
-        const MaterialData* textured = assets.GetMaterialData(assets.FindSlotMaterial(mesh, "textured"));
+        const MaterialData* textured = assets.GetData(FindSlotMaterial(assets, mesh, "textured"));
         REQUIRE(textured);
         CHECK(textured->Shader == assets.FindId("engine/shaders/S_Lit.hlsl"));
         CHECK(textured->Settings.RenderMode == MaterialRenderMode::Opaque);
@@ -1036,7 +1118,7 @@ TEST_CASE_METHOD(SlotFixture, "An .obj's .mtl gives its slots materials", "[asse
 
     SECTION("Values only")
     {
-        const MaterialData* plain = assets.GetMaterialData(assets.FindSlotMaterial(mesh, "plain"));
+        const MaterialData* plain = assets.GetData(FindSlotMaterial(assets, mesh, "plain"));
         REQUIRE(plain);
         CHECK(plain->Textures.empty());
         CHECK(plain->Properties.at("Color") == std::vector{ 1.0f, 0.0f, 0.0f, 1.0f });
@@ -1049,7 +1131,7 @@ TEST_CASE_METHOD(SlotFixture, "An .obj's .mtl gives its slots materials", "[asse
 
     SECTION("See-through, and a texture that isn't there is only left out")
     {
-        const MaterialData* glass = assets.GetMaterialData(assets.FindSlotMaterial(mesh, "glass"));
+        const MaterialData* glass = assets.GetData(FindSlotMaterial(assets, mesh, "glass"));
         REQUIRE(glass);
         CHECK(glass->Settings.RenderMode == MaterialRenderMode::Transparent);
         CHECK(glass->Properties.at("Color").at(3) == 0.5f);
@@ -1062,11 +1144,11 @@ TEST_CASE_METHOD(SlotFixture, "Making slot materials again changes nothing", "[a
     AssetManager assets(Gpu, Temp.Path());
     const MeshID mesh = assets.Find<AssetType::Mesh>("model/model.obj");
 
-    REQUIRE(assets.CreateSlotMaterials(mesh).Created.size() == 3);
+    REQUIRE(CreateSlotMaterials(assets, mesh).Created.size() == 3);
     const std::string textured = ReadMaterial("textured");
     const std::string normalMeta = ReadFile(meta::MetaPathFor(Temp.Path() / "model/textures/color_ddn.bmp"));
 
-    const SlotMaterials again = assets.CreateSlotMaterials(mesh);
+    const SlotMaterials again = CreateSlotMaterials(assets, mesh);
     CHECK(again.Created.empty());
     CHECK(again.Kept == 3);
     CHECK(ReadMaterial("textured") == textured);
@@ -1078,7 +1160,7 @@ TEST_CASE_METHOD(SlotFixture, "A slot material that is there already is never re
     Temp.Write("model/materials/plain.mat", kMainMaterial);
     AssetManager assets(Gpu, Temp.Path());
 
-    const SlotMaterials result = assets.CreateSlotMaterials(assets.Find<AssetType::Mesh>("model/model.obj"));
+    const SlotMaterials result = CreateSlotMaterials(assets, assets.Find<AssetType::Mesh>("model/model.obj"));
     CHECK(result.Created.size() == 2);
     CHECK(result.Kept == 1);
     CHECK(ReadMaterial("plain") == kMainMaterial);
@@ -1088,8 +1170,8 @@ TEST_CASE_METHOD(Fixture, "Only a project's .obj can get slot materials", "[asse
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    CHECK(assets.CreateSlotMaterials(assets.Find<AssetType::Mesh>("engine/meshes/SM_Cube.obj")).Created.empty());
-    CHECK(assets.CreateSlotMaterials({}).Created.empty());
+    CHECK(CreateSlotMaterials(assets, assets.Find<AssetType::Mesh>("engine/meshes/SM_Cube.obj")).Created.empty());
+    CHECK(CreateSlotMaterials(assets, {}).Created.empty());
 }
 
 TEST_CASE_METHOD(Fixture, "A missing reference keeps the type it was read as", "[asset editing]")
@@ -1099,7 +1181,7 @@ TEST_CASE_METHOD(Fixture, "A missing reference keeps the type it was read as", "
     AssetManager assets(Gpu, Temp.Path());
 
     const MaterialID material = assets.Find<AssetType::Material>("mine.mat");
-    const TextureID gone = assets.GetMaterialData(material)->Textures.at("NormalMap");
+    const TextureID gone = assets.GetData(material)->Textures.at("NormalMap");
 
     CHECK(assets.IsMissing(gone));
     CHECK(assets.As<AssetType::Texture>(gone) == gone);
@@ -1115,7 +1197,7 @@ TEST_CASE_METHOD(Fixture, "A missing reference keeps the type it was read as", "
 
         CHECK(assets.IsMissing(texture));
         CHECK(assets.As<AssetType::Texture>(texture) == texture);
-        CHECK(assets.GetMaterialData(material)->Textures.at("ColorMap") == texture);
+        CHECK(assets.GetData(material)->Textures.at("ColorMap") == texture);
     }
 }
 
@@ -1125,7 +1207,7 @@ TEST_CASE_METHOD(Fixture, "A reference to an asset of the wrong type is dropped"
     Temp.Write("mine.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "ColorMap": "other.mat" } })");
     AssetManager assets(Gpu, Temp.Path());
 
-    const MaterialData* data = assets.GetMaterialData(assets.Find<AssetType::Material>("mine.mat"));
+    const MaterialData* data = assets.GetData(assets.Find<AssetType::Material>("mine.mat"));
     REQUIRE(data);
     CHECK(data->Textures.empty());
 }
@@ -1153,33 +1235,33 @@ TEST_CASE_METHOD(Fixture, "A cutout material cuts by its AlphaCutoff, and only a
 
         const MaterialHandle material = assets.Load(id);
         REQUIRE(material);
-        CHECK(assets.GetMaterialData(id)->Settings.RenderMode == MaterialRenderMode::Cutout);
+        CHECK(assets.GetData(id)->Settings.RenderMode == MaterialRenderMode::Cutout);
         CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.3f);
 
         SECTION("It is written back as a cutout")
         {
-            CHECK(WriteMaterialData(*assets.GetMaterialData(id), assets).find(R"("renderMode": "cutout")") != std::string::npos);
+            CHECK(WriteMaterialData(*assets.GetData(id), assets).find(R"("renderMode": "cutout")") != std::string::npos);
         }
 
         SECTION("As an opaque one it doesn't cut, and as a cutout again it does")
         {
-            MaterialData data = *assets.GetMaterialData(id);
+            MaterialData data = *assets.GetData(id);
             data.Settings.RenderMode = MaterialRenderMode::Opaque;
 
-            CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(assets.Apply(id, data) == AssetUpdate::Updated);
             CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.0f);
 
             data.Settings.RenderMode = MaterialRenderMode::Cutout;
-            CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(assets.Apply(id, data) == AssetUpdate::Updated);
             CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.3f);
         }
 
         SECTION("A dragged slider reaches the shader")
         {
-            MaterialData data = *assets.GetMaterialData(id);
+            MaterialData data = *assets.GetData(id);
             data.Properties["AlphaCutoff"] = { 0.7f };
 
-            CHECK(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+            CHECK(assets.Apply(id, data) == AssetUpdate::Updated);
             CHECK(FloatProperty(Gpu, material, "AlphaCutoff") == 0.7f);
         }
     }
@@ -1206,8 +1288,8 @@ TEST_CASE_METHOD(SlotFixture, "An .mtl alpha mask makes a cutout material", "[as
     AssetManager assets(Gpu, Temp.Path());
 
     const MeshID mesh = assets.Find<AssetType::Mesh>("model/model.obj");
-    REQUIRE(assets.CreateSlotMaterials(mesh).Created.size() == 4);
+    REQUIRE(CreateSlotMaterials(assets, mesh).Created.size() == 4);
 
-    CHECK(assets.GetMaterialData(assets.FindSlotMaterial(mesh, "leaves"))->Settings.RenderMode == MaterialRenderMode::Cutout);
-    CHECK(assets.GetMaterialData(assets.FindSlotMaterial(mesh, "plain"))->Settings.RenderMode == MaterialRenderMode::Opaque);
+    CHECK(assets.GetData(FindSlotMaterial(assets, mesh, "leaves"))->Settings.RenderMode == MaterialRenderMode::Cutout);
+    CHECK(assets.GetData(FindSlotMaterial(assets, mesh, "plain"))->Settings.RenderMode == MaterialRenderMode::Opaque);
 }

@@ -9,11 +9,11 @@ namespace crimson::editor
         if (const auto it = m_edits.find(id); it != m_edits.end())
             return &it->second;
 
-        const MaterialData* live = m_assets.GetMaterialData(id);
+        const MaterialData* live = m_assets.GetData(id);
         if (!live)
             return nullptr;
 
-        const auto saved = m_assets.ReadMaterialFile(id);
+        const auto saved = m_assets.Read(id);
 
         return &m_edits.emplace(id, Edit{ .Working = *live, .Saved = saved.value_or(*live) }).first->second;
     }
@@ -54,7 +54,7 @@ namespace crimson::editor
         if (it == m_edits.end())
             return true;
 
-        if (!m_assets.SaveMaterial(id, it->second.Working))
+        if (!m_assets.Save(id, it->second.Working))
             return false;
 
         it->second.Saved = it->second.Working;
@@ -105,17 +105,17 @@ namespace crimson::editor
 
             edit.Pending = false;
 
-            switch (m_assets.ApplyMaterial(id, edit.Working))
+            switch (m_assets.Apply(id, edit.Working))
             {
-                case MaterialApplyResult::Replaced:
+                case AssetUpdate::Replaced:
                     replaced = true;
                     break;
 
-                case MaterialApplyResult::Updated:
+                case AssetUpdate::Updated:
                     break;
 
-                case MaterialApplyResult::Failed:
-                    if (const MaterialData* live = m_assets.GetMaterialData(id))
+                case AssetUpdate::Failed:
+                    if (const MaterialData* live = m_assets.GetData(id))
                         edit.Working = *live;
                     break;
             }

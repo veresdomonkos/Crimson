@@ -118,13 +118,13 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
 
     REQUIRE(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(255, 0, 0), kLitTolerance));
 
-    MaterialData data = *assets.GetMaterialData(id);
+    MaterialData data = *assets.GetData(id);
 
     SECTION("A property")
     {
         data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
 
-        REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+        REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
         CHECK(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(0, 255, 0), kLitTolerance));
     }
 
@@ -149,11 +149,11 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
         const glm::ivec4 noCulling = drawAway();
 
         data.Settings.Cull = CullMode::Back;
-        REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+        REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
         const glm::ivec4 backCulling = drawAway();
 
         data.Settings.Cull = CullMode::Front;
-        REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+        REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
         const glm::ivec4 frontCulling = drawAway();
 
         CHECK(IsNear(noCulling, glm::ivec3(255, 0, 0), kLitTolerance));
@@ -174,19 +174,19 @@ float4 PSMain() : SV_Target { return float4(0.0, 1.0, 0.0, 1.0); }
         data.Shader = assets.Find<AssetType::Shader>("green.hlsl");
         data.Properties.clear();
 
-        REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Replaced);
+        REQUIRE(assets.Apply(id, data) == AssetUpdate::Replaced);
         CHECK(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(0, 255, 0), kLitTolerance));
     }
 
     SECTION("Reverting to the file brings it back")
     {
         data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
-        REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+        REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
         REQUIRE(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(0, 255, 0), kLitTolerance));
 
-        const auto saved = assets.ReadMaterialFile(id);
+        const auto saved = assets.Read(id);
         REQUIRE(saved);
-        REQUIRE(assets.ApplyMaterial(id, *saved) == MaterialApplyResult::Updated);
+        REQUIRE(assets.Apply(id, *saved) == AssetUpdate::Updated);
         CHECK(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(255, 0, 0), kLitTolerance));
     }
 }
@@ -201,16 +201,16 @@ TEST_CASE_METHOD(Fixture, "A material's color map multiplies its color", "[asset
 
     REQUIRE(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 255), kLitTolerance));
 
-    MaterialData data = *assets.GetMaterialData(id);
+    MaterialData data = *assets.GetData(id);
     data.Textures["ColorMap"] = assets.Find<AssetType::Texture>("blue.bmp");
-    REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+    REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
 
     CHECK(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(0, 0, 255), kLitTolerance));
 
     SECTION("Clearing it goes back to white")
     {
         data.Textures.clear();
-        REQUIRE(assets.ApplyMaterial(id, data) == MaterialApplyResult::Updated);
+        REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
 
         CHECK(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 255), kLitTolerance));
     }
@@ -268,11 +268,11 @@ TEST_CASE("Mipmaps keep a shrunken texture from flickering", "[asset editing]")
     nlohmann::json settings = assets.GetInfo(texture)->Settings;
 
     settings["generateMips"] = false;
-    REQUIRE(assets.ReimportTexture(texture, settings));
+    REQUIRE(assets.Reimport(texture, settings));
     const int withoutMips = spread();
 
     settings["generateMips"] = true;
-    REQUIRE(assets.ReimportTexture(texture, settings));
+    REQUIRE(assets.Reimport(texture, settings));
     const int withMips = spread();
 
     CAPTURE(withoutMips, withMips);
@@ -292,11 +292,11 @@ TEST_CASE_METHOD(Fixture, "Flip Y turns the picture upside down", "[asset editin
     settings["generateMips"] = false;
 
     settings["flipY"] = false;
-    REQUIRE(assets.ReimportTexture(texture, settings));
+    REQUIRE(assets.Reimport(texture, settings));
     const Image normal = Draw(assets, Target, "rows.mat");
 
     settings["flipY"] = true;
-    REQUIRE(assets.ReimportTexture(texture, settings));
+    REQUIRE(assets.Reimport(texture, settings));
     const Image flipped = Draw(assets, Target, "rows.mat");
 
     const glm::ivec4 topBefore = normal.AtClip(0.0f, 0.9f);
@@ -321,7 +321,7 @@ TEST_CASE_METHOD(Fixture, "An sRGB texture is decoded to linear when sampled", "
 
     SECTION("Not when it is turned off")
     {
-        REQUIRE(assets.ReimportTexture(assets.Find<AssetType::Texture>("gray.bmp"), { { "srgb", false } }));
+        REQUIRE(assets.Reimport(assets.Find<AssetType::Texture>("gray.bmp"), { { "srgb", false } }));
         CHECK(IsNear(Draw(assets, Target, "unlit.mat").AtClip(0.0f, 0.0f), glm::ivec3(188, 188, 188), 2));
     }
 

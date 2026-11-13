@@ -34,7 +34,7 @@ namespace crimson::editor
           m_project(std::move(project)),
           m_assetManager(std::make_unique<AssetManager>(GpuResources(), m_project.AssetsDir())),
           m_assetEdits(std::make_unique<AssetEdits>(*m_assetManager)),
-          m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, *m_services.Graphics.Imgui)),
+          m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, GpuResources(), *m_services.Graphics.Imgui)),
           m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
                      .OpenScene = [this](SceneID id) { OpenScene(id); },
@@ -167,8 +167,11 @@ namespace crimson::editor
         if (const SceneID scene = m_assetManager->As<AssetType::Scene>(preferred))
             return scene;
 
+        // Not the engine's template, which is listed too
         const std::vector<const AssetInfo*> scenes = m_assetManager->List(AssetType::Scene);
-        return scenes.empty() ? m_assetManager->CreateScene("scenes/main.scene") : m_assetManager->As<AssetType::Scene>(scenes.front()->Id);
+        const auto first = std::ranges::find_if(scenes, [](const AssetInfo* scene) { return !scene->ReadOnly; });
+
+        return first == scenes.end() ? m_assetManager->Create<AssetType::Scene>("scenes/main.scene") : m_assetManager->As<AssetType::Scene>((*first)->Id);
     }
 
     void ProjectSessionMode::OpenScene(SceneID id)
@@ -216,7 +219,7 @@ namespace crimson::editor
         m_context.SceneChanged = false;
         m_scene.Clear();
 
-        const std::optional<SceneData> data = m_assetManager->ReadSceneFile(id);
+        const std::optional<SceneData> data = m_assetManager->Read(id);
         if (!data)
             return;
 
@@ -260,7 +263,7 @@ namespace crimson::editor
 
         if (current != m_savedScene)
         {
-            if (m_assetManager->SaveScene(m_context.ActiveSceneAsset, current))
+            if (m_assetManager->Save(m_context.ActiveSceneAsset, current))
             {
                 m_savedScene = std::move(current);
                 m_context.SceneChanged = false;
@@ -397,7 +400,7 @@ namespace crimson::editor
         {
             m_sinceShaderCheck = 0.0f;
 
-            if (!m_assetManager->ReloadChangedShaders().empty())
+            if (!m_assetManager->ReloadChanged().empty())
                 ResolveSceneAssets(m_scene, *m_assetManager);
         }
 

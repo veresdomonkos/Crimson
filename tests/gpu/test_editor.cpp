@@ -369,20 +369,20 @@ TEST_CASE_METHOD(AssetFixture, "A material's edits show and can be saved or reve
     RunFrames(App);
 
     CHECK(Assets().Load(id) == handle);
-    CHECK(*Assets().GetMaterialData(id) == data);
+    CHECK(*Assets().GetData(id) == data);
     CHECK(Context().Edits.IsDirty(id));
 
     SECTION("Reverting")
     {
         Context().Edits.Revert(id);
         RunFrames(App);
-        CHECK_FALSE(Assets().GetMaterialData(id)->Textures.contains("ColorMap"));
+        CHECK_FALSE(Assets().GetData(id)->Textures.contains("ColorMap"));
     }
 
     SECTION("Saving")
     {
         REQUIRE(Context().Edits.Save(id));
-        CHECK(Assets().ReadMaterialFile(id)->Properties.at("Color") == data.Properties.at("Color"));
+        CHECK(Assets().Read(id)->Properties.at("Color") == data.Properties.at("Color"));
     }
 }
 
@@ -412,7 +412,7 @@ TEST_CASE_METHOD(AssetFixture, "Reimporting a texture a panel is showing", "[edi
     nlohmann::json settings = Assets().GetInfo(id)->Settings;
     settings["flipY"] = true;
 
-    Context().Deferred.emplace_back([&] { Context().Thumbnails.Release(id); Assets().ReimportTexture(id, settings); });
+    Context().Deferred.emplace_back([&] { Context().Thumbnails.Release(id); Assets().Reimport(id, settings); });
     RunFrames(App);
 
     CHECK(Assets().GetInfo(id)->Settings.at("flipY") == true);
@@ -473,7 +473,7 @@ TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
         RunFrames(App);
 
         // Kept as a missing one, for it to work again if the file comes back
-        const AssetID texture = Assets().GetMaterialData(material)->Textures.at("ColorMap");
+        const AssetID texture = Assets().GetData(material)->Textures.at("ColorMap");
         CHECK(Assets().IsMissing(texture));
     }
 
@@ -518,11 +518,11 @@ TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[edit
 
     SECTION("Discard closes without saving")
     {
-        const std::string before = std::string(Assets().ReadMaterialFile(id)->Properties.contains("Color") ? "had" : "none");
+        const std::string before = std::string(Assets().Read(id)->Properties.contains("Color") ? "had" : "none");
         Session().DiscardAllAndClose();
 
         CHECK_FALSE(App.IsRunning());
-        CHECK(std::string(Assets().ReadMaterialFile(id)->Properties.contains("Color") ? "had" : "none") == before);
+        CHECK(std::string(Assets().Read(id)->Properties.contains("Color") ? "had" : "none") == before);
     }
 
     SECTION("Save writes it and closes")
@@ -530,7 +530,7 @@ TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[edit
         Session().SaveAllAndClose();
 
         CHECK_FALSE(App.IsRunning());
-        CHECK(Assets().ReadMaterialFile(id)->Properties.at("Color") == data.Properties.at("Color"));
+        CHECK(Assets().Read(id)->Properties.at("Color") == data.Properties.at("Color"));
     }
 }
 
@@ -548,7 +548,7 @@ TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[edit
         REQUIRE(Session().SaveAll());
 
         CHECK_FALSE(Session().IsSceneChanged());
-        CHECK(Assets().ReadSceneFile(id)->Roots.back().Name == "New");
+        CHECK(Assets().Read(id)->Roots.back().Name == "New");
     }
 
     SECTION("Closing asks first")
@@ -560,13 +560,13 @@ TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[edit
         Session().SaveAllAndClose();
 
         CHECK_FALSE(App.IsRunning());
-        CHECK(Assets().ReadSceneFile(id)->Roots.back().Name == "New");
+        CHECK(Assets().Read(id)->Roots.back().Name == "New");
     }
 
     SECTION("Opening another scene asks first, and discarding leaves the file")
     {
         SceneID other;
-        Context().Deferred.emplace_back([&] { other = Assets().CreateScene("scenes/other.scene"); });
+        Context().Deferred.emplace_back([&] { other = Assets().Create<AssetType::Scene>("scenes/other.scene"); });
         RunFrames(App);
         REQUIRE(other);
 
@@ -580,7 +580,7 @@ TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[edit
 
         CHECK(Context().ActiveSceneAsset == other);
         CHECK_FALSE(Session().IsSceneChanged());
-        CHECK(Assets().ReadSceneFile(id)->Roots.back().Name == "Sun");
+        CHECK(Assets().Read(id)->Roots.back().Name == "Sun");
     }
 }
 
@@ -590,7 +590,7 @@ TEST_CASE_METHOD(AssetFixture, "Opening a scene replaces the one showing", "[edi
     Context().SelectEntity(old);
 
     SceneID other;
-    Context().Deferred.emplace_back([&] { other = Assets().CreateScene("scenes/other.scene"); });
+    Context().Deferred.emplace_back([&] { other = Assets().Create<AssetType::Scene>("scenes/other.scene"); });
     RunFrames(App);
 
     Context().OpenScene(other);

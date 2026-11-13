@@ -5,6 +5,7 @@
 #include <iterator>
 #include <string>
 
+#include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson_editor/asset_edits.hpp>
 
 #include "support/fake_gpu.hpp"
@@ -67,7 +68,7 @@ TEST_CASE_METHOD(Fixture, "An edit is unsaved until it is saved", "[asset edits]
 
         CHECK_FALSE(Edits.IsDirty(Id));
         CHECK(ReadFile(File) != before);
-        CHECK(AssetManager(Gpu, Temp.Path()).ReadMaterialFile(Id)->Properties.at("Color") == changed.Properties.at("Color"));
+        CHECK(AssetManager(Gpu, Temp.Path()).Read(Id)->Properties.at("Color") == changed.Properties.at("Color"));
     }
 
     SECTION("Saving everything does the same")
@@ -166,7 +167,7 @@ TEST_CASE_METHOD(Fixture, "An edit that can't be shown is undone", "[asset edits
 
 TEST_CASE_METHOD(Fixture, "Engine materials can't be edited", "[asset edits]")
 {
-    const MaterialID engine = Assets.DefaultMaterial();
+    const MaterialID engine = DefaultMaterial(Assets);
 
     MaterialData changed = *Edits.GetMaterial(engine);
     changed.Settings.Cull = CullMode::None;

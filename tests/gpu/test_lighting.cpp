@@ -408,7 +408,7 @@ namespace
         {
             Project.Write(name, MakeBmp(1, 1, { color }));
             Assets->Refresh();
-            REQUIRE(Assets->ReimportTexture(Assets->Find<AssetType::Texture>(name), { { "srgb", false } }));
+            REQUIRE(Assets->Reimport(Assets->Find<AssetType::Texture>(name), { { "srgb", false } }));
         }
 
         float RenderCenter()
