@@ -741,7 +741,7 @@ namespace crimson
     bool AssetManager::Reimport(AssetID id, nlohmann::json settings)
     {
         const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.ReadOnly || it->second.Info.Type == AssetType::Mesh)
+        if (it == m_assets.end() || it->second.Info.ReadOnly || !it->second.Importer->CanReimport())
         {
             LOG_ERROR("[Assets] This asset can't be reimported");
             return false;

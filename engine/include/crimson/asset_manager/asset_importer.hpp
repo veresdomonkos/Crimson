@@ -104,6 +104,9 @@ namespace crimson
         // Whether a change to the file on disk should load the asset again
         [[nodiscard]] virtual bool ReloadsWhenChanged() const { return false; }
 
+        // Whether a loaded asset can be replaced: false when what uses it holds a pointer that nothing would resolve again
+        [[nodiscard]] virtual bool CanReimport() const { return true; }
+
         // Frees what the importer made to share between its assets, once they are all unloaded
         virtual void ReleaseShared(GpuResourceManager&) {}
     };

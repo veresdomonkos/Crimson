@@ -11,5 +11,8 @@ namespace crimson
 
         std::optional<Mesh> Load(const AssetSource&, ImportContext&) override;
         void Unload(Mesh&, GpuResourceManager&) override;
+
+        // Components hold a mesh by pointer
+        bool CanReimport() const override { return false; }
     };
 }
