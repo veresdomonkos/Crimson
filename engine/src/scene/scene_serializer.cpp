@@ -14,31 +14,25 @@ namespace crimson
         SceneNode CaptureNode(Entity entity, Scene& scene, const AssetManager& assets)
         {
             const auto& name = entity.GetComponent<NameComponent>();
-            const auto& transform = entity.GetComponent<TransformComponent>();
 
             SceneNode node;
             node.Id = name.Id;
             node.Name = name.Name;
             node.Active = name.Active;
-            node.Position = transform.Position;
-            node.RotationDegrees = transform.RotationDegrees;
-            node.Scale = transform.Scale;
 
-            if (const auto* instance = entity.TryGetComponent<SceneInstanceComponent>())
-            {
-                node.Instance = instance->Scene;
-                return node;
-            }
+            // An instance only has what can differ between instances, the rest comes from its scene
+            const auto* instance = entity.TryGetComponent<SceneInstanceComponent>();
 
             for (const ComponentType& type : assets.Components().Types())
             {
-                if (type.InlineInFile || !type.Has(entity))
-                    continue;
+                if (type.Has(entity) && (!instance || type.InlineInFile))
+                    node.Components.push_back(CaptureComponent(type, entity, assets));
+            }
 
-                SceneComponent& component = node.Components.emplace_back(SceneComponent{ .Type = type.Id, .Values = ReadComponent(type, entity) });
-
-                if (type.OnCaptured)
-                    type.OnCaptured(component.Values, assets);
+            if (instance)
+            {
+                node.Instance = instance->Scene;
+                return node;
             }
 
             if (const auto* unknown = entity.TryGetComponent<UnknownComponents>())
@@ -65,11 +59,6 @@ namespace crimson
                 name.Id = node.Id;
                 name.Active = node.Active;
 
-                auto& transform = entity.GetComponent<TransformComponent>();
-                transform.Position = node.Position;
-                transform.RotationDegrees = node.RotationDegrees;
-                transform.Scale = node.Scale;
-
                 if (readOnly)
                     Target.GetRegistry().emplace<InstancedComponent>(entity.GetHandle()); // empty, so AddComponent has no reference to give
 
@@ -78,16 +67,14 @@ namespace crimson
                     const ComponentType* type = Assets.Components().Find(component.Type);
 
                     // Kept as it was read, to be saved again
-                    if (!type || type->InlineInFile || !component.Raw.empty())
+                    if (!type || !component.Raw.empty())
                     {
                         Target.GetRegistry().get_or_emplace<UnknownComponents>(entity.GetHandle()).Components.push_back(component);
                         continue;
                     }
 
                     WriteComponent(*type, entity, component.Values);
-
-                    if (type->OnLoaded)
-                        type->OnLoaded(entity, Assets);
+                    ResolveComponentAssets(*type, type->Get(entity), Assets);
                 }
 
                 if (node.Instance)

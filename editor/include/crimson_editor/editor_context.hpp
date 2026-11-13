@@ -24,9 +24,6 @@ namespace crimson::editor
         // Call after assets are gone, so nothing keeps using them
         std::function<void(std::span<const AssetID>)> OnAssetsRemoved;
 
-        // Call after materials appear that meshes' slots look for, for the scene to use them
-        std::function<void()> ResolveMeshRenderers;
-
         // Replaces the scene with that one, after asking about unsaved changes
         std::function<void(SceneID)> OpenScene;
 

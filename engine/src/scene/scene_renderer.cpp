@@ -10,35 +10,6 @@
 
 namespace crimson
 {
-    void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets)
-    {
-        renderer.Resolved = {};
-
-        const Mesh* mesh = assets.Load(renderer.MeshAsset);
-        if (!mesh)
-            return;
-
-        renderer.Resolved = *mesh;
-        renderer.MaterialAssets.resize(renderer.Resolved.Materials.size());
-
-        for (size_t slot = 0; slot < renderer.MaterialAssets.size(); ++slot)
-        {
-            // The default counts as empty, as that's how it's saved, so a slot material made since is found
-            MaterialID& asset = renderer.MaterialAssets[slot];
-            if ((!asset || asset == assets.DefaultMaterial()) && slot < renderer.Resolved.MaterialSlots.size())
-            {
-                if (const MaterialID found = assets.FindSlotMaterial(renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]))
-                    asset = found;
-            }
-
-            if (!asset)
-                asset = assets.DefaultMaterial();
-
-            // A missing one stays in the slot, to be saved, and the default stands in for it
-            renderer.Resolved.Materials[slot] = assets.Load(assets.IsMissing(asset) ? assets.DefaultMaterial() : asset);
-        }
-    }
-
     SceneRenderer::SceneRenderer(GpuResourceManager& resources, Renderer& renderer, ShadowAtlasSettings atlas)
         : m_resources(resources), m_atlas(atlas)
     {

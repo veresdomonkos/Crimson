@@ -134,9 +134,9 @@ namespace crimson
                 case FieldType::Enum:
                 {
                     const std::string key = j.get<std::string>();
-                    const auto found = std::ranges::find(field.EnumKeys, key);
-                    if (found != field.EnumKeys.end())
-                        return static_cast<int32_t>(found - field.EnumKeys.begin());
+                    const auto found = std::ranges::find(field.EnumOptions, key, &EnumOption::Key);
+                    if (found != field.EnumOptions.end())
+                        return static_cast<int32_t>(found - field.EnumOptions.begin());
 
                     LOG_WARN("[Scene] '{}': unknown {} '{}', using the default", file, field.Key, key);
                     return field.Default;
@@ -167,7 +167,7 @@ namespace crimson
                 case FieldType::Enum:
                 {
                     const auto index = static_cast<size_t>(std::get<int32_t>(value));
-                    return index < field.EnumKeys.size() ? field.EnumKeys[index] : field.EnumKeys.at(static_cast<size_t>(std::get<int32_t>(field.Default)));
+                    return index < field.EnumOptions.size() ? field.EnumOptions[index].Key : field.EnumOptions.at(static_cast<size_t>(std::get<int32_t>(field.Default))).Key;
                 }
                 case FieldType::AssetList:
                 {
@@ -181,18 +181,32 @@ namespace crimson
             return nullptr;
         }
 
-        // What a node has besides its components
-        bool IsNodeKey(std::string_view key)
-        {
-            constexpr std::array kNodeKeys = { "id", "name", "active", "position", "rotation", "scale", "instance", "children" };
-            return std::ranges::find(kNodeKeys, key) != kNodeKeys.end();
-        }
-
         // A registered type whose fields aren't the node's own
         const ComponentType* FindComponentType(const AssetManager& assets, std::string_view id)
         {
             const ComponentType* type = assets.Components().Find(id);
             return type && !type->InlineInFile ? type : nullptr;
+        }
+
+        // A registered type whose fields are the node's own
+        const ComponentType* FindInlineType(const AssetManager& assets, std::string_view id)
+        {
+            const ComponentType* type = assets.Components().Find(id);
+            return type && type->InlineInFile ? type : nullptr;
+        }
+
+        // From the object that has the type's fields: the component's, or the node's for an inline type
+        SceneComponent ReadFieldsFrom(const ComponentType& type, const nlohmann::ordered_json& j, const AssetManager& assets, std::string_view file)
+        {
+            SceneComponent component{ .Type = type.Id };
+
+            for (const FieldInfo& field : type.Fields)
+            {
+                const auto value = j.find(field.Key);
+                component.Values.push_back(value != j.end() ? ReadValue(field, *value, assets, file) : field.Default);
+            }
+
+            return component;
         }
 
         SceneComponent ReadSceneComponent(const std::string& id, const nlohmann::ordered_json& j, const AssetManager& assets, std::string_view file)
@@ -204,15 +218,14 @@ namespace crimson
             if (!j.is_object())
                 throw std::runtime_error(std::format("'{}' isn't an object", id));
 
-            SceneComponent component{ .Type = id };
+            return ReadFieldsFrom(*type, j, assets, file);
+        }
 
-            for (const FieldInfo& field : type->Fields)
-            {
-                const auto value = j.find(field.Key);
-                component.Values.push_back(value != j.end() ? ReadValue(field, *value, assets, file) : field.Default);
-            }
-
-            return component;
+        // Into the object that has the type's fields
+        void WriteFields(const ComponentType& type, const SceneComponent& component, nlohmann::ordered_json& j, const AssetManager& assets)
+        {
+            for (size_t index = 0; index < std::min(type.Fields.size(), component.Values.size()); ++index)
+                j[type.Fields[index].Key] = WriteValue(type.Fields[index], component.Values[index], assets);
         }
 
         nlohmann::ordered_json WriteSceneComponent(const SceneComponent& component, const AssetManager& assets)
@@ -222,12 +235,8 @@ namespace crimson
 
             nlohmann::ordered_json j = nlohmann::ordered_json::object();
 
-            const ComponentType* type = FindComponentType(assets, component.Type);
-            if (!type)
-                return j;
-
-            for (size_t index = 0; index < std::min(type->Fields.size(), component.Values.size()); ++index)
-                j[type->Fields[index].Key] = WriteValue(type->Fields[index], component.Values[index], assets);
+            if (const ComponentType* type = FindComponentType(assets, component.Type))
+                WriteFields(*type, component, j, assets);
 
             return j;
         }
@@ -243,14 +252,18 @@ namespace crimson
 
             node.Name = j.value("name", std::string{});
             node.Active = j.value("active", true);
-            node.Position = ReadVec3(j, "position", glm::vec3(0.0f));
-            node.RotationDegrees = ReadVec3(j, "rotation", glm::vec3(0.0f));
-            node.Scale = ReadVec3(j, "scale", glm::vec3(1.0f));
+
+            // The fields of the components that are part of the node, like the transform, are the node's own keys
+            for (const ComponentType& type : assets.Components().Types())
+            {
+                if (type.InlineInFile)
+                    node.Components.push_back(ReadFieldsFrom(type, j, assets, file));
+            }
 
             // Everything else is a component, by its type's id
             for (const auto& [key, value] : j.items())
             {
-                if (!IsNodeKey(key))
+                if (!assets.Components().IsNodeKey(key))
                     node.Components.push_back(ReadSceneComponent(key, value, assets, file));
             }
 
@@ -273,12 +286,18 @@ namespace crimson
             j["id"] = node.Id.ToString();
             j["name"] = node.Name;
             j["active"] = node.Active;
-            j["position"] = WriteVec3(node.Position);
-            j["rotation"] = WriteVec3(node.RotationDegrees);
-            j["scale"] = WriteVec3(node.Scale);
 
             for (const SceneComponent& component : node.Components)
-                j[component.Type] = WriteSceneComponent(component, assets);
+            {
+                if (const ComponentType* type = FindInlineType(assets, component.Type))
+                    WriteFields(*type, component, j, assets);
+            }
+
+            for (const SceneComponent& component : node.Components)
+            {
+                if (!FindInlineType(assets, component.Type))
+                    j[component.Type] = WriteSceneComponent(component, assets);
+            }
 
             if (node.Instance)
                 j["instance"] = WriteAssetRef(assets, node.Instance);
@@ -296,6 +315,31 @@ namespace crimson
             return j;
         }
 
+        // The asset references among the fields of a type, in the object that has them
+        bool UpdateFieldReferences(nlohmann::ordered_json& fields, const ComponentType& type, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets)
+        {
+            bool updated = false;
+
+            for (const FieldInfo& field : type.Fields)
+            {
+                const auto value = fields.find(field.Key);
+                if (value == fields.end())
+                    continue;
+
+                if (field.Type == FieldType::Asset)
+                {
+                    updated = UpdateAssetRef(*value, moved, assets) || updated;
+                }
+                else if (field.Type == FieldType::AssetList && value->is_array())
+                {
+                    for (nlohmann::ordered_json& ref : *value)
+                        updated = UpdateAssetRef(ref, moved, assets) || updated;
+                }
+            }
+
+            return updated;
+        }
+
         bool UpdateNodeReferences(nlohmann::ordered_json& node, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets)
         {
             if (!node.is_object())
@@ -304,28 +348,17 @@ namespace crimson
             bool updated = false;
 
             // The asset fields of the components that are registered. Those of the others can't be told from other values.
+            for (const ComponentType& type : assets.Components().Types())
+            {
+                if (type.InlineInFile)
+                    updated = UpdateFieldReferences(node, type, moved, assets) || updated;
+            }
+
             for (auto& [key, component] : node.items())
             {
-                const ComponentType* type = IsNodeKey(key) ? nullptr : FindComponentType(assets, key);
-                if (!type || !component.is_object())
-                    continue;
-
-                for (const FieldInfo& field : type->Fields)
-                {
-                    const auto value = component.find(field.Key);
-                    if (value == component.end())
-                        continue;
-
-                    if (field.Type == FieldType::Asset)
-                    {
-                        updated = UpdateAssetRef(*value, moved, assets) || updated;
-                    }
-                    else if (field.Type == FieldType::AssetList && value->is_array())
-                    {
-                        for (nlohmann::ordered_json& ref : *value)
-                            updated = UpdateAssetRef(ref, moved, assets) || updated;
-                    }
-                }
+                const ComponentType* type = assets.Components().IsNodeKey(key) ? nullptr : FindComponentType(assets, key);
+                if (type && component.is_object())
+                    updated = UpdateFieldReferences(component, *type, moved, assets) || updated;
             }
 
             if (const auto instance = node.find("instance"); instance != node.end())

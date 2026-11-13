@@ -1,9 +1,11 @@
 #include "crimson/scene/component_registry.hpp"
 
 #include <algorithm>
+#include <array>
 
 #include <entt/core/hashed_string.hpp>
 
+#include "crimson/asset_manager/asset_manager.hpp"
 #include "crimson/core/log.hpp"
 
 namespace crimson
@@ -34,6 +36,12 @@ namespace crimson
 
     ComponentType* ComponentRegistry::Add(std::string id, std::string name)
     {
+        if (IsNodeKey(id))
+        {
+            LOG_ERROR("[Components] '{}' can't be a component's id, as a node of a scene file has a key of that name", id);
+            return nullptr;
+        }
+
         if (Find(id))
         {
             LOG_ERROR("[Components] There already is a component with the id '{}'", id);
@@ -101,6 +109,46 @@ namespace crimson
         return index && *index < component.Values.size() ? &component.Values[*index] : nullptr;
     }
 
+    bool ComponentRegistry::IsNodeKey(std::string_view key) const
+    {
+        constexpr std::array kNodeKeys = { "id", "name", "active", "instance", "children" };
+        if (std::ranges::find(kNodeKeys, key) != kNodeKeys.end())
+            return true;
+
+        return std::ranges::any_of(m_types, [key](const ComponentType& type)
+        {
+            return type.InlineInFile && type.FindField(key);
+        });
+    }
+
+    SceneComponent ComponentRegistry::Compose(std::string_view id, std::initializer_list<std::pair<std::string_view, FieldValue>> overrides) const
+    {
+        const ComponentType* type = Find(id);
+        if (!type)
+        {
+            LOG_ERROR("[Components] There is no component with the id '{}'", id);
+            return SceneComponent{ .Type = std::string(id) };
+        }
+
+        SceneComponent component{ .Type = type->Id };
+
+        for (const FieldInfo& field : type->Fields)
+            component.Values.push_back(field.Default);
+
+        for (const auto& [key, value] : overrides)
+        {
+            const std::optional<size_t> index = type->FindField(key);
+            if (!index)
+                LOG_ERROR("[Components] '{}' has no field '{}'", id, key);
+            else if (value.index() != type->Fields[*index].Default.index())
+                LOG_ERROR("[Components] '{}' of '{}' was given a value of another type", key, id);
+            else
+                component.Values[*index] = value;
+        }
+
+        return component;
+    }
+
     std::vector<FieldValue> ReadFields(const ComponentType& type, const void* component)
     {
         std::vector<FieldValue> values;
@@ -141,5 +189,129 @@ namespace crimson
     {
         if (type.Has(from))
             WriteComponent(type, to, ReadComponent(type, from));
+    }
+
+    void CreateComponent(const ComponentType& type, Entity entity, AssetManager& assets)
+    {
+        type.Add(entity);
+        ResolveComponentAssets(type, type.Get(entity), assets);
+    }
+
+    void ResolveComponentAssets(const ComponentType& type, void* component, AssetManager& assets)
+    {
+        if (type.ResolveAssets)
+            type.ResolveAssets(component, assets);
+    }
+
+    void ResolveSceneAssets(Scene& scene, AssetManager& assets)
+    {
+        for (const ComponentType& type : assets.Components().Types())
+        {
+            if (!type.ResolveAssets)
+                continue;
+
+            for (const entt::entity handle : scene.GetRegistry().view<NameComponent>())
+            {
+                if (void* component = type.Get(scene.GetEntity(handle)))
+                    type.ResolveAssets(component, assets);
+            }
+        }
+    }
+
+    SceneComponent CaptureComponent(const ComponentType& type, Entity entity, const AssetManager& assets)
+    {
+        SceneComponent component{ .Type = type.Id, .Values = ReadComponent(type, entity) };
+
+        for (size_t index = 0; index < type.Fields.size(); ++index)
+        {
+            const FieldInfo& field = type.Fields[index];
+            if (!field.Fallback)
+                continue;
+
+            // Left empty, the reference can still find what fits it better when it is loaded
+            const AssetID fallback = field.Fallback(assets);
+
+            if (AssetID* id = std::get_if<AssetID>(&component.Values[index]))
+            {
+                if (*id == fallback)
+                    *id = AssetID{};
+            }
+            else if (auto* ids = std::get_if<std::vector<AssetID>>(&component.Values[index]))
+            {
+                std::ranges::replace(*ids, fallback, AssetID{});
+            }
+        }
+
+        return component;
+    }
+
+    void ApplyPreset(const ComponentType& type, const ComponentPreset& preset, Entity entity, AssetManager& assets)
+    {
+        type.Add(entity);
+
+        void* component = type.Get(entity);
+        preset.Apply(component, assets);
+        ResolveComponentAssets(type, component, assets);
+    }
+
+    FieldRef FindSpawnField(const ComponentRegistry& registry, AssetType asset)
+    {
+        for (const ComponentType& type : registry.Types())
+        {
+            for (size_t index = 0; index < type.Fields.size(); ++index)
+            {
+                if (type.Fields[index].SpawnsFrom && type.Fields[index].Asset == asset)
+                    return { &type, index };
+            }
+        }
+
+        return {};
+    }
+
+    FieldRef FindDropField(const ComponentRegistry& registry, Entity entity, AssetType asset)
+    {
+        for (const ComponentType& type : registry.Types())
+        {
+            if (!type.Has(entity))
+                continue;
+
+            for (size_t index = 0; index < type.Fields.size(); ++index)
+            {
+                if (type.Fields[index].DropTarget && type.Fields[index].Asset == asset)
+                    return { &type, index };
+            }
+        }
+
+        return {};
+    }
+
+    void AssignAsset(const ComponentType& type, size_t field, Entity entity, AssetID asset, AssetManager& assets)
+    {
+        void* component = type.Get(entity);
+        if (!component)
+            return;
+
+        const FieldInfo& info = type.Fields[field];
+        FieldValue value = info.Get(component);
+
+        if (auto* ids = std::get_if<std::vector<AssetID>>(&value))
+        {
+            // A list without entries has nowhere to put it, like a mesh renderer without its mesh's slots
+            if (ids->empty())
+                return;
+
+            ids->front() = asset;
+        }
+        else
+        {
+            value = asset;
+        }
+
+        info.Set(component, value);
+
+        if (type.Constrain)
+            type.Constrain(component);
+
+        ResolveComponentAssets(type, component, assets);
     }
 }

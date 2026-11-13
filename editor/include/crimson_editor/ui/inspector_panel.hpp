@@ -13,10 +13,8 @@ namespace crimson::editor::ui
     private:
         void DrawHeader(Entity entity);
 
-        // Any registered component from its fields, except for the few that have a look of their own below
+        // Any registered component, from its fields
         void DrawComponent(Entity entity, const ComponentType& type);
-        void DrawTransform(TransformComponent& transform);
-        void DrawMeshRenderer(MeshRendererComponent& renderer);
 
         void DrawUnknownComponents(Entity entity);
         void DrawSceneInstance(Entity entity);
@@ -24,6 +22,5 @@ namespace crimson::editor::ui
     private:
         EditorContext& m_context;
         AssetInspector m_assetInspector;
-        bool m_uniformScale = false;
     };
 }

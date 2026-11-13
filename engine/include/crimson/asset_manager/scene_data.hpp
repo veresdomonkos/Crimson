@@ -31,11 +31,9 @@ namespace crimson
         AssetID Id;
         std::string Name;
         bool Active = true;
-        glm::vec3 Position{0.0f};
-        glm::vec3 RotationDegrees{0.0f};
-        glm::vec3 Scale{1.0f};
 
-        // In the order the file has them, each under its type's id. One whose type isn't registered is kept as it was.
+        // Each under its type's id: the components that are part of the node, like the transform, first, then the others
+        // in the order the file has them. One whose type isn't registered is kept as it was.
         std::vector<SceneComponent> Components;
         SceneID Instance;
         std::vector<SceneNode> Children;

@@ -1,4 +1,6 @@
 #pragma once
+#include <string_view>
+
 #include <crimson/asset_manager/asset_types.hpp>
 
 // Icons from the Lucide font (editor/resources/fonts/lucide.ttf, version 1.61.0), merged into the editor's fonts, so they
@@ -43,5 +45,33 @@ namespace crimson::editor::ui
             case AssetType::Scene:    return kIconScene;
             default:                  return kIconFile;
         }
+    }
+
+    // An icon by its Lucide name, which is how a component registers its own. Null for a name that isn't here.
+    inline const char* IconNamed(std::string_view name)
+    {
+        struct Named
+        {
+            std::string_view Name;
+            const char* Icon;
+        };
+
+        static constexpr Named kNamed[] = {
+            { "folder", kIconFolder }, { "folder-open", kIconFolderOpen }, { "box", kIconMesh }, { "palette", kIconMaterial },
+            { "file-code", kIconShader }, { "image", kIconTexture }, { "clapperboard", kIconScene }, { "file", kIconFile },
+            { "circle-dashed", kIconEntity }, { "sun", kIconDirectionalLight }, { "lightbulb", kIconPointLight },
+            { "cone", kIconSpotLight }, { "package", kIconSceneInstance }, { "move", kIconMove }, { "rotate-3d", kIconRotate },
+            { "scaling", kIconScale }, { "axis-3d", kIconLocalSpace }, { "globe", kIconWorldSpace }, { "move-3d", kIconTransform },
+            { "search", kIconSearch }, { "circle-alert", kIconError }, { "triangle-alert", kIconWarning },
+            { "circle-check", kIconSuccess }, { "info", kIconInfo },
+        };
+
+        for (const Named& named : kNamed)
+        {
+            if (named.Name == name)
+                return named.Icon;
+        }
+
+        return nullptr;
     }
 }

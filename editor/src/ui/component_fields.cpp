@@ -14,13 +14,13 @@ namespace crimson::editor::ui
     namespace
     {
         // One row per entry, as a list of assets is usually short and each entry has a meaning of its own, like a slot
-        bool DrawAssetList(const FieldInfo& field, std::vector<AssetID>& ids, const AssetManager& assets)
+        bool DrawAssetList(const FieldInfo& field, const void* component, std::vector<AssetID>& ids, const AssetManager& assets)
         {
             bool changed = false;
 
             for (size_t index = 0; index < ids.size(); ++index)
             {
-                const std::string label = field.Label + " " + std::to_string(index);
+                const std::string label = field.ItemLabel ? field.ItemLabel(component, index) : field.Label + " " + std::to_string(index);
 
                 ImGui::PushID(static_cast<int>(index));
                 props::BeginRow(label.c_str());
@@ -42,23 +42,18 @@ namespace crimson::editor::ui
 
     const char* ComponentIcon(const ComponentType& type, const void* component)
     {
-        if (type.Id == "transform")
-            return kIconTransform;
+        return IconNamed(type.Icon ? type.Icon(component) : std::string_view());
+    }
 
-        if (type.Id == "meshRenderer")
-            return kIconMesh;
-
-        if (type.Id == "light")
+    glm::vec3 ScaleUniformly(glm::vec3 previous, glm::vec3 edited)
+    {
+        for (int axis = 0; axis < 3; ++axis)
         {
-            switch (static_cast<const LightComponent*>(component)->Type)
-            {
-                case LightType::Directional: return kIconDirectionalLight;
-                case LightType::Point:       return kIconPointLight;
-                case LightType::Spot:        return kIconSpotLight;
-            }
+            if (edited[axis] != previous[axis] && previous[axis] != 0.0f)
+                return previous * (edited[axis] / previous[axis]);
         }
 
-        return nullptr;
+        return edited;
     }
 
     bool DrawAssetCombo(const char* id, const AssetManager& assets, AssetType type, AssetID& current)
@@ -93,7 +88,7 @@ namespace crimson::editor::ui
         return changed;
     }
 
-    bool DrawField(const FieldInfo& field, FieldValue& value, const AssetManager& assets)
+    bool DrawField(const FieldInfo& field, const void* component, FieldValue& value, const AssetManager& assets)
     {
         const char* label = field.Label.c_str();
         const float min = field.Range ? field.Range->first : 0.0f;
@@ -108,7 +103,26 @@ namespace crimson::editor::ui
             case FieldType::Float:
                 return props::Float(label, std::get<float>(value), field.Speed, min, max, &std::get<float>(field.Default));
             case FieldType::Vec3:
-                return props::Vec3(label, std::get<glm::vec3>(value), field.Speed, &std::get<glm::vec3>(field.Default));
+            {
+                glm::vec3& vector = std::get<glm::vec3>(value);
+                const glm::vec3 previous = vector;
+
+                const bool changed = props::Vec3(label, vector, field.Speed, &std::get<glm::vec3>(field.Default));
+                if (!field.UniformToggle)
+                    return changed;
+
+                // Kept by the window, as it belongs to the editor rather than the component
+                ImGuiStorage* storage = ImGui::GetStateStorage();
+                const ImGuiID toggle = ImGui::GetID("##Uniform");
+                bool uniform = storage->GetBool(toggle);
+
+                if (changed && uniform)
+                    vector = ScaleUniformly(previous, vector);
+
+                props::Checkbox(("Uniform " + field.Label).c_str(), uniform);
+                storage->SetBool(toggle, uniform);
+                return changed;
+            }
             case FieldType::Color:
                 return props::Color(label, &std::get<glm::vec3>(value).x, 3, &std::get<glm::vec3>(field.Default).x);
             case FieldType::String:
@@ -116,8 +130,8 @@ namespace crimson::editor::ui
             case FieldType::Enum:
             {
                 std::vector<const char*> labels;
-                for (const std::string& enumLabel : field.EnumLabels)
-                    labels.push_back(enumLabel.c_str());
+                for (const EnumOption& option : field.EnumOptions)
+                    labels.push_back(option.Label.c_str());
 
                 return props::Combo(label, std::get<int32_t>(value), labels.data(), static_cast<int>(labels.size()), &std::get<int32_t>(field.Default));
             }
@@ -139,7 +153,7 @@ namespace crimson::editor::ui
                 return changed;
             }
             case FieldType::AssetList:
-                return DrawAssetList(field, std::get<std::vector<AssetID>>(value), assets);
+                return DrawAssetList(field, component, std::get<std::vector<AssetID>>(value), assets);
         }
 
         return false;
@@ -155,7 +169,7 @@ namespace crimson::editor::ui
                 continue;
 
             FieldValue value = field.Get(component);
-            if (!DrawField(field, value, assets))
+            if (!DrawField(field, component, value, assets))
                 continue;
 
             field.Set(component, value);

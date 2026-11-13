@@ -37,14 +37,10 @@ namespace crimson::editor
         glm::vec3 center(world[3]);
         float radius = kDefaultRadius;
 
-        const auto* renderer = entity.TryGetComponent<MeshRendererComponent>();
-        if (renderer && !renderer->Resolved.SubMeshes.empty())
+        if (const std::optional<MeshBounds> bounds = entity.GetScene()->WorldBounds(entity))
         {
-            const MeshBounds& bounds = renderer->Resolved.Bounds;
-            const float scale = std::max({ glm::length(glm::vec3(world[0])), glm::length(glm::vec3(world[1])), glm::length(glm::vec3(world[2])) });
-
-            center = glm::vec3(world * glm::vec4((bounds.Min + bounds.Max) * 0.5f, 1.0f));
-            radius = glm::length(bounds.Max - bounds.Min) * 0.5f * scale;
+            center = (bounds->Min + bounds->Max) * 0.5f;
+            radius = glm::length(bounds->Max - bounds->Min) * 0.5f;
         }
 
         m_pivotDistance = std::max(radius * kMargin / std::sin(glm::radians(m_camera.GetFov()) * 0.5f), kMinPivotDistance);

@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <array>
 #include <filesystem>
 #include <fstream>
@@ -272,7 +273,9 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[
         FieldInfo{ .Key = "title", .Label = "Title", .Type = FieldType::String, .Default = std::string("Guard") },
         FieldInfo{ .Key = "tint", .Label = "Tint", .Type = FieldType::Color, .Default = glm::vec3(1.0f) },
         FieldInfo{ .Key = "weapon", .Label = "Weapon", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh },
-        FieldInfo{ .Key = "drops", .Label = "Drops", .Type = FieldType::AssetList, .Default = std::vector<AssetID>{ AssetID{} }, .Asset = AssetType::Material }
+        FieldInfo{ .Key = "drops", .Label = "Drops", .Type = FieldType::AssetList, .Default = std::vector<AssetID>{ AssetID{} }, .Asset = AssetType::Material,
+                   .ItemLabel = [](const void*, size_t index) { return "Drop " + std::to_string(index); } },
+        FieldInfo{ .Key = "size", .Label = "Size", .Type = FieldType::Vec3, .Default = glm::vec3(1.0f), .UniformToggle = true }
     });
     REQUIRE(health);
 
@@ -290,6 +293,17 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[
     health->Add(guard);
     entities.push_back(guard);
 
+    // What the Create menu makes, with the mesh renderer's slots named after the mesh's
+    const ComponentType* renderer = Assets().Components().Find<MeshRendererComponent>();
+    REQUIRE(renderer);
+
+    const auto cube = std::ranges::find(renderer->Presets, "Cube", &ComponentPreset::Name);
+    REQUIRE(cube != renderer->Presets.end());
+
+    const Entity cubeEntity = scene.CreateEntity("Cube");
+    ApplyPreset(*renderer, *cube, cubeEntity, Assets());
+    entities.push_back(cubeEntity);
+
     SceneData withUnknown;
     withUnknown.Roots.push_back(SceneNode{ .Name = "Door", .Components = { SceneComponent{ .Type = "lock", .Raw = R"({ "code": 1234 })" } } });
     InstantiateScene(withUnknown, scene, {}, Assets(), {});
@@ -306,6 +320,38 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[
     }
 
     CHECK(health->Has(guard));
+}
+
+// The panels queue these for after the frame, as they can't change GPU resources in the middle of it
+TEST_CASE_METHOD(AssetFixture, "Creating from the Hierarchy's presets and resolving after asset changes", "[editor]")
+{
+    const ComponentType* renderer = Assets().Components().Find<MeshRendererComponent>();
+    REQUIRE(renderer);
+
+    const auto cube = std::ranges::find(renderer->Presets, "Cube", &ComponentPreset::Name);
+    REQUIRE(cube != renderer->Presets.end());
+
+    Entity created;
+    Context().Deferred.emplace_back([&]
+    {
+        created = Context().ActiveScene.CreateEntity("Cube");
+        ApplyPreset(*renderer, *cube, created, Assets());
+        Context().SelectEntity(created);
+    });
+    RunFrames(App);
+
+    REQUIRE(created);
+    CHECK_FALSE(created.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
+
+    Context().Deferred.emplace_back([&]
+    {
+        Assets().Refresh();
+        ++Context().AssetsVersion;
+    });
+    RunFrames(App);
+
+    REQUIRE(created);
+    CHECK_FALSE(created.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
 }
 
 TEST_CASE_METHOD(AssetFixture, "A material's edits show and can be saved or reverted", "[editor]")

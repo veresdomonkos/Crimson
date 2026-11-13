@@ -52,7 +52,6 @@ namespace crimson::editor
 
         // --- Assets changing ---
         void RunDeferred();
-        void ResolveAllMeshRenderers();
         void ForgetAssets(std::span<const AssetID> removed);
 
         // --- The open scene ---
