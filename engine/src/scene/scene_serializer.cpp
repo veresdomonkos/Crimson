@@ -95,7 +95,7 @@ namespace crimson
                     return;
                 }
 
-                const std::optional<SceneData> data = Assets.ReadSceneFile(source);
+                const std::optional<SceneData> data = Assets.Read(source);
                 if (!data)
                     return;
 
@@ -183,7 +183,7 @@ namespace crimson
 
             visited.push_back(current);
 
-            if (const std::optional<SceneData> data = assets.ReadSceneFile(current))
+            if (const std::optional<SceneData> data = assets.Read(current))
                 CollectInstances(data->Roots, pending);
         }
 

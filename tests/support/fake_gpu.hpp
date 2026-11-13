@@ -2,6 +2,7 @@
 #include <cstddef>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -45,10 +46,16 @@ namespace crimson::tests
             return m_shaderInterfaces.at(handle.GetRaw());
         }
 
-        void DestroyShader(ShaderHandle) override
+        void DestroyShader(ShaderHandle shader) override
         {
             --LiveShaders;
             DestroyOrder.emplace_back("shader");
+
+            for (const auto& [raw, material] : Materials)
+            {
+                if (!m_destroyedMaterials.contains(raw) && material.Shader.GetRaw() == shader.GetRaw())
+                    ++ShadersFreedWhileUsed;
+            }
         }
 
         MaterialHandle CreateMaterial(ShaderHandle shader, const MaterialSettings& settings) override
@@ -59,10 +66,11 @@ namespace crimson::tests
             return handle;
         }
 
-        void DestroyMaterial(MaterialHandle) override
+        void DestroyMaterial(MaterialHandle material) override
         {
             --LiveMaterials;
             DestroyOrder.emplace_back("material");
+            m_destroyedMaterials.insert(material.GetRaw());
         }
 
         void SetMaterialSettings(MaterialHandle material, const MaterialSettings& settings) override
@@ -85,7 +93,22 @@ namespace crimson::tests
             return TextureHandle{ m_nextId++, 1 };
         }
 
-        void DestroyTexture(TextureHandle) override { --LiveTextures; }
+        void DestroyTexture(TextureHandle texture) override
+        {
+            --LiveTextures;
+
+            for (const auto& [raw, material] : Materials)
+            {
+                if (m_destroyedMaterials.contains(raw))
+                    continue;
+
+                for (const auto& [name, used] : material.Textures)
+                {
+                    if (used.GetRaw() == texture.GetRaw())
+                        ++TexturesFreedWhileUsed;
+                }
+            }
+        }
 
         std::vector<std::byte> ReadColorPixels(TextureHandle) override { return {}; }
 
@@ -108,6 +131,8 @@ namespace crimson::tests
         int LiveRenderTargets = 0;
 
         int ShadersCreated = 0;
+        int TexturesFreedWhileUsed = 0; // freed while a live material still has it
+        int ShadersFreedWhileUsed = 0;
         std::vector<std::string> DestroyOrder;
         std::map<uint64_t, MaterialRecord> Materials;
         TextureInfo LastTextureInfo{};
@@ -119,6 +144,7 @@ namespace crimson::tests
     private:
         uint32_t m_nextId = 1;
         std::map<uint64_t, ShaderInterface> m_shaderInterfaces;
+        std::set<uint64_t> m_destroyedMaterials;
     };
 
     // A renderer that renders nothing and only keeps the last submitted frame, to look at what was recorded

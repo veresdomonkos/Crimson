@@ -18,20 +18,6 @@
 
 namespace crimson
 {
-    enum class MaterialApplyResult
-    {
-        Failed,
-        Updated,  // the material's handle is the same
-        Replaced  // the material has a new handle, so anything holding on to the old one has to get it again
-    };
-
-    // What CreateSlotMaterials did
-    struct SlotMaterials
-    {
-        std::vector<MaterialID> Created;
-        size_t Kept = 0; // slots that had a material already, which is left as it is
-    };
-
     // A reference to an asset that isn't there, with what it was written as, for a save to write it back the same way
     struct MissingAssetRef
     {
@@ -44,14 +30,14 @@ namespace crimson
     template <AssetType T> class AssetStore;
 
     // Knows every asset under one folder and loads them on first use. Destroying it frees what it loaded.
-    // The engine's own shaders and materials are always available too, read-only, under "engine/".
+    // The engine's own shaders, materials and scenes are always available too, read-only, under "engine/".
     //
     // Asset paths are relative to the folder, with forward slashes. A load that fails returns an invalid
     // handle or null, logs once and isn't tried again. An invalid id does the same without logging, so a
     // component's empty asset slot needs no check.
     //
-    // What changes or removes GPU resources has to run between frames: Refresh, Delete, ApplyMaterial, ReimportTexture,
-    // CreateSlotMaterials and ReloadChangedShaders.
+    // What changes or removes GPU resources has to run between frames: Refresh, Delete, Apply, Reimport, ReloadChanged
+    // and CreateSlotMaterials, which reimports.
     // Handles that were copied elsewhere stop working when these remove what they refer to.
     class AssetManager
     {
@@ -102,60 +88,66 @@ namespace crimson
         template <AssetType T>
         LoadResult<T> Load(std::string_view path) { return Load(FindOrWarn<T>(path)); }
 
-        [[nodiscard]] MaterialID DefaultMaterial() const;
-
         // The kinds of components the project's scenes can have, the engine's own and any registered since
         [[nodiscard]] ComponentRegistry& Components() { return m_components; }
         [[nodiscard]] const ComponentRegistry& Components() const { return m_components; }
 
-        // The material made for one of a mesh's slots: materials/<slot>.mat, next to the mesh. Invalid if there is none.
-        [[nodiscard]] MaterialID FindSlotMaterial(MeshID mesh, std::string_view slot) const;
-
         // What a loaded shader's materials can set
         [[nodiscard]] const ShaderInterface& GetShaderInterface(ShaderHandle shader) const { return m_gpuResources.GetShaderInterface(shader); }
-
-        // A separate copy of a texture for showing as it is stored, as UI that isn't sRGB encoded would show an sRGB
-        // texture too dark. The caller owns it, and gives it back to DestroyTexturePreview.
-        [[nodiscard]] TextureHandle CreateTexturePreview(TextureID id) const;
-        void DestroyTexturePreview(TextureHandle preview) const { m_gpuResources.DestroyTexture(preview); }
-
-        // What a material's texture slot uses when nothing is assigned to it. Invalid means the backend's white texture.
-        [[nodiscard]] TextureHandle EmptySlotTexture(ShaderHandle shader, const std::string& slot);
 
         // Looks at the folder again: new files appear, files moved along with their meta keep their id,
         // and the assets whose files are gone are removed. Returns the ids of those.
         std::vector<AssetID> Refresh();
 
-        // These report failures in the log. Engine assets can't be changed, and project assets can't go under "engine/".
-        MaterialID CreateMaterial(std::string_view path);
-        SceneID CreateScene(std::string_view path); // with a light, for it not to start out black
-        ShaderID CreateShader(std::string_view path); // a simple lit one, to start from
-
-        // Makes the material each slot of an .obj looks for, materials/<slot>.mat next to it, from its .mtl: colors,
-        // textures and shininess on the default shader, with sRGB turned off on its normal maps. A slot that has one
-        // already keeps it, so running it again changes nothing.
-        SlotMaterials CreateSlotMaterials(MeshID mesh);
         bool Rename(AssetID id, std::string_view newPath);
         bool Delete(AssetID id);
 
-        // What the material is using right now, which edits may have made different from its file
-        [[nodiscard]] const MaterialData* GetMaterialData(MaterialID id);
-        [[nodiscard]] std::optional<MaterialData> ReadMaterialFile(MaterialID id) const;
+        // The bytes of a project or engine asset's file. Logs when it fails.
+        [[nodiscard]] std::optional<std::string> ReadSource(AssetID id) const;
 
-        // Shows the data on the material, leaving its file alone
-        MaterialApplyResult ApplyMaterial(MaterialID id, const MaterialData& data);
-        bool SaveMaterial(MaterialID id, const MaterialData& data);
+        // What an asset's file says, for a type whose files hold data (see AssetTraits). Nothing if it can't be read or parsed.
+        template <AssetType T>
+        [[nodiscard]] std::optional<AssetData<T>> Read(TypedAssetID<T> id) const
+        {
+            const AssetInfo* info = GetInfo(id);
+            if (!info || info->Type != T)
+                return std::nullopt;
 
-        [[nodiscard]] std::optional<SceneData> ReadSceneFile(SceneID id) const;
-        bool SaveScene(SceneID id, const SceneData& data);
+            const std::optional<std::string> text = ReadSource(id);
+            return text ? AssetTraits<T>::Parse(*text, *this, info->Path) : std::nullopt;
+        }
 
-        // Stores the settings in the texture's meta file, and if it is loaded, recreates it for the materials using it
-        bool ReimportTexture(TextureID id, nlohmann::json settings);
+        // Writes the data to the asset's file. Engine assets can't be saved.
+        template <AssetType T>
+        bool Save(TypedAssetID<T> id, const AssetData<T>& data)
+        {
+            return WriteFile(id, AssetTraits<T>::Write(data, *this));
+        }
 
-        // Compiles the project's shaders again whose file or included files changed since they were loaded, and
-        // recreates their materials. One that no longer compiles keeps the old version. Returns the ids of the
-        // shaders and materials that were replaced, whose handles have to be gotten again.
-        std::vector<AssetID> ReloadChangedShaders();
+        // Makes a file at the path, a new one of the type or one with the data, and the asset for it. These report failures
+        // in the log. Engine assets can't be changed, and project assets can't go under "engine/".
+        template <AssetType T>
+        TypedAssetID<T> Create(std::string_view path) { return As<T>(CreateFile(path, T, std::nullopt)); }
+
+        template <AssetType T>
+        TypedAssetID<T> Create(std::string_view path, const AssetData<T>& data) { return As<T>(CreateFile(path, T, AssetTraits<T>::Write(data, *this))); }
+
+        // What the asset is using right now, which edits may have made different from its file
+        template <AssetType T>
+        [[nodiscard]] const AssetData<T>* GetData(TypedAssetID<T> id);
+
+        // Shows the data on the asset, leaving its file alone
+        template <AssetType T>
+        AssetUpdate Apply(TypedAssetID<T> id, const AssetData<T>& data);
+
+        // Stores the settings in the asset's meta file, and if it is loaded, loads it again for what uses it. Not for a type whose importer
+        // says it can't be: what uses it holds a pointer that nothing would resolve again.
+        bool Reimport(AssetID id, nlohmann::json settings);
+
+        // Loads the project's assets again whose file or included files changed since they were loaded, if their type
+        // does that, and updates what uses them. One that no longer loads keeps the old version. Returns the ids of
+        // what was replaced, whose handles have to be gotten again.
+        std::vector<AssetID> ReloadChanged();
     private:
         // What is known about every asset, loaded or not. What it loads as is in its type's store.
         struct Record
@@ -171,19 +163,27 @@ namespace crimson
         void RegisterFile(const std::filesystem::path& file, std::unordered_set<AssetID>& seen);
         void RemoveAssets(std::span<const AssetID> ids);
         void UpdateReferencesTo(const std::unordered_map<std::string, AssetID>& moved); // old path to id
-        AssetID CreateAssetFile(std::string_view path, std::string_view extension, const std::string& contents);
+
+        bool WriteFile(AssetID id, const std::string& contents);
+
+        // The contents are a new file of the type if none are given
+        AssetID CreateFile(std::string_view path, AssetType type, std::optional<std::string> contents);
+
+        // Loads it again and updates what uses it. Returns it and what was replaced, or nothing if it didn't load.
+        std::vector<AssetID> Reload(AssetID id);
+
+        // What uses the asset, which was loaded again or removed, gets updated. The ids of those that got a new handle go in replaced.
+        void UpdateUsersOf(AssetID used, bool removed, std::vector<AssetID>* replaced);
 
         template <AssetType T>
         AssetStore<T>& Store();
+
+        [[nodiscard]] AssetStoreBase* StoreOf(AssetType type);
 
         // Where an asset of a type keeps what it loaded. Null if there is no such asset of that type.
         template <AssetType T>
         typename AssetStore<T>::Slot* SlotFor(AssetID id);
 
-        template <AssetType T>
-        std::optional<LoadedAsset<T>> Import(const Record& record, typename AssetStore<T>::Slot& slot);
-
-        std::vector<AssetID> ReloadShader(AssetID id, const Record& record);
         [[nodiscard]] AssetSource SourceOf(const Record& record) const;
         AssetID FindIdOrWarn(std::string_view path) const;
 
@@ -214,7 +214,5 @@ namespace crimson
 
         // One per type that loads, by AssetType. Scenes have none.
         std::array<std::unique_ptr<AssetStoreBase>, kAssetTypeCount> m_stores;
-
-        TextureHandle m_flatNormal; // made when a shader first needs it
     };
 }

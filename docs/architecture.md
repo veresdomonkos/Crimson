@@ -192,6 +192,8 @@ A scene is saved as a `.scene` asset: readable JSON with the entities nested the
 }
 ```
 
+A new scene is a copy of `engine/scenes/internal/SC_NewScene.scene`, which has a sun, with every entity given an id of its own.
+
 There are no prefabs, as any scene can be used inside another one as an instance. An instance is an entity with the other scene's roots as its children. Its own name, transform and active flag are saved with it, while what is under it comes from the other scene's file each time the scene opens, and can't be changed from here. There are no per-instance overrides yet (#20). A scene that would end up containing itself can't be dropped in, and one written that way by hand leaves that instance empty.
 
 Each component is a key of its entity, by its type's id, with its fields by their keys. A field the file doesn't have gets its default. The transform is a component like the others in a `SceneNode`, but a type can be part of the node (`PartOfNode`), which puts its fields among the node's own keys (`position`, `rotation`, `scale`). The ids of components can't be one of those keys, or `id`, `name`, `active`, `instance` or `children`. A component whose type isn't registered, such as one from a script that isn't loaded, is kept as it was: on the entity in `UnknownComponents`, and written back the same when the scene is saved. When a referenced asset moves, the references in the asset fields of the registered components are updated.
@@ -202,27 +204,36 @@ Hand-written references can be plain paths. Saving writes both the id and the pa
 
 `AssetManager` scans a project's `assets/` folder and dispatches files to its importers:
 
-| Importer | Produces |
-|:---------|:---------|
-| `TextureImporter` | `TextureHandle` |
-| `ShaderImporter` | `ShaderHandle` (`.hlsl`, compiled with glslang) |
-| `MaterialImporter` | `MaterialHandle` (`.mat`) |
-| `MeshImporter` | `Mesh` (vertex/index buffers + materials, e.g. `.obj`) |
-| `SceneImporter` | `.scene` files, read by the editor rather than loaded to the GPU |
+| Importer | Produces | Its file holds | New one |
+|:---------|:---------|:---------------|:--------|
+| `TextureImporter` | `TextureHandle` | an image, no data | no |
+| `ShaderImporter` | `ShaderHandle` (`.hlsl`, compiled with glslang) | source, no data | a simple lit shader |
+| `MaterialImporter` | `MaterialHandle` (`.mat`) | `MaterialData` | a material on `S_Lit` |
+| `MeshImporter` | `Mesh` (vertex/index buffers + materials, e.g. `.obj`) | geometry, no data | no |
+| `SceneImporter` | nothing, as a scene isn't loaded to the GPU | `SceneData` | a copy of the engine's template scene |
 
 Assets are addressed by a path relative to `assets/`, or by `AssetID`, and load on first use with `Load`. A load that fails is logged once and gives an invalid handle or null. A file's id lives in the `.meta` written next to it, so those belong in version control.
 
-Where the type is known, ids carry it: `TextureID`, `MeshID`, `ShaderID`, `MaterialID` and `SceneID` are `TypedAssetID<T>`, so a material's shader can't be given a texture, and ids of different types don't compare. Only the asset manager makes one, after checking the type, with `As<T>(id)` or `Find<T>(path)`. One turns back into a plain `AssetID` by itself, which is what the selection, drag and drop and the removed assets use. `Load(id)` gives what that type loads as, and `Load<T>(path)` is the shortcut for code that knows the path. A reference that is missing keeps the type it was read as, so it stays typed until its file is back. Each type keeps what it loaded in its own `AssetStore<T>` (`engine/src/asset_manager/asset_store.hpp`), with what only that type needs, such as a material's data or a shader's file times.
+Where the type is known, ids carry it: `TextureID`, `MeshID`, `ShaderID`, `MaterialID` and `SceneID` are `TypedAssetID<T>`, so a material's shader can't be given a texture, and ids of different types don't compare. Only the asset manager makes one, after checking the type, with `As<T>(id)` or `Find<T>(path)`. One turns back into a plain `AssetID` by itself, which is what the selection, drag and drop and the removed assets use. `Load(id)` gives what that type loads as, and `Load<T>(path)` is the shortcut for code that knows the path. A reference that is missing keeps the type it was read as, so it stays typed until its file is back. Each type keeps what it loaded in its own `AssetStore<T>` (`engine/src/asset_manager/asset_store.hpp`). Every asset has a slot there, and for every type the slot also keeps the data it is using (`Data`, for the types whose files hold data), the files it was made from with their times (`Files`, which is how a change on disk is noticed), and the assets it was made from (`Uses`).
 
-The asset manager can also change what it has while running:
-- `Refresh` looks at the folder again.
-- `CreateMaterial`, `CreateShader`, `Rename` and `Delete` change files.
-- `ApplyMaterial` shows new values on a material, and `ReimportTexture` applies new import settings.
-- `ReloadChangedShaders` recompiles shaders whose file, or a file they include, changed, and remakes their materials. A shader that no longer compiles keeps its last working version.
+`AssetManager` has no method of its own for a type. What a type's files say, and how it is made and updated, belongs to the type:
+- `AssetTraits<T>` says what loading gives (`Loaded`, `Result`) and what the file holds (`Data`). A type whose files hold data, such as `MaterialData` and `SceneData`, also names its `Parse` and `Write`. The others have `NoAssetData`.
+- Its importer, besides `Load` and `Unload`, can say how a new file of the type starts (`NewFile`), how the references in its file follow an asset that moved (`UpdateReferences`), whether a change to its file loads it again (`ReloadsWhenChanged`), how to make the asset from edited data (`Create`), how to show other data without making it again (`Update`), how to point it at an asset it uses that was loaded again or removed (`UpdateUse`), and how to free what it shares between its assets (`ReleaseShared`). Each has a default that does nothing, so a type only writes the ones it needs.
+
+The asset manager changes what it has while running with these, which work for any type that has what they need:
+- `Refresh` looks at the folder again, and `Rename` and `Delete` change files.
+- `Read` gives what a file says, `Save` writes data to it and `Create` makes a new file, from the data if given, or else the importer's `NewFile`. `ReadSource` gives a file's bytes, for what has no data.
+- `GetData` gives what an asset is using right now, which edits may have made different from its file, and `Apply` shows other data on it. A material's color changes in place, and only a different shader makes a new material. `Apply` says which it was: `AssetUpdate::Updated` or `Replaced`.
+- `Reimport` stores new import settings in the asset's `.meta`, and loads it again if it was loaded.
+- `ReloadChanged` loads the assets again whose file, or a file they include, changed, for the types that ask for it. That is the shaders, which also remake the materials using them. One that no longer loads keeps its last working version.
+
+A loaded asset knows what it was made from (`ImportContext::Uses`: a material's shader and textures). That is how a reload or a removal reaches the assets using it, without the manager naming a type: they are updated first, in place if their importer can, or else made again from their data, so unsaved edits survive. Only then is the old version freed, so nothing uses a handle that is gone. Removing a texture leaves its materials with the engine's empty texture in its place, and removing a shader unloads the materials using it.
+
+Every file the manager writes (assets, new files, updated references and `.meta` files) goes through a temporary file next to it that is then renamed over it, so a write that fails halfway leaves the old file. A `.saving` file left by a crash isn't picked up as an asset.
 
 A file moved along with its `.meta` keeps its id. Moving an asset while the engine runs also updates the `.mat` and `.scene` files that reference it, even if they only name its path. A reference with only a path breaks if the file moves while nothing is running. A reference to an asset that isn't there, because its file is gone or was deleted, keeps its id and path: it is saved as it was, shows as missing in the Inspector, and works again once the file is back. Opening a scene that has any warns about how many. Anything that changes GPU resources has to run between frames, which is why panels queue these in `EditorContext::Deferred`.
 
-A mesh's material slots fill themselves in: an empty slot uses `materials/<slot name>.mat` next to the mesh if that file exists, and the default material if not. For an `.obj`, the slot names are the material names in its `.mtl`. **Create Materials from .mtl**, on an `.obj` in the Assets panel (`AssetManager::CreateSlotMaterials`), writes those files from the `.mtl` for the slots that have none, and never replaces one. Each is a material on `S_Lit`:
+A mesh's material slots fill themselves in: an empty slot uses `materials/<slot name>.mat` next to the mesh if that file exists, and the default material if not. For an `.obj`, the slot names are the material names in its `.mtl`. **Create Materials from .mtl**, on an `.obj` in the Assets panel (`CreateSlotMaterials`, in `slot_materials.hpp`), writes those files from the `.mtl` for the slots that have none, and never replaces one. Each is a material on `S_Lit`:
 
 | `.mtl` | Material |
 |:-------|:---------|
@@ -243,7 +254,7 @@ The shadow passes and the selection outline's mask only need depth, so they draw
 
 ### Engine assets
 
-The engine's own shaders, materials and meshes live in `engine/resources/` and are bundled into the executable (`crimson_embed_resources`, in `cmake/`). They are always available under `engine/`, read-only and with the same ids in every project, so a project's material can use `"shader": "engine/shaders/S_Lit.hlsl"`. They are named with a prefix for their kind (`S_` shaders, `M_` materials, `SM_` meshes, `T_` textures). The ones only the renderer can use, for tone mapping, shadows and the selection outline, are under `internal/` and left out of the Inspector's pickers and the Assets panel. The Assets panel shows the rest only with **Show Engine Content**, under an Engine root apart from the project's folders, and a project can't have a folder of its own named `engine`. A renamed engine asset can get a line in `kRenamedEngineAssets` (`engine_renames.hpp`): what was saved with its old path or id still finds it, through any later renames too, and opening a project writes the new path into its `.mat` and `.scene` files.
+The engine's own shaders, materials, meshes and scenes live in `engine/resources/` and are bundled into the executable (`crimson_embed_resources`, in `cmake/`). They are always available under `engine/`, read-only and with the same ids in every project, so a project's material can use `"shader": "engine/shaders/S_Lit.hlsl"`. They are named with a prefix for their kind (`S_` shaders, `M_` materials, `SM_` meshes, `T_` textures, `SC_` scenes). Whatever is under an `internal/` folder, of any kind, is left out of the Inspector's pickers and the Assets panel: the shaders and materials only the renderer uses, for tone mapping, shadows and the selection outline, and the scene a new one is copied from. The Assets panel shows the rest only with **Show Engine Content**, under an Engine root apart from the project's folders, and a project can't have a folder of its own named `engine`. A renamed engine asset can get a line in `kRenamedEngineAssets` (`engine_renames.hpp`): what was saved with its old path or id still finds it, through any later renames too, and opening a project writes the new path into its `.mat` and `.scene` files.
 
 The built-in meshes are sized like Unity's: `engine/meshes/SM_Cube.obj` (1 m), `SM_Sphere.obj` (1 m across), `SM_Cylinder.obj` and `SM_Capsule.obj` (2 m tall, 1 m across), `SM_Plane.obj` (10 m, facing up) and `SM_Quad.obj` (1 m, facing +Z). `tools/generate_primitives.ps1` makes them, so a change goes there and the script is run again.
 

@@ -41,9 +41,9 @@ namespace crimson
         nlohmann::json Settings = nlohmann::json::object();
     };
 
-    // One of the engine's assets that only the renderer can use, like the tone mapping shader, which pickers leave out
+    // One of the engine's assets that only the renderer can use, like the tone mapping shader or the scene a new one is copied from, which pickers leave out
     [[nodiscard]] inline bool IsInternal(const AssetInfo& info)
     {
-        return info.ReadOnly && (info.Path.starts_with("engine/shaders/internal/") || info.Path.starts_with("engine/materials/internal/"));
+        return info.ReadOnly && info.Path.find("/internal/") != std::string::npos;
     }
 }

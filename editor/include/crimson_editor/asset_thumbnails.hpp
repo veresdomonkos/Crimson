@@ -6,12 +6,16 @@
 
 namespace crimson::editor
 {
+    // A separate copy of a texture for showing as it is stored, as UI that isn't sRGB encoded would show an sRGB
+    // texture too dark. The caller owns it, and destroys it with GpuResourceManager::DestroyTexture.
+    [[nodiscard]] TextureHandle CreateTexturePreview(GpuResourceManager& gpu, const AssetManager& assets, TextureID id);
+
     // The ImGui ids of texture assets, loaded the first time one is drawn. A texture's id stops
     // working when it is replaced or removed, so Release has to come first, between frames.
     class AssetThumbnails
     {
     public:
-        AssetThumbnails(AssetManager& assets, ImGuiBackend& imgui) : m_assets(assets), m_imgui(imgui) {}
+        AssetThumbnails(AssetManager& assets, GpuResourceManager& gpu, ImGuiBackend& imgui) : m_assets(assets), m_gpu(gpu), m_imgui(imgui) {}
         ~AssetThumbnails();
 
         AssetThumbnails(const AssetThumbnails&) = delete;
@@ -30,6 +34,7 @@ namespace crimson::editor
         void Destroy(const Thumbnail& thumbnail);
 
         AssetManager& m_assets;
+        GpuResourceManager& m_gpu;
         ImGuiBackend& m_imgui;
         std::unordered_map<AssetID, Thumbnail> m_thumbnails;
     };

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/scene/component_builder.hpp>
 #include <crimson/scene/component_registry.hpp>
 
@@ -417,7 +418,7 @@ TEST_CASE_METHOD(Fixture, "An asset fallback is saved as empty", "[components]")
 
     const auto& component = Thing.GetComponent<MeshRendererComponent>();
     REQUIRE(component.MaterialAssets.size() == 2);
-    CHECK(component.MaterialAssets[1] == Assets.DefaultMaterial());
+    CHECK(component.MaterialAssets[1] == DefaultMaterial(Assets));
 
     const SceneComponent captured = CaptureComponent(renderer, Thing, Assets);
     const auto& saved = std::get<std::vector<AssetID>>(captured.Values[materials]);
@@ -427,7 +428,7 @@ TEST_CASE_METHOD(Fixture, "An asset fallback is saved as empty", "[components]")
     CHECK_FALSE(saved[1]);
 
     // Only what is saved is changed
-    CHECK(component.MaterialAssets[1] == Assets.DefaultMaterial());
+    CHECK(component.MaterialAssets[1] == DefaultMaterial(Assets));
 }
 
 TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")

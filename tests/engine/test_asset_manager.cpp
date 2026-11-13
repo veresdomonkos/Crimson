@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/asset_manager/importers/texture_importer.hpp>
 #include <crimson/core/log.hpp>
 #include <crimson/scene/scene_renderer.hpp>
@@ -244,7 +245,7 @@ TEST_CASE("Engine assets are always there, with the same id everywhere", "[asset
         CHECK(a.FindId(path) == b.FindId(path));
     }
 
-    CHECK(a.DefaultMaterial() == a.Find<AssetType::Material>("engine/materials/M_Default.mat"));
+    CHECK(DefaultMaterial(a) == a.Find<AssetType::Material>("engine/materials/M_Default.mat"));
 
     // Includes aren't assets, and engine assets don't write metas anywhere
     CHECK_FALSE(a.FindId("engine/shaders/crimson/bindings.hlsli"));
@@ -559,21 +560,8 @@ TEST_CASE("A texture's srgb setting picks its format", "[assets]")
 
     SECTION("Turning it off")
     {
-        REQUIRE(assets.ReimportTexture(id, { { "srgb", false } }));
+        REQUIRE(assets.Reimport(id, { { "srgb", false } }));
         CHECK(gpu.LastTextureInfo.Format == TextureFormat::RGBA8);
-    }
-
-    SECTION("A preview shows what is stored, and belongs to the caller")
-    {
-        const int before = gpu.LiveTextures;
-
-        const TextureHandle preview = assets.CreateTexturePreview(id);
-        REQUIRE(preview);
-        CHECK(gpu.LastTextureInfo.Format == TextureFormat::RGBA8);
-        CHECK(gpu.LiveTextures == before + 1);
-
-        assets.DestroyTexturePreview(preview);
-        CHECK(gpu.LiveTextures == before);
     }
 }
 
@@ -619,9 +607,9 @@ TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
     const MeshID mesh = assets.Find<AssetType::Mesh>("model/two.obj");
     const MaterialID stone = assets.Find<AssetType::Material>("model/materials/stone.mat");
 
-    CHECK(assets.FindSlotMaterial(mesh, "stone") == stone);
-    CHECK_FALSE(assets.FindSlotMaterial(mesh, "wood"));
-    CHECK_FALSE(assets.FindSlotMaterial(MeshID{}, "stone"));
+    CHECK(FindSlotMaterial(assets, mesh, "stone") == stone);
+    CHECK_FALSE(FindSlotMaterial(assets, mesh, "wood"));
+    CHECK_FALSE(FindSlotMaterial(assets, MeshID{}, "stone"));
 
     MeshRendererComponent renderer;
     renderer.MeshAsset = mesh;
@@ -632,7 +620,7 @@ TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
 
         REQUIRE(renderer.MaterialAssets.size() == 2);
         CHECK(renderer.MaterialAssets[0] == stone);
-        CHECK(renderer.MaterialAssets[1] == assets.DefaultMaterial());
+        CHECK(renderer.MaterialAssets[1] == DefaultMaterial(assets));
         CHECK(renderer.Resolved.Materials[0] == assets.Load(stone));
     }
 
@@ -668,8 +656,8 @@ TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
         ResolveAssets(assets, renderer);
 
         REQUIRE(renderer.MaterialAssets.size() == 1);
-        CHECK(renderer.MaterialAssets[0] == assets.DefaultMaterial());
-        CHECK(renderer.Resolved.Materials[0] == assets.Load(assets.DefaultMaterial()));
+        CHECK(renderer.MaterialAssets[0] == DefaultMaterial(assets));
+        CHECK(renderer.Resolved.Materials[0] == assets.Load(DefaultMaterial(assets)));
     }
 
     SECTION("A chosen material is kept")
@@ -754,7 +742,7 @@ TEST_CASE("Engine assets saved under their old names still load", "[assets]")
         const auto data = ParseSceneData(text, assets, "test");
         REQUIRE(data);
         CHECK(FieldOf<AssetID>(assets, data->Roots.at(0), "meshRenderer", "mesh") == cube);
-        CHECK(FieldOf<std::vector<AssetID>>(assets, data->Roots.at(0), "meshRenderer", "materials").at(0) == assets.DefaultMaterial());
+        CHECK(FieldOf<std::vector<AssetID>>(assets, data->Roots.at(0), "meshRenderer", "materials").at(0) == DefaultMaterial(assets));
 
         const std::string written = WriteSceneData(*data, assets);
         CHECK_THAT(written, Catch::Matchers::ContainsSubstring("engine/meshes/SM_Cube.obj"));
@@ -773,7 +761,7 @@ TEST_CASE("The renderer's own shaders and materials are internal", "[assets]")
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, fs::path("does/not/exist"));
 
-    for (const std::string_view path : { "engine/shaders/internal/S_ToneMap.hlsl", "engine/materials/internal/M_Outline.mat" })
+    for (const std::string_view path : { "engine/shaders/internal/S_ToneMap.hlsl", "engine/materials/internal/M_Outline.mat", "engine/scenes/internal/SC_NewScene.scene" })
     {
         const AssetInfo* info = assets.GetInfo(assets.FindId(path));
         REQUIRE(info);

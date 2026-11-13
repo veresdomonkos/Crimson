@@ -7,6 +7,7 @@
 #include <set>
 #include <system_error>
 
+#include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/core/log.hpp>
 #include <crimson/project/project.hpp>
 
@@ -587,7 +588,7 @@ namespace crimson::editor::ui
                 {
                     m_context.Deferred.emplace_back([this, id = item.Id]
                     {
-                        if (m_context.Assets.CreateSlotMaterials(m_context.Assets.As<AssetType::Mesh>(id)).Created.empty())
+                        if (CreateSlotMaterials(m_context.Assets, m_context.Assets.As<AssetType::Mesh>(id)).Created.empty())
                             return;
 
                         ++m_context.AssetsVersion;
@@ -810,7 +811,7 @@ namespace crimson::editor::ui
             case Dialog::NewMaterial:
                 refreshAfter([this, path = JoinToCurrent(name + ".mat")]
                 {
-                    if (const AssetID id = m_context.Assets.CreateMaterial(path))
+                    if (const AssetID id = m_context.Assets.Create<AssetType::Material>(path))
                         m_context.SelectAsset(id);
                 });
                 break;
@@ -818,7 +819,7 @@ namespace crimson::editor::ui
             case Dialog::NewScene:
                 refreshAfter([this, path = JoinToCurrent(name + ".scene")]
                 {
-                    if (const AssetID id = m_context.Assets.CreateScene(path))
+                    if (const AssetID id = m_context.Assets.Create<AssetType::Scene>(path))
                         m_context.SelectAsset(id);
                 });
                 break;
@@ -826,7 +827,7 @@ namespace crimson::editor::ui
             case Dialog::NewShader:
                 refreshAfter([this, path = JoinToCurrent(name + ".hlsl")]
                 {
-                    if (const AssetID id = m_context.Assets.CreateShader(path))
+                    if (const AssetID id = m_context.Assets.Create<AssetType::Shader>(path))
                         m_context.SelectAsset(id);
                 });
                 break;

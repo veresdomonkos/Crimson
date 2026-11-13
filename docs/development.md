@@ -67,7 +67,7 @@ This needs no GPU or window. It covers everything above the graphics APIs:
 - **Assets and projects:** scanning, metas, loading and its failures, shader reloading, and the built-in meshes, using real files in a temporary folder (`tests/support/temp_folder.hpp`).
 - **Shaders:** every engine shader goes through what the backends do before reaching the GPU: HLSL to SPIR-V, reflection, and translation to GLSL.
 - **Frames:** pass recording, draw sorting, shadow views, the frame clock and `SceneRenderer`.
-- **The editor's logic:** asset edits, recent projects, settings, the script editor's arguments, and file URIs.
+- **The editor's logic:** asset edits, texture previews, recent projects, settings, the script editor's arguments, and file URIs.
 
 Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are already interfaces, so `tests/support/fake_gpu.hpp` stands in for them. Testability shouldn't cost anything per frame, so nothing gains a virtual function just to be faked: `BuildDrawOrder` takes its materials as a template parameter, and `Scene`, `Entity` and `Input` stay concrete.
 

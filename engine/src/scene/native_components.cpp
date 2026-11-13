@@ -2,6 +2,7 @@
 #include <string>
 
 #include "crimson/asset_manager/asset_manager.hpp"
+#include "crimson/asset_manager/slot_materials.hpp"
 #include "crimson/scene/component_builder.hpp"
 
 namespace crimson
@@ -9,7 +10,7 @@ namespace crimson
     namespace
     {
         // Loads the renderer's mesh and materials into Resolved and sizes MaterialAssets to the mesh's slots.
-        // Empty slots get the material made for them (AssetManager::FindSlotMaterial), or else the default one.
+        // Empty slots get the material made for them (FindSlotMaterial), or else the default one.
         void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets)
         {
             renderer.Resolved = {};
@@ -25,17 +26,17 @@ namespace crimson
             {
                 // The default counts as empty, as that's how it's saved, so a slot material made since is found
                 MaterialID& asset = renderer.MaterialAssets[slot];
-                if ((!asset || asset == assets.DefaultMaterial()) && slot < renderer.Resolved.MaterialSlots.size())
+                if ((!asset || asset == DefaultMaterial(assets)) && slot < renderer.Resolved.MaterialSlots.size())
                 {
-                    if (const MaterialID found = assets.FindSlotMaterial(renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]))
+                    if (const MaterialID found = FindSlotMaterial(assets, renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]))
                         asset = found;
                 }
 
                 if (!asset)
-                    asset = assets.DefaultMaterial();
+                    asset = DefaultMaterial(assets);
 
                 // A missing one stays in the slot, to be saved, and the default stands in for it
-                renderer.Resolved.Materials[slot] = assets.Load(assets.IsMissing(asset) ? assets.DefaultMaterial() : asset);
+                renderer.Resolved.Materials[slot] = assets.Load(assets.IsMissing(asset) ? DefaultMaterial(assets) : asset);
             }
         }
 
@@ -47,7 +48,7 @@ namespace crimson
         // The default is what an empty slot ends up with
         AssetID DefaultMaterialOf(const AssetManager& assets)
         {
-            return assets.DefaultMaterial();
+            return DefaultMaterial(assets);
         }
 
         // The engine's built-in meshes, in engine/resources/meshes
