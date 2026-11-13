@@ -609,6 +609,19 @@ TEST_CASE_METHOD(Fixture, "Saving leaves no temporary file", "[asset editing]")
     CHECK(assets.Read(id)->Properties.at("Color") == data.Properties.at("Color"));
 }
 
+TEST_CASE_METHOD(Fixture, "A mesh can't be reimported, as nothing would resolve its pointers again", "[asset editing]")
+{
+    Temp.Write("a.obj", kTriangleObj);
+    AssetManager assets(Gpu, Temp.Path());
+    const MeshID mesh = assets.Find<AssetType::Mesh>("a.obj");
+    REQUIRE(assets.Load(mesh));
+
+    const LogCounter errors(LogLevel::Error, "can't be reimported");
+    CHECK_FALSE(assets.Reimport(mesh, nlohmann::json::object()));
+    CHECK(errors.Count() == 1);
+    CHECK(assets.IsLoaded(mesh));
+}
+
 TEST_CASE_METHOD(Fixture, "Renaming moves the file and its meta", "[asset editing]")
 {
     Temp.Write("a.obj", kTriangleObj);

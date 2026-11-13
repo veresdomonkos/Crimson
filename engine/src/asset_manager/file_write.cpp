@@ -18,7 +18,11 @@ namespace crimson
             stream.close();
 
             if (!stream)
+            {
+                std::error_code removeError;
+                fs::remove(temporary, removeError);
                 return false;
+            }
         }
 
         std::error_code error;
