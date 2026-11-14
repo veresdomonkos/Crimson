@@ -10,6 +10,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/editor_settings.hpp
     include/crimson_editor/file_dialog.hpp
     include/crimson_editor/frame_stats.hpp
+    include/crimson_editor/platform.hpp
     include/crimson_editor/project_manager_mode.hpp
     include/crimson_editor/project_session_mode.hpp
     include/crimson_editor/recent_projects.hpp
@@ -92,9 +93,19 @@ target_link_libraries(EditorCore
         nfd
 )
 
-# Opening files in other programs and showing them in Explorer (system_shell.cpp)
+# What differs between the operating systems, one file for each (platform.hpp, system_shell.hpp)
 if(WIN32)
+    target_sources(EditorCore PRIVATE
+        src/platform/windows/windows_platform.cpp
+        src/platform/windows/windows_system_shell.cpp
+    )
+    # The command line, and opening files in other programs and showing them in Explorer
     target_link_libraries(EditorCore PRIVATE shell32 ole32)
+else()
+    target_sources(EditorCore PRIVATE
+        src/platform/posix/posix_platform.cpp
+        src/platform/posix/posix_system_shell.cpp
+    )
 endif()
 
 crimson_precompile_headers(EditorCore ${CRIMSON_PRECOMPILED_ENGINE_DEPS} <imgui.h>)

@@ -8,15 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
-#ifdef _WIN32
-    #ifndef WIN32_LEAN_AND_MEAN
-        #define WIN32_LEAN_AND_MEAN
-    #endif
-    #ifndef NOMINMAX
-        #define NOMINMAX
-    #endif
-    #include <windows.h>
-#endif
+#include "platform/files.hpp"
 
 namespace fs = std::filesystem;
 
@@ -88,12 +80,7 @@ namespace crimson
         if (error)
             return false;
 
-#ifdef _WIN32
-        // Also for a folder made before it was hidden
-        const DWORD attributes = GetFileAttributesW(folder.c_str());
-        if (attributes != INVALID_FILE_ATTRIBUTES && !(attributes & FILE_ATTRIBUTE_HIDDEN))
-            SetFileAttributesW(folder.c_str(), attributes | FILE_ATTRIBUTE_HIDDEN);
-#endif
+        platform::HideFolder(folder);
 
         return true;
     }

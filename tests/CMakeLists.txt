@@ -26,6 +26,7 @@ add_executable(CrimsonTests
     editor/test_component_fields.cpp
     editor/test_editor_theme.cpp
     editor/test_linear_color.cpp
+    editor/test_platform.cpp
     editor/test_recent_projects.cpp
     editor/test_script_editor.cpp
     editor/test_system_shell.cpp

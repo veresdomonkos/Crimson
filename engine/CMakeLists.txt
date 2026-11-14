@@ -97,6 +97,8 @@ set(ENGINE_SOURCES
 
     src/graphics/graphics_backend.cpp
 
+    src/platform/files.hpp
+
     src/platform/glfw/glfw_window.cpp
     src/platform/glfw/glfw_window.hpp
 
@@ -152,6 +154,15 @@ target_include_directories(Engine PUBLIC include PRIVATE src)
 
 if(MINGW)
     target_compile_options(Engine PRIVATE -Wa,-mbig-obj)
+endif()
+
+# windows.h without the min and max macros and the rarely used APIs, for every file that includes it, here and in
+# what uses the engine
+if(WIN32)
+    target_compile_definitions(Engine PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_sources(Engine PRIVATE src/platform/windows/windows_files.cpp)
+else()
+    target_sources(Engine PRIVATE src/platform/posix/posix_files.cpp)
 endif()
 
 crimson_embed_resources(Engine DIRECTORY resources NAMESPACE crimson FUNCTION GetEngineResources)

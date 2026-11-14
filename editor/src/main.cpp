@@ -1,30 +1,10 @@
 #include "crimson_editor/editor_application.hpp"
+#include "crimson_editor/platform.hpp"
 #include <crimson/core/profiler.hpp>
 #include <crimson/graphics/graphics_api.hpp>
 #include <filesystem>
 #include <iostream>
 #include <string_view>
-
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#define NOMINMAX
-#include <windows.h>
-#include <shellapi.h>
-#endif
-
-static std::filesystem::path ArgumentAsPath(int index, char* argv[])
-{
-#ifdef _WIN32
-    // argv isn't UTF-8 on Windows, so a path with non-ASCII characters has to come from the wide command line
-    int count = 0;
-    wchar_t** wideArguments = CommandLineToArgvW(GetCommandLineW(), &count);
-    std::filesystem::path path = wideArguments && index < count ? std::filesystem::path(wideArguments[index]) : std::filesystem::path();
-    LocalFree(wideArguments);
-    return path;
-#else
-    return argv[index];
-#endif
-}
 
 int main(int argc, char* argv[])
 {
@@ -39,7 +19,7 @@ int main(int argc, char* argv[])
 
         if ((arg == "-p" || arg == "--project") && i + 1 < argc)
         {
-            projectPath = ArgumentAsPath(++i, argv);
+            projectPath = crimson::editor::platform::CommandLineArgumentPath(++i, argv);
         }
         else if (arg == "-vk" || arg == "--vulkan")
         {
