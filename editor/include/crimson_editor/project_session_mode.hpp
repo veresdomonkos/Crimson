@@ -11,6 +11,7 @@
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/frame_stats.hpp"
 #include "crimson_editor/scene_camera_controller.hpp"
+#include "crimson_editor/scene_history.hpp"
 #include "crimson_editor/ui/editor_ui.hpp"
 #include "crimson_editor/ui/viewport_panel.hpp"
 
@@ -36,6 +37,11 @@ namespace crimson::editor
         // The material edits and the scene
         bool SaveAll();
 
+        // Go back to before the last edit, or forward again, after ending the one being recorded. Not while something
+        // is being edited, like a field being dragged.
+        void Undo();
+        void Redo();
+
         // What the unsaved changes dialog does
         void SaveAllAndClose();
         void DiscardAllAndClose();
@@ -60,6 +66,15 @@ namespace crimson::editor
         void OpenScene(SceneID id);
         void LoadScene(SceneID id);
 
+        // A field, the gizmo, the asset picker or anything else in the middle of being changed, which is one step once it is done
+        [[nodiscard]] bool IsEditing() const;
+
+        // Records what the Inspector, the gizmo and Render Settings may change, while nothing is
+        void RecordWatched();
+
+        // After a step was undone or redone
+        void FinishUndoRedo(bool applied);
+
         // --- Utils ---
         [[nodiscard]] GpuResourceManager& GpuResources() { return *m_services.Graphics.GPUResources; }
     private:
@@ -73,6 +88,8 @@ namespace crimson::editor
 
         PerspectiveCamera m_camera;
         Scene m_scene;
+        SceneEnvironment m_environment;
+        SceneHistory m_history;
         EditorContext m_context;
         std::unique_ptr<SceneRenderer> m_sceneRenderer;
 
@@ -84,7 +101,8 @@ namespace crimson::editor
 
         // What the open scene's file says, to tell if it has changed since
         SceneData m_savedScene;
-        SceneEnvironment m_environment;
+        bool m_wasEditing = false;
+        AssetID m_selectedBeforeEdit; // for the step an edit makes, to select it again if undoing brings it back
         float m_sinceSceneCheck = 0.0f;
         float m_sinceShaderCheck = 0.0f;
 

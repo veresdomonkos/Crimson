@@ -9,10 +9,21 @@
 
 namespace crimson::editor::ui
 {
+    // What the main menu's own items do, the panels add theirs
+    struct MainMenuActions
+    {
+        std::function<void()> SaveAll;
+        std::function<void()> CloseProject;
+        std::function<void()> Undo;
+        std::function<void()> Redo;
+        std::function<bool()> CanUndo;
+        std::function<bool()> CanRedo;
+    };
+
     class EditorUI
     {
     public:
-        EditorUI(std::function<void()> onSaveAll, std::function<void()> onCloseProject);
+        explicit EditorUI(MainMenuActions actions);
         ~EditorUI();
 
         template<typename T, typename... Args>
@@ -34,8 +45,7 @@ namespace crimson::editor::ui
         void BuildDefaultLayout(ImGuiID dockSpace, const ImVec2& size);
     private:
         std::vector<Panel*> m_panels;
-        std::function<void()> m_onSaveAll;
-        std::function<void()> m_onCloseProject;
+        MainMenuActions m_actions;
         bool m_resetLayout = false;
         Notifications m_notifications;
     };

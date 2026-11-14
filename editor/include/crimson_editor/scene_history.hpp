@@ -38,6 +38,7 @@ namespace crimson::editor
     {
         std::vector<EntityChange> Entities; // in the order they were recorded
         std::optional<std::pair<SceneEnvironment, SceneEnvironment>> Environment;
+        AssetID Selected; // the entity that was selected before the edit, for undo to select again
     };
 
     // Undo and redo for a scene, by the entities each edit changed, as Unity's Undo.RecordObject does it. Code that changes
@@ -66,11 +67,15 @@ namespace crimson::editor
         void RecordEnvironment();
 
         // Ends the step that was being recorded, which is kept if anything in it changed. Returns whether it was.
-        bool Commit();
+        // The selected entity is the one that was selected before the edit.
+        bool Commit(AssetID selected = {});
 
         // Put the scene back to before the last step, or after the next one. They don't commit what is being recorded.
         bool Undo();
         bool Redo();
+
+        // The entity that was selected before the step that Undo or Redo last did
+        [[nodiscard]] AssetID RestoredSelection() const { return m_restoredSelection; }
 
         [[nodiscard]] bool CanUndo() const { return m_done > 0; }
         [[nodiscard]] bool CanRedo() const { return m_done < m_steps.size(); }
@@ -98,6 +103,7 @@ namespace crimson::editor
         std::optional<SceneEnvironment> m_environmentBefore;
 
         std::deque<SceneStep> m_steps;
+        AssetID m_restoredSelection;
         size_t m_done = 0; // the steps before this are done, the rest can be redone
     };
 }

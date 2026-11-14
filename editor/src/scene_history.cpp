@@ -91,9 +91,10 @@ namespace crimson::editor
             m_environmentBefore = m_environment;
     }
 
-    bool SceneHistory::Commit()
+    bool SceneHistory::Commit(AssetID selected)
     {
         SceneStep step;
+        step.Selected = selected;
 
         for (const Pending& pending : m_pending)
         {
@@ -161,6 +162,7 @@ namespace crimson::editor
             return false;
 
         const SceneStep& step = m_steps[--m_done];
+        m_restoredSelection = step.Selected;
 
         for (const EntityChange& change : std::views::reverse(step.Entities))
             Apply(change.Id, change.Before);
@@ -180,6 +182,7 @@ namespace crimson::editor
             return false;
 
         const SceneStep& step = m_steps[m_done++];
+        m_restoredSelection = step.Selected;
 
         for (const EntityChange& change : step.Entities)
             Apply(change.Id, change.After);
@@ -198,6 +201,7 @@ namespace crimson::editor
         m_pending.clear();
         m_environmentBefore.reset();
         m_steps.clear();
+        m_restoredSelection = {};
         m_done = 0;
     }
 }
