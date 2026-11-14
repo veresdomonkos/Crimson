@@ -115,6 +115,7 @@ jobs:
             cmake:p
             ninja:p
             ccache:p
+            lld:p
 
       - name: Show errors on the run's page
         shell: pwsh
@@ -206,7 +207,7 @@ jobs:
           apt="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Dir::Cache::Archives=$HOME/apt-archives -o APT::Keep-Downloaded-Packages=true"
           $apt update
           $apt install -y --no-install-recommends \
-            cmake ninja-build ccache patchelf pkg-config file \
+            cmake ninja-build ccache lld patchelf pkg-config file \
             libvulkan-dev libgl-dev libgl1-mesa-dri xvfb xauth \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev \
             libgtk-3-dev librsvg2-dev
@@ -341,7 +342,7 @@ jobs:
           apt="sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Dir::Cache::Archives=$HOME/apt-archives -o APT::Keep-Downloaded-Packages=true"
           $apt update
           $apt install -y --no-install-recommends \
-            cmake ninja-build ccache \
+            cmake ninja-build ccache lld \
             libvulkan-dev vulkan-validationlayers mesa-vulkan-drivers \
             libgl-dev libgl1-mesa-dri xvfb xauth \
             libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxkbcommon-dev \

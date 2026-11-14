@@ -28,6 +28,17 @@ if (PROJECT_IS_TOP_LEVEL AND CRIMSON_USE_CCACHE AND NOT CMAKE_C_COMPILER_LAUNCHE
     endif()
 endif()
 
+# Links with lld when the compiler can use it, which is several times faster than GNU ld on the large Debug builds
+option(CRIMSON_USE_LLD "Link with lld when it is installed" ON)
+if (PROJECT_IS_TOP_LEVEL AND CRIMSON_USE_LLD)
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX -fuse-ld=lld CRIMSON_HAS_LLD)
+    if (CRIMSON_HAS_LLD)
+        add_link_options(-fuse-ld=lld)
+        message(STATUS "Linker: lld")
+    endif()
+endif()
+
 # GLFW
 add_subdirectory(external/glfw)
 
