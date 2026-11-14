@@ -5,7 +5,7 @@
 
 #include <imgui.h>
 
-#include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/asset_field.hpp"
 #include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
 
@@ -14,7 +14,7 @@ namespace crimson::editor::ui
     namespace
     {
         // One row per entry, as a list of assets is usually short and each entry has a meaning of its own, like a slot
-        bool DrawAssetList(const FieldInfo& field, const void* component, std::vector<AssetID>& ids, const AssetManager& assets)
+        bool DrawAssetList(const FieldInfo& field, const void* component, std::vector<AssetID>& ids, EditorContext& context)
         {
             bool changed = false;
 
@@ -24,7 +24,7 @@ namespace crimson::editor::ui
 
                 ImGui::PushID(static_cast<int>(index));
                 props::BeginRow(label.c_str());
-                changed |= DrawAssetCombo("##Asset", assets, field.Asset, ids[index]);
+                changed |= AssetField("##Asset", context, field.Asset, ids[index]);
                 props::ResetTarget();
 
                 if (props::EndRow(true) && ids[index])
@@ -56,39 +56,7 @@ namespace crimson::editor::ui
         return edited;
     }
 
-    bool DrawAssetCombo(const char* id, const AssetManager& assets, AssetType type, AssetID& current)
-    {
-        bool changed = false;
-
-        if (BeginAssetCombo(id, assets, current))
-        {
-            for (const AssetInfo* info : assets.List(type))
-            {
-                if (IsInternal(*info))
-                    continue;
-
-                const bool selected = info->Id == current;
-
-                if (ImGui::Selectable(info->Path.c_str(), selected))
-                {
-                    changed = !selected;
-                    current = info->Id;
-                }
-            }
-
-            ImGui::EndCombo();
-        }
-
-        if (const AssetID dropped = AcceptAssetOnLastItem(assets, type); dropped && dropped != current)
-        {
-            current = dropped;
-            changed = true;
-        }
-
-        return changed;
-    }
-
-    bool DrawField(const FieldInfo& field, const void* component, FieldValue& value, const AssetManager& assets)
+    bool DrawField(const FieldInfo& field, const void* component, FieldValue& value, EditorContext& context)
     {
         const char* label = field.Label.c_str();
         const float min = field.Range ? field.Range->first : 0.0f;
@@ -140,7 +108,7 @@ namespace crimson::editor::ui
                 AssetID& id = std::get<AssetID>(value);
 
                 props::BeginRow(label);
-                bool changed = DrawAssetCombo("##Asset", assets, field.Asset, id);
+                bool changed = AssetField("##Asset", context, field.Asset, id);
                 props::ResetTarget();
 
                 const AssetID reset = std::get<AssetID>(field.Default);
@@ -153,13 +121,13 @@ namespace crimson::editor::ui
                 return changed;
             }
             case FieldType::AssetList:
-                return DrawAssetList(field, component, std::get<std::vector<AssetID>>(value), assets);
+                return DrawAssetList(field, component, std::get<std::vector<AssetID>>(value), context);
         }
 
         return false;
     }
 
-    bool DrawComponentFields(const ComponentType& type, void* component, const AssetManager& assets)
+    bool DrawComponentFields(const ComponentType& type, void* component, EditorContext& context)
     {
         bool changed = false;
 
@@ -169,7 +137,7 @@ namespace crimson::editor::ui
                 continue;
 
             FieldValue value = field.Get(component);
-            if (!DrawField(field, component, value, assets))
+            if (!DrawField(field, component, value, context))
                 continue;
 
             field.Set(component, value);

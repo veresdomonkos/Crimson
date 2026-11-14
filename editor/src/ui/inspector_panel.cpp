@@ -107,7 +107,7 @@ namespace crimson::editor::ui
             if (props::BeginTable(type.Id.c_str()))
             {
                 // Between frames, as resolving its assets may load them
-                if (DrawComponentFields(type, component, m_context.Assets) && type.ResolveAssets)
+                if (DrawComponentFields(type, component, m_context) && type.ResolveAssets)
                 {
                     m_context.Deferred.emplace_back([this, &type, entity]
                     {

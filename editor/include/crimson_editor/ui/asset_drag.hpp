@@ -22,8 +22,9 @@ namespace crimson::editor::ui
         }
     }
 
-    // Makes the last item accept dropped assets of a type. Returns the asset on the frame it is dropped.
-    inline AssetID AcceptAssetOnLastItem(const AssetManager& assets, AssetType type)
+    // Makes the last item accept dropped assets of a type. Returns the asset on the frame it is dropped. A caller that
+    // draws the highlight itself passes ImGuiDragDropFlags_AcceptNoDrawDefaultRect.
+    inline AssetID AcceptAssetOnLastItem(const AssetManager& assets, AssetType type, ImGuiDragDropFlags flags = 0)
     {
         AssetID dropped;
 
@@ -34,7 +35,7 @@ namespace crimson::editor::ui
                 const AssetID id = *static_cast<const AssetID*>(payload->Data);
                 const AssetInfo* info = assets.GetInfo(id);
 
-                if (info && info->Type == type && ImGui::AcceptDragDropPayload(kAssetPayload))
+                if (info && info->Type == type && ImGui::AcceptDragDropPayload(kAssetPayload, flags))
                     dropped = id;
             }
 
@@ -54,26 +55,6 @@ namespace crimson::editor::ui
             return "Missing: " + (missing->Path.empty() ? id.ToString() : missing->Path);
 
         return id ? "Missing" : "None";
-    }
-
-    // A combo for picking an asset, in the warning color while the one it has is missing. EndCombo if it returns true.
-    inline bool BeginAssetCombo(const char* label, const AssetManager& assets, AssetID current)
-    {
-        const bool missing = assets.IsMissing(current);
-        if (missing)
-            ImGui::PushStyleColor(ImGuiCol_Text, theme::Warning);
-
-        const bool open = ImGui::BeginCombo(label, AssetLabel(assets, current).c_str());
-
-        if (missing)
-        {
-            ImGui::PopStyleColor();
-
-            if (ImGui::IsItemHovered())
-                ImGui::SetTooltip("The file isn't there. The reference is kept, and works again once it is back.");
-        }
-
-        return open;
     }
 
     // The same, for when the type is known when compiling

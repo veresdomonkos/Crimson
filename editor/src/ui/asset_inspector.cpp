@@ -15,7 +15,7 @@
 
 #include <crimson/asset_manager/importers/texture_importer.hpp>
 
-#include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/asset_field.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
 
@@ -45,6 +45,23 @@ namespace crimson::editor::ui
             return std::to_string(bytes / 1024) + " KB";
 
         return std::to_string(bytes / (1024 * 1024)) + " MB";
+    }
+
+    bool PruneToShader(MaterialData& data, const ShaderInterface& shader)
+    {
+        const std::size_t before = data.Properties.size() + data.Textures.size();
+
+        std::erase_if(data.Properties, [&](const auto& item) { return !shader.Properties.contains(item.first); });
+        std::erase_if(data.Textures, [&](const auto& item) { return !shader.Textures.contains(item.first); });
+
+        return data.Properties.size() + data.Textures.size() != before;
+    }
+
+    // Prunes for the material's shader, if it loads
+    static bool PruneToShader(AssetManager& assets, MaterialData& data)
+    {
+        const ShaderHandle handle = assets.Load(data.Shader);
+        return handle && PruneToShader(data, assets.GetShaderInterface(handle));
     }
 
     void AssetInspector::Draw(AssetID id)
@@ -160,39 +177,27 @@ namespace crimson::editor::ui
         if (!props::BeginTable("##MaterialSettings"))
             return;
 
-        const AssetManager& assets = m_context.Assets;
-
         props::BeginRow("Shader");
-        if (BeginAssetCombo("##Shader", assets, data.Shader))
+
+        ShaderID picked = data.Shader;
+        const ImGuiID owner = ImGui::GetID("##Shader");
+
+        if (AssetField<AssetType::Shader>("##Shader", m_context, picked))
         {
-            for (const AssetInfo* shader : assets.List(AssetType::Shader))
-            {
-                if (IsInternal(*shader))
-                    continue;
-
-                if (ImGui::Selectable(shader->Path.c_str(), shader->Id == data.Shader) && shader->Id != data.Shader)
-                {
-                    data.Shader = assets.As<AssetType::Shader>(shader->Id);
-                    changed = true;
-
-                    // What the new shader doesn't have would stay in the file forever
-                    if (const ShaderHandle handle = m_context.Assets.Load(data.Shader))
-                    {
-                        const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(handle);
-                        std::erase_if(data.Properties, [&](const auto& item) { return !shaderInterface.Properties.contains(item.first); });
-                        std::erase_if(data.Textures, [&](const auto& item) { return !shaderInterface.Textures.contains(item.first); });
-                    }
-                }
-            }
-
-            ImGui::EndCombo();
-        }
-
-        if (const ShaderID dropped = AcceptAssetOnLastItem<AssetType::Shader>(assets); dropped && dropped != data.Shader)
-        {
-            data.Shader = dropped;
+            data.Shader = picked;
             changed = true;
+
+            // A drop has no picker to wait for
+            if (!m_context.Picker.IsOpenFor(owner))
+                PruneToShader(m_context.Assets, data);
         }
+
+        // The picker closed, by Enter or a click outside, or by Escape and the old shader is back
+        const bool picking = m_context.Picker.IsOpenFor(owner);
+        if (m_pickingShader && !picking && PruneToShader(m_context.Assets, data))
+            changed = true;
+
+        m_pickingShader = picking;
 
         props::EndRow(false);
 
@@ -294,7 +299,6 @@ namespace crimson::editor::ui
             return;
 
         const AssetManager& assets = m_context.Assets;
-        const float previewSize = ImGui::GetFrameHeight();
 
         for (const auto& [name, texture] : SortedByName(shader.Textures))
         {
@@ -302,36 +306,11 @@ namespace crimson::editor::ui
 
             const auto used = data.Textures.find(name);
             const TextureID current = used != data.Textures.end() ? used->second : TextureID{};
-
-            // Not for a missing one, as the empty thumbnail would be kept after the file is back
-            if (const ImTextureID preview = current && !assets.IsMissing(current) ? m_context.Thumbnails.Get(current) : ImTextureID{ 0 })
-                ImGui::Image(preview, ImVec2(previewSize, previewSize));
-            else
-                ImGui::Dummy(ImVec2(previewSize, previewSize));
-
-            props::ResetTarget();
-            ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
-            ImGui::SetNextItemWidth(-FLT_MIN);
-
             const AssetInfo* currentInfo = assets.GetInfo(current);
             TextureID picked = current;
 
-            if (BeginAssetCombo("##Texture", assets, current))
-            {
-                if (ImGui::Selectable("None", !current))
-                    picked = {};
-
-                for (const AssetInfo* candidate : assets.List(AssetType::Texture))
-                {
-                    if (ImGui::Selectable(candidate->Path.c_str(), candidate->Id == current))
-                        picked = assets.As<AssetType::Texture>(candidate->Id);
-                }
-
-                ImGui::EndCombo();
-            }
-
-            if (const TextureID dropped = AcceptAssetOnLastItem<AssetType::Texture>(assets))
-                picked = dropped;
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            AssetField<AssetType::Texture>("##Texture", m_context, picked);
 
             props::ResetTarget();
 

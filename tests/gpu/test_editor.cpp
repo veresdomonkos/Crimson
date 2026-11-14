@@ -265,6 +265,65 @@ TEST_CASE_METHOD(AssetFixture, "Selecting an entity and an asset replace each ot
     CHECK_FALSE(Context().SelectedAsset);
 }
 
+// What it picks is checked by the picker's unit tests, as nothing here can click in it
+TEST_CASE_METHOD(AssetFixture, "The asset picker opens, draws both views and closes when the selection changes", "[editor]")
+{
+    using crimson::editor::ui::AssetPicker;
+
+    // The first root is the floor, which has a mesh and a material to draw fields for
+    Context().SelectEntity(Context().ActiveScene.GetEntity(Context().ActiveScene.GetRoots()[0]));
+    RunFrames(App);
+
+    AssetPicker& picker = Context().Picker;
+    picker.Open(1, AssetType::Texture, {}, {});
+    RunFrames(App);
+    CHECK(picker.IsOpen());
+
+    // The grid loads the texture's thumbnail
+    picker.SetView(AssetPicker::View::Grid);
+    RunFrames(App);
+    CHECK(picker.IsOpen());
+
+    picker.Open(1, AssetType::Material, {}, {});
+    RunFrames(App);
+    CHECK(picker.IsOpen());
+
+    const MaterialID floor = Assets().Find<AssetType::Material>("materials/floor.mat");
+    Context().SelectAsset(floor);
+    RunFrames(App);
+    CHECK_FALSE(picker.IsOpen());
+
+    // The material's shader and texture fields
+    RunFrames(App);
+    CHECK(Context().SelectedAsset == floor);
+}
+
+TEST_CASE_METHOD(AssetFixture, "A pinged asset is shown in the Assets panel", "[editor]")
+{
+    const AssetID selected = Assets().Find<AssetType::Material>("materials/floor.mat");
+    Context().SelectAsset(selected);
+
+    Context().PingedAsset = Assets().FindId("textures/picture.bmp");
+    REQUIRE(Context().PingedAsset);
+    RunFrames(App);
+
+    CHECK_FALSE(Context().PingedAsset);
+    CHECK(Context().SelectedAsset == selected);
+
+    // An engine asset is only in the panel while the engine's content is shown, so pinging one turns that on
+    EditorSettings& settings = App.Services().Settings;
+    settings.SetShowEngineContent(false);
+
+    Context().PingedAsset = Assets().FindId("engine/materials/M_Default.mat");
+    RunFrames(App);
+
+    CHECK(settings.GetShowEngineContent());
+    CHECK(Context().SelectedAsset == selected);
+
+    // The settings are shared by the tests that come after
+    settings.SetShowEngineContent(false);
+}
+
 // The Inspector draws components from their registered fields, so a field it can't draw would assert here
 TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[editor]")
 {

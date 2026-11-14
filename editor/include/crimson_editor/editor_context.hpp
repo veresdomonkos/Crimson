@@ -10,6 +10,7 @@
 
 #include "crimson_editor/asset_edits.hpp"
 #include "crimson_editor/asset_thumbnails.hpp"
+#include "crimson_editor/ui/asset_picker.hpp"
 
 namespace crimson::editor
 {
@@ -38,6 +39,12 @@ namespace crimson::editor
         Entity Selected;
         AssetID SelectedAsset;
 
+        // The one picker that can be open: fields open it and take what it chose the next frame
+        ui::AssetPicker Picker;
+
+        // Set by a field to show the asset in the Assets panel, which clears it
+        AssetID PingedAsset;
+
         // Panels draw in the middle of a frame, when GPU resources can't change. These run right after it.
         std::vector<std::function<void()>> Deferred;
 
@@ -48,12 +55,16 @@ namespace crimson::editor
         {
             Selected = entity;
             SelectedAsset = {};
+
+            // Fields of one kind share their ImGui ids from one selection to the next, so a choice must not reach the next
+            Picker.Reset();
         }
 
         void SelectAsset(AssetID asset)
         {
             Selected = {};
             SelectedAsset = asset;
+            Picker.Reset();
         }
     };
 }

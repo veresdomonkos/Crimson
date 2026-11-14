@@ -21,6 +21,8 @@ add_executable(CrimsonTests
         editor/test_asset_edits.cpp
         editor/test_asset_thumbnails.cpp
         editor/test_asset_browser.cpp
+        editor/test_asset_picker.cpp
+        editor/test_asset_inspector_prune.cpp
         editor/test_component_fields.cpp
         editor/test_system_shell.cpp
         editor/test_script_editor.cpp

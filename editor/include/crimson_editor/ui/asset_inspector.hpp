@@ -9,6 +9,9 @@
 
 namespace crimson::editor::ui
 {
+    // Drops the properties and textures a shader doesn't have, as they would stay in the file forever. Returns true if any went.
+    bool PruneToShader(MaterialData& data, const ShaderInterface& shader);
+
     // The Inspector's view of the selected asset
     class AssetInspector
     {
@@ -30,6 +33,10 @@ namespace crimson::editor::ui
         void ShowTexture(const AssetInfo& info);
     private:
         EditorContext& m_context;
+
+        // While the shader's picker is open the material only takes the shader, so Escape can put the old one back with
+        // everything it had. What the shader picked last lacks is dropped once the picker closes.
+        bool m_pickingShader = false;
 
         // What the selected texture's controls show, until Apply stores them
         AssetID m_shownTexture;
