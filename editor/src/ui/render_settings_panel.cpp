@@ -15,7 +15,7 @@ namespace crimson::editor::ui
         if (const ImGuiWindow* stats = ImGui::FindWindowByName("Stats"); stats && stats->DockId != 0)
             ImGui::SetNextWindowDockID(stats->DockId, ImGuiCond_FirstUseEver);
 
-        ImGui::SetNextWindowSize(ImVec2(260.0f, 0.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 15.0f, 0.0f), ImGuiCond_FirstUseEver);
         ImGui::Begin("Render Settings");
 
         constexpr std::array kToneMapperNames = { "ACES", "None" };

@@ -23,8 +23,11 @@ namespace crimson::editor::ui
         // The id is the label alone, so the section stays open or closed if its icon changes
         bool open = false;
         {
+            // Header is the selection color, and a framed node would take it as its background
+            ImGui::PushStyleColor(ImGuiCol_Header, theme::FrameBackground);
             const theme::ScopedBold bold;
-            open = ImGui::TreeNodeEx(label, flags, "%s  %s", icon, label);
+            open = theme::IconTreeNode(label, flags, icon, theme::TextMuted, label);
+            ImGui::PopStyleColor();
         }
 
         if (removable && ImGui::BeginPopupContextItem())

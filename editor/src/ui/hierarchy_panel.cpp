@@ -215,9 +215,8 @@ namespace crimson::editor::ui
 
         ImGui::PushID(static_cast<int>(entt::to_integral(handle)));
         const bool renaming = handle == m_renaming;
-        const bool open = renaming
-            ? ImGui::TreeNodeEx("##Entity", flags, "%s", EntityIcon(entity, m_context.Assets.Components()))
-            : ImGui::TreeNodeEx("##Entity", flags, isInstance ? "%s  %s [scene]" : "%s  %s", EntityIcon(entity, m_context.Assets.Components()), name.Name.c_str());
+        const std::string label = renaming ? std::string() : isInstance ? name.Name + " [scene]" : name.Name;
+        const bool open = theme::IconTreeNode("##Entity", flags, EntityIcon(entity, m_context.Assets.Components()), theme::TextMuted, label.c_str());
 
         if (dimmed)
             ImGui::PopStyleColor();
@@ -291,7 +290,9 @@ namespace crimson::editor::ui
     // Enter or clicking away keeps the new name, Escape keeps the old one
     void HierarchyPanel::DrawRenameField(Entity entity)
     {
-        ImGui::SameLine();
+        // The icon is drawn over the node and takes no room, so the field starts after it
+        const char* icon = EntityIcon(entity, m_context.Assets.Components());
+        ImGui::SameLine(0.0f, ImGui::CalcTextSize(icon).x + ImGui::GetStyle().ItemInnerSpacing.x * 2.0f);
         ImGui::SetNextItemWidth(-FLT_MIN);
 
         if (m_focusRename)

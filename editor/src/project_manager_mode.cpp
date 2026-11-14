@@ -67,17 +67,20 @@ namespace crimson::editor
 
     void ProjectManagerMode::DrawHeader()
     {
-        constexpr float kLogoSize = 36.0f;
+        const float logoSize = ui::theme::Scaled(ui::theme::SpaceXL + ui::theme::SpaceM);
 
         if (const ImTextureID logo = m_services.Icons.Get(kLogoIcon))
         {
-            ImGui::Image(logo, ImVec2(kLogoSize, kLogoSize));
+            ImGui::Image(logo, ImVec2(logoSize, logoSize));
             ImGui::SameLine();
         }
 
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (kLogoSize - ImGui::GetTextLineHeight()) * 0.5f);
-        ImGui::TextUnformatted("Crimson Projects");
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4.0f);
+        {
+            const ui::theme::ScopedFont heading(ui::theme::BoldFont(), ui::theme::FontHeading);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (logoSize - ImGui::GetTextLineHeight()) * 0.5f);
+            ImGui::TextUnformatted("Crimson Projects");
+        }
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ui::theme::Scaled(ui::theme::SpaceXS));
         ImGui::Separator();
     }
 
@@ -94,7 +97,7 @@ namespace crimson::editor
         ImGui::BeginDisabled(!hasSelection);
 
         ImGui::SameLine();
-        if (ImGui::Button("Open"))
+        if (ui::theme::PrimaryButton("Open"))
             OpenSelected();
 
         ImGui::SameLine();
@@ -260,7 +263,7 @@ namespace crimson::editor
 
         ImGui::Spacing();
         ImGui::BeginDisabled(!m_newProblem.empty());
-        const bool create = ImGui::Button("Create and Open");
+        const bool create = ui::theme::PrimaryButton("Create and Open");
         ImGui::EndDisabled();
 
         ImGui::SameLine();

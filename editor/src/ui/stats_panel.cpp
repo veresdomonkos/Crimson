@@ -6,7 +6,7 @@ namespace crimson::editor::ui
 {
     void StatsPanel::OnImGui()
     {
-        ImGui::SetNextWindowSize(ImVec2(260.0f, 0.0f), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 15.0f, 0.0f), ImGuiCond_FirstUseEver);
         ImGui::Begin("Stats");
 
 #ifdef NDEBUG

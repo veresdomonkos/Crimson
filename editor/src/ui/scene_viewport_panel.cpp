@@ -189,26 +189,20 @@ namespace crimson::editor::ui
 
     void SceneViewportPanel::DrawToolbar(const ImVec2& position)
     {
-        constexpr float kMargin = 8.0f;
+        const float margin = theme::Scaled(theme::SpaceS);
 
-        ImGui::SetCursorScreenPos(ImVec2(position.x + kMargin, position.y + kMargin));
+        ImGui::SetCursorScreenPos(ImVec2(position.x + margin, position.y + margin));
 
         const auto operationButton = [this](const char* icon, const char* name, const char* shortcut, ImGuizmo::OPERATION operation)
         {
             const bool active = m_operation == operation;
 
-            if (active)
-                ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
-
             ImGui::PushID(name);
-            if (ImGui::Button(icon))
+            if (theme::ToggleButton(icon, active))
                 m_operation = operation;
             ImGui::PopID();
 
             ImGui::SetItemTooltip("%s (%s)", name, shortcut);
-
-            if (active)
-                ImGui::PopStyleColor();
 
             ImGui::SameLine();
         };
