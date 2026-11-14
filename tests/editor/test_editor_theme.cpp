@@ -126,7 +126,8 @@ TEST_CASE("Every corner has the one radius and every border is 1 px", "[editor][
         for (const float rounding : roundings(style))
             CHECK(rounding == theme::Radius);
 
-        CHECK(style.DragDropTargetRounding < 0.0f);
+        // A highlight takes the shape of what it is on, and the rounded targets draw their own
+        CHECK(style.DragDropTargetRounding == 0.0f);
         CHECK(style.WindowBorderSize == theme::BorderSize);
         CHECK(style.ChildBorderSize == theme::BorderSize);
         CHECK(style.PopupBorderSize == theme::BorderSize);

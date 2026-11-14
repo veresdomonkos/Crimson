@@ -22,7 +22,7 @@ namespace crimson::editor::ui
     private:
         void DrawHeader(const AssetInfo& info);
         void DrawMaterial(const AssetInfo& info);
-        void DrawMaterialSettings(MaterialData& data, bool& changed);
+        void DrawMaterialSettings(MaterialID id, MaterialData& data, bool& changed);
         void DrawMaterialProperties(const ShaderInterface& shader, MaterialData& data, bool& changed);
         void DrawMaterialTextures(const ShaderInterface& shader, MaterialData& data, bool& changed);
         void DrawTexture(const AssetInfo& info);
@@ -36,7 +36,7 @@ namespace crimson::editor::ui
 
         // While the shader's picker is open the material only takes the shader, so Escape can put the old one back with
         // everything it had. What the shader picked last lacks is dropped once the picker closes.
-        bool m_pickingShader = false;
+        MaterialID m_pickingShaderFor; // the material whose shader picker was open
 
         // What the selected texture's controls show, until Apply stores them
         AssetID m_shownTexture;

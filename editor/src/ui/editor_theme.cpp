@@ -176,7 +176,7 @@ namespace crimson::editor::ui
         style.GrabRounding           = theme::Radius;
         style.ScrollbarRounding      = theme::Radius;
         style.TabRounding            = theme::Radius;
-        style.DragDropTargetRounding = -1.0f;
+        style.DragDropTargetRounding = 0.0f; // a highlight takes the shape of what it is on, so rounded targets draw their own
 
         style.WindowPadding     = ImVec2(theme::SpaceS, theme::SpaceS);
         style.FramePadding      = ImVec2(theme::SpaceS, theme::SpaceXS);

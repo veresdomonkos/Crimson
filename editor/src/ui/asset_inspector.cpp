@@ -133,7 +133,7 @@ namespace crimson::editor::ui
 
         ImGui::BeginDisabled(info.ReadOnly);
 
-        DrawMaterialSettings(data, changed);
+        DrawMaterialSettings(id, data, changed);
 
         const ShaderHandle shader = m_context.Assets.Load(data.Shader);
 
@@ -172,8 +172,21 @@ namespace crimson::editor::ui
         ImGui::EndDisabled();
     }
 
-    void AssetInspector::DrawMaterialSettings(MaterialData& data, bool& changed)
+    void AssetInspector::DrawMaterialSettings(MaterialID id, MaterialData& data, bool& changed)
     {
+        // Another material is drawn, so the picker was left by selecting it and the first one is still unpruned
+        if (m_pickingShaderFor && m_pickingShaderFor != id)
+        {
+            if (const MaterialData* left = m_context.Edits.GetMaterial(m_pickingShaderFor))
+            {
+                MaterialData pruned = *left;
+                if (PruneToShader(m_context.Assets, pruned))
+                    m_context.Edits.SetMaterial(m_pickingShaderFor, pruned);
+            }
+
+            m_pickingShaderFor = {};
+        }
+
         if (!props::BeginTable("##MaterialSettings"))
             return;
 
@@ -194,10 +207,10 @@ namespace crimson::editor::ui
 
         // The picker closed, by Enter or a click outside, or by Escape and the old shader is back
         const bool picking = m_context.Picker.IsOpenFor(owner);
-        if (m_pickingShader && !picking && PruneToShader(m_context.Assets, data))
+        if (m_pickingShaderFor == id && !picking && PruneToShader(m_context.Assets, data))
             changed = true;
 
-        m_pickingShader = picking;
+        m_pickingShaderFor = picking ? id : MaterialID{};
 
         props::EndRow(false);
 

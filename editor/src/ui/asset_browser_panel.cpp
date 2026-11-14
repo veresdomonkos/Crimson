@@ -401,8 +401,13 @@ namespace crimson::editor::ui
         {
             for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture, AssetType::Scene })
             {
-                if (const AssetID dropped = AcceptAssetOnLastItem(m_context.Assets, type))
+                const ImVec2 min = ImGui::GetItemRectMin();
+                const ImVec2 max = ImGui::GetItemRectMax();
+
+                if (const AssetID dropped = AcceptAssetOnLastItem(m_context.Assets, type, ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
                     MoveAssetToFolder(dropped, folder);
+
+                DrawAssetDropHighlight(m_context.Assets, type, min, max, theme::Scaled(theme::Radius));
             }
 
             DrawFolderMenu(folder);

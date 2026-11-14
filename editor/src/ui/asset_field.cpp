@@ -111,16 +111,7 @@ namespace crimson::editor::ui
         drawList->AddText(ImVec2(min.x + height, min.y + style.FramePadding.y), ImGui::GetColorU32(textColor), text.c_str());
         drawList->PopClipRect();
 
-        // ImGui's own highlight is square, so the one for an asset of the type is drawn here with the frame's corners
-        if (const ImGuiPayload* payload = ImGui::GetDragDropPayload(); payload && payload->IsDataType(kAssetPayload) && ImGui::IsMouseHoveringRect(min, max))
-        {
-            const AssetInfo* dragged = assets.GetInfo(*static_cast<const AssetID*>(payload->Data));
-            if (dragged && dragged->Type == type)
-            {
-                drawList->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_DragDropTargetBg), style.FrameRounding);
-                drawList->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_DragDropTarget), style.FrameRounding, 0, style.DragDropTargetBorderSize);
-            }
-        }
+        DrawAssetDropHighlight(assets, type, min, max, style.FrameRounding);
 
         bool changed = false;
 
