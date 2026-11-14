@@ -55,7 +55,7 @@ It needs a C++23 compiler, CMake 3.22+, the [Vulkan SDK](https://vulkan.lunarg.c
 
 1. **Open a project.** Start the editor and open `samples/Demo`, or make a new project, which is a folder with an `assets/` folder in it. `--project <folder>` opens one straight away, and `--vulkan` or `--opengl` picks the backend.
 2. **Add something to the scene.** Right-click in the Hierarchy, or use the **Create** menu, for an empty entity, a light, or a built-in mesh under **Create 3D Object**. Meshes can also be dragged from the Assets panel into the Scene view.
-3. **Give it a material.** Right-click in the Assets panel for **New Material**, pick it in the Inspector's Mesh Renderer, or drop it on the mesh in the Scene view.
+3. **Give it a material.** Right-click in the Assets panel for **New Material**, pick it with the picker next to the Mesh Renderer's material, or drop it on the mesh in the Scene view.
 4. **Write a shader.** **New Shader** in the Assets panel starts a lit one. Double-click it to open it in the code editor set in **Edit > Preferences**, and it reloads every time it's saved. [docs/shaders.md](docs/shaders.md) has what a shader can use.
 5. **Save.** **File > Save All** or `Ctrl+S` saves the scene and the materials. Closing with unsaved changes asks first.
 
@@ -63,7 +63,7 @@ It needs a C++23 compiler, CMake 3.22+, the [Vulkan SDK](https://vulkan.lunarg.c
 |:------|:--------------|
 | **Scene** | the scene, with a gizmo on the selection |
 | **Hierarchy** | the scene's entities. Drag to reparent, `F2` or double-click to rename, `Delete` to delete, and search at the top. |
-| **Inspector** | the selected entity or asset. Right-click any field to reset it. |
+| **Inspector** | the selected entity or asset. Right-click any field to reset it. Pick assets with the button next to a field, or drop them on it. |
 | **Assets** | the project's files. Drag them into the scene or the Inspector, and right-click for more. **Show Engine Content** adds the engine's built-in ones under an Engine root of their own, named with a prefix for their kind: `S_Lit.hlsl`, `M_Default.mat`, `SM_Cube.obj`. |
 | **Console** | everything the engine logs |
 | **Render Settings** | exposure, tone mapping and ambient light, saved with the scene |

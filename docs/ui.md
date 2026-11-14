@@ -50,6 +50,7 @@ Inter stays, in Regular and Bold, at its 18 pt optical size, the smallest that i
 - `Scaled` for a spacing, radius or margin token that goes outside the style, such as a draw list's rounding.
 - `ScopedFont` for one scope in another font or type size, `ScopedBold` for bold at the current size.
 - `WithAlpha` for a status color as a tint.
+- `AssetField` for any reference to an asset, never a combo. Its picker marks the engine's assets with a `TextMuted` name and an `Engine` label, and the field has the accent border while its picker is open.
 
 ## Next
 
