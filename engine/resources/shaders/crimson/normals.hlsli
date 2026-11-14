@@ -5,7 +5,7 @@
 #include "crimson/transforms.hlsli"
 
 // The full unit tangent space normal from its X and Y, which are -1..1. Z is always positive, as a tangent space normal points out of the surface.
-// Normalize may be unnecessary?
+// Normalized, as filtered X and Y can be longer than 1.
 float3 ReconstructNormalZ(float2 xy)
 {
     return normalize(float3(xy, sqrt(saturate(1.0 - dot(xy, xy)))));
@@ -43,15 +43,19 @@ float3 UnpackNormalXYZ(float4 texel)
 
 // Scales how far a tangent space normal tilts: 0 is flat, 1 unchanged, above 1 exaggerated.
 // Use this instead of multiplying by a scalar which would not change the direction.
-// Normalize may be unnecessary?
+// Normalized, as scaling X and Y changes the length.
 float3 ApplyNormalStrength(float3 normal, float strength)
 {
-    return normalize(float3(normal.xy * strength, lerp(1.0, normal.z, saturate(strength))));
+    return normalize(float3(normal.xy * strength, normal.z));
 }
 
 // Tilts a world space normal by a tangent space one, along the mesh's tangent.
 float3 ApplyNormalMap(float3 normal, float4 tangent, float3 tangentNormal)
 {
+    // A mesh without UVs has w = 0 and nothing to go by
+    if (abs(tangent.w) < 0.5)
+        return normal;
+
     // Green points up in the image, and V goes down it, as the first row of an image is at V = 0
     const float3 flipped = float3(tangentNormal.x, -tangentNormal.y, tangentNormal.z);
     return normalize(TangentToWorldDirection(flipped, TangentFrame(normal, tangent)));
