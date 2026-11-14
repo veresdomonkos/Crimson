@@ -6,6 +6,7 @@
 #include <imgui_internal.h>
 
 #include "crimson_editor/ui/linear_color.hpp"
+#include "crimson_editor/ui/property_fields.hpp"
 
 namespace crimson::editor::ui
 {
@@ -20,7 +21,14 @@ namespace crimson::editor::ui
 
         constexpr std::array kToneMapperNames = { "ACES", "None" };
 
-        bool changed = ImGui::SliderFloat("Exposure", &m_environment.Exposure, 0.05f, 16.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+        // The label sits after the widgets, as it does for the other fields of this panel
+        const float labelWidth = ImGui::CalcTextSize("Exposure").x + ImGui::GetStyle().ItemInnerSpacing.x;
+        ImGui::SetNextItemWidth(ImGui::CalcItemWidth() - labelWidth);
+        ImGui::PushID("Exposure");
+        bool changed = props::SliderField(m_environment.Exposure, 0.05f, 16.0f, "%.2f", ImGuiSliderFlags_Logarithmic);
+        ImGui::PopID();
+        ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x);
+        ImGui::TextUnformatted("Exposure");
 
         int toneMapper = static_cast<int>(m_environment.Mapper);
         if (ImGui::Combo("Tone Mapper", &toneMapper, kToneMapperNames.data(), static_cast<int>(kToneMapperNames.size())))

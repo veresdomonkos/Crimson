@@ -19,6 +19,7 @@ The editor's colors, sizes and fonts are named in [`editor_theme.hpp`](../editor
 - **Spacing comes from the scale**: `SpaceXS`, `SpaceS`, `SpaceM`, `SpaceL`, `SpaceXL`. Widths that depend on the text, such as a field that fits 12 characters, are in ems: `ImGui::GetFontSize() * 12.0f`. They are not spacing, so they have no token.
 - **Three type sizes and two weights**: `FontBody`, `FontSmall` and `FontHeading`, in Regular and Bold.
 - **One icon size** (`IconSize`, the body size). An icon is muted unless it carries meaning: a status, a kind of asset or an axis.
+- **Sliders always have a number field next to them** (`props::Slider`, or `props::SliderField` outside a props table), so a value can be typed as well as dragged.
 - **Surfaces** go back to front as `AppBackground` (the dock space, tab bars and menu bar), `PanelBackground`, `FrameBackground` (fields, buttons and component headers) and `PopupBackground` (popups, menus and notifications).
 
 ## Tokens
