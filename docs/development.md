@@ -8,12 +8,13 @@
 - A GPU and driver with Vulkan 1.3 (dynamic rendering, synchronization2) and/or OpenGL 4.5
 - [Git LFS](https://git-lfs.com/), for the fonts, the icons, the meshes and the sample project
 - Optionally [ccache](https://ccache.dev/) 4.8+, which makes rebuilding files that were built before almost free. CMake uses it when it is on the PATH. It is `pacman -S mingw-w64-ucrt-x86_64-ccache` in MSYS2 and `apt install ccache` on Ubuntu.
+- Optionally [lld](https://lld.llvm.org/), which links the large Debug builds many times faster than GNU ld. CMake uses it when the compiler can. It is `pacman -S mingw-w64-ucrt-x86_64-lld` in MSYS2 and `apt install lld` on Ubuntu.
 
 ### Windows
 
 The editor is developed with MinGW. **Use the one from [MSYS2](https://www.msys2.org/)'s UCRT64 environment** (`pacman -S mingw-w64-ucrt-x86_64-gcc`).
 
-The MinGW that CLion 2026.2 bundles can't link the editor. Its static `libwinpthread` is built for UCRT while the rest of it uses MSVCRT, so linking fails with an undefined reference to `__intrinsic_setjmpex`. In CLion, add a MinGW toolchain at `C:\msys64\ucrt64`, keep the bundled CMake and Ninja, and use it for the CMake profiles.
+The MinGW that CLion 2026.2 bundles can't link the editor. Its static `libwinpthread` is built for UCRT while the rest of it uses MSVCRT, so linking fails with an undefined reference to `__intrinsic_setjmpex`. In CLion, add a MinGW toolchain at the `ucrt64` folder of MSYS2, keep the bundled CMake and Ninja, and use it for the CMake profiles.
 
 ## Building
 
@@ -25,6 +26,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --target Editor
 ```
 
+- **Debug info:** the libraries in `external/` only get line tables, so call stacks through them still have files and lines, but their variables can't be inspected. Our own code gets full debug info.
 - **Static linking:** the editor links everything statically, including the shader compiler, so it needs no DLLs of its own. It only uses the system's graphics driver, and the executable can run from anywhere.
 - **Measuring performance:** use **Release** (or RelWithDebInfo). Debug builds, especially with validation layers enabled, are many times slower and give misleading numbers. The Stats panel says when it is a Debug build.
 - **Choosing a backend:** `--vulkan` or `--opengl` on the command line picks the backend, and `--project <folder>` opens a project straight away.
@@ -34,6 +36,7 @@ cmake --build build --target Editor
 | `-DCRIMSON_BUILD_TESTS=OFF` | leaves the tests out |
 | `-DCRIMSON_ENABLE_PROFILER=OFF` | compiles the Tracy instrumentation out |
 | `-DCRIMSON_USE_CCACHE=OFF` | builds without ccache, even when it is installed |
+| `-DCRIMSON_USE_LLD=OFF` | links with the compiler's default linker, even when lld is installed |
 | `CRIMSON_VSYNC=1` | limits the editor to the display's refresh rate. It renders as fast as it can otherwise. |
 | `CRIMSON_VK_SYNC_VALIDATION=1` | adds synchronization validation to the Vulkan validation layers, which Debug builds turn on when they are installed |
 
@@ -114,7 +117,7 @@ git push origin v0.1.0
 
 Crimson is instrumented with [Tracy](https://github.com/wolfpld/tracy): CPU zones, per-pass GPU zones on both backends, and a `Draw Calls` plot. To profile, run the editor and connect the [Tracy v0.14.1 viewer](https://github.com/wolfpld/tracy/releases/tag/v0.14.1) to `127.0.0.1`. The viewer version must match the `external/tracy` submodule.
 
-Data is only collected while a viewer is connected, and the client only listens on localhost. Add zones with the macros in `crimson/core/profiler.hpp`.
+Data is only collected while a viewer is connected, and the client only listens on localhost. Add zones with the macros in `crimson/core/profiler.hpp`. The profiler runs while a `ProfilerSession` from the same header lives, which the editor and the GPU tests make at the start of `main`. A new program that runs profiled code needs one too.
 
 ## Screenshots
 

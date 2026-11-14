@@ -28,28 +28,52 @@ if (PROJECT_IS_TOP_LEVEL AND CRIMSON_USE_CCACHE AND NOT CMAKE_C_COMPILER_LAUNCHE
     endif()
 endif()
 
+# Links with lld when the compiler can use it, which is several times faster than GNU ld on the large Debug builds
+option(CRIMSON_USE_LLD "Link with lld when it is installed" ON)
+if (PROJECT_IS_TOP_LEVEL AND CRIMSON_USE_LLD)
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX -fuse-ld=lld CRIMSON_HAS_LLD)
+    if (CRIMSON_HAS_LLD)
+        add_link_options(-fuse-ld=lld)
+        message(STATUS "Linker: lld")
+    endif()
+endif()
+
+# Adds a library from external/ with only line tables as debug info. Nobody steps through them, and full debug info
+# makes their archives and every executable they link into hundreds of megabytes bigger.
+function(crimson_add_external dir)
+    if (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        foreach (lang C CXX)
+            foreach (config DEBUG RELWITHDEBINFO)
+                set(CMAKE_${lang}_FLAGS_${config} "${CMAKE_${lang}_FLAGS_${config}} -g1")
+            endforeach()
+        endforeach()
+    endif()
+    add_subdirectory(${dir} ${ARGN})
+endfunction()
+
 # GLFW
-add_subdirectory(external/glfw)
+crimson_add_external(external/glfw)
 
 # imgui
-add_subdirectory(external/imgui)
+crimson_add_external(external/imgui)
 
 # glad
-add_subdirectory(external/glad)
+crimson_add_external(external/glad)
 
 #glm
 set(GLM_BUILD_LIBRARY OFF CACHE INTERNAL "")
 set(GLM_BUILD_TESTS OFF CACHE INTERNAL "")
-add_subdirectory(external/glm)
+crimson_add_external(external/glm)
 
 #fmt
-add_subdirectory(external/fmt)
+crimson_add_external(external/fmt)
 
 set(CMAKE_POLICY_VERSION_MINIMUM "3.5")
 
 set(SPIRV_REFLECT_STATIC_LIB ON CACHE BOOL "Build static library" FORCE)
 set(SPIRV_REFLECT_EXECUTABLE OFF CACHE BOOL "" FORCE)
-add_subdirectory(external/spirv-reflect)
+crimson_add_external(external/spirv-reflect)
 
 #spirv-cross
 set(SPIRV_CROSS_CLI OFF CACHE BOOL "" FORCE)
@@ -62,7 +86,7 @@ set(SPIRV_CROSS_ENABLE_CPP OFF CACHE BOOL "" FORCE)
 set(SPIRV_CROSS_ENABLE_REFLECT OFF CACHE BOOL "" FORCE)
 set(SPIRV_CROSS_ENABLE_C_API OFF CACHE BOOL "" FORCE)
 set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "" FORCE)
-add_subdirectory(external/SPIRV-Cross)
+crimson_add_external(external/SPIRV-Cross)
 
 #glslang, the HLSL compiler built into the engine
 set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
@@ -72,7 +96,7 @@ set(ENABLE_PCH OFF CACHE BOOL "" FORCE)
 set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
 set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)
 set(GLSLANG_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
-add_subdirectory(external/glslang)
+crimson_add_external(external/glslang)
 
 #imguizmo, without the rest of its project's widgets
 add_library(imguizmo STATIC external/ImGuizmo/src/ImGuizmo.cpp)
@@ -80,15 +104,15 @@ target_include_directories(imguizmo PUBLIC external/ImGuizmo/src)
 target_link_libraries(imguizmo PUBLIC imgui)
 
 #entt
-add_subdirectory(external/entt)
+crimson_add_external(external/entt)
 
 #json
-add_subdirectory(external/json)
+crimson_add_external(external/json)
 
 #stb-image
-add_subdirectory(external/stb_image)
+crimson_add_external(external/stb_image)
 
-add_subdirectory(external/tinyobjloader)
+crimson_add_external(external/tinyobjloader)
 
 #mikktspace, the tangents normal maps are baked against
 add_library(mikktspace STATIC external/MikkTSpace/mikktspace.c)
@@ -99,13 +123,18 @@ option(CRIMSON_ENABLE_PROFILER "Enable Tracy profiling instrumentation" ON)
 set(TRACY_ENABLE ${CRIMSON_ENABLE_PROFILER} CACHE BOOL "" FORCE)
 set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 set(TRACY_ONLY_LOCALHOST ON CACHE BOOL "" FORCE)
-add_subdirectory(external/tracy)
+# The profiler starts in main, through crimson::ProfilerSession, instead of during static initialization. Its threads
+# would otherwise run before the C runtime sets up the stack protector, and MinGW's thread library, which has it,
+# aborts when they return.
+set(TRACY_MANUAL_LIFETIME ON CACHE BOOL "" FORCE)
+crimson_add_external(external/tracy)
+target_compile_definitions(TracyClient PUBLIC TRACY_DELAYED_INIT)
 
 #vulkan memory allocator
-add_subdirectory(external/VulkanMemoryAllocator)
+crimson_add_external(external/VulkanMemoryAllocator)
 
 #native file dialogs
-add_subdirectory(external/nativefiledialog-extended)
+crimson_add_external(external/nativefiledialog-extended)
 
 include(cmake/EmbedResources.cmake)
 include(cmake/LinkStatically.cmake)
@@ -116,6 +145,6 @@ add_subdirectory(editor)
 option(CRIMSON_BUILD_TESTS "Build the tests" ON)
 if(CRIMSON_BUILD_TESTS)
     enable_testing()
-    add_subdirectory(external/Catch2)
+    crimson_add_external(external/Catch2)
     add_subdirectory(tests)
 endif()

@@ -7,6 +7,8 @@
 #include <iostream>
 #include <string>
 
+#include <crimson/core/profiler.hpp>
+
 #include "gpu/gpu_test.hpp"
 #include "support/temp_folder.hpp"
 
@@ -24,6 +26,8 @@ static void RedirectUserConfig(const std::filesystem::path& folder)
 
 int main(int argc, char* argv[])
 {
+    const ProfilerSession profiler;
+
     Catch::Session session;
 
     std::string backend = "gl";
