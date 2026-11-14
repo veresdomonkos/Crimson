@@ -117,7 +117,7 @@ git push origin v0.1.0
 
 Crimson is instrumented with [Tracy](https://github.com/wolfpld/tracy): CPU zones, per-pass GPU zones on both backends, and a `Draw Calls` plot. To profile, run the editor and connect the [Tracy v0.14.1 viewer](https://github.com/wolfpld/tracy/releases/tag/v0.14.1) to `127.0.0.1`. The viewer version must match the `external/tracy` submodule.
 
-Data is only collected while a viewer is connected, and the client only listens on localhost. Add zones with the macros in `crimson/core/profiler.hpp`.
+Data is only collected while a viewer is connected, and the client only listens on localhost. Add zones with the macros in `crimson/core/profiler.hpp`. The profiler runs while a `ProfilerSession` from the same header lives, which the editor and the GPU tests make at the start of `main`. A new program that runs profiled code needs one too.
 
 ## Screenshots
 

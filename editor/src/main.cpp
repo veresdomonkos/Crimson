@@ -1,4 +1,5 @@
 #include "crimson_editor/editor_application.hpp"
+#include <crimson/core/profiler.hpp>
 #include <crimson/graphics/graphics_api.hpp>
 #include <filesystem>
 #include <iostream>
@@ -27,6 +28,8 @@ static std::filesystem::path ArgumentAsPath(int index, char* argv[])
 
 int main(int argc, char* argv[])
 {
+    const crimson::ProfilerSession profiler;
+
     crimson::GraphicsApi apiType = crimson::GraphicsApi::OpenGL;
     std::filesystem::path projectPath;
 

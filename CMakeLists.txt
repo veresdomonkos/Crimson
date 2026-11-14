@@ -123,7 +123,12 @@ option(CRIMSON_ENABLE_PROFILER "Enable Tracy profiling instrumentation" ON)
 set(TRACY_ENABLE ${CRIMSON_ENABLE_PROFILER} CACHE BOOL "" FORCE)
 set(TRACY_ON_DEMAND ON CACHE BOOL "" FORCE)
 set(TRACY_ONLY_LOCALHOST ON CACHE BOOL "" FORCE)
+# The profiler starts in main, through crimson::ProfilerSession, instead of during static initialization. Its threads
+# would otherwise run before the C runtime sets up the stack protector, and MinGW's thread library, which has it,
+# aborts when they return.
+set(TRACY_MANUAL_LIFETIME ON CACHE BOOL "" FORCE)
 crimson_add_external(external/tracy)
+target_compile_definitions(TracyClient PUBLIC TRACY_DELAYED_INIT)
 
 #vulkan memory allocator
 crimson_add_external(external/VulkanMemoryAllocator)
