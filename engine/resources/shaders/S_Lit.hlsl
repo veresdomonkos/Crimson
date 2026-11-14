@@ -1,23 +1,26 @@
 // The default lit shader: metallic-roughness PBR, with the same material slots as glTF.
 // Colors are linear. Turn sRGB off on the textures in every slot but ColorMap and EmissiveMap.
+#include "crimson/normals.hlsli"
 #include "crimson/lighting.hlsli"
 
 cbuffer MaterialBlock : register(b0, space1)
 {
-    float4 Color; // @default 1 1 1 1
-    float Metallic; // @default 0 @range 0 1
-    float Roughness; // @default 0.5 @range 0 1
-    float NormalStrength; // @default 1 @range 0 2
+    float4 Color;            // @default 1 1 1 1
+    float Metallic;          // @default 0 @range 0 1
+    float Roughness;         // @default 0.5 @range 0 1
+    float NormalStrength;    // @default 1 @range 0 2
     float OcclusionStrength; // @default 1 @range 0 1
-    float3 EmissiveColor; // @default 0 0 0
-    float EmissiveStrength; // @default 1
-    float AlphaCutoff; // @default 0.5 @range 0 1
+    float3 EmissiveColor;    // @default 0 0 0
+    float EmissiveStrength;  // @default 1
+    // A float2 has to sit on an 8-byte boundary for OpenGL, so Tiling goes before the lone float after it
+    float2 Tiling;           // @default 1 1 @range 0.01 100
+    float AlphaCutoff;       // @default 0.5 @range 0 1
 };
 
 Texture2D ColorMap : register(t0, space1);
-Texture2D NormalMap : register(t1, space1); // @default normal
-Texture2D MetallicRoughnessMap : register(t2, space1); // green is roughness, blue is metallic
-Texture2D OcclusionMap : register(t3, space1); // red
+Texture2D NormalMap : register(t1, space1);            // @default normal
+Texture2D MetallicRoughnessMap : register(t2, space1); // G: roughness, B: metallic
+Texture2D OcclusionMap : register(t3, space1);         // R: ao
 Texture2D EmissiveMap : register(t4, space1);
 
 struct VertexInput
@@ -45,26 +48,9 @@ VertexOutput VSMain(VertexInput input)
     output.ClipPosition = WorldToClip(worldPosition);
     output.Normal = ObjectToWorldNormal(input.Normal);
     output.WorldPosition = worldPosition;
-    output.UV = input.UV;
-    output.Tangent = float4(ObjectToWorldDirection(input.Tangent.xyz), input.Tangent.w);
+    output.UV = input.UV * Tiling;
+    output.Tangent = ObjectToWorldTangent(input.Tangent);
     return output;
-}
-
-// The tangent is the mesh's, along +U, with w the side the bitangent is on. A mesh without UVs has w = 0 and nothing to go by.
-float3 ApplyNormalMap(float3 normal, float4 tangent, float2 uv)
-{
-    if (abs(tangent.w) < 0.5)
-        return normal;
-
-    float3 mapped = NormalMap.Sample(LinearWrap, uv).xyz * 2.0 - 1.0;
-    mapped.xy *= NormalStrength;
-
-    // Interpolation leaves it a little off the normal
-    const float3 t = normalize(tangent.xyz - normal * dot(normal, tangent.xyz));
-    const float3 b = cross(normal, t) * (tangent.w < 0.0 ? -1.0 : 1.0);
-
-    // Green points up in the image, and V goes down it, as the first row of an image is at V = 0
-    return normalize(t * mapped.x - b * mapped.y + normal * mapped.z);
 }
 
 float4 PSMain(VertexOutput input) : SV_Target
@@ -75,10 +61,11 @@ float4 PSMain(VertexOutput input) : SV_Target
     const float3 emissive = EmissiveColor * EmissiveStrength * EmissiveMap.Sample(LinearWrap, input.UV).rgb;
 
     const float3 geometricNormal = normalize(input.Normal);
+    const float3 tangentNormal = ApplyNormalStrength(UnpackNormalXYZ(NormalMap.Sample(LinearWrap, input.UV)), NormalStrength);
 
     Surface surface;
     surface.WorldPosition = input.WorldPosition;
-    surface.Normal = ApplyNormalMap(geometricNormal, input.Tangent, input.UV);
+    surface.Normal = ApplyNormalMap(geometricNormal, input.Tangent, tangentNormal);
     surface.GeometricNormal = geometricNormal;
     surface.Albedo = base.rgb;
     surface.Metallic = Metallic * metallicRoughness.b;
@@ -87,8 +74,8 @@ float4 PSMain(VertexOutput input) : SV_Target
 
     const float3 color = ComputeLighting(surface) + emissive;
 
-    // Last, as a discarded pixel stops at once, and the normal map's derivatives need the pixels around it. Only a
-    // cutout material is given a cutoff above 0, which nothing is under.
+    // Last, as a discarded pixel stops at once, and the normal map's derivatives need the pixels around it.
+    // Only a cutout material is given a cutoff above 0, which nothing is under.
     clip(base.a - AlphaCutoff);
 
     return float4(color, base.a);

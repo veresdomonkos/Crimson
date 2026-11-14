@@ -34,7 +34,7 @@ namespace crimson::editor::ui::props
     bool Int(const char* label, int& value, float speed, int min = 0, int max = 0, const int* reset = nullptr);
     bool String(const char* label, std::string& value, const std::string* reset = nullptr); // up to 255 bytes
     bool Slider(const char* label, float& value, float min, float max, const float* reset = nullptr, ImGuiSliderFlags flags = 0);
-    bool Floats(const char* label, float* values, int count, float speed, const float* reset = nullptr);
+    bool Floats(const char* label, float* values, int count, float speed, float min = 0.0f, float max = 0.0f, const float* reset = nullptr);
     bool Vec3(const char* label, glm::vec3& value, float speed, const glm::vec3* reset = nullptr);
     bool Color(const char* label, float* linearColor, int channels, const float* reset = nullptr);
     bool Checkbox(const char* label, bool& value, const bool* reset = nullptr);

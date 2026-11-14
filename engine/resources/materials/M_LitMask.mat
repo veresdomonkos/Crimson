@@ -1,0 +1,6 @@
+{
+  "shader": "engine/shaders/S_LitMask.hlsl",
+  "properties": {
+    "Color": [1.0, 1.0, 1.0, 1.0]
+  }
+}

@@ -59,7 +59,7 @@ The comment after a declaration says what materials start with:
 | Annotation | On | Does |
 |:-----------|:---|:-----|
 | `@default 1 0.5 0` | a property | the value a material has until it sets its own. Without one, a property starts at zero. |
-| `@range 0 1` | a single number | a slider in the Inspector, between those values |
+| `@range 0 1` | a number or a vector | a slider in the Inspector, between those values. On a vector, each component is kept between them. |
 | `@default normal` | a texture | an empty slot samples a flat normal. Without it, an empty slot samples white. |
 
 A material property that's back at its `@default` isn't written to the `.mat` file, and **Reset to default** in the Inspector puts it there.
@@ -71,13 +71,20 @@ Includes resolve relative to the shader's folder, then to the engine's shaders.
 | Header | Has |
 |:-------|:----|
 | `crimson/bindings.hlsli` | the standard resources above, and `GetObjectData()` for the current draw |
-| `crimson/math.hlsli` | `PI`, `TAU`, `HALF_PI`, `INV_PI`, `E` and `EPSILON` |
-| `crimson/transforms.hlsli` | `ObjectToWorldPosition`, `ObjectToWorldDirection`, `ObjectToWorldNormal`, `WorldToObjectPosition`, `WorldToObjectDirection`, `WorldToClip`, `ObjectToClip` and `ObjectWorldPosition()` |
-| `crimson/lighting.hlsli` | `Surface` and `ComputeLighting(Surface)`, the scene's lights and shadows for a point on a surface. Includes the three above. |
+| `crimson/math.hlsli` | `PI`, `TAU`, `HALF_PI`, `INV_PI`, `E`, `EPSILON`, `INV_SQRT3`, `FLT_MIN` and `FLT_MAX` |
+| `crimson/transforms.hlsli` | `ObjectToWorldPosition`, `ObjectToWorldDirection`, `ObjectToWorldNormal`, `ObjectToWorldTangent`, `WorldToObjectPosition`, `WorldToObjectDirection`, `WorldToObjectNormal`, `WorldToClip`, `ObjectToClip`, `ObjectWorldPosition()`, `GetViewDirection`, and `TangentFrame` with `WorldToTangentDirection` and `TangentToWorldDirection` |
+| `crimson/normals.hlsli` | unpacking normal maps (`UnpackNormalXYZ`, `UnpackNormalXY`, `ReconstructNormalZ`), `ApplyNormalStrength`, `ApplyNormalMap` and two ways to blend normals, `BlendNormalsDefault` and `BlendNormalsReoriented` |
+| `crimson/projections.hlsli` | texturing without UVs: `SamplePlanar`, and biplanar and triplanar projection in the world or the object (`SampleTriplanarObject`, `SampleBiplanarWorld`, `SampleTriplanarNormalObject` and so on) |
+| `crimson/parallax.hlsli` | `ParallaxOcclusion`, which finds the UV where the view ray meets a height map |
+| `crimson/lighting.hlsli` | `Surface` and `ComputeLighting(Surface)`, the scene's lights and shadows for a point on a surface. Includes `bindings`, `math` and `transforms`. |
 
-## The default lit shader
+## Built-in shaders and materials
 
-`engine/shaders/S_Lit.hlsl` is the default lit shader: metallic-roughness PBR with a Cook-Torrance GGX specular and a Lambert diffuse, with the same material slots as glTF.
+The engine ships shaders in `engine/shaders/` and materials that use them in `engine/materials/`. They show under the **Engine** root once **Show Engine Content** is on. Every material works as Opaque, Cutout or Transparent, with any cull mode.
+
+### S_Lit
+
+`engine/shaders/S_Lit.hlsl` is the default lit shader, used by `M_Default`: metallic-roughness PBR with a Cook-Torrance GGX specular and a Lambert diffuse, with the same material slots as glTF.
 
 | Property | Default | |
 |:---------|:--------|:--|
@@ -87,8 +94,32 @@ Includes resolve relative to the shader's folder, then to the engine's shaders.
 | `OcclusionStrength` | 1 | how much `OcclusionMap` (red) darkens ambient light |
 | `EmissiveColor`, `EmissiveStrength` | black, 1 | linear, multiplied with `EmissiveMap` |
 | `AlphaCutoff` | 0.5 | for a cutout material, where the alpha of `Color` times `ColorMap` is under it there is nothing |
+| `Tiling` | 1, 1 | multiplies the UVs, to repeat the textures |
 
 Normal maps use the mesh's tangents, which the importer works out with MikkTSpace, the same way Blender, Substance and other baking tools do, so baked normal maps match. A mesh without UVs has no tangents to go by and stays flat.
+
+### The other lit shaders
+
+These share `S_Lit`'s lighting, `Color`, `NormalStrength`, `OcclusionStrength`, `EmissiveColor`, `EmissiveStrength` and `AlphaCutoff`, and use the same slots for `ColorMap`, `NormalMap` and `EmissiveMap`. Each is its own file with the surface code written out, so a change to how a surface is lit has to be made in all of them.
+
+- **`S_LitMask`** (`M_LitMask`) takes its metallic, occlusion and roughness from one `MaskMap`, packed like Unity HDRP's mask map but with roughness, not smoothness, in alpha: red is metallic, green is occlusion and alpha is roughness. `Metallic` and `Roughness` default to 1 and scale what the mask holds, so without a mask map it is a fully rough metal. It has no `MetallicRoughnessMap` or `OcclusionMap`. Turn sRGB off on `NormalMap` and `MaskMap`.
+- **`S_LitMaskParallax`** is `S_LitMask` with parallax occlusion mapping. `HeightMap` (white is the top, sRGB off) is marched along the view ray, so the surface looks sunken where it is dark. `ParallaxHeightStrength` is how deep, and `ParallaxSteps` is the most steps the march takes. The shadows and the selection outline use the flat surface.
+- **`S_LitMaskTriplanar` and `S_LitMaskBiplanar`** are `S_LitMask` with its maps projected along the object's axes instead of read at its UVs, for meshes without good UVs, such as rocks and blockouts. They project in the object's own space, so the texture moves and stretches with the object. `ProjectionTiling` is how many times a map repeats per unit, and `TriplanarSharpness` or `BiplanarSharpness` is how narrow the blends between the axes are. Biplanar takes two samples per map instead of three, for nearly the same look. `Tiling` doesn't apply, as there are no UVs.
+
+The parallax and projected shaders have no material of their own. Pick them as the shader of a material you make.
+
+### S_Unlit
+
+`engine/shaders/S_Unlit.hlsl`, used by `M_Unlit`, draws `Color` times `ColorMap` with no lighting. Its alpha blends when the material is Transparent, and cuts out at `AlphaCutoff` when it is Cutout. `Tiling` multiplies the UVs.
+
+### Debug views
+
+- **`S_DebugNormals`** (`M_DebugNormals`) shows the world space normal as a color, `normal * 0.5 + 0.5`: +X is red, +Y is green and +Z is blue. Back faces get the normal flipped towards the camera, as a double-sided surface would be shaded.
+- **`S_DebugUV`** (`M_DebugUV`) draws a checkerboard in UV space, 20 squares per UV unit times `Tiling`. Stretched squares mean distorted UVs, squares of different sizes on neighbouring surfaces mean the texture is spread thinner or packed denser there, and a pattern that jumps along a line marks a seam.
+
+The debug colors are tone mapped like the rest of the scene, so they are close to, not exactly, the values they stand for.
+
+The materials are `M_Default`, `M_LitMask`, `M_Unlit`, `M_DebugNormals` and `M_DebugUV`.
 
 ### Cutout
 
@@ -114,6 +145,6 @@ void PSDepth(VertexOutput input)
 ## Color and light
 
 - **Colors in `.mat` files and lights are linear.** The scene renders in linear HDR and is tone mapped for the screen afterwards, so what a shader outputs is linear too. The Inspector's color swatches convert colors to show what they look like on screen.
-- **A texture's `srgb` setting** is on by default, which is right for `ColorMap` and `EmissiveMap`. Turn it off for maps that hold data (normal, metallic-roughness, occlusion). The Inspector warns when one of those slots has a texture with it on.
+- **A texture's `srgb` setting** is on by default, which is right for `ColorMap` and `EmissiveMap`. Turn it off for maps that hold data (normal, metallic-roughness, occlusion, mask and height). The Inspector warns when one of those slots has a texture with it on.
 - **Light intensities are physical quantities**, as in glTF: illuminance for directional lights, and candela for point and spot lights. Light falls off with the square of the distance, and reaches zero at `Range`.
 - **There is no image-based lighting yet** (#29), so `AmbientColor` counts as a uniform environment. Metals reflect that, so they look flat until there is an environment map.

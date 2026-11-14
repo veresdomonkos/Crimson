@@ -108,6 +108,16 @@ float4 PSMain(VertexOutput input) : SV_Target { return Fetch(Albedo, input.UV); 
             left, bottom, right, top, depth);
     }
 
+    // The same rectangle with a normal along +Z, wound the other way when facingAway, so that the camera sees its back
+    std::string MakeQuadWithNormal(float left, float bottom, float right, float top, bool facingAway)
+    {
+        return fmt::format(
+            "v {0} {1} 0.5\nv {2} {1} 0.5\nv {2} {3} 0.5\nv {0} {3} 0.5\n"
+            "vt 0 0\nvt 1 0\nvt 1 1\nvt 0 1\nvn 0 0 1\n"
+            "f {4}\n",
+            left, bottom, right, top, facingAway ? "1/1/1 4/4/1 3/3/1 2/2/1" : "1/1/1 2/2/1 3/3/1 4/4/1");
+    }
+
     std::string MakeMaterial(std::string_view color, std::string_view extra = "")
     {
         return fmt::format(R"({{ "shader": "flat.hlsl", "cull": "none", {} "properties": {{ "Color": {} }} }})", extra, color);
@@ -519,4 +529,107 @@ float4 PSMain(VertexOutput input) : SV_Target { return float4(input.Correct, 0.0
     });
 
     CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kRed));
+}
+
+// The view is the identity and nothing tone maps here, so a color comes out as it was written
+TEST_CASE_METHOD(Fixture, "S_Unlit draws its color and texture, ignoring lights", "[rendering]")
+{
+    Project.Write("all.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
+    Project.Write("back.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f, 0.8f));
+    Project.Write("front.obj", MakeQuad(-1.0f, -1.0f, 0.0f, 1.0f, 0.2f));
+    Project.Write("image.bmp", MakeImage());
+
+    const auto writeMaterial = [&](const std::string& name, std::string_view color, std::string_view extra)
+    {
+        Project.Write(name, fmt::format(R"({{ "shader": "engine/shaders/S_Unlit.hlsl", {} "properties": {{ "Color": {} }} }})", extra, color));
+    };
+
+    constexpr std::array kCulls = { "none", "back", "front" };
+
+    writeMaterial("color.mat", "[1, 0, 0, 1]", R"("cull": "none",)");
+    writeMaterial("textured.mat", "[1, 1, 1, 1]", R"("cull": "none", "textures": { "ColorMap": "image.bmp" },)");
+    writeMaterial("half.mat", "[0, 1, 0, 0.5]", R"("cull": "none", "renderMode": "transparent",)");
+
+    for (const char* cull : kCulls)
+        writeMaterial(fmt::format("cull_{}.mat", cull), "[1, 0, 0, 1]", fmt::format(R"("cull": "{}",)", cull));
+
+    AssetManager assets(*Gpu().GPUResources, Project.Path());
+
+    SECTION("Color")
+    {
+        CHECK(IsNear(RenderMesh(assets, "all.obj", "color.mat").AtClip(0.0f, 0.0f), kRed));
+    }
+
+    SECTION("Color times ColorMap")
+    {
+        CHECK(IsNear(RenderMesh(assets, "all.obj", "textured.mat").AtClip(0.0f, 0.0f), glm::ivec3(0, 0, 255)));
+    }
+
+    SECTION("Transparent blends with its alpha")
+    {
+        const Mesh* back = assets.Load<AssetType::Mesh>("back.obj");
+        const Mesh* front = assets.Load<AssetType::Mesh>("front.obj");
+        const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
+        const MaterialHandle half = assets.Load<AssetType::Material>("half.mat");
+        REQUIRE(back);
+        REQUIRE(front);
+
+        RenderOneFrame([&](FrameRecorder& frame)
+        {
+            PassBuilder pass = frame.AddPass(Pass());
+            pass.DrawMesh(*back, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*front, 0, { .MaterialOverride = half });
+        });
+
+        const Image image = Target.Read();
+        CHECK(IsNear(image.AtClip(-0.5f, 0.0f), glm::ivec3(127, 127, 0), 4));
+        CHECK(IsNear(image.AtClip(0.5f, 0.0f), kRed));
+    }
+
+    SECTION("Every cull mode")
+    {
+        for (const char* cull : kCulls)
+        {
+            const glm::ivec3 expected = std::string_view(cull) == "front" ? kBlack : kRed;
+            CAPTURE(cull);
+            CHECK(IsNear(RenderMesh(assets, "all.obj", fmt::format("cull_{}.mat", cull).c_str()).AtClip(0.0f, 0.0f), expected));
+        }
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "S_DebugNormals shows the world space normal as a color", "[rendering]")
+{
+    Project.Write("front.obj", MakeQuadWithNormal(-1.0f, -1.0f, 1.0f, 1.0f, false));
+    Project.Write("back.obj", MakeQuadWithNormal(-1.0f, -1.0f, 1.0f, 1.0f, true));
+    Project.Write("normals.mat", R"({ "shader": "engine/shaders/S_DebugNormals.hlsl", "cull": "none" })");
+
+    AssetManager assets(*Gpu().GPUResources, Project.Path());
+
+    SECTION("Front")
+    {
+        CHECK(IsNear(RenderMesh(assets, "front.obj", "normals.mat").AtClip(0.0f, 0.0f), glm::ivec3(128, 128, 255), 2));
+    }
+
+    // Tells whether SV_IsFrontFace reaches the shader the right way round on each backend
+    SECTION("Back face, flipped towards the camera")
+    {
+        CHECK(IsNear(RenderMesh(assets, "back.obj", "normals.mat").AtClip(0.0f, 0.0f), glm::ivec3(128, 128, 0), 2));
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "S_DebugUV draws a checkerboard in UV space, scaled by Tiling", "[rendering]")
+{
+    Project.Write("all.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
+
+    // 20 squares per UV unit times 0.1 leaves 2x2 squares over the quad
+    Project.Write("uv.mat", R"({ "shader": "engine/shaders/S_DebugUV.hlsl", "cull": "none", "properties": { "Tiling": [0.1, 0.1] } })");
+
+    AssetManager assets(*Gpu().GPUResources, Project.Path());
+    const Image image = RenderMesh(assets, "all.obj", "uv.mat");
+
+    // The OBJ loader flips V, so it counts down from the top of the quad
+    CHECK(IsNear(image.AtClip(-0.5f, -0.5f), glm::ivec3(204), 2));
+    CHECK(IsNear(image.AtClip(0.5f, 0.5f), glm::ivec3(204), 2));
+    CHECK(IsNear(image.AtClip(0.5f, -0.5f), glm::ivec3(51), 2));
+    CHECK(IsNear(image.AtClip(-0.5f, 0.5f), glm::ivec3(51), 2));
 }

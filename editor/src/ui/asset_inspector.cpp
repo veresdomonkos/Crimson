@@ -24,7 +24,7 @@ namespace crimson::editor::ui
     // Whether a texture slot's name says it holds values rather than colors
     static bool HoldsData(const std::string& slot)
     {
-        constexpr std::array kDataWords = { "Normal", "Metallic", "Roughness", "Occlusion" };
+        constexpr std::array kDataWords = { "Normal", "Metallic", "Roughness", "Occlusion", "Mask", "Height" };
         return std::ranges::any_of(kDataWords, [&](const char* word) { return slot.find(word) != std::string::npos; });
     }
 
@@ -283,7 +283,9 @@ namespace crimson::editor::ui
             }
             else
             {
-                edited = props::Floats(name.c_str(), values.data(), channels, 0.01f, defaults.data());
+                // A range clamps every component to it
+                const auto [min, max] = property.Range.value_or(std::pair{ 0.0f, 0.0f });
+                edited = props::Floats(name.c_str(), values.data(), channels, 0.01f, min, max, defaults.data());
             }
 
             if (!edited)

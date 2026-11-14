@@ -173,7 +173,7 @@ namespace crimson::editor::ui::props
         return changed;
     }
 
-    bool Floats(const char* label, float* values, int count, float speed, const float* reset)
+    bool Floats(const char* label, float* values, int count, float speed, float min, float max, const float* reset)
     {
         static constexpr std::array kAxes = { "X", "Y", "Z", "W" };
         static constexpr std::array kColors = { theme::AxisX, theme::AxisY, theme::AxisZ, theme::AxisW };
@@ -206,7 +206,7 @@ namespace crimson::editor::ui::props
             ImGui::SameLine(0.0f, 0.0f);
 
             ImGui::SetNextItemWidth(std::max(1.0f, fieldWidth - stripeWidth));
-            changed |= ImGui::DragFloat("##Value", &values[i], speed, 0.0f, 0.0f, "%.3f");
+            changed |= ImGui::DragFloat("##Value", &values[i], speed, min, max, "%.3f", min < max ? ImGuiSliderFlags_AlwaysClamp : 0);
             ResetTarget();
             ImGui::SetItemTooltip("%s", kAxes[i]);
 
@@ -227,7 +227,7 @@ namespace crimson::editor::ui::props
 
     bool Vec3(const char* label, glm::vec3& value, float speed, const glm::vec3* reset)
     {
-        return Floats(label, &value.x, 3, speed, reset ? &reset->x : nullptr);
+        return Floats(label, &value.x, 3, speed, 0.0f, 0.0f, reset ? &reset->x : nullptr);
     }
 
     bool Color(const char* label, float* linearColor, int channels, const float* reset)
