@@ -16,6 +16,18 @@ if (PROJECT_IS_TOP_LEVEL AND GIT_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.
     endif()
 endif()
 
+# Caches compiler output with ccache when it is installed, so files that were built before come from the cache
+option(CRIMSON_USE_CCACHE "Use ccache when it is installed" ON)
+if (PROJECT_IS_TOP_LEVEL AND CRIMSON_USE_CCACHE AND NOT CMAKE_C_COMPILER_LAUNCHER AND NOT CMAKE_CXX_COMPILER_LAUNCHER)
+    find_program(CRIMSON_CCACHE ccache)
+    if (CRIMSON_CCACHE)
+        # Precompiled headers only come from the cache with this sloppiness
+        set(CMAKE_C_COMPILER_LAUNCHER "${CRIMSON_CCACHE}" sloppiness=pch_defines,time_macros)
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${CRIMSON_CCACHE}" sloppiness=pch_defines,time_macros)
+        message(STATUS "ccache: ${CRIMSON_CCACHE}")
+    endif()
+endif()
+
 # GLFW
 add_subdirectory(external/glfw)
 
