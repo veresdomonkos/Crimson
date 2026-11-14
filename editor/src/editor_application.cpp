@@ -178,7 +178,7 @@ namespace crimson::editor
     {
         const PassInfo info{
             .Name = "UI",
-            .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(0.09f, 0.10f, 0.11f, 1.0f) }
+            .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(ui::theme::AppBackground.x, ui::theme::AppBackground.y, ui::theme::AppBackground.z, 1.0f) }
         };
 
         // The draw data stays valid until the next ImGui frame starts, which is after Submit.

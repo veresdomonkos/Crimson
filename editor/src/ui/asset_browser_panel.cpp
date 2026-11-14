@@ -98,7 +98,7 @@ namespace crimson::editor::ui
     static TileLayout DrawTileFrame(const char* id, float width, bool selected)
     {
         const ImGuiStyle& style = ImGui::GetStyle();
-        const float pad = std::round(width * 0.08f);
+        const float pad = std::round(theme::Scaled(theme::SpaceS));
         const float iconHeight = std::round(width * 0.62f);
         const float height = pad + iconHeight + style.ItemInnerSpacing.y + ImGui::GetTextLineHeight() + pad;
 
@@ -110,7 +110,7 @@ namespace crimson::editor::ui
 
         const ImGuiCol background = selected ? ImGuiCol_Header : ImGui::IsItemHovered() ? ImGuiCol_HeaderHovered : ImGuiCol_COUNT;
         if (background != ImGuiCol_COUNT)
-            ImGui::GetWindowDrawList()->AddRectFilled(min, max, ImGui::GetColorU32(background), style.FrameRounding * 2.0f);
+            ImGui::GetWindowDrawList()->AddRectFilled(min, max, ImGui::GetColorU32(background), theme::Scaled(theme::Radius));
 
         layout.IconMin = ImVec2(min.x + pad, min.y + pad);
         layout.IconMax = ImVec2(max.x - pad, min.y + pad + iconHeight);
@@ -331,7 +331,7 @@ namespace crimson::editor::ui
         // The project's folders, without the engine's
         {
             const bool selected = m_currentFolder.empty();
-            const bool open = ImGui::TreeNodeEx("##AssetsRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), "%s  Assets", selected ? kIconFolderOpen : kIconFolder);
+            const bool open = theme::IconTreeNode("##AssetsRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), selected ? kIconFolderOpen : kIconFolder, theme::Folder, "Assets");
 
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                 m_currentFolder.clear();
@@ -361,7 +361,7 @@ namespace crimson::editor::ui
         const bool selected = m_currentFolder == engine;
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        const bool open = ImGui::TreeNodeEx("##EngineRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), "%s  Engine", selected ? kIconFolderOpen : kIconFolder);
+        const bool open = theme::IconTreeNode("##EngineRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), selected ? kIconFolderOpen : kIconFolder, theme::Folder, "Engine");
         ImGui::PopStyleColor();
 
         ImGui::SetItemTooltip("The engine's built-in assets, which can be used but not changed");
@@ -391,7 +391,7 @@ namespace crimson::editor::ui
             if (folder == m_currentFolder)
                 flags |= ImGuiTreeNodeFlags_Selected;
 
-            const bool open = ImGui::TreeNodeEx(folder.c_str(), flags, "%s  %s", folder == m_currentFolder ? kIconFolderOpen : kIconFolder, NameOf(folder).c_str());
+            const bool open = theme::IconTreeNode(folder.c_str(), flags, folder == m_currentFolder ? kIconFolderOpen : kIconFolder, theme::Folder, NameOf(folder).c_str());
 
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                 m_currentFolder = folder;
@@ -760,7 +760,7 @@ namespace crimson::editor::ui
         }
 
         ImGui::BeginDisabled(!problem.empty());
-        const bool accepted = ImGui::Button(deleting ? "Delete" : "OK") || (!deleting && problem.empty() && ImGui::IsKeyPressed(ImGuiKey_Enter, false));
+        const bool accepted = (deleting ? ImGui::Button("Delete") : theme::PrimaryButton("OK")) || (!deleting && problem.empty() && ImGui::IsKeyPressed(ImGuiKey_Enter, false));
         ImGui::EndDisabled();
 
         ImGui::SameLine();

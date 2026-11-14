@@ -289,8 +289,8 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 
 ### Look and layout
 
-- **Theme:** the editor's colors and sizes are named once in `crimson_editor/ui/editor_theme.hpp`, and panels use those names rather than writing colors out. The size follows the monitor's scaling when the editor starts.
-- **Fonts and icons:** Inter Regular and Bold are used for text, with the [Lucide](https://lucide.dev) icon font merged into both, so a label can hold an icon from `crimson_editor/ui/icons.hpp`. Inter is loaded without its private use area, which is where Lucide's icons are. The fonts live in `editor/resources/` and are bundled like the engine's resources, but never go through the asset manager. Their licenses are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+- **Theme:** the editor's colors and sizes are named once in `crimson_editor/ui/editor_theme.hpp` as design tokens (surfaces, one accent, status colors, a spacing scale, one radius, a type scale and a muted color for each kind of asset), and panels use those names rather than writing values out. The size follows the monitor's scaling when the editor starts. [ui.md](ui.md) has the tokens and the rules for them.
+- **Fonts and icons:** Inter Regular and Bold are used for text, at 14 px, with the [Lucide](https://lucide.dev) icon font merged into both, so a label can hold an icon from `crimson_editor/ui/icons.hpp`. Inter is loaded without its private use area, which is where Lucide's icons are. The fonts live in `editor/resources/` and are bundled like the engine's resources, but never go through the asset manager. Their licenses are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 - **Inspector rows:** they come from `crimson_editor/ui/property_fields.hpp`.
   - The label sits in a column on the left.
   - Vector fields have a stripe for each axis.

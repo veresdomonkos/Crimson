@@ -1,6 +1,7 @@
 #include "crimson_editor/ui/editor_theme.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include <imgui.h>
 
@@ -12,8 +13,6 @@ namespace crimson::editor::ui
 {
     namespace
     {
-        constexpr float kFontSize = 18.0f;
-
         ImFont* s_regular = nullptr;
         ImFont* s_bold = nullptr;
 
@@ -29,7 +28,7 @@ namespace crimson::editor::ui
 
             ImFontConfig config = base;
             config.FontDataOwnedByAtlas = false;
-            return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(const_cast<std::byte*>(file->Data.data()), static_cast<int>(file->Data.size()), kFontSize, &config);
+            return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(const_cast<std::byte*>(file->Data.data()), static_cast<int>(file->Data.size()), theme::FontBody, &config);
         }
 
         // Unicode's private use area. Inter has glyphs of its own there, which would cover the icons at the same codepoints.
@@ -49,8 +48,8 @@ namespace crimson::editor::ui
             // whole font and stand on the baseline, so they go down a little to be centered on the text.
             ImFontConfig icons;
             icons.MergeMode = true;
-            icons.GlyphMinAdvanceX = kFontSize;
-            icons.GlyphOffset = ImVec2(0.0f, 2.0f);
+            icons.GlyphMinAdvanceX = theme::IconSize;
+            icons.GlyphOffset = ImVec2(0.0f, theme::IconSize * 0.11f);
             AddEmbeddedFont("fonts/lucide.ttf", icons);
 
             return font;
@@ -78,73 +77,85 @@ namespace crimson::editor::ui
 
             colors[ImGuiCol_Text]                  = Text;
             colors[ImGuiCol_TextDisabled]          = TextMuted;
-            colors[ImGuiCol_WindowBg]              = ImVec4(0.13f, 0.14f, 0.15f, 1.00f);
-            colors[ImGuiCol_ChildBg]               = ImVec4(0.13f, 0.14f, 0.15f, 1.00f);
-            colors[ImGuiCol_PopupBg]               = ImVec4(0.10f, 0.10f, 0.11f, 1.00f);
-            colors[ImGuiCol_Border]                = ImVec4(0.25f, 0.25f, 0.27f, 0.60f);
-            colors[ImGuiCol_BorderShadow]          = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+            colors[ImGuiCol_TextLink]              = Text;
+            colors[ImGuiCol_TextSelectedBg]        = TextSelection;
+            colors[ImGuiCol_InputTextCursor]       = Text;
 
-            colors[ImGuiCol_FrameBg]               = ImVec4(0.20f, 0.21f, 0.23f, 1.00f);
-            colors[ImGuiCol_FrameBgHovered]        = ImVec4(0.26f, 0.27f, 0.29f, 1.00f);
-            colors[ImGuiCol_FrameBgActive]         = ImVec4(0.30f, 0.31f, 0.33f, 1.00f);
+            colors[ImGuiCol_WindowBg]              = PanelBackground;
+            colors[ImGuiCol_ChildBg]               = PanelBackground;
+            colors[ImGuiCol_PopupBg]               = PopupBackground;
+            colors[ImGuiCol_Border]                = Border;
+            colors[ImGuiCol_BorderShadow]          = WithAlpha(Border, 0.0f);
 
-            colors[ImGuiCol_TitleBg]               = ImVec4(0.11f, 0.11f, 0.12f, 1.00f);
-            colors[ImGuiCol_TitleBgActive]         = ImVec4(0.15f, 0.16f, 0.18f, 1.00f);
-            colors[ImGuiCol_TitleBgCollapsed]      = ImVec4(0.11f, 0.11f, 0.12f, 0.75f);
+            colors[ImGuiCol_FrameBg]               = FrameBackground;
+            colors[ImGuiCol_FrameBgHovered]        = Hover;
+            colors[ImGuiCol_FrameBgActive]         = Pressed;
 
-            colors[ImGuiCol_MenuBarBg]             = ImVec4(0.14f, 0.14f, 0.16f, 1.00f);
+            colors[ImGuiCol_TitleBg]               = AppBackground;
+            colors[ImGuiCol_TitleBgActive]         = AppBackground;
+            colors[ImGuiCol_TitleBgCollapsed]      = AppBackground;
+            colors[ImGuiCol_MenuBarBg]             = AppBackground;
 
-            colors[ImGuiCol_ScrollbarBg]           = ImVec4(0.10f, 0.10f, 0.11f, 1.00f);
-            colors[ImGuiCol_ScrollbarGrab]         = ImVec4(0.30f, 0.30f, 0.33f, 1.00f);
-            colors[ImGuiCol_ScrollbarGrabHovered]  = ImVec4(0.38f, 0.38f, 0.41f, 1.00f);
-            colors[ImGuiCol_ScrollbarGrabActive]   = ImVec4(0.46f, 0.46f, 0.50f, 1.00f);
+            colors[ImGuiCol_ScrollbarBg]           = PanelBackground;
+            colors[ImGuiCol_ScrollbarGrab]         = FrameBackground;
+            colors[ImGuiCol_ScrollbarGrabHovered]  = Hover;
+            colors[ImGuiCol_ScrollbarGrabActive]   = Pressed;
 
-            const auto accentAlpha = [](float alpha) { return ImVec4(Accent.x, Accent.y, Accent.z, alpha); };
+            colors[ImGuiCol_CheckMark]             = Text;
+            colors[ImGuiCol_CheckboxSelectedBg]    = FrameBackground;
+            colors[ImGuiCol_SliderGrab]            = TextMuted;
+            colors[ImGuiCol_SliderGrabActive]      = Text;
 
-            colors[ImGuiCol_CheckMark]             = Accent;
-            colors[ImGuiCol_SliderGrab]            = Accent;
-            colors[ImGuiCol_SliderGrabActive]      = AccentHover;
+            colors[ImGuiCol_Button]                = FrameBackground;
+            colors[ImGuiCol_ButtonHovered]         = Hover;
+            colors[ImGuiCol_ButtonActive]          = Pressed;
 
-            colors[ImGuiCol_Button]                = ImVec4(0.22f, 0.23f, 0.26f, 1.00f);
-            colors[ImGuiCol_ButtonHovered]         = Accent;
-            colors[ImGuiCol_ButtonActive]          = AccentActive;
+            // Selected rows, tiles and menu items
+            colors[ImGuiCol_Header]                = Selection;
+            colors[ImGuiCol_HeaderHovered]         = Hover;
+            colors[ImGuiCol_HeaderActive]          = Pressed;
 
-            colors[ImGuiCol_Header]                = ImVec4(0.22f, 0.23f, 0.26f, 1.00f);
-            colors[ImGuiCol_HeaderHovered]         = accentAlpha(0.55f);
-            colors[ImGuiCol_HeaderActive]          = Accent;
+            colors[ImGuiCol_Separator]             = Border;
+            colors[ImGuiCol_SeparatorHovered]      = Hover;
+            colors[ImGuiCol_SeparatorActive]       = Pressed;
 
-            colors[ImGuiCol_Separator]             = colors[ImGuiCol_Border];
-            colors[ImGuiCol_SeparatorHovered]      = accentAlpha(0.65f);
-            colors[ImGuiCol_SeparatorActive]       = Accent;
+            colors[ImGuiCol_ResizeGrip]            = WithAlpha(Hover, 0.0f);
+            colors[ImGuiCol_ResizeGripHovered]     = Hover;
+            colors[ImGuiCol_ResizeGripActive]      = Pressed;
 
-            colors[ImGuiCol_ResizeGrip]            = accentAlpha(0.20f);
-            colors[ImGuiCol_ResizeGripHovered]     = accentAlpha(0.55f);
-            colors[ImGuiCol_ResizeGripActive]      = Accent;
-
-            colors[ImGuiCol_Tab]                   = ImVec4(0.15f, 0.16f, 0.18f, 1.00f);
-            colors[ImGuiCol_TabHovered]            = accentAlpha(0.60f);
-            colors[ImGuiCol_TabActive]             = ImVec4(0.55f, 0.18f, 0.22f, 1.00f);
-            colors[ImGuiCol_TabUnfocused]          = ImVec4(0.11f, 0.11f, 0.13f, 1.00f);
-            colors[ImGuiCol_TabUnfocusedActive]    = ImVec4(0.15f, 0.16f, 0.18f, 1.00f);
-
+            // The selected tab is the panel's own color, so it joins the panel, under a thin accent line
+            colors[ImGuiCol_Tab]                       = AppBackground;
+            colors[ImGuiCol_TabHovered]                = Hover;
+            colors[ImGuiCol_TabSelected]               = PanelBackground;
             colors[ImGuiCol_TabSelectedOverline]       = Accent;
-            colors[ImGuiCol_TabDimmedSelectedOverline] = accentAlpha(0.50f);
+            colors[ImGuiCol_TabDimmed]                 = AppBackground;
+            colors[ImGuiCol_TabDimmedSelected]         = PanelBackground;
+            colors[ImGuiCol_TabDimmedSelectedOverline] = Border;
+            colors[ImGuiCol_UnsavedMarker]             = Text;
 
-            colors[ImGuiCol_DockingPreview]        = accentAlpha(0.60f);
-            colors[ImGuiCol_DockingEmptyBg]        = ImVec4(0.13f, 0.14f, 0.15f, 1.00f);
+            colors[ImGuiCol_DockingPreview]        = WithAlpha(Accent, 0.50f);
+            colors[ImGuiCol_DockingEmptyBg]        = AppBackground;
 
-            colors[ImGuiCol_PlotLines]             = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
-            colors[ImGuiCol_PlotLinesHovered]      = AccentHover;
-            colors[ImGuiCol_PlotHistogram]         = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
-            colors[ImGuiCol_PlotHistogramHovered]  = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+            colors[ImGuiCol_PlotLines]             = TextMuted;
+            colors[ImGuiCol_PlotLinesHovered]      = Text;
+            colors[ImGuiCol_PlotHistogram]         = TextMuted;
+            colors[ImGuiCol_PlotHistogramHovered]  = Warning;
 
-            colors[ImGuiCol_TextSelectedBg]        = AccentSubtle;
-            colors[ImGuiCol_DragDropTarget]        = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+            colors[ImGuiCol_TableHeaderBg]         = FrameBackground;
+            colors[ImGuiCol_TableBorderStrong]     = Border;
+            colors[ImGuiCol_TableBorderLight]      = Border;
+            colors[ImGuiCol_TableRowBg]            = WithAlpha(Text, 0.0f);
+            colors[ImGuiCol_TableRowBgAlt]         = WithAlpha(Text, 0.03f);
+            colors[ImGuiCol_TreeLines]             = Border;
 
-            colors[ImGuiCol_NavHighlight]          = ImVec4(0.90f, 0.90f, 0.90f, 1.00f);
-            colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
-            colors[ImGuiCol_NavWindowingDimBg]     = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
-            colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
+            // A drop target is where the pointer is about to act, so it is drawn like focus
+            colors[ImGuiCol_DragDropTarget]        = Accent;
+            colors[ImGuiCol_DragDropTargetBg]      = WithAlpha(Accent, 0.15f);
+
+            colors[ImGuiCol_NavCursor]             = Accent;
+            colors[ImGuiCol_NavWindowingHighlight] = WithAlpha(Text, 0.70f);
+            colors[ImGuiCol_NavWindowingDimBg]     = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
+            colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.0f, 0.0f, 0.0f, 0.50f);
         }
     }
 
@@ -158,24 +169,33 @@ namespace crimson::editor::ui
 
         ImGuiStyle& style = ImGui::GetStyle();
 
-        style.WindowRounding    = 4.0f;
-        style.FrameRounding     = 3.0f;
-        style.GrabRounding      = 3.0f;
-        style.PopupRounding     = 3.0f;
-        style.ScrollbarRounding = 3.0f;
-        style.TabRounding       = 3.0f;
+        style.WindowRounding         = theme::Radius;
+        style.ChildRounding          = theme::Radius;
+        style.FrameRounding          = theme::Radius;
+        style.PopupRounding          = theme::Radius;
+        style.GrabRounding           = theme::Radius;
+        style.ScrollbarRounding      = theme::Radius;
+        style.TabRounding            = theme::Radius;
+        style.DragDropTargetRounding = -1.0f;
 
-        style.WindowPadding     = ImVec2(10.0f, 10.0f);
-        style.FramePadding      = ImVec2(8.0f, 4.0f);
-        style.ItemSpacing       = ImVec2(8.0f, 6.0f);
-        style.ItemInnerSpacing  = ImVec2(6.0f, 4.0f);
-        style.IndentSpacing     = 20.0f;
-        style.ScrollbarSize     = 14.0f;
-        style.GrabMinSize       = 10.0f;
+        style.WindowPadding     = ImVec2(theme::SpaceS, theme::SpaceS);
+        style.FramePadding      = ImVec2(theme::SpaceS, theme::SpaceXS);
+        style.ItemSpacing       = ImVec2(theme::SpaceS, theme::SpaceXS);
+        style.ItemInnerSpacing  = ImVec2(theme::SpaceXS, theme::SpaceXS);
+        style.IndentSpacing     = theme::SpaceL;
+        style.ScrollbarSize     = theme::SpaceM;
+        style.GrabMinSize       = theme::SpaceS;
 
-        style.WindowBorderSize  = 1.0f;
-        style.FrameBorderSize   = 0.0f;
-        style.PopupBorderSize   = 1.0f;
+        style.WindowBorderSize     = theme::BorderSize;
+        style.ChildBorderSize      = theme::BorderSize;
+        style.PopupBorderSize      = theme::BorderSize;
+        style.FrameBorderSize      = 0.0f;
+        style.TabBorderSize        = 0.0f;
+        style.TabBarBorderSize     = theme::BorderSize;
+        style.TabBarOverlineSize   = theme::AccentLineSize;
+        style.DockingSeparatorSize = theme::BorderSize;
+
+        style.FontSizeBase = theme::FontBody;
 
         ApplyColors(style);
 
@@ -194,21 +214,72 @@ namespace crimson::editor::ui
         {
             switch (type)
             {
-                case AssetType::Material: return ImVec4(0.59f, 0.24f, 0.27f, 1.00f);
-                case AssetType::Mesh:     return ImVec4(0.24f, 0.43f, 0.59f, 1.00f);
-                case AssetType::Shader:   return ImVec4(0.37f, 0.29f, 0.59f, 1.00f);
-                case AssetType::Texture:  return ImVec4(0.24f, 0.51f, 0.35f, 1.00f);
-                case AssetType::Scene:    return ImVec4(0.67f, 0.41f, 0.20f, 1.00f);
-                default:                  return ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
+                case AssetType::Material: return ImVec4(0.66f, 0.42f, 0.52f, 1.00f);
+                case AssetType::Mesh:     return ImVec4(0.38f, 0.54f, 0.68f, 1.00f);
+                case AssetType::Shader:   return ImVec4(0.52f, 0.46f, 0.70f, 1.00f);
+                case AssetType::Texture:  return ImVec4(0.40f, 0.62f, 0.48f, 1.00f);
+                case AssetType::Scene:    return ImVec4(0.70f, 0.50f, 0.36f, 1.00f);
+                default:                  return ImVec4(0.42f, 0.43f, 0.46f, 1.00f);
             }
         }
 
         ImFont* RegularFont() { return s_regular; }
         ImFont* BoldFont() { return s_bold; }
 
+        float Scaled(float size) { return size * ImGui::GetStyle().FontScaleDpi; }
+
+        bool PrimaryButton(const char* label, const ImVec2& size)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, Accent);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, AccentHover);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, AccentPressed);
+            ImGui::PushStyleColor(ImGuiCol_Text, TextOnAccent);
+            const bool clicked = ImGui::Button(label, size);
+            ImGui::PopStyleColor(4);
+
+            return clicked;
+        }
+
+        bool ToggleButton(const char* label, bool on, const ImVec2& size)
+        {
+            if (on)
+                ImGui::PushStyleColor(ImGuiCol_Button, Selection);
+            const bool clicked = ImGui::Button(label, size);
+            if (on)
+                ImGui::PopStyleColor();
+
+            return clicked;
+        }
+
+        bool IconTreeNode(const char* id, ImGuiTreeNodeFlags flags, const char* icon, const ImVec4& iconColor, const char* label)
+        {
+            const bool open = ImGui::TreeNodeEx(id, flags, "%s", "");
+
+            const ImGuiStyle& style = ImGui::GetStyle();
+            const ImVec2 min = ImGui::GetItemRectMin();
+            const ImVec2 max = ImGui::GetItemRectMax();
+
+            // Where the label would start: after the arrow, and after the frame's padding in a framed node
+            float x = min.x + ImGui::GetTreeNodeToLabelSpacing();
+            if (flags & ImGuiTreeNodeFlags_Framed)
+                x += style.FramePadding.x;
+            const float y = std::round((min.y + max.y - ImGui::GetTextLineHeight()) * 0.5f);
+
+            // The node clipped its label to the row, so the drawn one is too
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(min, max, true);
+            drawList->AddText(ImVec2(x, y), ImGui::GetColorU32(iconColor), icon);
+
+            if (label && *label)
+                drawList->AddText(ImVec2(x + ImGui::CalcTextSize(icon).x + style.ItemInnerSpacing.x * 2.0f, y), ImGui::GetColorU32(ImGuiCol_Text), label);
+
+            drawList->PopClipRect();
+            return open;
+        }
+
         void EmptyHint(const char* text)
         {
-            ImGui::PushFont(nullptr, ImGui::GetStyle().FontSizeBase * SmallTextScale);
+            const ScopedFont small(nullptr, FontSmall);
 
             const ImVec2 available = ImGui::GetContentRegionAvail();
             const float width = std::min(ImGui::CalcTextSize(text).x, available.x);
@@ -220,8 +291,6 @@ namespace crimson::editor::ui
             ImGui::TextUnformatted(text);
             ImGui::PopTextWrapPos();
             ImGui::PopStyleColor();
-
-            ImGui::PopFont();
         }
     }
 }

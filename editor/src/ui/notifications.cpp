@@ -102,7 +102,7 @@ namespace crimson::editor::ui
 
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
         const ImGuiStyle& style = ImGui::GetStyle();
-        const float margin = style.WindowPadding.x * 1.5f;
+        const float margin = theme::Scaled(theme::SpaceL);
         const float deltaTime = ImGui::GetIO().DeltaTime;
 
         constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings
@@ -125,7 +125,7 @@ namespace crimson::editor::ui
             ImGui::SetNextWindowPos(ImVec2(right, bottom), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
             ImGui::SetNextWindowViewport(viewport->ID);
             ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, style.FrameRounding * 2.0f);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::PopupBackground);
 
             // Named by place rather than by message, so ImGui keeps a few windows instead of one for each message ever shown
             const std::string window = "##Notification" + std::to_string(slot);
@@ -162,7 +162,8 @@ namespace crimson::editor::ui
             }
 
             ImGui::End();
-            ImGui::PopStyleVar(2);
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar();
         }
 
         std::erase_if(m_shown, [&](const Message& message)

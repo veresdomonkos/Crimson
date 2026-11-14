@@ -145,7 +145,7 @@ namespace crimson::editor::ui
         const bool dirty = edits.IsDirty(id);
         ImGui::BeginDisabled(!dirty);
 
-        if (ImGui::Button("Save"))
+        if (theme::PrimaryButton("Save"))
             edits.Save(id);
 
         ImGui::SameLine();
@@ -438,7 +438,7 @@ namespace crimson::editor::ui
         const bool changed = m_textureSettings != info.Settings;
         ImGui::BeginDisabled(!changed);
 
-        if (ImGui::Button("Apply"))
+        if (theme::PrimaryButton("Apply"))
         {
             m_context.Deferred.emplace_back([this, id = m_context.Assets.As<AssetType::Texture>(info.Id), settings = m_textureSettings]
             {

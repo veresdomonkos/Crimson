@@ -140,11 +140,34 @@ namespace crimson::editor::ui::props
         return changed;
     }
 
-    bool Slider(const char* label, float& value, float min, float max, const float* reset)
+    bool SliderField(float& value, float min, float max, const char* format, ImGuiSliderFlags flags)
+    {
+        const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float fieldWidth = ImGui::GetFontSize() * 4.5f;
+        const float sliderWidth = std::max(1.0f, ImGui::CalcItemWidth() - fieldWidth - spacing);
+
+        ImGui::SetNextItemWidth(sliderWidth);
+        bool changed = ImGui::SliderFloat("##Value", &value, min, max, format, flags);
+        ResetTarget();
+
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::SetNextItemWidth(fieldWidth);
+
+        // A typed value can be anything, so it is held to the slider's range
+        if (ImGui::InputFloat("##Field", &value, 0.0f, 0.0f, "%.3f"))
+        {
+            value = std::clamp(value, min, max);
+            changed = true;
+        }
+
+        ResetTarget();
+        return changed;
+    }
+
+    bool Slider(const char* label, float& value, float min, float max, const float* reset, ImGuiSliderFlags flags)
     {
         BeginRow(label);
-        bool changed = ImGui::SliderFloat("##Value", &value, min, max);
-        ResetTarget();
+        bool changed = SliderField(value, min, max, "%.3f", flags);
 
         changed |= ApplyReset(EndRow(reset != nullptr), value, reset);
         return changed;

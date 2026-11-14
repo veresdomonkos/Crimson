@@ -61,7 +61,8 @@ C++23, in the style the code already has:
 - **No cost for testability:** nothing gets a virtual function, or anything else that costs per frame, only so a test can fake it. See [Testing](docs/development.md#testing).
 - **GPU resources** only change between frames. Panels queue such changes in `EditorContext::Deferred`.
 - **Editor UI:**
-  - Colors come from `crimson_editor/ui/editor_theme.hpp`, never written out in a panel.
+  - Colors, spacing, radii and font sizes come from `crimson_editor/ui/editor_theme.hpp`, never written out in a panel. [docs/ui.md](docs/ui.md) has the rules.
+  - The main action of a dialog is a `theme::PrimaryButton`.
   - Icons come from `crimson_editor/ui/icons.hpp`.
   - Inspector fields go through `crimson_editor/ui/property_fields.hpp`.
 - **Errors** are logged with `LOG_ERROR`. That puts them in the Console and in the corner of the window, and makes a test fail unless it expected them.

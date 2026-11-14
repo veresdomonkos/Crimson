@@ -16,6 +16,7 @@
 #include "crimson_editor/script_editor.hpp"
 #include "crimson_editor/ui/asset_browser_panel.hpp"
 #include "crimson_editor/ui/console_panel.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 #include "crimson_editor/ui/inspector_panel.hpp"
 #include "crimson_editor/ui/preferences_panel.hpp"
@@ -329,7 +330,7 @@ namespace crimson::editor
 
         bool close = false;
 
-        if (ImGui::Button("Save All"))
+        if (ui::theme::PrimaryButton("Save All"))
         {
             SaveAllAndClose();
             close = true;

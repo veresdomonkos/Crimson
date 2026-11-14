@@ -95,11 +95,15 @@ namespace crimson::editor::ui
         {
             const ImVec4 color = LevelColor(level);
 
-            ImGui::PushStyleColor(ImGuiCol_Button, shown ? ImVec4(color.x, color.y, color.z, 0.25f) : theme::ToggleOff);
-            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(color.x, color.y, color.z, 0.40f));
+            // A hidden level keeps the normal button, so only the shown ones carry a tint
+            if (shown)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, theme::WithAlpha(color, theme::TintAlpha));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::WithAlpha(color, theme::TintHoverAlpha));
+            }
             ImGui::PushStyleColor(ImGuiCol_Text, shown ? theme::Text : theme::TextMuted);
             const bool clicked = ImGui::Button(label);
-            ImGui::PopStyleColor(3);
+            ImGui::PopStyleColor(shown ? 3 : 1);
 
             return clicked;
         }
@@ -153,13 +157,11 @@ namespace crimson::editor::ui
         ImGui::SameLine();
 
         // Repeats of the same message in a row go into one line, with how many there were
-        ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(m_Collapse ? ImGuiCol_ButtonActive : ImGuiCol_Button));
-        if (ImGui::Button("Group"))
+        if (theme::ToggleButton("Group", m_Collapse))
         {
             m_Collapse = !m_Collapse;
             m_SelectedIndex = -1;
         }
-        ImGui::PopStyleColor();
         ImGui::SetItemTooltip("Show repeats of the same message as one line");
 
         ImGui::SameLine();
