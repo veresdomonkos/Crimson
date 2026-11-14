@@ -27,7 +27,7 @@ Crimson/
   tools/             scripts that make the built-in meshes and the screenshots
   cmake/             embedding files into the executable, linking statically
   docs/              these pages, and the screenshots
-  external/          glfw, glad, glm, fmt, imgui, entt, glslang, ImGuizmo, json, nativefiledialog-extended, spirv-cross, spirv-reflect, stb_image, tinyobjloader, tracy, VulkanMemoryAllocator
+  external/          glfw, glad, glm, fmt, imgui, entt, glslang, ImGuizmo, json, nativefiledialog-extended, spirv-cross, SPIRV-Headers, SPIRV-Tools, spirv-reflect, stb_image, tinyobjloader, tracy, VulkanMemoryAllocator
 ```
 
 Each of `engine/` and `editor/` keeps its headers in `include/` (`crimson/...` and `crimson_editor/...`) and its sources in `src/`.

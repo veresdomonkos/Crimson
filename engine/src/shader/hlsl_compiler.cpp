@@ -8,6 +8,8 @@
 #include <utility>
 
 #include <SPIRV/GlslangToSpv.h>
+#include <spirv-tools/libspirv.hpp>
+#include <spirv-tools/optimizer.hpp>
 #include <glslang/Public/ResourceLimits.h>
 #include <glslang/Public/ShaderLang.h>
 
@@ -81,7 +83,54 @@ namespace crimson
             [[maybe_unused]] static const bool initialized = glslang::InitializeProcess();
         }
 
-        std::optional<std::vector<uint32_t>> CompileStage(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<std::filesystem::path>& included, EShLanguage stage, const char* entryPoint)
+        // What a stage compiles to: the SPIR-V as glslang emits it, and the same legalized and validated for running
+        struct CompiledStage
+        {
+            std::vector<uint32_t> Interface;
+            std::vector<uint32_t> Code;
+        };
+
+        // glslang copies a texture passed to a function into a local variable, which Vulkan doesn't allow and which
+        // SPIRV-Cross then can't name after the texture. Inlining and copy propagation remove those copies.
+        std::optional<std::vector<uint32_t>> Legalize(const std::string& name, const std::vector<uint32_t>& spirv)
+        {
+            constexpr spv_target_env kTarget = SPV_ENV_VULKAN_1_3;
+
+            spvtools::Optimizer optimizer(kTarget);
+            optimizer.SetMessageConsumer([&name](spv_message_level_t level, const char*, const spv_position_t&, const char* message)
+            {
+                if (level <= SPV_MSG_ERROR)
+                    LOG_ERROR("[Shader] {}: {}", name, message);
+            });
+            optimizer.RegisterLegalizationPasses();
+
+            // The input is what is invalid, so only the result is validated, below
+            spvtools::OptimizerOptions options;
+            options.set_run_validator(false);
+
+            std::vector<uint32_t> legalized;
+            if (!optimizer.Run(spirv.data(), spirv.size(), &legalized, options))
+            {
+                LOG_ERROR("[Shader] Failed to legalize the SPIR-V of '{}'", name);
+                return std::nullopt;
+            }
+
+            spvtools::SpirvTools tools(kTarget);
+            tools.SetMessageConsumer([&name](spv_message_level_t, const char*, const spv_position_t&, const char* message)
+            {
+                LOG_ERROR("[Shader] {}: {}", name, message);
+            });
+
+            if (!tools.Validate(legalized))
+            {
+                LOG_ERROR("[Shader] The SPIR-V of '{}' is not valid for Vulkan", name);
+                return std::nullopt;
+            }
+
+            return legalized;
+        }
+
+        std::optional<CompiledStage> CompileStage(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<std::filesystem::path>& included, EShLanguage stage, const char* entryPoint)
         {
             const char* sourceData = source.data();
             const int sourceLength = static_cast<int>(source.size());
@@ -124,9 +173,15 @@ namespace crimson
                 return std::nullopt;
             }
 
-            std::vector<uint32_t> spirv;
-            glslang::GlslangToSpv(*program.getIntermediate(stage), spirv);
-            return spirv;
+            CompiledStage compiled;
+            glslang::GlslangToSpv(*program.getIntermediate(stage), compiled.Interface);
+
+            auto legalized = Legalize(name, compiled.Interface);
+            if (!legalized)
+                return std::nullopt;
+
+            compiled.Code = std::move(*legalized);
+            return compiled;
         }
     }
 
@@ -140,7 +195,7 @@ namespace crimson
 
         // Only when it is there, as glslang reports a missing entry point as an error
         static const std::regex kDepthEntryPoint(R"(\bvoid\s+PSDepth\s*\()");
-        std::optional<std::vector<uint32_t>> pixelDepth = std::vector<uint32_t>();
+        std::optional<CompiledStage> pixelDepth = CompiledStage();
         if (std::regex_search(source, kDepthEntryPoint))
             pixelDepth = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSDepth");
 
@@ -150,6 +205,9 @@ namespace crimson
         if (!vertex || !pixel || !pixelDepth)
             return std::nullopt;
 
-        return ShaderBinary{ std::move(*vertex), std::move(*pixel), ParseShaderAnnotations(source), std::move(*pixelDepth) };
+        return ShaderBinary{
+            std::move(vertex->Code), std::move(pixel->Code), ParseShaderAnnotations(source), std::move(pixelDepth->Code),
+            std::move(vertex->Interface), std::move(pixel->Interface), std::move(pixelDepth->Interface)
+        };
     }
 }

@@ -34,6 +34,12 @@ namespace crimson
         std::vector<uint32_t> Pixel;
         std::unordered_map<std::string, ShaderAnnotation> Annotations;
         std::vector<uint32_t> PixelDepth; // PSDepth, for the passes that only need depth. Empty if the shader has none.
+
+        // The same stages before legalization, which drops the resources a stage never uses. Reflection reads these,
+        // so that a texture the shader declares stays a material slot.
+        std::vector<uint32_t> VertexInterface;
+        std::vector<uint32_t> PixelInterface;
+        std::vector<uint32_t> PixelDepthInterface;
     };
 
     struct ShaderMaterialTexture

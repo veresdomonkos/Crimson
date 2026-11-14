@@ -7,7 +7,7 @@ Shaders are HLSL, with a `VSMain` and a `PSMain` in one `.hlsl` file. The same f
                            -> SPIRV-Cross -> GLSL 4.5 -> OpenGL
 ```
 
-glslang is linked into the engine, so shaders compile in the editor as they are saved. Its HLSL support is around Shader Model 5, so Shader Model 6 features such as wave ops and mesh shaders aren't available.
+glslang is linked into the engine, so shaders compile in the editor as they are saved. The SPIR-V it makes is legalized and validated with SPIRV-Tools before either backend gets it, so a texture can be passed to a function, as in `Fetch(Texture2D map, float2 uv)`. Its HLSL support is around Shader Model 5, so Shader Model 6 features such as wave ops and mesh shaders aren't available.
 
 ## Making one
 
@@ -47,6 +47,7 @@ Texture2D Bumps : register(t1, space1); // @default normal
 ```
 
 - **Discovery:** material properties and textures are found with SPIRV-Reflect, so the shader is the only place they're declared. The standard blocks are checked against the engine's structs.
+- **Unused textures:** a texture the shader declares but never samples still shows as a material texture. Reflection reads the SPIR-V before the unused resources are removed.
 - **Samplers:** materials share the samplers in `space0`, and can't declare their own.
 - **Import errors:** a shader fails to import, with an error in the console, if it uses an unknown space or a standard resource whose type or size doesn't match the engine.
 - **Vertex inputs:** meshes give `POSITION` (float3), `NORMAL` (float3), `TEXCOORD0` (float2) and `TANGENT` (float4: xyz along +U, w the side the bitangent is on, ±1, and 0 for a mesh without UVs). There are no vertex colors. Inputs take their locations from their order in the input struct, so declare them in this order; a shader can leave out the ones at the end.
