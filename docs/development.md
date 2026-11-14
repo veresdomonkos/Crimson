@@ -7,6 +7,7 @@
 - The [Vulkan SDK](https://vulkan.lunarg.com/) 1.3+, for the headers, the loader and the validation layers
 - A GPU and driver with Vulkan 1.3 (dynamic rendering, synchronization2) and/or OpenGL 4.5
 - [Git LFS](https://git-lfs.com/), for the fonts, the icons, the meshes and the sample project
+- Optionally [ccache](https://ccache.dev/) 4.8+, which makes rebuilding files that were built before almost free. CMake uses it when it is on the PATH. It is `pacman -S mingw-w64-ucrt-x86_64-ccache` in MSYS2 and `apt install ccache` on Ubuntu.
 
 ### Windows
 
@@ -32,6 +33,7 @@ cmake --build build --target Editor
 |:--------|:-----|
 | `-DCRIMSON_BUILD_TESTS=OFF` | leaves the tests out |
 | `-DCRIMSON_ENABLE_PROFILER=OFF` | compiles the Tracy instrumentation out |
+| `-DCRIMSON_USE_CCACHE=OFF` | builds without ccache, even when it is installed |
 | `CRIMSON_VSYNC=1` | limits the editor to the display's refresh rate. It renders as fast as it can otherwise. |
 | `CRIMSON_VK_SYNC_VALIDATION=1` | adds synchronization validation to the Vulkan validation layers, which Debug builds turn on when they are installed |
 
