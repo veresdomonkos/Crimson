@@ -12,6 +12,8 @@ cbuffer MaterialBlock : register(b0, space1)
     float OcclusionStrength; // @default 1 @range 0 1
     float3 EmissiveColor;    // @default 0 0 0
     float EmissiveStrength;  // @default 1
+    // A float2 has to sit on an 8-byte boundary for OpenGL, so Tiling goes before the lone float after it
+    float2 Tiling;           // @default 1 1 @range 0.01 100
     float AlphaCutoff;       // @default 0.5 @range 0 1
 };
 
@@ -46,7 +48,7 @@ VertexOutput VSMain(VertexInput input)
     output.ClipPosition = WorldToClip(worldPosition);
     output.Normal = ObjectToWorldNormal(input.Normal);
     output.WorldPosition = worldPosition;
-    output.UV = input.UV;
+    output.UV = input.UV * Tiling;
     output.Tangent = ObjectToWorldTangent(input.Tangent);
     return output;
 }

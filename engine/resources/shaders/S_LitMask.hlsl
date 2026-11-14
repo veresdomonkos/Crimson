@@ -1,4 +1,5 @@
-// Lit shader with unity hdrp style mask map with roughness (not smoothness) stored in the A channel.
+// A lit shader for textures packed like Unity HDRP's mask map, but with roughness, not smoothness, in alpha: R metallic, G occlusion, A roughness.
+// Metallic and Roughness default to 1, as they scale what the mask holds. Turn sRGB off on NormalMap and MaskMap.
 #include "crimson/normals.hlsli"
 #include "crimson/lighting.hlsli"
 
@@ -11,13 +12,15 @@ cbuffer MaterialBlock : register(b0, space1)
     float OcclusionStrength; // @default 1 @range 0 1
     float3 EmissiveColor;    // @default 0 0 0
     float EmissiveStrength;  // @default 1
+    // A float2 has to sit on an 8-byte boundary for OpenGL, so Tiling goes before the lone float after it
+    float2 Tiling;           // @default 1 1 @range 0.01 100
     float AlphaCutoff;       // @default 0.5 @range 0 1
 };
 
 Texture2D ColorMap : register(t0, space1);
 Texture2D NormalMap : register(t1, space1);   // @default normal
 Texture2D MaskMap : register(t2, space1);     // R: metallic, G: ao, B: reserved, A: roughness
-Texture2D EmissiveMap : register(t4, space1);
+Texture2D EmissiveMap : register(t3, space1);
 
 struct VertexInput
 {
@@ -44,7 +47,7 @@ VertexOutput VSMain(VertexInput input)
     output.ClipPosition = WorldToClip(worldPosition);
     output.Normal = ObjectToWorldNormal(input.Normal);
     output.WorldPosition = worldPosition;
-    output.UV = input.UV;
+    output.UV = input.UV * Tiling;
     output.Tangent = ObjectToWorldTangent(input.Tangent);
     return output;
 }
@@ -68,8 +71,8 @@ float4 PSMain(VertexOutput input) : SV_Target
     surface.Roughness = Roughness * mask.a;
 
     const float3 color = ComputeLighting(surface) + emissive;
-    
-    // Discard pixels whose alpha is below the cutoff.
+
+    // Last, as a discarded pixel stops at once, and the derivatives need the pixels around it.
     // Must match the clip in PSDepth, so the shadows and the selection outline get the same holes.
     clip(base.a - AlphaCutoff);
 

@@ -25,7 +25,7 @@ VertexOutput VSMain(VertexInput input)
     return output;
 }
 
-// TODO: No tonemapping
+// The result is tone mapped like the rest of the scene, so the colors on screen are close to, not exactly, normal * 0.5 + 0.5.
 float4 PSMain(VertexOutput input, bool isFrontFace : SV_IsFrontFace) : SV_Target
 {
     // Interpolation shortens the normal between vertices, so it is normalized again here

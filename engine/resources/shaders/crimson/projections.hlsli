@@ -1,5 +1,5 @@
-#ifndef CRIMSON_PROJECTION_HLSLI
-#define CRIMSON_PROJECTION_HLSLI
+#ifndef CRIMSON_PROJECTIONS_HLSLI
+#define CRIMSON_PROJECTIONS_HLSLI
 
 #include "crimson/math.hlsli"
 #include "crimson/normals.hlsli"
