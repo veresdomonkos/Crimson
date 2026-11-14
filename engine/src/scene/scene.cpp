@@ -225,16 +225,30 @@ namespace crimson
             UpdateWorldTransform(child, transform.World, transform.ActiveInHierarchy);
     }
 
+    void Scene::SetSiblingIndex(Entity entity, size_t index)
+    {
+        std::vector<entt::entity>& siblings = SiblingsOf(entity.GetHandle());
+
+        std::erase(siblings, entity.GetHandle());
+        siblings.insert(siblings.begin() + static_cast<std::ptrdiff_t>(std::min(index, siblings.size())), entity.GetHandle());
+    }
+
+    size_t Scene::GetSiblingIndex(Entity entity)
+    {
+        const std::vector<entt::entity>& siblings = SiblingsOf(entity.GetHandle());
+        return static_cast<size_t>(std::ranges::find(siblings, entity.GetHandle()) - siblings.begin());
+    }
+
+    std::vector<entt::entity>& Scene::SiblingsOf(entt::entity handle)
+    {
+        const entt::entity parent = m_registry.get<RelationshipComponent>(handle).Parent;
+        return parent == entt::null ? m_roots : m_registry.get<RelationshipComponent>(parent).Children;
+    }
+
     void Scene::Detach(entt::entity handle)
     {
-        RelationshipComponent& relationship = m_registry.get<RelationshipComponent>(handle);
-
-        std::vector<entt::entity>& siblings = relationship.Parent == entt::null
-            ? m_roots
-            : m_registry.get<RelationshipComponent>(relationship.Parent).Children;
-
-        std::erase(siblings, handle);
-        relationship.Parent = entt::null;
+        std::erase(SiblingsOf(handle), handle);
+        m_registry.get<RelationshipComponent>(handle).Parent = entt::null;
     }
 
     void Scene::Attach(entt::entity handle, entt::entity parent)

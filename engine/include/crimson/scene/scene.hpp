@@ -29,6 +29,12 @@ namespace crimson
         // Returns false without changing anything if the parent is the entity or one of its children.
         bool SetParent(Entity entity, Entity parent);
 
+        // Moves it among its siblings, to the end if the index is past it
+        void SetSiblingIndex(Entity entity, size_t index);
+
+        // Where it is among its siblings
+        [[nodiscard]] size_t GetSiblingIndex(Entity entity);
+
         [[nodiscard]] Entity GetEntity(entt::entity handle);
         [[nodiscard]] std::span<const entt::entity> GetRoots() const { return m_roots; }
 
@@ -49,6 +55,7 @@ namespace crimson
         [[nodiscard]] entt::registry& GetRegistry() { return m_registry; }
     private:
         void UpdateWorldTransform(entt::entity handle, const glm::mat4& parentWorld, bool parentActive);
+        std::vector<entt::entity>& SiblingsOf(entt::entity handle);
         void Detach(entt::entity handle);
         void Attach(entt::entity handle, entt::entity parent);
     private:

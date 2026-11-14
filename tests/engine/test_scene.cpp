@@ -306,3 +306,34 @@ TEST_CASE("A raycast finds the nearest box", "[scene]")
         CHECK(scene.Raycast(origin, forward) == ahead);
     }
 }
+
+TEST_CASE("An entity can be moved among its siblings", "[scene]")
+{
+    Scene scene;
+    const Entity parent = scene.CreateEntity("Parent");
+    const Entity a = scene.CreateEntity("A", parent);
+    const Entity b = scene.CreateEntity("B", parent);
+    const Entity c = scene.CreateEntity("C", parent);
+
+    const auto order = [&] { return parent.GetComponent<RelationshipComponent>().Children; };
+
+    CHECK(scene.GetSiblingIndex(b) == 1);
+
+    scene.SetSiblingIndex(c, 0);
+    CHECK(order() == std::vector{ c.GetHandle(), a.GetHandle(), b.GetHandle() });
+    CHECK(scene.GetSiblingIndex(a) == 1);
+
+    SECTION("Past the end is the end")
+    {
+        scene.SetSiblingIndex(c, 10);
+        CHECK(order() == std::vector{ a.GetHandle(), b.GetHandle(), c.GetHandle() });
+    }
+
+    SECTION("Roots too")
+    {
+        const Entity other = scene.CreateEntity("Other");
+        scene.SetSiblingIndex(other, 0);
+        CHECK(scene.GetRoots()[0] == other.GetHandle());
+        CHECK(scene.GetSiblingIndex(parent) == 1);
+    }
+}

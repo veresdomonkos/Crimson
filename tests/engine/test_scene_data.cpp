@@ -748,3 +748,64 @@ TEST_CASE_METHOD(Fixture, "Moving a file updates a runtime component's asset fie
 
     CHECK_FALSE(UpdateSceneReferences(*updated, moved, assets));
 }
+
+TEST_CASE_METHOD(Fixture, "One entity can be captured and set from its node", "[scene data]")
+{
+    Temp.Write("crate.scene", SceneWith(R"({ "name": "Lid" })"));
+    AssetManager assets(Gpu, Temp.Path());
+
+    Scene scene;
+    const Entity lamp = scene.CreateEntity("Lamp");
+    lamp.AddComponent<LightComponent>(LightComponent{ .Intensity = 3.0f });
+    scene.CreateEntity("Bulb", lamp);
+
+    SECTION("Without its children, or with them")
+    {
+        CHECK(CaptureNode(lamp, scene, assets, false).Children.empty());
+        CHECK(CaptureNode(lamp, scene, assets, true).Children.size() == 1);
+    }
+
+    SECTION("Setting a node puts its values back, and removes the components it doesn't have")
+    {
+        const SceneNode before = CaptureNode(lamp, scene, assets, false);
+
+        lamp.GetComponent<NameComponent>().Name = "Renamed";
+        lamp.GetComponent<TransformComponent>().Position = glm::vec3(5.0f);
+        lamp.GetComponent<LightComponent>().Intensity = 9.0f;
+        lamp.AddComponent<MeshRendererComponent>();
+
+        ApplyNode(lamp, before, assets);
+
+        CHECK(lamp.GetComponent<NameComponent>().Name == "Lamp");
+        CHECK(lamp.GetComponent<TransformComponent>().Position == glm::vec3(0.0f));
+        CHECK(lamp.GetComponent<LightComponent>().Intensity == 3.0f);
+        CHECK_FALSE(lamp.HasComponent<MeshRendererComponent>());
+        CHECK(lamp.GetComponent<RelationshipComponent>().Children.size() == 1);
+        CHECK(CaptureNode(lamp, scene, assets, false) == before);
+    }
+
+    SECTION("An instance root only takes its name and transform, and keeps what was expanded")
+    {
+        const Entity crate = CreateSceneInstance(assets.Find<AssetType::Scene>("crate.scene"), scene, {}, assets, {});
+        const SceneNode before = CaptureNode(crate, scene, assets, false);
+
+        crate.GetComponent<NameComponent>().Name = "Renamed";
+        crate.GetComponent<TransformComponent>().Position = glm::vec3(5.0f);
+
+        ApplyNode(crate, before, assets);
+
+        CHECK(CaptureNode(crate, scene, assets, false) == before);
+        CHECK(crate.HasComponent<SceneInstanceComponent>());
+        CHECK(crate.GetComponent<RelationshipComponent>().Children.size() == 1);
+    }
+
+    SECTION("An entity is found by its id, but not inside an instance, whose ids are its scene's")
+    {
+        CHECK(FindEntity(scene, lamp.GetComponent<NameComponent>().Id) == lamp);
+        CHECK_FALSE(FindEntity(scene, AssetID::Generate()));
+
+        const Entity crate = CreateSceneInstance(assets.Find<AssetType::Scene>("crate.scene"), scene, {}, assets, {});
+        const Entity lid = scene.GetEntity(crate.GetComponent<RelationshipComponent>().Children.at(0));
+        CHECK_FALSE(FindEntity(scene, lid.GetComponent<NameComponent>().Id));
+    }
+}
