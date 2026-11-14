@@ -18,6 +18,7 @@ Crimson is a small real-time 3D engine in C++23, with an editor. It renders with
 
 - **Physically based rendering:** metallic-roughness materials with the same slots as glTF, rendered in linear HDR and tone mapped for the screen.
 - **Lights and shadows:** any number of directional, point and spot lights, each of which can cast a shadow.
+- **Built-in shaders:** lit with glTF or mask-map packing, with parallax or triplanar and biplanar projection, unlit, and debug views of normals and UVs.
 - **Shaders that reload as you save:** HLSL, compiled inside the editor for both backends, with the material's properties and textures read from the shader itself.
 - **Scenes inside scenes:** any scene can be placed in another one as an instance. That's how reusable pieces are made, without a separate prefab type.
 - **Built-in meshes:** a cube, sphere, cylinder, capsule, plane and quad, from **Create 3D Object**.
