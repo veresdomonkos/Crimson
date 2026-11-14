@@ -86,7 +86,12 @@ namespace crimson::editor::ui
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kEntityPayload))
             {
                 const entt::entity dropped = *static_cast<const entt::entity*>(payload->Data);
-                m_deferred.emplace_back([this, dropped] { m_context.ActiveScene.SetParent(m_context.ActiveScene.GetEntity(dropped), {}); });
+                m_deferred.emplace_back([this, dropped]
+                {
+                    const Entity moved = m_context.ActiveScene.GetEntity(dropped);
+                    m_context.History.Record(moved);
+                    m_context.ActiveScene.SetParent(moved, {});
+                });
             }
 
             ImGui::EndDragDropTarget();
@@ -114,6 +119,9 @@ namespace crimson::editor::ui
             m_renaming = entt::null;
 
         ImGui::End();
+
+        // They are edits made at once, so they are steps of their own right away
+        m_context.SceneEdited = m_context.SceneEdited || !m_deferred.empty();
 
         for (const auto& action : m_deferred)
             action();
@@ -147,7 +155,11 @@ namespace crimson::editor::ui
 
     void HierarchyPanel::DeleteEntity(Entity entity)
     {
-        m_deferred.emplace_back([this, entity] { m_context.ActiveScene.DestroyEntity(entity); });
+        m_deferred.emplace_back([this, entity]
+        {
+            m_context.History.RecordDestroy(entity);
+            m_context.ActiveScene.DestroyEntity(entity);
+        });
     }
 
     void HierarchyPanel::DrawSearch()
@@ -239,7 +251,12 @@ namespace crimson::editor::ui
             if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kEntityPayload))
             {
                 const entt::entity dropped = *static_cast<const entt::entity*>(payload->Data);
-                m_deferred.emplace_back([this, dropped, entity] { m_context.ActiveScene.SetParent(m_context.ActiveScene.GetEntity(dropped), entity); });
+                m_deferred.emplace_back([this, dropped, entity]
+                {
+                    const Entity moved = m_context.ActiveScene.GetEntity(dropped);
+                    m_context.History.Record(moved);
+                    m_context.ActiveScene.SetParent(moved, entity);
+                });
             }
 
             ImGui::EndDragDropTarget();
@@ -318,7 +335,11 @@ namespace crimson::editor::ui
         name.erase(name.find_last_not_of(" \t") + 1);
 
         if (!name.empty())
-            m_deferred.emplace_back([entity, name = std::move(name)] { entity.GetComponent<NameComponent>().Name = name; });
+            m_deferred.emplace_back([this, entity, name = std::move(name)]
+            {
+                m_context.History.Record(entity);
+                entity.GetComponent<NameComponent>().Name = name;
+            });
     }
 
     void HierarchyPanel::DrawCreateMenu(Entity parent)
@@ -331,6 +352,7 @@ namespace crimson::editor::ui
                 if (setup)
                     setup(created);
 
+                m_context.History.RecordCreated(created);
                 m_context.SelectEntity(created);
             });
         };
