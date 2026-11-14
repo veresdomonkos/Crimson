@@ -8,6 +8,8 @@
 #include <nfd.h>
 #include <nfd_glfw3.h>
 
+#include "crimson_editor/platform.hpp"
+
 namespace crimson::editor
 {
     std::optional<std::filesystem::path> PickFolder(const Window& parent, const std::filesystem::path& startFolder)
@@ -40,11 +42,13 @@ namespace crimson::editor
         args.defaultPath = start.empty() ? nullptr : start.c_str();
         NFD_GetNativeWindowFromGLFWWindow(static_cast<GLFWwindow*>(parent.GetNativeHandle()), &args.parentWindow);
 
-#ifdef _WIN32
-        const nfdu8filteritem_t filters[] = { { "Programs", "exe,cmd,bat" } };
-        args.filterList = filters;
-        args.filterCount = 1;
-#endif
+        const std::string extensions(platform::ProgramExtensions());
+        const nfdu8filteritem_t filters[] = { { "Programs", extensions.c_str() } };
+        if (!extensions.empty())
+        {
+            args.filterList = filters;
+            args.filterCount = 1;
+        }
 
         nfdu8char_t* picked = nullptr;
         const nfdresult_t result = NFD_OpenDialogU8_With(&picked, &args);

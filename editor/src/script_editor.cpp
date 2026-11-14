@@ -2,11 +2,11 @@
 
 #include <algorithm>
 #include <cctype>
-#include <cstdlib>
 #include <system_error>
 
 #include <crimson/core/log.hpp>
 
+#include "crimson_editor/platform.hpp"
 #include "crimson_editor/system_shell.hpp"
 
 namespace fs = std::filesystem;
@@ -38,19 +38,6 @@ namespace crimson::editor
                 text.replace(at, from.size(), to);
         }
 
-        // An environment variable as a path, empty if it isn't set
-        fs::path EnvironmentPath(const char* name)
-        {
-#ifdef _WIN32
-            const std::wstring wideName(name, name + std::char_traits<char>::length(name));
-            const wchar_t* value = _wgetenv(wideName.c_str());
-            return value ? fs::path(value) : fs::path();
-#else
-            const char* value = std::getenv(name);
-            return value ? fs::path(value) : fs::path();
-#endif
-        }
-
         void AddIfFound(std::vector<CodeEditor>& editors, std::string name, const fs::path& program)
         {
             if (!IsFile(program))
@@ -61,92 +48,13 @@ namespace crimson::editor
 
             editors.push_back({ std::move(name), program, DefaultScriptEditorArguments(program) });
         }
-
-#ifndef _WIN32
-        // Where a program is on the PATH, empty if it isn't there
-        fs::path FindOnPath(const std::string& program)
-        {
-            const std::string path = EnvironmentPath("PATH").string();
-
-            for (size_t start = 0; start <= path.size();)
-            {
-                const size_t end = std::min(path.find(':', start), path.size());
-                if (end > start)
-                {
-                    const fs::path candidate = fs::path(path.substr(start, end - start)) / program;
-                    if (IsFile(candidate))
-                        return candidate;
-                }
-
-                start = end + 1;
-            }
-
-            return {};
-        }
-#endif
     }
 
     std::vector<CodeEditor> FindCodeEditors()
     {
         std::vector<CodeEditor> editors;
-        std::error_code error;
-
-#ifdef _WIN32
-        const fs::path localPrograms = EnvironmentPath("LOCALAPPDATA") / "Programs";
-        const std::vector<fs::path> programFiles = { EnvironmentPath("ProgramFiles"), EnvironmentPath("ProgramFiles(x86)") };
-
-        // Its command line, bin\code.cmd, is what takes -g file:line, so that comes before Code.exe itself
-        for (const fs::path& install : { localPrograms / "Microsoft VS Code", programFiles[0] / "Microsoft VS Code", programFiles[1] / "Microsoft VS Code" })
-        {
-            const fs::path commandLine = install / "bin" / "code.cmd";
-            AddIfFound(editors, "VS Code", IsFile(commandLine) ? commandLine : install / "Code.exe");
-        }
-
-        // Visual Studio is in a folder for each version, then one for each edition
-        for (const fs::path& root : programFiles)
-        {
-            const fs::path studio = root / "Microsoft Visual Studio";
-
-            for (fs::directory_iterator version(studio, error), end; !error && version != end; version.increment(error))
-            {
-                for (fs::directory_iterator edition(version->path(), error); !error && edition != end; edition.increment(error))
-                {
-                    AddIfFound(editors, "Visual Studio " + version->path().filename().string() + " " + edition->path().filename().string(),
-                               edition->path() / "Common7" / "IDE" / "devenv.exe");
-                }
-
-                error.clear();
-            }
-
-            error.clear();
-        }
-
-        // JetBrains installs a folder for each version, and the Toolbox puts them in the user's programs
-        for (const fs::path& root : { programFiles[0] / "JetBrains", localPrograms })
-        {
-            for (fs::directory_iterator product(root, error), end; !error && product != end; product.increment(error))
-            {
-                AddIfFound(editors, product->path().filename().string(), product->path() / "bin" / "rider64.exe");
-                AddIfFound(editors, product->path().filename().string(), product->path() / "bin" / "clion64.exe");
-            }
-
-            error.clear();
-        }
-#else
-        const std::pair<const char*, const char*> onPath[] = {
-            { "VS Code", "code" }, { "VSCodium", "codium" }, { "Rider", "rider" }, { "CLion", "clion" }
-        };
-
-        for (const auto& [name, program] : onPath)
-        {
-            if (const fs::path found = FindOnPath(program); !found.empty())
-                AddIfFound(editors, name, found);
-        }
-
-    #ifdef __APPLE__
-        AddIfFound(editors, "VS Code", "/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code");
-    #endif
-#endif
+        for (const auto& [name, program] : platform::CodeEditorCandidates())
+            AddIfFound(editors, name, program);
 
         return editors;
     }

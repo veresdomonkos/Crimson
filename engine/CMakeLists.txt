@@ -1,164 +1,175 @@
 find_package(Vulkan REQUIRED)
 
 set(ENGINE_PUBLIC_HEADERS
-		include/crimson/core/core.hpp
-		include/crimson/core/window.hpp
-		include/crimson/core/events.hpp
-		include/crimson/core/embedded_resource.hpp
-		include/crimson/core/engine_resources.hpp
-        include/crimson/core/log.hpp
-        include/crimson/core/input.hpp
-        include/crimson/graphics/graphics_api.hpp
-        include/crimson/renderer/resource_manager.hpp
-        include/crimson/renderer/renderer.hpp
-        include/crimson/renderer/frame_recorder.hpp
-        include/crimson/renderer/frame_validation.hpp
-        include/crimson/renderer/native_context.hpp
-        include/crimson/renderer/draw_sort.hpp
-        include/crimson/renderer/handle_registry.hpp
-        include/crimson/renderer/resource_handles.hpp
-        include/crimson/renderer/core.hpp
-        include/crimson/renderer/resource_manager_base.hpp
-        include/crimson/renderer/buffer_layout.hpp
-        include/crimson/renderer/buffers.hpp
-        include/crimson/renderer/camera_data.hpp
-        include/crimson/renderer/shader_property_info.hpp
-        include/crimson/renderer/shader_interface.hpp
-        include/crimson/renderer/shader_compiler.hpp
-        include/crimson/renderer/shadow_atlas.hpp
-        include/crimson/renderer/light.hpp
-        include/crimson/renderer/frame_gpu_data.hpp
-		include/crimson/graphics/graphics_backend.hpp
-		include/crimson/graphics/graphics_device.hpp
-        include/crimson/renderer/resource_tags.hpp
-        include/crimson/asset_manager/asset_id.hpp
-        include/crimson/asset_manager/asset_types.hpp
-        include/crimson/asset_manager/meta_file.hpp
-        include/crimson/asset_manager/asset_manager.hpp
-        include/crimson/asset_manager/material_data.hpp
-        include/crimson/asset_manager/scene_data.hpp
-        include/crimson/asset_manager/slot_materials.hpp
-        include/crimson/asset_manager/importers/texture_importer.hpp
-        include/crimson/asset_manager/importers/material_importer.hpp
-        include/crimson/asset_manager/importers/shader_importer.hpp
-        include/crimson/asset_manager/importers/scene_importer.hpp
-        include/crimson/renderer/mesh.hpp
-        include/crimson/renderer/shader_variant.hpp
-        include/crimson/asset_manager/importers/mesh_importer.hpp
-        include/crimson/core/profiler.hpp
-        include/crimson/renderer/render_stats.hpp
-        include/crimson/renderer/material_settings.hpp
-        include/crimson/scene/component_builder.hpp
-        include/crimson/scene/component_registry.hpp
-        include/crimson/scene/components.hpp
-        include/crimson/scene/entity.hpp
-        include/crimson/scene/scene.hpp
-        include/crimson/scene/scene_renderer.hpp
-        include/crimson/scene/scene_serializer.hpp
-        include/crimson/scene/tone_mapper.hpp
-        include/crimson/project/project.hpp
-        include/crimson/project/shader_includes.hpp
+    include/crimson/core/core.hpp
+    include/crimson/core/embedded_resource.hpp
+    include/crimson/core/engine_resources.hpp
+    include/crimson/core/events.hpp
+    include/crimson/core/input.hpp
+    include/crimson/core/log.hpp
+    include/crimson/core/profiler.hpp
+    include/crimson/core/window.hpp
+
+    include/crimson/graphics/graphics_api.hpp
+    include/crimson/graphics/graphics_backend.hpp
+    include/crimson/graphics/graphics_device.hpp
+
+    include/crimson/renderer/buffer_layout.hpp
+    include/crimson/renderer/buffers.hpp
+    include/crimson/renderer/camera_data.hpp
+    include/crimson/renderer/core.hpp
+    include/crimson/renderer/draw_sort.hpp
+    include/crimson/renderer/frame_gpu_data.hpp
+    include/crimson/renderer/frame_recorder.hpp
+    include/crimson/renderer/frame_validation.hpp
+    include/crimson/renderer/handle_registry.hpp
+    include/crimson/renderer/light.hpp
+    include/crimson/renderer/material_settings.hpp
+    include/crimson/renderer/mesh.hpp
+    include/crimson/renderer/native_context.hpp
+    include/crimson/renderer/render_stats.hpp
+    include/crimson/renderer/renderer.hpp
+    include/crimson/renderer/resource_handles.hpp
+    include/crimson/renderer/resource_manager.hpp
+    include/crimson/renderer/resource_manager_base.hpp
+    include/crimson/renderer/resource_tags.hpp
+    include/crimson/renderer/shader_compiler.hpp
+    include/crimson/renderer/shader_interface.hpp
+    include/crimson/renderer/shader_property_info.hpp
+    include/crimson/renderer/shader_variant.hpp
+    include/crimson/renderer/shadow_atlas.hpp
+    include/crimson/renderer/texture.hpp
+
+    include/crimson/asset_manager/asset_id.hpp
+    include/crimson/asset_manager/asset_importer.hpp
+    include/crimson/asset_manager/asset_manager.hpp
+    include/crimson/asset_manager/asset_types.hpp
+    include/crimson/asset_manager/material_data.hpp
+    include/crimson/asset_manager/meta_file.hpp
+    include/crimson/asset_manager/scene_data.hpp
+    include/crimson/asset_manager/slot_materials.hpp
+    include/crimson/asset_manager/importers/material_importer.hpp
+    include/crimson/asset_manager/importers/mesh_importer.hpp
+    include/crimson/asset_manager/importers/scene_importer.hpp
+    include/crimson/asset_manager/importers/shader_importer.hpp
+    include/crimson/asset_manager/importers/texture_importer.hpp
+
+    include/crimson/scene/component_builder.hpp
+    include/crimson/scene/component_registry.hpp
+    include/crimson/scene/components.hpp
+    include/crimson/scene/entity.hpp
+    include/crimson/scene/scene.hpp
+    include/crimson/scene/scene_renderer.hpp
+    include/crimson/scene/scene_serializer.hpp
+    include/crimson/scene/tone_mapper.hpp
+
+    include/crimson/project/project.hpp
+    include/crimson/project/shader_includes.hpp
+
+    include/crimson/ui/imgui_backend.hpp
 )
 
-set(ENGINE_IMPLEMENTATION
-		src/platform/glfw/glfw_window.hpp
-		src/platform/glfw/glfw_window.cpp
-        src/core/log.cpp
-        src/core/input.cpp
-        src/platform/opengl/opengl_resource_manager.hpp
-        src/platform/opengl/opengl_resource_manager.cpp
-        src/platform/opengl/opengl_renderer.hpp
-        src/platform/opengl/opengl_renderer_glfw.cpp
-		src/platform/opengl/opengl_resources.hpp
-        src/platform/vulkan/vulkan_resources.hpp
-        src/platform/vulkan/vulkan_allocator.hpp
-        src/platform/vulkan/vulkan_allocator.cpp
-        src/platform/vulkan/vulkan_include.hpp
-        src/platform/vulkan/vulkan_pipeline_cache.hpp
-        src/platform/opengl/utils.hpp
-        src/platform/opengl/vertex_array_cache.hpp
-        src/platform/opengl/opengl_state_cache.hpp
-        src/platform/opengl/spirv_to_glsl.hpp
-        src/platform/opengl/spirv_to_glsl.cpp
-        src/shader/hlsl_compiler.cpp
-        src/shader/shader_annotations.cpp
-        src/shader/shader_reflection.hpp
-        src/shader/shader_reflection.cpp
-        include/crimson/renderer/texture.hpp
-        src/platform/vulkan/utils.hpp
-        src/platform/opengl/opengl_imgui_backend.hpp
-        src/platform/opengl/opengl_imgui_backend.cpp
-        src/platform/vulkan/vulkan_imgui_backend.hpp
-        src/platform/vulkan/vulkan_imgui_backend.cpp
-		src/platform/vulkan/vulkan_device.hpp
-		src/platform/vulkan/vulkan_device.cpp
-		src/platform/vulkan/vulkan_resource_manager.hpp
-		src/platform/vulkan/vulkan_resource_manager.cpp
-		src/platform/vulkan/vulkan_renderer.hpp
-		src/platform/vulkan/vulkan_renderer.cpp
-		src/graphics/graphics_backend.cpp
-		src/platform/opengl/opengl_device.hpp
-		src/platform/opengl/opengl_device.cpp
-        src/asset_manager/asset_id.cpp
-        src/asset_manager/meta_file.cpp
-        src/asset_manager/file_write.hpp
-        src/asset_manager/file_write.cpp
-        include/crimson/asset_manager/asset_importer.hpp
-        src/asset_manager/asset_manager.cpp
-        src/asset_manager/material_data.cpp
-        src/asset_manager/scene_data.cpp
-        src/asset_manager/asset_ref.hpp
-        src/asset_manager/asset_ref.cpp
-        src/asset_manager/mtl_materials.hpp
-        src/asset_manager/mtl_materials.cpp
-        src/asset_manager/slot_materials.cpp
-        include/crimson/asset_manager/importers/texture_importer.hpp
-        src/asset_manager/importers/texture_importer.cpp
-        src/asset_manager/importers/material_importer.cpp
-        src/asset_manager/importers/mesh_importer.cpp
-        src/asset_manager/importers/mesh_tangents.hpp
-        src/asset_manager/importers/mesh_tangents.cpp
-        src/asset_manager/importers/shader_importer.cpp
-        src/asset_manager/importers/scene_importer.cpp
-        src/scene/component_registry.cpp
-        src/scene/native_components.cpp
-        src/scene/scene.cpp
-        src/scene/scene_renderer.cpp
-        src/scene/scene_serializer.cpp
-        src/project/project.cpp
-        src/project/shader_includes.cpp
+set(ENGINE_SOURCES
+    src/asset_manager/asset_id.cpp
+    src/asset_manager/asset_manager.cpp
+    src/asset_manager/asset_ref.cpp
+    src/asset_manager/asset_ref.hpp
+    src/asset_manager/asset_store.hpp
+    src/asset_manager/engine_renames.hpp
+    src/asset_manager/file_write.cpp
+    src/asset_manager/file_write.hpp
+    src/asset_manager/importers/material_importer.cpp
+    src/asset_manager/importers/mesh_importer.cpp
+    src/asset_manager/importers/mesh_tangents.cpp
+    src/asset_manager/importers/mesh_tangents.hpp
+    src/asset_manager/importers/scene_importer.cpp
+    src/asset_manager/importers/shader_importer.cpp
+    src/asset_manager/importers/texture_importer.cpp
+    src/asset_manager/material_data.cpp
+    src/asset_manager/meta_file.cpp
+    src/asset_manager/mtl_materials.cpp
+    src/asset_manager/mtl_materials.hpp
+    src/asset_manager/scene_data.cpp
+    src/asset_manager/slot_materials.cpp
+
+    src/core/input.cpp
+    src/core/log.cpp
+
+    src/graphics/graphics_backend.cpp
+
+    src/platform/files.hpp
+
+    src/platform/glfw/glfw_window.cpp
+    src/platform/glfw/glfw_window.hpp
+
+    src/platform/opengl/opengl_device.cpp
+    src/platform/opengl/opengl_device.hpp
+    src/platform/opengl/opengl_imgui_backend.cpp
+    src/platform/opengl/opengl_imgui_backend.hpp
+    src/platform/opengl/opengl_renderer.hpp
+    src/platform/opengl/opengl_renderer_glfw.cpp
+    src/platform/opengl/opengl_resource_manager.cpp
+    src/platform/opengl/opengl_resource_manager.hpp
+    src/platform/opengl/opengl_resources.hpp
+    src/platform/opengl/opengl_state_cache.hpp
+    src/platform/opengl/spirv_to_glsl.cpp
+    src/platform/opengl/spirv_to_glsl.hpp
+    src/platform/opengl/utils.hpp
+    src/platform/opengl/vertex_array_cache.hpp
+
+    src/platform/vulkan/utils.hpp
+    src/platform/vulkan/vulkan_allocator.cpp
+    src/platform/vulkan/vulkan_allocator.hpp
+    src/platform/vulkan/vulkan_device.cpp
+    src/platform/vulkan/vulkan_device.hpp
+    src/platform/vulkan/vulkan_imgui_backend.cpp
+    src/platform/vulkan/vulkan_imgui_backend.hpp
+    src/platform/vulkan/vulkan_include.hpp
+    src/platform/vulkan/vulkan_pipeline_cache.hpp
+    src/platform/vulkan/vulkan_renderer.cpp
+    src/platform/vulkan/vulkan_renderer.hpp
+    src/platform/vulkan/vulkan_resource_manager.cpp
+    src/platform/vulkan/vulkan_resource_manager.hpp
+    src/platform/vulkan/vulkan_resources.hpp
+
+    src/project/project.cpp
+    src/project/shader_includes.cpp
+
+    src/scene/component_registry.cpp
+    src/scene/native_components.cpp
+    src/scene/scene.cpp
+    src/scene/scene_renderer.cpp
+    src/scene/scene_serializer.cpp
+
+    src/shader/hlsl_compiler.cpp
+    src/shader/shader_annotations.cpp
+    src/shader/shader_reflection.cpp
+    src/shader/shader_reflection.hpp
 )
 
-add_library(Engine STATIC
-        ${ENGINE_PUBLIC_HEADERS}
-        ${ENGINE_IMPLEMENTATION}
-)
+add_library(Engine STATIC ${ENGINE_PUBLIC_HEADERS} ${ENGINE_SOURCES})
 
 target_compile_features(Engine PUBLIC cxx_std_23)
-set_target_properties(Engine PROPERTIES
-        CXX_STANDARD_REQUIRED ON
-        CXX_EXTENSIONS OFF
-)
-
 target_include_directories(Engine PUBLIC include PRIVATE src)
-
-crimson_embed_resources(Engine DIRECTORY resources NAMESPACE crimson FUNCTION GetEngineResources)
-
-# vulkan_raii.hpp is very large, so only the Vulkan backend pays for it
-set(ENGINE_VULKAN_SOURCES ${ENGINE_IMPLEMENTATION})
-list(FILTER ENGINE_VULKAN_SOURCES INCLUDE REGEX "src/platform/vulkan/.*\.cpp$")
-list(APPEND ENGINE_VULKAN_SOURCES src/graphics/graphics_backend.cpp)
-
-set(ENGINE_OTHER_SOURCES ${ENGINE_IMPLEMENTATION})
-list(FILTER ENGINE_OTHER_SOURCES INCLUDE REGEX "\.cpp$")
-list(REMOVE_ITEM ENGINE_OTHER_SOURCES ${ENGINE_VULKAN_SOURCES})
-
-target_precompile_headers(Engine PRIVATE src/platform/vulkan/vulkan_include.hpp)
-set_source_files_properties(${ENGINE_OTHER_SOURCES} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
 
 if(MINGW)
     target_compile_options(Engine PRIVATE -Wa,-mbig-obj)
 endif()
+
+# windows.h without the min and max macros and the rarely used APIs, for every file that includes it, here and in
+# what uses the engine
+if(WIN32)
+    target_compile_definitions(Engine PUBLIC NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_sources(Engine PRIVATE src/platform/windows/windows_files.cpp)
+else()
+    target_sources(Engine PRIVATE src/platform/posix/posix_files.cpp)
+endif()
+
+crimson_embed_resources(Engine DIRECTORY resources NAMESPACE crimson FUNCTION GetEngineResources)
+
+# Every engine file gets the Vulkan headers too. That was measured at about 5% more compile time than a separate
+# precompiled header for the backend, which isn't worth a second target.
+crimson_precompile_headers(Engine ${CRIMSON_PRECOMPILED_ENGINE_DEPS} src/platform/vulkan/vulkan_include.hpp)
 
 target_link_libraries(Engine
     PUBLIC
@@ -171,7 +182,7 @@ target_link_libraries(Engine
     PRIVATE
         glfw
         glad
-		Vulkan::Vulkan
+        Vulkan::Vulkan
         spirv-reflect-static
         spirv-cross-glsl
         glslang::glslang
