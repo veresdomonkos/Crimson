@@ -1,7 +1,13 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <cmath>
+#include <span>
 #include <string>
+#include <string_view>
+#include <vector>
+
+#include <fmt/format.h>
 
 #include <glm/gtc/quaternion.hpp>
 
@@ -385,17 +391,18 @@ namespace
     {
         int MaterialCount = 0;
 
-        Entity AddWall(const std::string& properties, const std::string& textures = "{}")
+        Entity AddWall(const std::string& properties, const std::string& textures = "{}",
+            const std::string& shader = "engine/shaders/S_Lit.hlsl", const char* mesh = "textured_wall.obj")
         {
             Project.Write("textured_wall.obj", kTexturedWall);
 
             const std::string name = "wall" + std::to_string(MaterialCount++) + ".mat";
-            Project.Write(name, R"({ "shader": "engine/shaders/S_Lit.hlsl", "properties": )" + properties + R"(, "textures": )" + textures + " }");
+            Project.Write(name, R"({ "shader": ")" + shader + R"(", "properties": )" + properties + R"(, "textures": )" + textures + " }");
             Assets->Refresh();
 
             const Entity entity = World.CreateEntity(name);
             auto& renderer = entity.AddComponent<MeshRendererComponent>();
-            renderer.MeshAsset = Assets->Find<AssetType::Mesh>("textured_wall.obj");
+            renderer.MeshAsset = Assets->Find<AssetType::Mesh>(mesh);
             renderer.MaterialAssets = { Assets->Find<AssetType::Material>(name) };
             ResolveAssets(*Assets, renderer);
             REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
@@ -414,6 +421,17 @@ namespace
         float RenderCenter()
         {
             return LinearBrightness(PixelAt(Render(), glm::vec3(0.0f)));
+        }
+
+        // A wall drawn alone: its center and a point off to the side of it
+        std::array<glm::ivec4, 2> RenderWall(const std::string& properties, const std::string& textures, const std::string& shader,
+            const char* mesh = "textured_wall.obj")
+        {
+            const Entity wall = AddWall(properties, textures, shader, mesh);
+            const Image image = Render();
+            World.DestroyEntity(wall);
+
+            return { PixelAt(image, glm::vec3(0.0f)), PixelAt(image, glm::vec3(0.5f, 0.5f, 0.0f)) };
         }
     };
 }
@@ -661,9 +679,22 @@ TEST_CASE_METHOD(Fixture, "A selected mesh gets an outline", "[lighting]")
 
 namespace
 {
+    // Every shader that has a cutout, and the ones that light a surface
+    constexpr std::array kCutoutShaders = {
+        "S_Lit", "S_LitMask", "S_LitMaskParallax", "S_LitMaskTriplanar", "S_LitMaskBiplanar", "S_Unlit"
+    };
+    constexpr size_t kLitShaders = 5;
+
     // Cutout materials whose alpha is all under the cutoff, and all over it
-    constexpr std::string_view kCutAway = R"({ "shader": "engine/shaders/S_Lit.hlsl", "renderMode": "cutout", "properties": { "Color": [1, 1, 1, 0] } })";
-    constexpr std::string_view kCutNothing = R"({ "shader": "engine/shaders/S_Lit.hlsl", "renderMode": "cutout", "properties": { "Color": [1, 1, 1, 1] } })";
+    std::string CutAway(std::string_view shader)
+    {
+        return fmt::format(R"({{ "shader": "engine/shaders/{}.hlsl", "renderMode": "cutout", "properties": {{ "Color": [1, 1, 1, 0] }} }})", shader);
+    }
+
+    std::string CutNothing(std::string_view shader)
+    {
+        return fmt::format(R"({{ "shader": "engine/shaders/{}.hlsl", "renderMode": "cutout", "properties": {{ "Color": [1, 1, 1, 1] }} }})", shader);
+    }
 
     void UseMaterial(Entity entity, AssetManager& assets, std::string_view path)
     {
@@ -676,57 +707,72 @@ namespace
 TEST_CASE_METHOD(Fixture, "What a cutout material cuts away isn't drawn", "[lighting]")
 {
     Lighting.AmbientColor = glm::vec3(0.3f);
-    Project.Write("cut_away.mat", kCutAway);
-    Project.Write("cut_nothing.mat", kCutNothing);
-    Assets->Refresh();
 
-    const Entity wall = AddMesh("wall.obj", glm::vec3(0.0f), glm::vec3(0.5f));
+    for (const std::string_view shader : kCutoutShaders)
+    {
+        DYNAMIC_SECTION(shader)
+        {
+            Project.Write("cut_away.mat", CutAway(shader));
+            Project.Write("cut_nothing.mat", CutNothing(shader));
+            Assets->Refresh();
 
-    UseMaterial(wall, *Assets, "cut_away.mat");
-    CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), kClearPixel, 2));
+            const Entity wall = AddMesh("wall.obj", glm::vec3(0.0f), glm::vec3(0.5f));
 
-    UseMaterial(wall, *Assets, "cut_nothing.mat");
-    CHECK_FALSE(IsNear(PixelAt(Render(), glm::vec3(0.0f)), kClearPixel, 2));
+            UseMaterial(wall, *Assets, "cut_away.mat");
+            CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), kClearPixel, 2));
+
+            UseMaterial(wall, *Assets, "cut_nothing.mat");
+            CHECK_FALSE(IsNear(PixelAt(Render(), glm::vec3(0.0f)), kClearPixel, 2));
+        }
+    }
 }
 
+// Each shader has a PSDepth of its own, so each one is checked
 TEST_CASE_METHOD(ShadowFixture, "What a cutout material cuts away casts no shadow", "[lighting]")
 {
     Lighting.AmbientColor = glm::vec3(0.1f);
-    Project.Write("cut_away.mat", kCutAway);
-    Project.Write("cut_nothing.mat", kCutNothing);
-    Assets->Refresh();
 
     AddLight({ .Type = LightType::Directional, .CastsShadow = true }, glm::vec3(0.0f), glm::vec3(1.0f, -1.0f, 0.0f));
 
-    SECTION("All of it cut away, so no shadow")
+    for (const std::string_view shader : std::span(kCutoutShaders).first(kLitShaders))
     {
-        UseMaterial(Roof, *Assets, "cut_away.mat");
+        DYNAMIC_SECTION(shader)
+        {
+            Project.Write("cut_away.mat", CutAway(shader));
+            Project.Write("cut_nothing.mat", CutNothing(shader));
+            Assets->Refresh();
 
-        const Image image = Render();
-        const float shadow = LinearBrightness(PixelAt(image, kInShadow));
-        const float light = LinearBrightness(PixelAt(image, kInLight));
+            SECTION("All of it cut away, so no shadow")
+            {
+                UseMaterial(Roof, *Assets, "cut_away.mat");
 
-        CAPTURE(shadow, light);
-        CHECK(std::abs(shadow - light) <= kSpecularDifference);
-    }
+                const Image image = Render();
+                const float shadow = LinearBrightness(PixelAt(image, kInShadow));
+                const float light = LinearBrightness(PixelAt(image, kInLight));
 
-    SECTION("Nothing cut away, so the whole shadow")
-    {
-        UseMaterial(Roof, *Assets, "cut_nothing.mat");
+                CAPTURE(shadow, light);
+                CHECK(std::abs(shadow - light) <= kSpecularDifference);
+            }
 
-        const Image image = Render();
-        const float shadow = LinearBrightness(PixelAt(image, kInShadow));
-        const float light = LinearBrightness(PixelAt(image, kInLight));
+            SECTION("Nothing cut away, so the whole shadow")
+            {
+                UseMaterial(Roof, *Assets, "cut_nothing.mat");
 
-        CAPTURE(shadow, light);
-        CHECK(shadow < light / 2);
+                const Image image = Render();
+                const float shadow = LinearBrightness(PixelAt(image, kInShadow));
+                const float light = LinearBrightness(PixelAt(image, kInLight));
+
+                CAPTURE(shadow, light);
+                CHECK(shadow < light / 2);
+            }
+        }
     }
 }
 
 TEST_CASE_METHOD(Fixture, "What a cutout material cuts away has no outline", "[lighting]")
 {
     Lighting.AmbientColor = glm::vec3(0.3f);
-    Project.Write("cut_away.mat", kCutAway);
+    Project.Write("cut_away.mat", CutAway("S_Lit"));
     Assets->Refresh();
 
     const Entity wall = AddMesh("wall.obj", glm::vec3(0.0f), glm::vec3(0.5f));
@@ -791,4 +837,143 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
         // Its shadow falls from x 3.5 to 4.5, and the moved mesh hides the ground up to about 4 from the camera above
         CHECK(shadowAt(image, glm::vec3(4.3f, 0.0f, 0.0f)));
     }
+}
+
+namespace
+{
+    // What the shaders below are compared with: one light from the side, some ambient, and every value set by hand,
+    // as the mask shaders' defaults differ from S_Lit's
+    constexpr std::string_view kSharedValues =
+        R"("Color": [0.8, 0.4, 0.2, 1], "Metallic": 0.5, "Roughness": 0.4, "OcclusionStrength": 0.5, "EmissiveColor": [0.1, 0, 0], "EmissiveStrength": 1)";
+
+    constexpr std::string_view kLit = "engine/shaders/S_Lit.hlsl";
+    constexpr std::string_view kLitMask = "engine/shaders/S_LitMask.hlsl";
+
+    std::string Properties(std::string_view extra = "")
+    {
+        return std::string("{ ") + std::string(kSharedValues) + (extra.empty() ? "" : ", ") + std::string(extra) + " }";
+    }
+
+    void CheckSamePixels(const std::array<glm::ivec4, 2>& actual, const std::array<glm::ivec4, 2>& expected)
+    {
+        for (size_t i = 0; i < actual.size(); ++i)
+        {
+            CAPTURE(i, actual[i].r, actual[i].g, actual[i].b, expected[i].r, expected[i].g, expected[i].b);
+            CHECK(IsNear(actual[i], glm::ivec3(expected[i]), 1));
+        }
+    }
+
+    struct SharedFixture : MaterialFixture
+    {
+        SharedFixture()
+        {
+            Lighting.AmbientColor = glm::vec3(0.2f);
+            AddLight({ .Type = LightType::Directional }, glm::vec3(0.0f), glm::vec3(-1.0f, 0.0f, -1.0f));
+        }
+    };
+}
+
+TEST_CASE_METHOD(SharedFixture, "S_LitMask lights a surface like S_Lit given the same values", "[pbr]")
+{
+    SECTION("Values only")
+    {
+        const auto lit = RenderWall(Properties(), "{}", std::string(kLit));
+        const auto mask = RenderWall(Properties(), "{}", std::string(kLitMask));
+
+        CheckSamePixels(mask, lit);
+    }
+
+    SECTION("With maps holding the same values")
+    {
+        WriteDataTexture("metallic_roughness.bmp", Rgb{ 0, 255, 128 });
+        WriteDataTexture("occlusion.bmp", Rgb{ 128, 0, 0 });
+        WriteDataTexture("mask.bmp", Rgb{ 128, 128, 0 });
+        WriteDataTexture("lean.bmp", Rgb{ 218, 128, 218 });
+        Project.Write("emissive.bmp", MakeBmp(1, 1, { Rgb{ 255, 128, 0 } }));
+
+        const auto lit = RenderWall(Properties(), R"({ "MetallicRoughnessMap": "metallic_roughness.bmp", "OcclusionMap": "occlusion.bmp",
+            "NormalMap": "lean.bmp", "EmissiveMap": "emissive.bmp" })", std::string(kLit));
+        const auto mask = RenderWall(Properties(), R"({ "MaskMap": "mask.bmp", "NormalMap": "lean.bmp", "EmissiveMap": "emissive.bmp" })",
+            std::string(kLitMask));
+
+        CheckSamePixels(mask, lit);
+    }
+}
+
+// A map of one color reads the same at any UV or projection, and on a wall facing +Z the projected normals blend back to the wall's own.
+// So what's left to differ is how each shader handles the mask, occlusion and emissive values.
+TEST_CASE_METHOD(SharedFixture, "The mask-map variants light a flat wall like S_LitMask, given maps of one color", "[pbr]")
+{
+    WriteDataTexture("mask.bmp", Rgb{ 128, 128, 0 });
+    WriteDataTexture("height.bmp", Rgb{ 0, 0, 0 });
+    Project.Write("color.bmp", MakeBmp(1, 1, { Rgb{ 200, 100, 50 } }));
+    Project.Write("emissive.bmp", MakeBmp(1, 1, { Rgb{ 255, 128, 0 } }));
+
+    const std::string textures = R"("MaskMap": "mask.bmp", "ColorMap": "color.bmp", "EmissiveMap": "emissive.bmp")";
+    const auto expected = RenderWall(Properties(), "{ " + textures + " }", std::string(kLitMask));
+
+    for (const char* shader : { "S_LitMaskParallax", "S_LitMaskTriplanar", "S_LitMaskBiplanar" })
+    {
+        DYNAMIC_SECTION(shader)
+        {
+            const std::string extra = std::string(shader) == "S_LitMaskParallax" ? R"(, "HeightMap": "height.bmp")" : "";
+            const auto actual = RenderWall(Properties(), "{ " + textures + extra + " }", fmt::format("engine/shaders/{}.hlsl", shader));
+
+            CheckSamePixels(actual, expected);
+        }
+    }
+}
+
+TEST_CASE_METHOD(MaterialFixture, "Triplanar and biplanar project along the axis the surface faces, without UVs", "[pbr]")
+{
+    Lighting.AmbientColor = glm::vec3(0.5f);
+
+    // Red, then green: the Z projection's U is +x * ProjectionTiling, so x = 0.5 reads U 0.25, and x = -0.5 wraps to U 0.75
+    Project.Write("halves.bmp", MakeBmp(2, 1, { Rgb{ 255, 0, 0 }, Rgb{ 0, 255, 0 } }));
+
+    for (const char* shader : { "S_LitMaskTriplanar", "S_LitMaskBiplanar" })
+    {
+        DYNAMIC_SECTION(shader)
+        {
+            const Entity wall = AddWall(R"({ "Metallic": 0, "Roughness": 1, "ProjectionTiling": 0.5 })", R"({ "ColorMap": "halves.bmp" })",
+                fmt::format("engine/shaders/{}.hlsl", shader), "wall.obj");
+            const Image image = Render();
+
+            const glm::ivec4 right = PixelAt(image, glm::vec3(0.5f, 0.0f, 0.0f));
+            const glm::ivec4 left = PixelAt(image, glm::vec3(-0.5f, 0.0f, 0.0f));
+
+            CAPTURE(right.r, right.g, left.r, left.g);
+            CHECK(right.r > right.g * 3);
+            CHECK(left.g > left.r * 3);
+        }
+    }
+}
+
+TEST_CASE_METHOD(MaterialFixture, "A parallax height map shows the surface sunk away from the camera", "[pbr]")
+{
+    Lighting.AmbientColor = glm::vec3(0.5f);
+
+    // Red rises with U, so a larger U there reads as a brighter red
+    std::vector<Rgb> ramp;
+    for (unsigned char i = 0; i < 8; ++i)
+        ramp.push_back(Rgb{ static_cast<unsigned char>(i * 32), 0, 0 });
+
+    Project.Write("ramp.bmp", MakeBmp(8, 1, ramp));
+    WriteDataTexture("deep.bmp", Rgb{ 0, 0, 0 });
+
+    // The camera sees this point from its left, so a sunken surface shows more of what lies to the right
+    const auto redAt = [&](const char* strength)
+    {
+        const std::string properties = std::string(R"({ "Metallic": 0, "Roughness": 1, "ParallaxHeightStrength": )") + strength + " }";
+        const Entity wall = AddWall(properties, R"({ "ColorMap": "ramp.bmp", "HeightMap": "deep.bmp" })", "engine/shaders/S_LitMaskParallax.hlsl");
+        const int red = PixelAt(Render(), glm::vec3(0.6f, 0.0f, 0.0f)).r;
+        World.DestroyEntity(wall);
+        return red;
+    };
+
+    const int flat = redAt("0");
+    const int sunk = redAt("0.2");
+
+    CAPTURE(flat, sunk);
+    CHECK(sunk > flat);
 }

@@ -60,7 +60,7 @@ TEST_CASE("Every engine shader compiles, reflects and translates to GLSL", "[sha
         }
     }
 
-    CHECK(shaders >= 3);
+    CHECK(shaders >= 10);
 }
 
 TEST_CASE("A shader can have its own depth version, for the shadows and the outline", "[shaders]")
@@ -236,7 +236,7 @@ TEST_CASE("Every engine material names an engine shader", "[shaders]")
         CHECK(FindEmbeddedFile(resources, std::string_view(shader).substr(7)) != nullptr);
     }
 
-    CHECK(materials >= 3);
+    CHECK(materials >= 7);
 }
 
 TEST_CASE("Embedded files can be found by their path", "[shaders]")
@@ -348,6 +348,7 @@ cbuffer MaterialBlock : register(b0, space1)
     float4 Tint; // @default 1 1 1 1
     float Amount; // @default 0.25 @range 0 2
     float WrongSize; // @default 1 2
+    float2 Offset; // @default 1 1 @range 0.01 100
 };
 
 Texture2D Plain : register(t0, space1);
@@ -357,7 +358,7 @@ float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position
 
 float4 PSMain() : SV_Target
 {
-    return Tint * Amount * WrongSize + Plain.Sample(LinearWrap, float2(0, 0)) + Bumps.Sample(LinearWrap, float2(0, 0));
+    return Tint * Amount * WrongSize * Offset.x + Plain.Sample(LinearWrap, float2(0, 0)) + Bumps.Sample(LinearWrap, float2(0, 0));
 }
 )", {});
     REQUIRE(binary);
@@ -368,6 +369,8 @@ float4 PSMain() : SV_Target
     CHECK(shader->Properties.at("Tint").Default.size() == 4);
     CHECK(shader->Properties.at("Amount").Default == std::vector{ 0.25f });
     CHECK(shader->Properties.at("Amount").Range == std::pair{ 0.0f, 2.0f });
+    CHECK(shader->Properties.at("Offset").Range == std::pair{ 0.01f, 100.0f });
+    CHECK(shader->Properties.at("Offset").Default.size() == 2);
     CHECK(shader->Properties.at("WrongSize").Default.empty());
     CHECK(shader->Textures.at("Plain").Default == ShaderTextureDefault::White);
     CHECK(shader->Textures.at("Bumps").Default == ShaderTextureDefault::Normal);
@@ -442,6 +445,63 @@ VertexOutput VSMain(float3 position : POSITION, float3 normal : NORMAL)
 float4 PSMain(VertexOutput input) : SV_Target
 {
     return float4(input.Value * (PI + TAU + HALF_PI + INV_PI + E), 1.0);
+}
+)";
+
+    const auto binary = CompileHlslShader("helpers.hlsl", std::string(kShader), {});
+    REQUIRE(binary);
+    CHECK(ReflectShaderInterface(*binary));
+
+    std::vector<opengl::GlslTextureUnit> units;
+    CHECK(opengl::TranslateSpirvToGlsl(binary->Vertex, units));
+    CHECK(opengl::TranslateSpirvToGlsl(binary->Pixel, units));
+}
+
+TEST_CASE("The normal, parallax and projection helpers compile and translate to GLSL", "[shaders]")
+{
+    constexpr std::string_view kShader = R"(
+#include "crimson/normals.hlsli"
+#include "crimson/projections.hlsli"
+#include "crimson/parallax.hlsli"
+
+Texture2D Map : register(t0, space1);
+
+struct VertexOutput
+{
+    float4 ClipPosition : SV_Position;
+    float3 WorldPosition : WORLDPOSITION;
+    float3 Normal : NORMAL;
+    float4 Tangent : TANGENT;
+};
+
+VertexOutput VSMain(float3 position : POSITION, float3 normal : NORMAL, float4 tangent : TANGENT)
+{
+    VertexOutput output;
+    output.WorldPosition = ObjectToWorldPosition(position);
+    output.ClipPosition = WorldToClip(output.WorldPosition);
+    output.Normal = ObjectToWorldNormal(normal);
+    output.Tangent = ObjectToWorldTangent(tangent);
+    return output;
+}
+
+float4 PSMain(VertexOutput input) : SV_Target
+{
+    const float4 texel = Map.Sample(LinearWrap, input.WorldPosition.xy);
+    const float3 normal = normalize(input.Normal);
+    const float3x3 frame = TangentFrame(normal, input.Tangent);
+
+    float3 result = ReconstructNormalZ(texel.xy);
+    result = BlendNormalsDefault(result, UnpackNormalXY(texel));
+    result = BlendNormalsReoriented(result, UnpackNormalXYZ(texel));
+    result = TangentToWorldDirection(result, frame) + WorldToObjectNormal(normal);
+
+    float4 color = SamplePlanar(Map, LinearWrap, input.WorldPosition, float3(1, 0, 0), float3(0, -1, 0), 0.5);
+    color += SampleTriplanarWorld(Map, LinearWrap, input.WorldPosition, normal, 1.0, 4.0);
+    color += SampleBiplanarWorld(Map, LinearWrap, input.WorldPosition, normal, 1.0, 8.0);
+    result += SampleTriplanarNormalWorld(Map, LinearWrap, input.WorldPosition, normal, 1.0, 4.0, 1.0);
+    result += SampleBiplanarNormalWorld(Map, LinearWrap, input.WorldPosition, normal, 1.0, 8.0, 1.0);
+
+    return float4(result + color.rgb * (INV_SQRT3 + FLT_MIN + FLT_MAX), 1.0);
 }
 )";
 
