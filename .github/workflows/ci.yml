@@ -134,14 +134,11 @@ jobs:
         run: >-
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCRIMSON_ENABLE_PROFILER=OFF
 
       - name: Build
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
-          CCACHE_SLOPPINESS: pch_defines,time_macros
           CCACHE_MAXSIZE: 1G
         run: cmake --build build --target Editor CrimsonTests CrimsonGpuTests
 
@@ -248,8 +245,6 @@ jobs:
         run: >-
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DCRIMSON_BUILD_TESTS=OFF
           -DCRIMSON_ENABLE_PROFILER=OFF
           -DGLFW_BUILD_WAYLAND=OFF
@@ -257,7 +252,6 @@ jobs:
       - name: Build
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
-          CCACHE_SLOPPINESS: pch_defines,time_macros
           CCACHE_MAXSIZE: 1G
         run: cmake --build build --target Editor
 
@@ -372,8 +366,6 @@ jobs:
         run: >-
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
-          -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
-          -DCMAKE_C_COMPILER_LAUNCHER=ccache
           -DGLFW_BUILD_WAYLAND=OFF
           "-DCMAKE_CXX_FLAGS=${{ matrix.flags }}"
           "-DCMAKE_C_FLAGS=${{ matrix.flags }}"
@@ -382,7 +374,6 @@ jobs:
       - name: Build
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
-          CCACHE_SLOPPINESS: pch_defines,time_macros
           CCACHE_MAXSIZE: 1G
         run: cmake --build build --target Editor CrimsonTests CrimsonGpuTests
       - name: Test
