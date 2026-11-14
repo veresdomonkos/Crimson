@@ -97,6 +97,8 @@ if(WIN32)
     target_link_libraries(EditorCore PRIVATE shell32 ole32)
 endif()
 
+crimson_precompile_headers(EditorCore ${CRIMSON_PRECOMPILED_ENGINE_DEPS} <imgui.h>)
+
 add_executable(Editor src/main.cpp)
 
 target_link_libraries(Editor PRIVATE EditorCore)

@@ -44,6 +44,8 @@ target_link_libraries(CrimsonTests
         Catch2::Catch2WithMain
 )
 
+crimson_precompile_headers(CrimsonTests ${CRIMSON_PRECOMPILED_ENGINE_DEPS} <imgui.h> <catch2/catch_test_macros.hpp>)
+
 crimson_link_statically(CrimsonTests)
 
 add_test(NAME CrimsonTests COMMAND CrimsonTests)
@@ -68,6 +70,8 @@ target_link_libraries(CrimsonGpuTests
         EditorCore
         Catch2::Catch2
 )
+
+crimson_precompile_headers(CrimsonGpuTests ${CRIMSON_PRECOMPILED_ENGINE_DEPS} <imgui.h> <catch2/catch_test_macros.hpp>)
 
 crimson_link_statically(CrimsonGpuTests)
 

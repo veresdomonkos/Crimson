@@ -148,6 +148,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(cmake/EmbedResources.cmake)
 include(cmake/LinkStatically.cmake)
+include(cmake/PrecompileHeaders.cmake)
 
 add_subdirectory(engine)
 add_subdirectory(editor)

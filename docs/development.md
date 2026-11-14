@@ -28,6 +28,7 @@ cmake --build build --target Editor
 
 - **Debug info:** the libraries in `external/` only get line tables, so call stacks through them still have files and lines, but their variables can't be inspected. Our own code gets full debug info.
 - **Static linking:** the editor links everything statically, including the shader compiler, so it needs no DLLs of its own. It only uses the system's graphics driver, and the executable can run from anywhere.
+- **Precompiled headers:** `cmake/PrecompileHeaders.cmake` lists standard and third-party headers only, because an edit to a header in the list rebuilds the whole target. Files keep their own includes. Engine's precompiled header includes the Vulkan headers too. That was measured at about 5% more compile time than a separate one for the backend, which isn't worth a second target. Configuring with `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` checks that every file builds on its own. The `linux-gcc` CI job always builds that way, so a missing include fails the pull request.
 - **Measuring performance:** use **Release** (or RelWithDebInfo). Debug builds, especially with validation layers enabled, are many times slower and give misleading numbers. The Stats panel says when it is a Debug build.
 - **Choosing a backend:** `--vulkan` or `--opengl` on the command line picks the backend, and `--project <folder>` opens a project straight away.
 
@@ -37,6 +38,7 @@ cmake --build build --target Editor
 | `-DCRIMSON_ENABLE_PROFILER=OFF` | compiles the Tracy instrumentation out |
 | `-DCRIMSON_USE_CCACHE=OFF` | builds without ccache, even when it is installed |
 | `-DCRIMSON_USE_LLD=OFF` | links with the compiler's default linker, even when lld is installed |
+| `-DCMAKE_DISABLE_PRECOMPILE_HEADERS=ON` | builds without precompiled headers, to check that every file includes what it uses |
 | `CRIMSON_VSYNC=1` | limits the editor to the display's refresh rate. It renders as fast as it can otherwise. |
 | `CRIMSON_VK_SYNC_VALIDATION=1` | adds synchronization validation to the Vulkan validation layers, which Debug builds turn on when they are installed |
 

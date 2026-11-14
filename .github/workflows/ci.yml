@@ -298,6 +298,7 @@ jobs:
   # Runs everything. Without a GPU Mesa renders on the CPU, with llvmpipe for OpenGL and lavapipe for Vulkan,
   # and Xvfb is the display the windows open on. Debug builds turn the validation layers on.
   # The AddressSanitizer build reports memory errors. Leak checking is off, as the graphics drivers keep memory on purpose.
+  # The GCC build has no precompiled headers, so a file that relies on them for an include fails here.
   linux:
     name: linux-${{ matrix.flavor }}
     runs-on: ubuntu-26.04
@@ -309,8 +310,10 @@ jobs:
         include:
           - flavor: gcc
             flags: ""
+            pch_disabled: "ON"
           - flavor: asan
             flags: -fsanitize=address -fno-omit-frame-pointer
+            pch_disabled: "OFF"
 
     steps:
       - name: Check out, with the submodules
@@ -368,6 +371,7 @@ jobs:
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
           -DGLFW_BUILD_WAYLAND=OFF
+          -DCMAKE_DISABLE_PRECOMPILE_HEADERS=${{ matrix.pch_disabled }}
           "-DCMAKE_CXX_FLAGS=${{ matrix.flags }}"
           "-DCMAKE_C_FLAGS=${{ matrix.flags }}"
           "-DCMAKE_EXE_LINKER_FLAGS=${{ matrix.flags }}"

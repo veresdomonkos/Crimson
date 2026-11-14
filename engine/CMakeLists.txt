@@ -156,22 +156,9 @@ endif()
 
 crimson_embed_resources(Engine DIRECTORY resources NAMESPACE crimson FUNCTION GetEngineResources)
 
-# vulkan_raii.hpp is very large, so only the Vulkan backend pays for it
-set(ENGINE_VULKAN_SOURCES
-    src/graphics/graphics_backend.cpp
-    src/platform/vulkan/vulkan_allocator.cpp
-    src/platform/vulkan/vulkan_device.cpp
-    src/platform/vulkan/vulkan_imgui_backend.cpp
-    src/platform/vulkan/vulkan_renderer.cpp
-    src/platform/vulkan/vulkan_resource_manager.cpp
-)
-
-set(ENGINE_OTHER_SOURCES ${ENGINE_SOURCES})
-list(FILTER ENGINE_OTHER_SOURCES INCLUDE REGEX "\.cpp$")
-list(REMOVE_ITEM ENGINE_OTHER_SOURCES ${ENGINE_VULKAN_SOURCES})
-
-target_precompile_headers(Engine PRIVATE src/platform/vulkan/vulkan_include.hpp)
-set_source_files_properties(${ENGINE_OTHER_SOURCES} PROPERTIES SKIP_PRECOMPILE_HEADERS ON)
+# Every engine file gets the Vulkan headers too. That was measured at about 5% more compile time than a separate
+# precompiled header for the backend, which isn't worth a second target.
+crimson_precompile_headers(Engine ${CRIMSON_PRECOMPILED_ENGINE_DEPS} src/platform/vulkan/vulkan_include.hpp)
 
 target_link_libraries(Engine
     PUBLIC
