@@ -33,6 +33,7 @@ namespace crimson::editor::ui
     inline constexpr const char* kIconWarning = "\xEE\x86\x93"; // triangle-alert, U+E193
     inline constexpr const char* kIconSuccess = "\xEE\x88\xA6"; // circle-check, U+E226
     inline constexpr const char* kIconInfo = "\xEE\x83\xB9"; // info, U+E0F9
+    inline constexpr const char* kIconPicker = "\xEE\x8D\x85"; // circle-dot, U+E345
 
     inline const char* AssetIcon(AssetType type)
     {
@@ -63,7 +64,7 @@ namespace crimson::editor::ui
             { "cone", kIconSpotLight }, { "package", kIconSceneInstance }, { "move", kIconMove }, { "rotate-3d", kIconRotate },
             { "scaling", kIconScale }, { "axis-3d", kIconLocalSpace }, { "globe", kIconWorldSpace }, { "move-3d", kIconTransform },
             { "search", kIconSearch }, { "circle-alert", kIconError }, { "triangle-alert", kIconWarning },
-            { "circle-check", kIconSuccess }, { "info", kIconInfo },
+            { "circle-check", kIconSuccess }, { "info", kIconInfo }, { "circle-dot", kIconPicker },
         };
 
         for (const Named& named : kNamed)

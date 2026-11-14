@@ -55,6 +55,7 @@ namespace crimson::editor::ui
         void Rebuild();
         void RefreshFromDisk();
         void RefreshWhenRefocused();
+        void ShowPinged(AssetID asset);
 
         void DrawToolbar();
         void DrawFolderTree(const std::string& parent);
@@ -86,6 +87,10 @@ namespace crimson::editor::ui
         std::string m_currentFolder; // empty for the top
 
         ImGuiTextFilter m_filter;
+
+        AssetID m_pinged; // flashes in the grid for a moment, after a field pointed at it
+        double m_pingStart = 0.0;
+        bool m_scrollToPinged = false;
 
         Dialog m_dialog = Dialog::None;
         bool m_openDialog = false;

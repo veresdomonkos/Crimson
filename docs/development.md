@@ -76,7 +76,7 @@ Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are alr
 This runs the real backends, once with `--backend gl` and once with `--backend vk`, and opens a window to do it. `ctest --label-exclude gpu` skips it.
 
 - **Rendering:** renders into a target and checks the pixels with `ReadColorPixels`. It covers placement, depth, materials, textures, blending, lights, all three kinds of shadow, outlines, shader time and the space helpers.
-- **The editor:** drives the real `EditorApplication` frame by frame. It covers the project manager, opening and closing projects, projects with problems, and shaders reloading while a material is selected. The panels draw, but nothing clicks on them.
+- **The editor:** drives the real `EditorApplication` frame by frame. It covers the project manager, opening and closing projects, projects with problems, and shaders reloading while a material is selected. The panels draw, but nothing clicks on them. It also opens the asset picker, in both views, and pings an asset.
 - **Input:** a locked cursor staying in place.
 
 ## CI

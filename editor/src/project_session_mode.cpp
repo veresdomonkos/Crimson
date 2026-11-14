@@ -216,6 +216,7 @@ namespace crimson::editor
     void ProjectSessionMode::LoadScene(SceneID id)
     {
         m_context.Selected = {};
+        m_context.Picker.Reset();
         m_context.ActiveSceneAsset = {};
         m_context.SceneChanged = false;
         m_scene.Clear();
@@ -376,6 +377,7 @@ namespace crimson::editor
     void ProjectSessionMode::OnImGui()
     {
         m_ui->Draw();
+        m_context.Picker.Draw(m_context.Assets, m_context.Thumbnails);
         DrawUnsavedChangesDialog();
     }
 

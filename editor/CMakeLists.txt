@@ -54,6 +54,12 @@ add_library(EditorCore STATIC
         include/crimson_editor/ui/inspector_panel.hpp
         include/crimson_editor/ui/asset_browser_panel.hpp
         src/ui/asset_browser_panel.cpp
+        include/crimson_editor/ui/asset_tiles.hpp
+        src/ui/asset_tiles.cpp
+        include/crimson_editor/ui/asset_picker.hpp
+        src/ui/asset_picker.cpp
+        include/crimson_editor/ui/asset_field.hpp
+        src/ui/asset_field.cpp
         include/crimson_editor/ui/asset_inspector.hpp
         src/ui/asset_inspector.cpp
         include/crimson_editor/ui/asset_drag.hpp

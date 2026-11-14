@@ -13,6 +13,7 @@
 
 #include "crimson_editor/system_shell.hpp"
 #include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/asset_tiles.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
@@ -21,17 +22,12 @@ namespace fs = std::filesystem;
 namespace crimson::editor::ui
 {
     static constexpr std::string_view kEngineFolder = "engine";
+    static constexpr float kPingSeconds = 1.5f;
 
     static std::string ParentOf(const std::string& path)
     {
         const size_t slash = path.find_last_of('/');
         return slash == std::string::npos ? std::string{} : path.substr(0, slash);
-    }
-
-    static std::string NameOf(const std::string& path)
-    {
-        const size_t slash = path.find_last_of('/');
-        return slash == std::string::npos ? path : path.substr(slash + 1);
     }
 
     bool IsEngineFolder(std::string_view folder)
@@ -49,108 +45,6 @@ namespace crimson::editor::ui
     static bool OpensOutside(AssetType type)
     {
         return type == AssetType::Shader || type == AssetType::Texture || type == AssetType::Mesh;
-    }
-
-    // The first character of a UTF-8 string, such as an icon
-    static unsigned int FirstCodepoint(const char* text)
-    {
-        const auto* bytes = reinterpret_cast<const unsigned char*>(text);
-
-        if (bytes[0] < 0x80) return bytes[0];
-        if ((bytes[0] & 0xE0) == 0xC0) return ((bytes[0] & 0x1Fu) << 6) | (bytes[1] & 0x3Fu);
-        if ((bytes[0] & 0xF0) == 0xE0) return ((bytes[0] & 0x0Fu) << 12) | ((bytes[1] & 0x3Fu) << 6) | (bytes[2] & 0x3Fu);
-        return ((bytes[0] & 0x07u) << 18) | ((bytes[1] & 0x3Fu) << 12) | ((bytes[2] & 0x3Fu) << 6) | (bytes[3] & 0x3Fu);
-    }
-
-    // An icon as big as fits in a box, centered by what it draws rather than by its place in the font, which leaves
-    // room around icons that isn't the same on every side
-    static void DrawTileIcon(ImDrawList* drawList, const ImVec2& min, const ImVec2& max, const char* icon, const ImVec4& color)
-    {
-        const float size = std::min(max.x - min.x, max.y - min.y);
-        ImFont* font = ImGui::GetFont();
-        const ImVec2 center((min.x + max.x) * 0.5f, (min.y + max.y) * 0.5f);
-
-        ImVec2 position;
-        if (const ImFontGlyph* glyph = font->GetFontBaked(size)->FindGlyphNoFallback(static_cast<ImWchar>(FirstCodepoint(icon))))
-        {
-            position = ImVec2(center.x - (glyph->X0 + glyph->X1) * 0.5f, center.y - (glyph->Y0 + glyph->Y1) * 0.5f);
-        }
-        else
-        {
-            const ImVec2 textSize = font->CalcTextSizeA(size, FLT_MAX, 0.0f, icon);
-            position = ImVec2(center.x - textSize.x * 0.5f, center.y - textSize.y * 0.5f);
-        }
-
-        drawList->AddText(font, size, position, ImGui::GetColorU32(color), icon);
-    }
-
-    // Where a tile's parts go. Its frame is drawn here rather than by a Selectable, whose highlight reaches past the
-    // tile into the spacing around it, so the icon and the name are centered in exactly what shows as the tile.
-    struct TileLayout
-    {
-        ImVec2 IconMin;
-        ImVec2 IconMax;
-        ImVec2 LabelPosition;
-        float LabelWidth = 0.0f;
-        bool Clicked = false;
-    };
-
-    static TileLayout DrawTileFrame(const char* id, float width, bool selected)
-    {
-        const ImGuiStyle& style = ImGui::GetStyle();
-        const float pad = std::round(theme::Scaled(theme::SpaceS));
-        const float iconHeight = std::round(width * 0.62f);
-        const float height = pad + iconHeight + style.ItemInnerSpacing.y + ImGui::GetTextLineHeight() + pad;
-
-        TileLayout layout;
-        layout.Clicked = ImGui::InvisibleButton(id, ImVec2(width, height));
-
-        const ImVec2 min = ImGui::GetItemRectMin();
-        const ImVec2 max = ImGui::GetItemRectMax();
-
-        const ImGuiCol background = selected ? ImGuiCol_Header : ImGui::IsItemHovered() ? ImGuiCol_HeaderHovered : ImGuiCol_COUNT;
-        if (background != ImGuiCol_COUNT)
-            ImGui::GetWindowDrawList()->AddRectFilled(min, max, ImGui::GetColorU32(background), theme::Scaled(theme::Radius));
-
-        layout.IconMin = ImVec2(min.x + pad, min.y + pad);
-        layout.IconMax = ImVec2(max.x - pad, min.y + pad + iconHeight);
-        layout.LabelPosition = ImVec2(min.x + pad * 0.5f, layout.IconMax.y + style.ItemInnerSpacing.y);
-        layout.LabelWidth = width - pad;
-        return layout;
-    }
-
-    // A name centered under its tile, and cut off if it would run into the next one
-    // A name centered under its tile, shortened with "..." if it is wider than the tile. The tooltip has the whole name.
-    static void DrawClippedText(ImDrawList* drawList, const ImVec2& position, float width, const char* text, ImU32 color)
-    {
-        static constexpr const char* kEllipsis = "...";
-
-        std::string shown = text;
-        if (ImGui::CalcTextSize(shown.c_str()).x > width)
-        {
-            const float ellipsisWidth = ImGui::CalcTextSize(kEllipsis).x;
-
-            // Whole UTF-8 characters come off the end, never half of one: continuation bytes, then the byte they follow
-            while (!shown.empty() && ImGui::CalcTextSize(shown.c_str()).x + ellipsisWidth > width)
-            {
-                while (!shown.empty())
-                {
-                    const auto byte = static_cast<unsigned char>(shown.back());
-                    shown.pop_back();
-
-                    if ((byte & 0xC0) != 0x80)
-                        break;
-                }
-            }
-
-            shown += kEllipsis;
-        }
-
-        const float textWidth = ImGui::CalcTextSize(shown.c_str()).x;
-        const ImVec2 start(position.x + std::max((width - textWidth) * 0.5f, 0.0f), position.y);
-        const ImVec4 clip(position.x, position.y, position.x + width, position.y + ImGui::GetTextLineHeight());
-
-        drawList->AddText(nullptr, 0.0f, start, color, shown.c_str(), nullptr, 0.0f, &clip);
     }
 
     void AssetBrowserPanel::Rebuild()
@@ -178,7 +72,7 @@ namespace crimson::editor::ui
                 continue;
 
             const std::string folder = ParentOf(info->Path);
-            m_items.push_back({ info->Id, info->Type, info->Path, NameOf(info->Path), folder, info->ReadOnly });
+            m_items.push_back({ info->Id, info->Type, info->Path, AssetFileName(info->Path), folder, info->ReadOnly });
             addFolderAndParents(folder);
         }
 
@@ -234,8 +128,36 @@ namespace crimson::editor::ui
         return m_currentFolder.empty() ? name : m_currentFolder + "/" + name;
     }
 
+    void AssetBrowserPanel::ShowPinged(AssetID asset)
+    {
+        const AssetInfo* info = m_context.Assets.GetInfo(asset);
+        if (!info || IsInternal(*info))
+            return;
+
+        // The engine's assets are only in the grid while they are shown
+        if (info->ReadOnly && !m_settings.GetShowEngineContent())
+            m_settings.SetShowEngineContent(true);
+
+        if (m_filter.IsActive() && !m_filter.PassFilter(info->Path.c_str()))
+            m_filter.Clear();
+
+        m_currentFolder = ParentOf(info->Path);
+        m_pinged = asset;
+        m_pingStart = ImGui::GetTime();
+        m_scrollToPinged = true;
+
+        // Brings the panel's tab to the front
+        ImGui::SetNextWindowFocus();
+    }
+
     void AssetBrowserPanel::OnImGui()
     {
+        if (m_context.PingedAsset)
+        {
+            ShowPinged(m_context.PingedAsset);
+            m_context.PingedAsset = {};
+        }
+
         ImGui::Begin("Assets");
 
         RefreshWhenRefocused();
@@ -391,7 +313,7 @@ namespace crimson::editor::ui
             if (folder == m_currentFolder)
                 flags |= ImGuiTreeNodeFlags_Selected;
 
-            const bool open = theme::IconTreeNode(folder.c_str(), flags, folder == m_currentFolder ? kIconFolderOpen : kIconFolder, theme::Folder, NameOf(folder).c_str());
+            const bool open = theme::IconTreeNode(folder.c_str(), flags, folder == m_currentFolder ? kIconFolderOpen : kIconFolder, theme::Folder, AssetFileName(folder).c_str());
 
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                 m_currentFolder = folder;
@@ -472,15 +394,20 @@ namespace crimson::editor::ui
         ImDrawList* drawList = ImGui::GetWindowDrawList();
         DrawTileIcon(drawList, tile.IconMin, tile.IconMax, kIconFolder, theme::Folder);
 
-        const std::string name = NameOf(folder);
+        const std::string name = AssetFileName(folder);
         DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(ImGuiCol_Text));
 
         if (!IsEngineFolder(folder))
         {
             for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture, AssetType::Scene })
             {
-                if (const AssetID dropped = AcceptAssetOnLastItem(m_context.Assets, type))
+                const ImVec2 min = ImGui::GetItemRectMin();
+                const ImVec2 max = ImGui::GetItemRectMax();
+
+                if (const AssetID dropped = AcceptAssetOnLastItem(m_context.Assets, type, ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
                     MoveAssetToFolder(dropped, folder);
+
+                DrawAssetDropHighlight(m_context.Assets, type, min, max, theme::Scaled(theme::Radius));
             }
 
             DrawFolderMenu(folder);
@@ -498,6 +425,22 @@ namespace crimson::editor::ui
         const TileLayout tile = DrawTileFrame("##Asset", tileSize, selected);
         if (tile.Clicked)
             m_context.SelectAsset(item.Id);
+
+        if (item.Id == m_pinged)
+        {
+            const float left = 1.0f - static_cast<float>(ImGui::GetTime() - m_pingStart) / kPingSeconds;
+            if (left > 0.0f)
+            {
+                ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                    ImGui::GetColorU32(theme::WithAlpha(theme::Accent, theme::TintHoverAlpha * left)), theme::Scaled(theme::Radius));
+            }
+
+            if (m_scrollToPinged)
+            {
+                ImGui::SetScrollHereY(0.5f);
+                m_scrollToPinged = false;
+            }
+        }
 
         // A scene opens in the editor. Shaders open in the script editor from the preferences, and textures and
         // meshes in the program the system has for them. A material's editor is the Inspector, so it only gets selected.
@@ -658,13 +601,13 @@ namespace crimson::editor::ui
         if (ImGui::MenuItem("Rename"))
         {
             m_dialogFolder = folder;
-            OpenDialog(Dialog::RenameFolder, NameOf(folder));
+            OpenDialog(Dialog::RenameFolder, AssetFileName(folder));
         }
 
         if (ImGui::MenuItem("Delete"))
         {
             m_dialogFolder = folder;
-            OpenDialog(Dialog::DeleteFolder, NameOf(folder));
+            OpenDialog(Dialog::DeleteFolder, AssetFileName(folder));
         }
 
         ImGui::EndPopup();
@@ -904,7 +847,7 @@ namespace crimson::editor::ui
             if (!info || info->ReadOnly || ParentOf(info->Path) == folder)
                 return;
 
-            if (m_context.Assets.Rename(asset, folder.empty() ? NameOf(info->Path) : folder + "/" + NameOf(info->Path)))
+            if (m_context.Assets.Rename(asset, folder.empty() ? AssetFileName(info->Path) : folder + "/" + AssetFileName(info->Path)))
                 ++m_context.AssetsVersion;
         });
     }
