@@ -643,6 +643,140 @@ TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[edit
     }
 }
 
+TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]")
+{
+    Scene& scene = Context().ActiveScene;
+    REQUIRE(scene.GetRoots().size() >= 2);
+    CHECK_FALSE(Context().History.CanUndo());
+
+    const auto root = [&scene](size_t index) { return scene.GetEntity(scene.GetRoots()[index]); };
+    const auto idOf = [](Entity entity) { return entity.GetComponent<NameComponent>().Id; };
+
+    const size_t roots = scene.GetRoots().size();
+    const AssetID firstId = idOf(root(0));
+
+    SECTION("A deleted entity comes back where it was, with its id, and the scene is as saved again")
+    {
+        Context().History.RecordDestroy(root(0));
+        scene.DestroyEntity(root(0));
+        Context().History.Commit();
+        REQUIRE(Context().History.CanUndo());
+
+        Session().Undo();
+
+        REQUIRE(scene.GetRoots().size() == roots);
+        CHECK(idOf(root(0)) == firstId);
+        CHECK_FALSE(Session().IsSceneChanged());
+        CHECK_FALSE(Context().SceneChanged);
+
+        Session().Redo();
+
+        CHECK(scene.GetRoots().size() == roots - 1);
+        CHECK(Session().IsSceneChanged());
+    }
+
+    SECTION("A deleted entity that was selected is selected again, by its id")
+    {
+        Context().SelectEntity(root(0));
+        RunFrames(App, 1);
+
+        Context().Deferred.emplace_back([&]
+        {
+            Context().History.RecordDestroy(root(0));
+            scene.DestroyEntity(root(0));
+        });
+        RunFrames(App, 1);
+        CHECK_FALSE(Context().Selected);
+
+        Session().Undo();
+
+        REQUIRE(Context().Selected);
+        CHECK(idOf(Context().Selected) == firstId);
+        CHECK(Context().Selected == root(0));
+
+        // With nothing left to undo, the selection stays as it is
+        REQUIRE_FALSE(Context().History.CanUndo());
+        Context().SelectEntity({});
+        Session().Undo();
+        CHECK_FALSE(Context().Selected);
+    }
+
+    SECTION("The selected entity is recorded, so what the Inspector or the gizmo does to it is one step")
+    {
+        const Entity selected = root(1);
+        Context().SelectEntity(selected);
+        RunFrames(App, 1);
+
+        // Changed over a few frames, as a drag would
+        for (int frame = 0; frame < 3; ++frame)
+            selected.GetComponent<TransformComponent>().Position.x += 1.0f;
+
+        Context().SceneEdited = true;
+        RunFrames(App, 1);
+
+        Session().Undo();
+
+        // The same entity, as only it was put back
+        CHECK(Context().Selected == selected);
+        CHECK(selected.GetComponent<TransformComponent>().Position.x == 0.0f);
+        CHECK_FALSE(Context().History.CanUndo());
+    }
+
+    SECTION("Edits recorded between frames are each a step of their own, right away")
+    {
+        Context().Deferred.emplace_back([&] { Context().History.RecordCreated(scene.CreateEntity("First")); });
+        RunFrames(App, 1);
+        CHECK(Context().History.CanUndo());
+
+        Context().Deferred.emplace_back([&] { Context().History.RecordCreated(scene.CreateEntity("Second")); });
+        RunFrames(App, 1);
+
+        Session().Undo();
+        CHECK(scene.GetRoots().size() == roots + 1);
+
+        Session().Undo();
+        CHECK(scene.GetRoots().size() == roots);
+    }
+
+    SECTION("Nothing is undone while the asset picker is open")
+    {
+        Context().Deferred.emplace_back([&] { Context().History.RecordCreated(scene.CreateEntity("First")); });
+        RunFrames(App, 1);
+
+        Context().Picker.Open(1, AssetType::Texture, {}, {});
+        RunFrames(App, 1);
+        REQUIRE(Context().Picker.IsOpen());
+
+        Session().Undo();
+        CHECK(scene.GetRoots().size() == roots + 1);
+
+        Context().Picker.Close();
+        RunFrames(App, 1);
+
+        Session().Undo();
+        CHECK(scene.GetRoots().size() == roots);
+    }
+
+    SECTION("Opening another scene forgets the steps")
+    {
+        Context().History.RecordDestroy(root(0));
+        scene.DestroyEntity(root(0));
+        Context().History.Commit();
+        REQUIRE(Session().SaveAll());
+
+        SceneID other;
+        Context().Deferred.emplace_back([&] { other = Assets().Create<AssetType::Scene>("scenes/other.scene"); });
+        RunFrames(App);
+
+        Context().OpenScene(other);
+        RunFrames(App);
+
+        REQUIRE(Context().ActiveSceneAsset == other);
+        CHECK_FALSE(Context().History.CanUndo());
+        CHECK_FALSE(Context().History.CanRedo());
+    }
+}
+
 TEST_CASE_METHOD(AssetFixture, "Opening a scene replaces the one showing", "[editor]")
 {
     const Entity old = Context().ActiveScene.GetEntity(Context().ActiveScene.GetRoots()[0]);

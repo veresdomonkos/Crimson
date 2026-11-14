@@ -192,6 +192,8 @@ A scene is saved as a `.scene` asset: readable JSON with the entities nested the
 }
 ```
 
+`CaptureNode` and `ApplyNode` capture and set one entity apart from its children, which undo uses.
+
 A new scene is a copy of `engine/scenes/internal/SC_NewScene.scene`, which has a sun, with every entity given an id of its own.
 
 There are no prefabs, as any scene can be used inside another one as an instance. An instance is an entity with the other scene's roots as its children. Its own name, transform and active flag are saved with it, while what is under it comes from the other scene's file each time the scene opens, and can't be changed from here. There are no per-instance overrides yet (#20). A scene that would end up containing itself can't be dropped in, and one written that way by hand leaves that instance empty.
@@ -273,7 +275,7 @@ A project is a folder with a `project.crimson` file and an `assets/` folder. It 
 
 Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single native pass. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default.
 
-- **The main menu:** File and View come from `EditorUI`. Panels add their own menus between them through `Panel::OnMainMenuBar`. The Hierarchy adds **Edit** (Rename, Delete) and **Create**, the same as its right-click menu. The Preferences window adds **Edit > Preferences**.
+- **The main menu:** File, **Edit** (Undo, Redo) and View come from `EditorUI`. Panels add their own menus between them through `Panel::OnMainMenuBar`, and items to Edit, which ImGui puts after the ones already there. The Hierarchy adds **Edit** (Rename, Delete) and **Create**, the same as its right-click menu. The Preferences window adds **Edit > Preferences**.
 - **Notifications:** `ui::Notifications` shows errors, from anywhere in the engine, and finished saves in the bottom right corner, so they are seen with the Console closed. It reads the same `Logger` the Console does.
 
 | Panel | What it does |
@@ -286,6 +288,18 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 | **Render Settings** | exposure, tone mapper and ambient light, saved with the scene |
 | **Stats** | FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts |
 | **Shadow Map** | the shadow atlas |
+
+### Undo
+
+`SceneHistory` works like Unity's `Undo.RecordObject`: code that changes the scene records what it is about to change (`Record`), creates (`RecordCreated`) or destroys (`RecordDestroy`), and `Commit` ends the step, keeping each recorded entity that did change as it was before and after. Undo puts back only those, so the rest of the scene, its entity handles and the Hierarchy's open nodes stay as they are. A deleted entity comes back with what was under it, its ids and its place among its siblings. A step keeps whole states rather than what was done, so an edit nobody recorded only means that one can't be undone.
+
+- **Capturing and setting:** `CaptureNode` and `ApplyNode` capture and set one entity through the component registry, the way a scene file does. A component's fallbacks are captured as empty by `CaptureComponent` and resolved again by `ResolveComponentAssets`, so an undone material drop gets its default material back.
+- **Who records:** the Hierarchy and the Scene view record their edits through `EditorContext::History`. The Inspector and the gizmo change the selected entity directly, and Render Settings the environment, so the session records those whenever nothing is being edited.
+- **When a step ends:** on the frame an ImGui item stops being active, the gizmo stops being dragged (`EditorContext::GizmoInUse`) or the asset picker closes, after deferred actions ran, or after a panel sets `EditorContext::SceneEdited` for an edit done at once. The Inspector sets it too, so a drop onto a field ends its step right away. The check a few times a second for the unsaved mark ends any other. A whole drag, typing a name or a visit to the picker is one step, and undo first ends the step being recorded.
+- **The selection:** an entity that undo brings back is a new one, so it is selected again by its id if it was selected before the edit.
+- **What resets it:** opening a scene. Undoing back to the saved state clears the unsaved mark, as that compares the scene with what was saved.
+- **The shortcuts:** `Ctrl+Z`, and `Ctrl+Y` or `Ctrl+Shift+Z`, except in a text field, which has its own undo. The 100 latest steps are kept.
+- **Not covered:** material edits (#103), which are files rather than the scene, and anything done to asset files.
 
 ### Look and layout
 

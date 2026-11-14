@@ -36,7 +36,8 @@ namespace crimson::editor
           m_assetManager(std::make_unique<AssetManager>(GpuResources(), m_project.AssetsDir())),
           m_assetEdits(std::make_unique<AssetEdits>(*m_assetManager)),
           m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, GpuResources(), *m_services.Graphics.Imgui)),
-          m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails,
+          m_history(m_scene, *m_assetManager, m_environment, [this] { m_sceneRenderer->SetToneMapping(m_environment.Exposure, m_environment.Mapper); }),
+          m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails, .History = m_history,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
                      .OpenScene = [this](SceneID id) { OpenScene(id); },
                      .OpenCodeFile = [this](const std::filesystem::path& file) { OpenInScriptEditor(m_services.Settings.GetScriptEditor(), file, m_project.Root()); } }
@@ -47,9 +48,15 @@ namespace crimson::editor
         ExportShaderIncludes(m_project);
 
         m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer);
-        m_ui = std::make_unique<ui::EditorUI>(
-            [this] { SaveAll(); },
-            [this] { RequestClose(m_services.CloseProject); });
+        // The menu is drawn in the middle of a frame, and undoing can create entities, which load GPU resources
+        m_ui = std::make_unique<ui::EditorUI>(ui::MainMenuActions{
+            .SaveAll = [this] { SaveAll(); },
+            .CloseProject = [this] { RequestClose(m_services.CloseProject); },
+            .Undo = [this] { m_context.Deferred.emplace_back([this] { Undo(); }); },
+            .Redo = [this] { m_context.Deferred.emplace_back([this] { Redo(); }); },
+            .CanUndo = [this] { return m_history.CanUndo(); },
+            .CanRedo = [this] { return m_history.CanRedo(); }
+        });
 
         CreateRenderTargets();
         SetupRenderer();
@@ -221,6 +228,9 @@ namespace crimson::editor
         m_context.SceneChanged = false;
         m_scene.Clear();
 
+        // What was done to the last scene can't be undone in this one
+        m_history.Clear();
+
         const std::optional<SceneData> data = m_assetManager->Read(id);
         if (!data)
             return;
@@ -249,6 +259,53 @@ namespace crimson::editor
     bool ProjectSessionMode::IsSceneChanged()
     {
         return m_context.ActiveSceneAsset && CaptureScene(m_scene, m_environment, *m_assetManager) != m_savedScene;
+    }
+
+    bool ProjectSessionMode::IsEditing() const
+    {
+        return ImGui::IsAnyItemActive() || m_context.GizmoInUse || m_context.Picker.IsOpen();
+    }
+
+    void ProjectSessionMode::RecordWatched()
+    {
+        // The Inspector and the gizmo change the selection directly, and Render Settings the environment
+        m_history.Record(m_context.Selected);
+        m_history.RecordEnvironment();
+
+        m_selectedBeforeEdit = m_context.Selected ? m_context.Selected.GetComponent<NameComponent>().Id : AssetID{};
+    }
+
+    void ProjectSessionMode::Undo()
+    {
+        if (IsEditing())
+            return;
+
+        // An edit that wasn't a step yet is the one to undo
+        m_history.Commit(m_selectedBeforeEdit);
+        FinishUndoRedo(m_history.Undo());
+    }
+
+    void ProjectSessionMode::Redo()
+    {
+        if (IsEditing())
+            return;
+
+        // An edit since the last undo makes a step, which leaves nothing to redo
+        m_history.Commit(m_selectedBeforeEdit);
+        FinishUndoRedo(m_history.Redo());
+    }
+
+    void ProjectSessionMode::FinishUndoRedo(bool applied)
+    {
+        // An entity that comes back is a new one, so what was selected is found again by its id
+        if (applied && !m_context.Selected)
+        {
+            if (const Entity restored = FindEntity(m_scene, m_history.RestoredSelection()))
+                m_context.SelectEntity(restored);
+        }
+
+        RecordWatched();
+        m_context.SceneChanged = IsSceneChanged();
     }
 
     bool ProjectSessionMode::SaveAll()
@@ -376,6 +433,9 @@ namespace crimson::editor
 
     void ProjectSessionMode::OnImGui()
     {
+        // The Scene view sets it again while the gizmo is dragged, and may not draw the gizmo at all
+        m_context.GizmoInUse = false;
+
         m_ui->Draw();
         m_context.Picker.Draw(m_context.Assets, m_context.Thumbnails);
         DrawUnsavedChangesDialog();
@@ -383,8 +443,17 @@ namespace crimson::editor
 
     void ProjectSessionMode::Update(float deltaTime)
     {
+        const bool ranDeferred = !m_context.Deferred.empty();
         RunDeferred();
         UpdateFrameStats();
+
+        // An edit is a step as soon as it is done. Those that aren't noticed here are by the check below.
+        const bool editing = IsEditing();
+        if (!editing && (m_wasEditing || ranDeferred || m_context.SceneEdited))
+            m_history.Commit(m_selectedBeforeEdit);
+
+        m_wasEditing = editing;
+        m_context.SceneEdited = false;
 
         constexpr float kSceneCheckSeconds = 0.25f;
 
@@ -392,8 +461,16 @@ namespace crimson::editor
         if (m_sinceSceneCheck >= kSceneCheckSeconds)
         {
             m_sinceSceneCheck = 0.0f;
+
+            if (!editing)
+                m_history.Commit(m_selectedBeforeEdit);
+
             m_context.SceneChanged = IsSceneChanged();
         }
+
+        // The next edit's state from before it, once nothing is being edited
+        if (!editing)
+            RecordWatched();
 
         // Often enough for a shader saved in another program to show up about right away
         constexpr float kShaderCheckSeconds = 0.5f;
@@ -449,8 +526,19 @@ namespace crimson::editor
 
     void ProjectSessionMode::HandleShortcuts()
     {
-        if (ImGui::GetIO().KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
+        const ImGuiIO& io = ImGui::GetIO();
+
+        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
             SaveAll();
+
+        // In a text field these are the field's own
+        if (io.KeyCtrl && !io.WantTextInput)
+        {
+            if (ImGui::IsKeyPressed(ImGuiKey_Z) && !io.KeyShift)
+                Undo();
+            else if (ImGui::IsKeyPressed(ImGuiKey_Y) || (ImGui::IsKeyPressed(ImGuiKey_Z) && io.KeyShift))
+                Redo();
+        }
 
         if (!ImGui::GetIO().WantTextInput && !m_services.AppInput.IsMouseButtonDown(MouseButton::Right)
             && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_context.Selected)

@@ -10,6 +10,7 @@
 
 #include "crimson_editor/asset_edits.hpp"
 #include "crimson_editor/asset_thumbnails.hpp"
+#include "crimson_editor/scene_history.hpp"
 #include "crimson_editor/ui/asset_picker.hpp"
 
 namespace crimson::editor
@@ -21,6 +22,9 @@ namespace crimson::editor
         AssetManager& Assets;
         AssetEdits& Edits;
         AssetThumbnails& Thumbnails;
+
+        // For undo: record an entity before changing it, or after creating it. The selected one is recorded already.
+        SceneHistory& History;
 
         // Call after assets are gone, so nothing keeps using them
         std::function<void(std::span<const AssetID>)> OnAssetsRemoved;
@@ -34,6 +38,13 @@ namespace crimson::editor
         // The file of ActiveScene. Invalid if the scene couldn't be loaded, and then there is nothing to save to.
         SceneID ActiveSceneAsset;
         bool SceneChanged = false; // looked at a few times a second, as finding out goes over the whole scene
+
+        // An edit is a step once it is done: a field's when it stops being active, the gizmo's when this goes back to
+        // false. The Scene view sets it on each frame the gizmo is dragged.
+        bool GizmoInUse = false;
+
+        // Set after an edit done at once rather than with a field, like from a menu or a key, for it to be a step right away
+        bool SceneEdited = false;
 
         // One thing is selected at a time: an entity or an asset
         Entity Selected;

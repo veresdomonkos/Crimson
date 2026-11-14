@@ -81,7 +81,8 @@ namespace crimson::editor::ui
     {
         auto& name = entity.GetComponent<NameComponent>();
 
-        ImGui::Checkbox("##Active", &name.Active);
+        if (ImGui::Checkbox("##Active", &name.Active))
+            m_context.SceneEdited = true;
         ImGui::SameLine();
 
         std::array<char, 256> buffer{};
@@ -89,7 +90,10 @@ namespace crimson::editor::ui
 
         ImGui::SetNextItemWidth(-1.0f);
         if (ImGui::InputText("##Name", buffer.data(), buffer.size()))
+        {
             name.Name = buffer.data();
+            m_context.SceneEdited = true;
+        }
     }
 
     void InspectorPanel::DrawComponent(Entity entity, const ComponentType& type)
@@ -107,13 +111,18 @@ namespace crimson::editor::ui
             if (props::BeginTable(type.Id.c_str()))
             {
                 // Between frames, as resolving its assets may load them
-                if (DrawComponentFields(type, component, m_context) && type.ResolveAssets)
+                if (DrawComponentFields(type, component, m_context))
                 {
-                    m_context.Deferred.emplace_back([this, &type, entity]
+                    m_context.SceneEdited = true;
+
+                    if (type.ResolveAssets)
                     {
-                        if (entity && type.Has(entity))
-                            ResolveComponentAssets(type, type.Get(entity), m_context.Assets);
-                    });
+                        m_context.Deferred.emplace_back([this, &type, entity]
+                        {
+                            if (entity && type.Has(entity))
+                                ResolveComponentAssets(type, type.Get(entity), m_context.Assets);
+                        });
+                    }
                 }
 
                 props::EndTable();
@@ -123,7 +132,10 @@ namespace crimson::editor::ui
         }
 
         if (removed)
+        {
             type.Remove(entity);
+            m_context.SceneEdited = true;
+        }
     }
 
     void InspectorPanel::DrawUnknownComponents(Entity entity)

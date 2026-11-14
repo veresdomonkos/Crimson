@@ -6,8 +6,8 @@
 
 namespace crimson::editor::ui
 {
-    EditorUI::EditorUI(std::function<void()> onSaveAll, std::function<void()> onCloseProject)
-        : m_onSaveAll(std::move(onSaveAll)), m_onCloseProject(std::move(onCloseProject))
+    EditorUI::EditorUI(MainMenuActions actions)
+        : m_actions(std::move(actions))
     {
     }
 
@@ -38,11 +38,24 @@ namespace crimson::editor::ui
         if (ImGui::BeginMenu("File"))
         {
             if (ImGui::MenuItem("Save All", "Ctrl+S"))
-                m_onSaveAll();
+                m_actions.SaveAll();
 
             if (ImGui::MenuItem("Close Project"))
-                m_onCloseProject();
+                m_actions.CloseProject();
 
+            ImGui::EndMenu();
+        }
+
+        // Before the panels, whose Edit items ImGui adds to this menu after these
+        if (ImGui::BeginMenu("Edit"))
+        {
+            if (ImGui::MenuItem("Undo", "Ctrl+Z", false, m_actions.CanUndo()))
+                m_actions.Undo();
+
+            if (ImGui::MenuItem("Redo", "Ctrl+Y", false, m_actions.CanRedo()))
+                m_actions.Redo();
+
+            ImGui::Separator();
             ImGui::EndMenu();
         }
 

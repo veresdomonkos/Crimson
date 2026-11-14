@@ -9,6 +9,16 @@ namespace crimson
     // What the scene would save as. Instances only keep what can differ between them.
     [[nodiscard]] SceneData CaptureScene(Scene& scene, const SceneEnvironment& environment, const AssetManager& assets);
 
+    // One entity as the scene would save it, with what is under it or not
+    [[nodiscard]] SceneNode CaptureNode(Entity entity, Scene& scene, const AssetManager& assets, bool withChildren);
+
+    // Makes the entity what the node says, apart from its children: its name and components, including removing those
+    // the node doesn't have
+    void ApplyNode(Entity entity, const SceneNode& node, AssetManager& assets);
+
+    // The entity with that id, not counting those inside instances, whose ids are their scene's. Invalid if there is none.
+    [[nodiscard]] Entity FindEntity(Scene& scene, AssetID id);
+
     // Creates the data's entities under the parent, and expands the instances. The owner is the scene being created,
     // if it has a file, so that a scene containing itself stops instead of going on forever.
     void InstantiateScene(const SceneData& data, Scene& scene, Entity parent, AssetManager& assets, SceneID owner);

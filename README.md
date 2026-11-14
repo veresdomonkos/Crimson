@@ -24,6 +24,7 @@ Crimson is a small real-time 3D engine in C++23, with an editor. It renders with
 - **An editor that stays out of the way:**
   - Unity-style camera controls and gizmos
   - Hierarchy search
+  - undo and redo for every change to the scene
   - an Inspector where every field resets to its default
   - errors and saves shown in the corner, so nothing goes unnoticed
 - **Your own tools:** shaders open in VS Code, Visual Studio, Rider or CLion, and other files in their usual program, or in Explorer.
@@ -91,6 +92,8 @@ Based on Unity's scene view. Mouse controls start over the Scene panel, and the 
 | `Left Ctrl` while dragging the gizmo | Snap to 0.5 units, 15 degrees or 0.1 scale |
 | `F2` | Rename the selected entity, in the Hierarchy |
 | `Ctrl+S` | Save everything |
+| `Ctrl+Z` | Undo the last change to the scene |
+| `Ctrl+Y` or `Ctrl+Shift+Z` | Redo |
 
 ## Roadmap
 

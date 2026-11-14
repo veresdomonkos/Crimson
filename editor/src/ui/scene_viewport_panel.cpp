@@ -143,6 +143,7 @@ namespace crimson::editor::ui
         CreateComponent(*spawn.Type, entity, m_context.Assets);
         AssignAsset(*spawn.Type, spawn.Field, entity, asset, m_context.Assets);
 
+        m_context.History.RecordCreated(entity);
         m_context.SelectEntity(entity);
     }
 
@@ -153,6 +154,8 @@ namespace crimson::editor::ui
             return;
 
         entity.GetComponent<TransformComponent>().Position = GetDropPosition(origin, direction);
+
+        m_context.History.RecordCreated(entity);
         m_context.SelectEntity(entity);
     }
 
@@ -163,7 +166,10 @@ namespace crimson::editor::ui
             return;
 
         if (const FieldRef target = FindDropField(m_context.Assets.Components(), entity, type))
+        {
+            m_context.History.Record(entity);
             AssignAsset(*target.Type, target.Field, entity, asset, m_context.Assets);
+        }
     }
 
     void SceneViewportPanel::HandleShortcuts()
@@ -184,7 +190,13 @@ namespace crimson::editor::ui
         // What is inside an instance can't be changed here
         const Entity selected = m_context.Selected;
         if (IsFocused() && selected && !selected.HasComponent<InstancedComponent>() && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-            m_context.Deferred.emplace_back([this, selected] { m_context.ActiveScene.DestroyEntity(selected); });
+        {
+            m_context.Deferred.emplace_back([this, selected]
+            {
+                m_context.History.RecordDestroy(selected);
+                m_context.ActiveScene.DestroyEntity(selected);
+            });
+        }
     }
 
     void SceneViewportPanel::DrawToolbar(const ImVec2& position)
@@ -249,7 +261,9 @@ namespace crimson::editor::ui
         ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(projection), m_operation, m_mode,
             glm::value_ptr(world), nullptr, snapping ? glm::value_ptr(snap) : nullptr);
 
-        if (ImGuizmo::IsUsing())
+        m_context.GizmoInUse = ImGuizmo::IsUsing();
+
+        if (m_context.GizmoInUse)
         {
             const Entity parent = scene.GetEntity(entity.GetComponent<RelationshipComponent>().Parent);
             entity.GetComponent<TransformComponent>().SetFromMatrix(glm::inverse(scene.ComputeWorldMatrix(parent)) * world);
