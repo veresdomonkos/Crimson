@@ -102,6 +102,120 @@ void PSDepth(float4 position : SV_Position) { clip(Mask.Load(int3(0, 0, 0)).a - 
     }
 }
 
+static constexpr std::string_view kTextureArgumentShader = R"(
+Texture2D HeightMap : register(t0, space1);
+SamplerState LinearWrap : register(s0, space0);
+
+float4 Fetch(Texture2D map, float2 uv) { return map.SampleGrad(LinearWrap, uv, ddx(uv), ddy(uv)); }
+
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain(float2 uv : TEXCOORD0) : SV_Target { return Fetch(HeightMap, uv); }
+)";
+
+TEST_CASE("A texture passed to a function keeps its own name and unit on OpenGL", "[shaders]")
+{
+    const auto translate = [](std::string_view source, std::vector<opengl::GlslTextureUnit>& units)
+    {
+        const auto binary = CompileHlslShader("argument.hlsl", std::string(source), {});
+        REQUIRE(binary);
+        REQUIRE(opengl::TranslateSpirvToGlsl(binary->Pixel, units));
+        return *binary;
+    };
+
+    SECTION("the unit is named after the texture the shader declared")
+    {
+        std::vector<opengl::GlslTextureUnit> units;
+        const ShaderBinary binary = translate(kTextureArgumentShader, units);
+
+        REQUIRE(units.size() == 1);
+        CHECK(units[0].Texture == "HeightMap");
+        CHECK(units[0].Sampler == "LinearWrap");
+
+        const auto shaderInterface = ReflectShaderInterface(binary);
+        REQUIRE(shaderInterface);
+        REQUIRE(shaderInterface->Textures.contains("HeightMap"));
+        CHECK(shaderInterface->Textures.at("HeightMap").Binding == kTextureBindingShift);
+        CHECK(shaderInterface->Textures.at("HeightMap").Pixel);
+    }
+
+    SECTION("two call sites with different textures give two units")
+    {
+        std::vector<opengl::GlslTextureUnit> units;
+        translate(R"(
+Texture2D First : register(t0, space1);
+Texture2D Second : register(t1, space1);
+SamplerState LinearWrap : register(s0, space0);
+
+float4 Fetch(Texture2D map, float2 uv) { return map.Sample(LinearWrap, uv); }
+
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain(float2 uv : TEXCOORD0) : SV_Target { return Fetch(First, uv) + Fetch(Second, uv); }
+)", units);
+
+        REQUIRE(units.size() == 2);
+        CHECK(((units[0].Texture == "First" && units[1].Texture == "Second") || (units[0].Texture == "Second" && units[1].Texture == "First")));
+    }
+
+    SECTION("a texture handed down through nested functions resolves to the global")
+    {
+        std::vector<opengl::GlslTextureUnit> units;
+        translate(R"(
+Texture2D HeightMap : register(t0, space1);
+SamplerState LinearWrap : register(s0, space0);
+
+float4 Inner(Texture2D map, float2 uv) { return map.Sample(LinearWrap, uv); }
+float4 Outer(Texture2D map, float2 uv) { return Inner(map, uv * 2.0); }
+
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain(float2 uv : TEXCOORD0) : SV_Target { return Outer(HeightMap, uv); }
+)", units);
+
+        REQUIRE(units.size() == 1);
+        CHECK(units[0].Texture == "HeightMap");
+    }
+
+    SECTION("a gradient sample in a loop compiles and translates")
+    {
+        std::vector<opengl::GlslTextureUnit> units;
+        translate(R"(
+Texture2D HeightMap : register(t0, space1);
+SamplerState LinearWrap : register(s0, space0);
+
+float March(Texture2D map, float2 uv, int steps)
+{
+    float height = 0.0;
+    [loop]
+    for (int i = 0; i < steps; ++i)
+        height += map.SampleGrad(LinearWrap, uv + i * 0.01, ddx(uv), ddy(uv)).r;
+    return height;
+}
+
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain(float2 uv : TEXCOORD0) : SV_Target { return March(HeightMap, uv, 8); }
+)", units);
+
+        REQUIRE(units.size() == 1);
+        CHECK(units[0].Texture == "HeightMap");
+    }
+}
+
+TEST_CASE("A texture that is declared but not used is still in the shader's interface", "[shaders]")
+{
+    // Legalization drops it from the code that runs, but the material still has the slot
+    const auto binary = CompileHlslShader("unused.hlsl", R"(
+Texture2D Unused : register(t3, space1);
+
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
+float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+)", {});
+    REQUIRE(binary);
+
+    const auto shaderInterface = ReflectShaderInterface(*binary);
+    REQUIRE(shaderInterface);
+    REQUIRE(shaderInterface->Textures.contains("Unused"));
+    CHECK(shaderInterface->Textures.at("Unused").Binding == 3 + kTextureBindingShift);
+}
+
 TEST_CASE("Every engine material names an engine shader", "[shaders]")
 {
     const std::span<const EmbeddedFile> resources = GetEngineResources();

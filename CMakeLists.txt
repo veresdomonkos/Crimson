@@ -90,10 +90,18 @@ set(SPIRV_CROSS_ENABLE_C_API OFF CACHE BOOL "" FORCE)
 set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "" FORCE)
 crimson_add_external(external/SPIRV-Cross)
 
+# SPIRV-Tools, which glslang uses to legalize the SPIR-V it makes from HLSL. The pins follow glslang's known_good.json
+set(SPIRV_SKIP_EXECUTABLES ON CACHE BOOL "" FORCE)
+set(SPIRV_SKIP_TESTS ON CACHE BOOL "" FORCE)
+set(SPIRV_WERROR OFF CACHE BOOL "" FORCE)
+set(SPIRV-Headers_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/external/SPIRV-Headers CACHE PATH "" FORCE)
+crimson_add_external(external/SPIRV-Headers EXCLUDE_FROM_ALL)
+crimson_add_external(external/SPIRV-Tools EXCLUDE_FROM_ALL)
+
 # glslang, the HLSL compiler built into the engine
 set(ENABLE_GLSLANG_BINARIES OFF CACHE BOOL "" FORCE)
 set(ENABLE_HLSL ON CACHE BOOL "" FORCE)
-set(ENABLE_OPT OFF CACHE BOOL "" FORCE)
+set(ENABLE_OPT ON CACHE BOOL "" FORCE)
 set(ENABLE_PCH OFF CACHE BOOL "" FORCE)
 set(BUILD_EXTERNAL OFF CACHE BOOL "" FORCE)
 set(GLSLANG_TESTS OFF CACHE BOOL "" FORCE)

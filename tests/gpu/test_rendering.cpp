@@ -66,6 +66,38 @@ VertexOutput VSMain(VertexInput input)
 float4 PSMain(VertexOutput input) : SV_Target { return Albedo.Sample(LinearWrap, input.UV); }
 )";
 
+    // The same, but the texture goes through a function, which is how a parallax or triplanar helper takes it
+    constexpr std::string_view kTextureArgumentShader = R"(
+#include "crimson/bindings.hlsli"
+
+Texture2D Albedo : register(t0, space1);
+
+struct VertexInput
+{
+    float3 Position : POSITION;
+    float3 Normal : NORMAL;
+    float2 UV : TEXCOORD0;
+};
+
+struct VertexOutput
+{
+    float4 ClipPosition : SV_Position;
+    float2 UV : TEXCOORD0;
+};
+
+VertexOutput VSMain(VertexInput input)
+{
+    VertexOutput output;
+    output.ClipPosition = mul(GetView().ViewProj, mul(GetObjectData().Transform, float4(input.Position, 1.0)));
+    output.UV = input.UV;
+    return output;
+}
+
+float4 Fetch(Texture2D map, float2 uv) { return map.SampleGrad(LinearWrap, uv, ddx(uv), ddy(uv)); }
+
+float4 PSMain(VertexOutput input) : SV_Target { return Fetch(Albedo, input.UV); }
+)";
+
     // A rectangle in clip space
     std::string MakeQuad(float left, float bottom, float right, float top, float depth = 0.5f)
     {
@@ -275,6 +307,18 @@ TEST_CASE_METHOD(Fixture, "A material samples its texture", "[rendering]")
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
     CHECK(IsNear(RenderMesh(assets, "all.obj", "textured.mat").AtClip(0.0f, 0.0f), glm::ivec3(0, 0, 255)));
+}
+
+TEST_CASE_METHOD(Fixture, "A texture passed to a function is sampled on every backend", "[rendering]")
+{
+    Project.Write("argument.hlsl", kTextureArgumentShader);
+    Project.Write("image.bmp", MakeImage());
+    Project.Write("argument.mat", R"({ "shader": "argument.hlsl", "cull": "none", "textures": { "Albedo": "image.bmp" } })");
+    Project.Write("all.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
+
+    AssetManager assets(*Gpu().GPUResources, Project.Path());
+
+    CHECK(IsNear(RenderMesh(assets, "all.obj", "argument.mat").AtClip(0.0f, 0.0f), glm::ivec3(0, 0, 255)));
 }
 
 TEST_CASE_METHOD(Fixture, "A transparent material blends over what is behind it", "[rendering]")

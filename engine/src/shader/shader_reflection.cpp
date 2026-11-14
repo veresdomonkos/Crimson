@@ -177,11 +177,11 @@ namespace crimson
     {
         ShaderInterface result;
 
-        if (!ReflectStage(binary.Vertex, true, result) || !ReflectStage(binary.Pixel, false, result))
+        if (!ReflectStage(binary.VertexInterface, true, result) || !ReflectStage(binary.PixelInterface, false, result))
             return std::nullopt;
 
         // What only PSDepth uses has to be in the material's layout too
-        if (!binary.PixelDepth.empty() && !ReflectStage(binary.PixelDepth, false, result))
+        if (!binary.PixelDepthInterface.empty() && !ReflectStage(binary.PixelDepthInterface, false, result))
             return std::nullopt;
 
         for (const auto& [name, annotation] : binary.Annotations)
