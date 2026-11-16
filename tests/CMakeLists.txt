@@ -16,6 +16,7 @@ add_executable(CrimsonTests
     engine/test_scene_camera.cpp
     engine/test_scene_data.cpp
     engine/test_scene_renderer.cpp
+    engine/test_shader_cache.cpp
     engine/test_shaders.cpp
     engine/test_shadow_atlas.cpp
 

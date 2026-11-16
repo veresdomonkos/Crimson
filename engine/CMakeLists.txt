@@ -34,6 +34,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/renderer/resource_manager.hpp
     include/crimson/renderer/resource_manager_base.hpp
     include/crimson/renderer/resource_tags.hpp
+    include/crimson/renderer/shader_cache.hpp
     include/crimson/renderer/shader_compiler.hpp
     include/crimson/renderer/shader_interface.hpp
     include/crimson/renderer/shader_property_info.hpp
@@ -146,6 +147,7 @@ set(ENGINE_SOURCES
 
     src/shader/hlsl_compiler.cpp
     src/shader/shader_annotations.cpp
+    src/shader/shader_cache.cpp
     src/shader/shader_reflection.cpp
     src/shader/shader_reflection.hpp
 )
