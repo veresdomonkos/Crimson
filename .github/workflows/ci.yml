@@ -364,6 +364,19 @@ jobs:
           key: ccache-linux-${{ matrix.flavor }}-${{ github.sha }}
           restore-keys: ccache-linux-${{ matrix.flavor }}-
 
+      # The GPU tests compile every built-in shader again for each editor test, so the compiled ones are kept. Each entry
+      # checks its own source, includes, compiler versions, compile settings
+      # and optimizer passes, so one from an older key is only a miss.
+      - name: List the shader compiler's versions
+        run: git rev-parse HEAD:external/glslang HEAD:external/SPIRV-Tools > .shader-compilers
+
+      - name: Restore the compiled shaders
+        uses: actions/cache@v6
+        with:
+          path: .shader-cache
+          key: shaders-linux-${{ matrix.flavor }}-${{ hashFiles('.shader-compilers', 'engine/resources/shaders/**', 'engine/src/shader/**') }}
+          restore-keys: shaders-linux-${{ matrix.flavor }}-
+
       - name: Configure
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -384,4 +397,5 @@ jobs:
       - name: Test
         env:
           ASAN_OPTIONS: detect_leaks=0
+          CRIMSON_SHADER_CACHE: ${{ github.workspace }}/.shader-cache
         run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" ctest --test-dir build --output-on-failure
