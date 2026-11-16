@@ -25,8 +25,9 @@ namespace crimson::editor::ui::props
     void ResetTarget();
     bool EndRow(bool resettable);
 
-    // A slider with a number field next to it, filling the current item width, for rows outside a props table. The
-    // typed value is clamped to [min, max]. Returns true when either changed the value.
+    // A slider drawn as a track with a handle, and a number field next to it that shows the value and takes a typed one,
+    // filling the current item width. It is used by Slider, and on its own in rows outside a props table. The format is
+    // the field's, and a typed value is clamped to [min, max]. Returns true when either changed the value.
     bool SliderField(float& value, float min, float max, const char* format = "%.3f", ImGuiSliderFlags flags = 0);
 
     // Each returns true when the value changed, by editing or by a reset
