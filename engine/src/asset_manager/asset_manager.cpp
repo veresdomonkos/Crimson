@@ -15,6 +15,7 @@
 #include "crimson/asset_manager/meta_file.hpp"
 #include "asset_store.hpp"
 #include "crimson/core/engine_resources.hpp"
+#include "crimson/core/hash.hpp"
 #include "crimson/core/log.hpp"
 
 #include "engine_renames.hpp"
@@ -29,18 +30,10 @@ namespace crimson
     // Each can use the ones after it
     static constexpr std::array kUnloadOrder = { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader };
 
-    // FNV-1a. An engine resource has no meta to store an id in, and scenes must find it again in any project.
+    // An engine resource has no meta to store an id in, and scenes must find it again in any project.
     static AssetID EngineResourceId(std::string_view path)
     {
-        uint64_t hash = 0xcbf29ce484222325ull;
-
-        for (const unsigned char c : path)
-        {
-            hash ^= c;
-            hash *= 0x100000001b3ull;
-        }
-
-        return AssetID{ hash };
+        return AssetID{ Fnv1a(path) };
     }
 
     static std::string NormalizeExt(const fs::path& p)

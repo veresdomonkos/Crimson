@@ -5,6 +5,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/core/embedded_resource.hpp
     include/crimson/core/engine_resources.hpp
     include/crimson/core/events.hpp
+    include/crimson/core/hash.hpp
     include/crimson/core/input.hpp
     include/crimson/core/log.hpp
     include/crimson/core/profiler.hpp
