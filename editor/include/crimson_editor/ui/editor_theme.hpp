@@ -116,8 +116,14 @@ namespace crimson::editor::ui
 
         // A tree node whose icon has a color of its own, which one label can't have. The node is drawn without a label,
         // and the icon and the name are drawn over it, where the label would be. It needs ImGuiTreeNodeFlags_SpanAvailWidth
-        // or _Framed, so the item covers the row. An empty label draws just the icon.
+        // or _Framed, so the item covers the row. An empty label draws just the icon, and no icon just the label.
         bool IconTreeNode(const char* id, ImGuiTreeNodeFlags flags, const char* icon, const ImVec4& iconColor, const char* label);
+
+        // A collapsible section of the Inspector, open at first, with a bold title and an optional icon before it.
+        // Returns true while it is open, and EndSection has to be called then. Its id is the label, so it stays open or
+        // closed when its icon changes, and sections of the same name share that state.
+        bool BeginSection(const char* label, const char* icon = nullptr);
+        inline void EndSection() { ImGui::TreePop(); }
 
         // A muted line of text for when a panel has nothing to show yet, centered in what is left of it
         void EmptyHint(const char* text);

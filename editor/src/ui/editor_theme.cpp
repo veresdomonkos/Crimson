@@ -332,12 +332,30 @@ namespace crimson::editor::ui
             // The node clipped its label to the row, so the drawn one is too
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             drawList->PushClipRect(min, max, true);
-            drawList->AddText(ImVec2(x, y), ImGui::GetColorU32(iconColor), icon);
+
+            if (icon && *icon)
+            {
+                drawList->AddText(ImVec2(x, y), ImGui::GetColorU32(iconColor), icon);
+                x += ImGui::CalcTextSize(icon).x + style.ItemInnerSpacing.x * 2.0f;
+            }
 
             if (label && *label)
-                drawList->AddText(ImVec2(x + ImGui::CalcTextSize(icon).x + style.ItemInnerSpacing.x * 2.0f, y), ImGui::GetColorU32(ImGuiCol_Text), label);
+                drawList->AddText(ImVec2(x, y), ImGui::GetColorU32(ImGuiCol_Text), label);
 
             drawList->PopClipRect();
+            return open;
+        }
+
+        bool BeginSection(const char* label, const char* icon)
+        {
+            constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_Framed;
+
+            // Header is the selection color, and a framed node would take it as its background
+            ImGui::PushStyleColor(ImGuiCol_Header, FrameBackground);
+            const ScopedBold bold;
+            const bool open = IconTreeNode(label, flags, icon, TextMuted, label);
+            ImGui::PopStyleColor();
+
             return open;
         }
 
