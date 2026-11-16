@@ -1,5 +1,6 @@
 #include "crimson_editor/ui/component_fields.hpp"
 
+#include <array>
 #include <string>
 #include <vector>
 
@@ -42,12 +43,15 @@ namespace crimson::editor::ui
         return icons::Named(type.Icon ? type.Icon(component) : std::string_view());
     }
 
-    glm::vec3 ScaleUniformly(glm::vec3 previous, glm::vec3 edited)
+    glm::vec3 ScaleUniformly(glm::vec3 previous, glm::vec3 edited, glm::vec3 shape)
     {
+        // Scaled down to zero, the vector has no proportions left, so it grows back with those it had before
+        const glm::vec3 base = previous == glm::vec3(0.0f) ? shape : previous;
+
         for (int axis = 0; axis < 3; ++axis)
         {
-            if (edited[axis] != previous[axis] && previous[axis] != 0.0f)
-                return previous * (edited[axis] / previous[axis]);
+            if (edited[axis] != previous[axis] && base[axis] != 0.0f)
+                return base * (edited[axis] / base[axis]);
         }
 
         return edited;
@@ -81,8 +85,20 @@ namespace crimson::editor::ui
                 const ImGuiID toggle = ImGui::GetID("##Uniform");
                 bool uniform = storage->GetBool(toggle);
 
+                // The last proportions that weren't all zero, for growing back from zero
+                const std::array shapeIds = { ImGui::GetID("##ShapeX"), ImGui::GetID("##ShapeY"), ImGui::GetID("##ShapeZ") };
+                glm::vec3 shape;
+                for (int axis = 0; axis < 3; ++axis)
+                    shape[axis] = storage->GetFloat(shapeIds[axis], 1.0f);
+
                 if (changed && uniform)
-                    vector = ScaleUniformly(previous, vector);
+                    vector = ScaleUniformly(previous, vector, shape);
+
+                if (vector != glm::vec3(0.0f))
+                {
+                    for (int axis = 0; axis < 3; ++axis)
+                        storage->SetFloat(shapeIds[axis], vector[axis]);
+                }
 
                 props::Checkbox(("Uniform " + field.Label).c_str(), uniform);
                 storage->SetBool(toggle, uniform);

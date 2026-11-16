@@ -14,8 +14,9 @@ namespace crimson::editor::ui
     bool DrawField(const FieldInfo& field, const void* component, FieldValue& value, EditorContext& context);
 
     // What a vector becomes when one of its axes was edited and the others follow: the axis that changed sets the ratio.
-    // The edited one if none changed, or the one that changed was zero, as there is no ratio to keep then.
-    [[nodiscard]] glm::vec3 ScaleUniformly(glm::vec3 previous, glm::vec3 edited);
+    // The edited one if none changed, or the one that changed was zero, as there is no ratio to keep then. A vector
+    // scaled down to all zeros has lost its proportions, so it grows back with shape's, the last ones it had.
+    [[nodiscard]] glm::vec3 ScaleUniformly(glm::vec3 previous, glm::vec3 edited, glm::vec3 shape);
 
     // The fields that mean something with the component's values, each written back when it changed, then the
     // component's constraint. Returns true when any changed.
