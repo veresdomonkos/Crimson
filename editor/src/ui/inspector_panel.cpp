@@ -15,32 +15,6 @@
 
 namespace crimson::editor::ui
 {
-    // A collapsible section. Returns true while it is open, and needs EndComponentSection then.
-    static bool BeginComponentSection(const char* icon, const char* label, bool removable, bool& removed)
-    {
-        constexpr ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_AllowOverlap | ImGuiTreeNodeFlags_Framed;
-
-        // The id is the label alone, so the section stays open or closed if its icon changes
-        bool open = false;
-        {
-            // Header is the selection color, and a framed node would take it as its background
-            ImGui::PushStyleColor(ImGuiCol_Header, theme::FrameBackground);
-            const theme::ScopedBold bold;
-            open = theme::IconTreeNode(label, flags, icon, theme::TextMuted, label);
-            ImGui::PopStyleColor();
-        }
-
-        if (removable && ImGui::BeginPopupContextItem())
-        {
-            if (ImGui::MenuItem("Remove Component"))
-                removed = true;
-
-            ImGui::EndPopup();
-        }
-
-        return open;
-    }
-
     void InspectorPanel::OnImGui()
     {
         ImGui::Begin("Inspector");
@@ -106,7 +80,17 @@ namespace crimson::editor::ui
 
         // What can be added can be removed, which every entity's own, like the transform, can't
         bool removed = false;
-        if (BeginComponentSection(icon ? icon : icons::kEntity, type.Name.c_str(), type.Addable, removed))
+        const bool open = theme::BeginSection(type.Name.c_str(), icon ? icon : icons::kEntity);
+
+        if (type.Addable && ImGui::BeginPopupContextItem())
+        {
+            if (ImGui::MenuItem("Remove Component"))
+                removed = true;
+
+            ImGui::EndPopup();
+        }
+
+        if (open)
         {
             if (props::BeginTable(type.Id.c_str()))
             {
@@ -128,7 +112,7 @@ namespace crimson::editor::ui
                 props::EndTable();
             }
 
-            ImGui::TreePop();
+            theme::EndSection();
         }
 
         if (removed)
