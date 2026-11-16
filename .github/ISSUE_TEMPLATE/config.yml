@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: How issues and pull requests are written
+    url: https://github.com/veresdomonkos/Crimson/blob/main/CONTRIBUTING.md
+    about: The parts of an issue, the labels, and the conventions for branches and commits

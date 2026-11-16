@@ -4,7 +4,7 @@ How work on Crimson goes, from an issue to a merged pull request. How the engine
 
 ## Issues
 
-Work starts from an [issue](https://github.com/veresdomonkos/Crimson/issues). Each one has four parts:
+Work starts from an [issue](https://github.com/veresdomonkos/Crimson/issues). The bug report and feature request forms start from this shape. Each one has four parts:
 - **Problem:** what is wrong or missing, and why it matters
 - **Scope:** what the change covers, and what it leaves out
 - **Done when:** a checklist of what has to be true at the end
@@ -40,7 +40,7 @@ The prefix says what kind of change it is: `feature/`, `fix/`, `refactor/`, `cho
 
 ## Pull requests
 
-- **Description:**
+- **Description:** a new pull request starts from `.github/pull_request_template.md`, which asks for these:
   - what changed and why
   - what was checked, and what was left to CI
   - `Fixes #<number>`
