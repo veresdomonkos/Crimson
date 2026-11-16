@@ -307,6 +307,37 @@ TEST_CASE_METHOD(Fixture, "Materials keep their own properties", "[rendering]")
     }
 }
 
+TEST_CASE_METHOD(Fixture, "There can be more materials than one descriptor pool holds", "[rendering]")
+{
+    Project.Write("all.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
+
+    AssetManager assets(*Gpu().GPUResources, Project.Path());
+
+    const Mesh* mesh = assets.Load<AssetType::Mesh>("all.obj");
+    const ShaderHandle shader = assets.Load<AssetType::Shader>("flat.hlsl");
+    REQUIRE(mesh);
+    REQUIRE(shader);
+
+    // A Vulkan pool holds 256 sets, so these take a few of them
+    constexpr int kMaterials = 600;
+
+    std::vector<MaterialHandle> materials;
+    for (int i = 0; i < kMaterials; ++i)
+    {
+        const MaterialHandle material = Gpu().GPUResources->CreateMaterial(shader, { .Cull = CullMode::None });
+        REQUIRE(material);
+        materials.push_back(material);
+    }
+
+    Gpu().GPUResources->SetMaterialPropertyByName(materials.back(), "Color", glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
+
+    RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*mesh, 0, { .MaterialOverride = materials.back() }); });
+    CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kGreen));
+
+    for (const MaterialHandle material : materials)
+        Gpu().GPUResources->DestroyMaterial(material);
+}
+
 TEST_CASE_METHOD(Fixture, "A material samples its texture", "[rendering]")
 {
     Project.Write("textured.hlsl", kTexturedShader);
