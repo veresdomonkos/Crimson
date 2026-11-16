@@ -5,7 +5,13 @@
 #include <crimson/project/shader_includes.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 #include <algorithm>
+#include <chrono>
+#include <ctime>
+#include <filesystem>
+#include <iomanip>
+#include <sstream>
 #include <string>
+#include <system_error>
 #include <utility>
 #include <vector>
 #include <glm/gtc/matrix_transform.hpp>
@@ -30,9 +36,26 @@ namespace crimson::editor
     static constexpr uint32_t kMainTargetWidth = 1920;
     static constexpr uint32_t kMainTargetHeight = 1080;
 
+    // The only part of the recovery files that knows they are scenes
+    static std::string RecoveryName(SceneID id)
+    {
+        return id.ToString() + ".scene";
+    }
+
+    static std::string FormatTime(std::filesystem::file_time_type time)
+    {
+        const auto system = std::chrono::time_point_cast<std::chrono::system_clock::duration>(std::chrono::file_clock::to_sys(time));
+        const std::time_t seconds = std::chrono::system_clock::to_time_t(system);
+
+        std::ostringstream text;
+        text << std::put_time(std::localtime(&seconds), "%Y-%m-%d %H:%M");
+        return text.str();
+    }
+
     ProjectSessionMode::ProjectSessionMode(EditorServices& services, Project project)
         : m_services(services),
           m_project(std::move(project)),
+          m_recovery(m_project.DataDir() / "recovery"),
           m_assetManager(std::make_unique<AssetManager>(GpuResources(), m_project.AssetsDir(), m_project.DataDir() / "cache")),
           m_assetEdits(std::make_unique<AssetEdits>(*m_assetManager)),
           m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, GpuResources(), *m_services.Graphics.Imgui)),
@@ -151,6 +174,8 @@ namespace crimson::editor
 
         if (isRemoved(m_context.ActiveSceneAsset))
         {
+            // Nothing is left of the scene for its copy to restore into
+            m_recovery.Remove(RecoveryName(m_context.ActiveSceneAsset));
             LoadScene(ChooseScene({}));
             return;
         }
@@ -221,24 +246,18 @@ namespace crimson::editor
         return missing;
     }
 
-    void ProjectSessionMode::LoadScene(SceneID id)
+    void ProjectSessionMode::ShowScene(const SceneData& data, SceneID id)
     {
         m_context.Selected = {};
         m_context.Picker.Reset();
-        m_context.ActiveSceneAsset = {};
-        m_context.SceneChanged = false;
         m_scene.Clear();
 
         // What was done to the last scene can't be undone in this one
         m_history.Clear();
 
-        const std::optional<SceneData> data = m_assetManager->Read(id);
-        if (!data)
-            return;
+        InstantiateScene(data, m_scene, {}, *m_assetManager, id);
 
-        InstantiateScene(*data, m_scene, {}, *m_assetManager, id);
-
-        if (const size_t missing = CountMissing(data->Roots, *m_assetManager))
+        if (const size_t missing = CountMissing(data.Roots, *m_assetManager))
         {
             const std::string text = missing == 1
                 ? "1 asset this scene uses is missing, see the Console"
@@ -247,14 +266,125 @@ namespace crimson::editor
             m_ui->GetNotifications().Push(ui::Notifications::Kind::Warning, text);
         }
 
-        m_settings = data->Settings;
+        m_settings = data.Settings;
         m_sceneRenderer->SetToneMapping(m_settings.PostProcessing.Exposure, m_settings.PostProcessing.Mapper);
+    }
+
+    void ProjectSessionMode::LoadScene(SceneID id)
+    {
+        m_context.ActiveSceneAsset = {};
+        m_context.SceneChanged = false;
+        m_writtenRecovery.reset();
+        m_offeredRecovery.reset();
+
+        const std::optional<SceneData> data = m_assetManager->Read(id);
+        if (!data)
+        {
+            m_context.Selected = {};
+            m_context.Picker.Reset();
+            m_scene.Clear();
+            m_history.Clear();
+            return;
+        }
+
+        ShowScene(*data, id);
 
         // Not the file's data, as loading can fill things in that shouldn't count as a change
         m_savedScene = CaptureScene(m_scene, m_settings, *m_assetManager);
         m_context.ActiveSceneAsset = id;
 
         m_services.Recents.SetLastScene(m_project.Root(), id);
+
+        OfferRecovery(id);
+    }
+
+    void ProjectSessionMode::OfferRecovery(SceneID id)
+    {
+        const std::string name = RecoveryName(id);
+
+        const std::optional<std::filesystem::file_time_type> copied = m_recovery.WrittenAt(name);
+        if (!copied)
+            return;
+
+        std::error_code error;
+        const std::filesystem::file_time_type saved = std::filesystem::last_write_time(m_assetManager->GetFilePath(id), error);
+
+        // A copy that isn't newer than the file has nothing the file doesn't
+        if (error || *copied <= saved)
+        {
+            m_recovery.Remove(name);
+            return;
+        }
+
+        m_offeredRecovery = copied;
+        m_openRecoveryDialog = true;
+    }
+
+    void ProjectSessionMode::WriteRecovery()
+    {
+        if (!m_context.ActiveSceneAsset)
+            return;
+
+        // On this thread, as they read the scene and the assets. Only the write to the disk is on another.
+        SceneData current = CaptureScene(m_scene, m_settings, *m_assetManager);
+
+        if (current == m_savedScene)
+        {
+            // Undoing back to the saved state leaves a copy of this session out of date
+            ForgetRecovery();
+        }
+        else if (m_writtenRecovery != current)
+        {
+            m_recovery.Write(RecoveryName(m_context.ActiveSceneAsset), WriteSceneData(current, *m_assetManager));
+            m_writtenRecovery = std::move(current);
+        }
+    }
+
+    void ProjectSessionMode::ForgetRecovery()
+    {
+        // Only a copy of this session. One that was offered and not answered yet may be the only trace of lost work.
+        if (!m_writtenRecovery)
+            return;
+
+        m_recovery.Remove(RecoveryName(m_context.ActiveSceneAsset));
+        m_writtenRecovery.reset();
+    }
+
+    void ProjectSessionMode::RestoreRecovery()
+    {
+        if (!m_offeredRecovery || !m_context.ActiveSceneAsset)
+            return;
+
+        const SceneID id = m_context.ActiveSceneAsset;
+        const std::string name = RecoveryName(id);
+        const AssetInfo* info = m_assetManager->GetInfo(id);
+
+        const std::optional<std::string> text = m_recovery.Read(name);
+        std::optional<SceneData> data;
+        if (text && info)
+            data = ParseSceneData(*text, *m_assetManager, info->Path);
+
+        if (!data)
+        {
+            LOG_WARN("[Recovery] The copy of the scene can't be read, so it is deleted");
+            m_recovery.Remove(name);
+            m_offeredRecovery.reset();
+            return;
+        }
+
+        // The saved scene stays as it was, which makes what was restored an unsaved change
+        ShowScene(*data, id);
+        m_writtenRecovery = CaptureScene(m_scene, m_settings, *m_assetManager);
+        m_offeredRecovery.reset();
+        m_context.SceneChanged = IsSceneChanged();
+    }
+
+    void ProjectSessionMode::DiscardRecovery()
+    {
+        if (m_context.ActiveSceneAsset)
+            m_recovery.Remove(RecoveryName(m_context.ActiveSceneAsset));
+
+        m_offeredRecovery.reset();
     }
 
     bool ProjectSessionMode::IsSceneChanged()
@@ -327,6 +457,7 @@ namespace crimson::editor
             {
                 m_savedScene = std::move(current);
                 m_context.SceneChanged = false;
+                ForgetRecovery();
             }
             else
             {
@@ -343,6 +474,13 @@ namespace crimson::editor
 
     void ProjectSessionMode::RequestClose(std::function<void()> proceed)
     {
+        // Closing normally leaves nothing to recover
+        proceed = [this, proceed = std::move(proceed)]
+        {
+            ForgetRecovery();
+            proceed();
+        };
+
         if (!m_assetEdits->HasUnsavedChanges() && !IsSceneChanged())
         {
             proceed();
@@ -415,6 +553,55 @@ namespace crimson::editor
         ImGui::EndPopup();
     }
 
+    void ProjectSessionMode::DrawRecoveryDialog()
+    {
+        static constexpr const char* kPopup = "Recover Scene";
+
+        if (m_openRecoveryDialog)
+        {
+            ImGui::OpenPopup(kPopup);
+            m_openRecoveryDialog = false;
+        }
+
+        if (!ImGui::BeginPopupModal(kPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+            return;
+
+        // The scene was loaded again while it was showing
+        if (!m_offeredRecovery)
+        {
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
+
+        const AssetInfo* info = m_assetManager->GetInfo(m_context.ActiveSceneAsset);
+
+        ImGui::Text("The editor didn't close normally after changes to %s that were never saved.", info ? info->Path.c_str() : "this scene");
+        ImGui::Text("A copy of them from %s was kept.", FormatTime(*m_offeredRecovery).c_str());
+        ImGui::Spacing();
+
+        bool close = false;
+
+        if (ui::theme::PrimaryButton("Restore"))
+        {
+            // Instantiating loads GPU resources, which can't happen in the middle of a frame
+            m_context.Deferred.emplace_back([this] { RestoreRecovery(); });
+            close = true;
+        }
+
+        ImGui::SameLine();
+        if (ImGui::Button("Discard"))
+        {
+            DiscardRecovery();
+            close = true;
+        }
+
+        if (close)
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+
     void ProjectSessionMode::Record(FrameRecorder& frame)
     {
         m_scene.UpdateWorldTransforms();
@@ -442,6 +629,7 @@ namespace crimson::editor
         m_ui->Draw();
         m_context.Picker.Draw(m_context.Assets, m_context.Thumbnails);
         DrawUnsavedChangesDialog();
+        DrawRecoveryDialog();
     }
 
     void ProjectSessionMode::Update(float deltaTime)
@@ -470,6 +658,16 @@ namespace crimson::editor
                 m_history.Commit(m_selectedBeforeEdit);
 
             m_context.SceneChanged = IsSceneChanged();
+        }
+
+        // Not too often, as each copy is serialized on this thread
+        constexpr float kRecoverySeconds = 30.0f;
+
+        m_sinceRecovery += deltaTime;
+        if (m_sinceRecovery >= kRecoverySeconds)
+        {
+            m_sinceRecovery = 0.0f;
+            WriteRecovery();
         }
 
         // The next edit's state from before it, once nothing is being edited

@@ -278,7 +278,7 @@ The embedded files are kept in Git LFS, like the editor's, and CI pulls `engine/
 - `ProjectManagerMode` - shown on start. Lists the recent projects, and creates, imports or opens one. `--project <folder>` skips it.
 - `ProjectSessionMode` - the editor with one project open. Its asset manager, scene and panels all live and die with it, and **File > Close Project** goes back to the project manager.
 
-A project is a folder with a `project.crimson` file and an `assets/` folder. It opens on the scene that was last open, or on its first one, and one with no scenes gets a new `scenes/main.scene`. Opening a project also copies the engine's shader headers into its data folder and lists them in `shadertoolsconfig.json`, so code editors with HLSL Tools find them. The data folder also holds `cache/`, what importing the project's files made.
+A project is a folder with a `project.crimson` file and an `assets/` folder. It opens on the scene that was last open, or on its first one, and one with no scenes gets a new `scenes/main.scene`. Opening a project also copies the engine's shader headers into its data folder and lists them in `shadertoolsconfig.json`, so code editors with HLSL Tools find them. The data folder also holds `cache/`, what importing the project's files made, and `recovery/`, copies of unsaved scenes.
 
 ### Panels and menus
 
@@ -293,7 +293,7 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 | **Hierarchy** | the entity tree, with search, rename in place and the create menu, which has a submenu for each menu name the components' presets use. Dragging onto an entity reparents, and onto the empty area makes a root. |
 | **Inspector** | the selected entity or asset. Entities show their components, drawn from their registered fields (see [Components](#components)), and **Add Component** lists what is registered. Materials show their shader's properties and textures, and edits reach the file on **Save** (`AssetEdits`). Asset fields, a component's and a material's shader and texture slots, are object fields with a picker button: the asset's icon or thumbnail and its name, and a window with a search box, a list or grid view, **None** and the current asset highlighted (`ui::AssetPicker`). A choice applies at once, Enter or a double-click closes it, and Escape puts back what the field had. Clicking the name shows the asset in the Assets panel. Textures show their import settings, and meshes and shaders their details. |
 | **Assets** | the project's files and the engine's, with a folder tree, a grid, search, and dragging into the Inspector or the Scene view. In the Scene view, what a component registered as `SpawnsFrom` (a mesh) makes a new entity, what one registered as `DropTarget` (a material) goes on the entity under the mouse, and a scene becomes an instance. Shaders open in the External Script Editor, other files in the system's program (`system_shell.hpp`). Files changed outside the editor appear when it regains focus. |
-| **Console** | the log, grouped and filtered by level |
+| **Console** | the log, grouped and filtered by level. It can be logged to from any thread: entries wait in a queue until the panel is drawn. |
 | **Scene Settings** | what is saved with the scene apart from its entities: ambient light, the main camera (a picker of its cameras, or Automatic, the first active one), and post-processing (exposure and tone mapper) for now |
 | **Stats** | FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts |
 | **Shadow Map** | the shadow atlas |
@@ -311,6 +311,15 @@ The Scene view is seen from the editor's own camera (`PerspectiveCamera`, moved 
 - **What resets it:** opening a scene. Undoing back to the saved state clears the unsaved mark, as that compares the scene with what was saved.
 - **The shortcuts:** `Ctrl+Z`, and `Ctrl+Y` or `Ctrl+Shift+Z`, except in a text field, which has its own undo. The 100 latest steps are kept.
 - **Not covered:** material edits (#103), which are files rather than the scene, and anything done to asset files.
+
+### Recovering unsaved scenes
+
+A copy of the open scene's unsaved changes is kept, to offer back after the editor didn't close normally. `RecoveryFiles` keeps named copies in `.crimson/recovery/`, knowing only names and bytes. It writes them on one background thread through `WriteFileSafely` (a temp file, then a rename), and from the main thread everything behaves as if the writes were synchronous: asking about a file waits for its write.
+
+- **Writing:** every 30 seconds, `ProjectSessionMode` captures the scene and serializes it on the main thread, as that reads the registry and the asset manager. It writes only if the scene differs from its file and from the last copy, so only the disk write is on the other thread. A copy is named `<scene id>.scene`.
+- **Offering:** every scene load checks for a copy. One that isn't newer than the scene's file is deleted without asking. A newer one opens a **Recover Scene** dialog with when it was written. **Restore** loads it as unsaved changes: the file is untouched until the scene is saved. **Discard** deletes the copy.
+- **Removing:** on a successful save, on a normal close of the project, quitting or switching scenes (including **Discard** in the unsaved changes dialog), when the scene's changes are undone back to its file, and when the scene's file is deleted. Only a copy this session wrote or restored is removed, so one that was offered and not answered stays for next time.
+- **Not covered:** unsaved asset edits (#146).
 
 ### Look and layout
 

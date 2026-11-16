@@ -60,7 +60,7 @@ It needs a C++23 compiler, CMake 3.22+, the [Vulkan SDK](https://vulkan.lunarg.c
 2. **Add something to the scene.** Right-click in the Hierarchy, or use the **Create** menu, for an empty entity, a light, or a built-in mesh under **Create 3D Object**. Meshes can also be dragged from the Assets panel into the Scene view.
 3. **Give it a material.** Right-click in the Assets panel for **New Material**, pick it with the picker next to the Mesh Renderer's material, or drop it on the mesh in the Scene view.
 4. **Write a shader.** **New Shader** in the Assets panel starts a lit one. Double-click it to open it in the code editor set in **Edit > Preferences**, and it reloads every time it's saved. [docs/shaders.md](docs/shaders.md) has what a shader can use.
-5. **Save.** **File > Save All** or `Ctrl+S` saves the scene and the materials. Closing with unsaved changes asks first.
+5. **Save.** **File > Save All** or `Ctrl+S` saves the scene and the materials. Closing with unsaved changes asks first. If the editor closes without saving, opening the scene again offers its unsaved changes.
 
 | Panel | What it's for |
 |:------|:--------------|

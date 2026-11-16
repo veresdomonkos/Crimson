@@ -1,4 +1,5 @@
 #pragma once
+#include <mutex>
 #include <vector>
 #include <string>
 
@@ -22,15 +23,21 @@ namespace crimson::editor::ui
     public:
         ConsolePanel();
         ~ConsolePanel() override;
+        // From any thread. The entry shows up in the Console the next time it is drawn.
         void AddLog(LogLevel level, const std::string& message, const std::string& stackTrace = "");
         void Clear();
         void OnImGui() override;
     private:
+        // Moves what AddLog was given into the lists, on the main thread
+        void DrainPending();
         void DrawToolbar();
         void DrawLogList(const std::vector<LogEntry>& logs, const std::vector<int>& visible, float height);
         void DrawDetails(const LogEntry& log);
     private:
         uint64_t m_LogSubscription = 0;
+
+        std::mutex m_PendingMutex;
+        std::vector<LogEntry> m_Pending;
 
         std::vector<LogEntry> m_RawLogs;
         std::vector<LogEntry> m_CollapsedLogs;

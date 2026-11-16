@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
+#include <utility>
 
 namespace crimson::editor::ui
 {
@@ -30,26 +31,42 @@ namespace crimson::editor::ui
         auto now = std::chrono::system_clock::now();
         auto time_t_now = std::chrono::system_clock::to_time_t(now);
         std::stringstream ss;
+
+        // Under the lock too, as localtime shares one buffer
+        const std::lock_guard lock(m_PendingMutex);
         ss << std::put_time(std::localtime(&time_t_now), "%H:%M:%S");
+        m_Pending.push_back({ level, message, stackTrace, ss.str(), 1 });
+    }
 
-        switch (level)
+    void ConsolePanel::DrainPending()
+    {
+        std::vector<LogEntry> pending;
         {
-            case LogLevel::Info:    m_InfoCount++; break;
-            case LogLevel::Warn: m_WarningCount++; break;
-            case LogLevel::Error:   m_ErrorCount++; break;
+            const std::lock_guard lock(m_PendingMutex);
+            pending.swap(m_Pending);
         }
 
-        m_RawLogs.push_back({ level, message, stackTrace, ss.str(), 1 });
+        for (LogEntry& entry : pending)
+        {
+            switch (entry.Level)
+            {
+                case LogLevel::Info:    m_InfoCount++; break;
+                case LogLevel::Warn: m_WarningCount++; break;
+                case LogLevel::Error:   m_ErrorCount++; break;
+            }
 
-        if (!m_CollapsedLogs.empty() &&
-            m_CollapsedLogs.back().Level == level &&
-            m_CollapsedLogs.back().Message == message)
-        {
-            m_CollapsedLogs.back().Count++;
-        }
-        else
-        {
-            m_CollapsedLogs.push_back({ level, message, stackTrace, ss.str(), 1 });
+            m_RawLogs.push_back(entry);
+
+            if (!m_CollapsedLogs.empty() &&
+                m_CollapsedLogs.back().Level == entry.Level &&
+                m_CollapsedLogs.back().Message == entry.Message)
+            {
+                m_CollapsedLogs.back().Count++;
+            }
+            else
+            {
+                m_CollapsedLogs.push_back(std::move(entry));
+            }
         }
     }
 
@@ -113,6 +130,7 @@ namespace crimson::editor::ui
     {
         ImGui::Begin("Console");
 
+        DrainPending();
         DrawToolbar();
 
         const std::vector<LogEntry>& logs = m_Collapse ? m_CollapsedLogs : m_RawLogs;

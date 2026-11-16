@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -1018,4 +1019,132 @@ TEST_CASE("A project with a broken shader still opens", "[editor]")
 
     CHECK(ExpectLoggedErrors("broken.hlsl") > 0);
     CHECK(ExpectLoggedErrors("materials/floor.mat") > 0);
+}
+
+static std::string ReadBytes(const std::filesystem::path& file)
+{
+    std::ifstream stream(file, std::ios::binary);
+    return { std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>() };
+}
+
+static bool HasEntityNamed(Scene& scene, std::string_view name)
+{
+    for (auto [handle, entityName] : scene.GetRegistry().view<NameComponent>().each())
+    {
+        if (entityName.Name == name)
+            return true;
+    }
+
+    return false;
+}
+
+TEST_CASE("A scene that wasn't closed normally is offered again", "[editor]")
+{
+    ShutdownGpu();
+
+    const TempFolder temp;
+    const Project project = MakeProject(temp, "Crashed", true);
+    const std::filesystem::path sceneFile = project.AssetsDir() / "scenes/main.scene";
+
+    SceneID id;
+    {
+        EditorApplication app(SelectedBackend(), project.Root());
+        RunFrames(app);
+
+        auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
+        id = session.GetContext().ActiveSceneAsset;
+        REQUIRE(id);
+
+        session.GetContext().ActiveScene.CreateEntity("Unsaved");
+        session.WriteRecovery();
+        CHECK_FALSE(session.IsAskingAboutRecovery());
+
+        // Gone without closing, like a killed process. The recovery files finish what they were writing.
+    }
+
+    const std::filesystem::path copy = project.DataDir() / "recovery" / (id.ToString() + ".scene");
+    REQUIRE(std::filesystem::exists(copy));
+    const std::string savedBytes = ReadBytes(sceneFile);
+
+    EditorApplication app(SelectedBackend(), project.Root());
+    RunFrames(app);
+
+    auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
+    EditorContext& context = session.GetContext();
+
+    REQUIRE(session.IsAskingAboutRecovery());
+    CHECK(context.ActiveSceneAsset == id);
+    CHECK(context.Assets.List(AssetType::Scene).size() == 2); // this one and the engine's
+    CHECK(std::ranges::count_if(context.Assets.List(AssetType::Scene), [](const AssetInfo* scene) { return !scene->ReadOnly; }) == 1);
+    CHECK_FALSE(session.IsSceneChanged());
+
+    session.RestoreRecovery();
+    RunFrames(app);
+
+    CHECK_FALSE(session.IsAskingAboutRecovery());
+    CHECK(session.IsSceneChanged());
+    CHECK(HasEntityNamed(context.ActiveScene, "Unsaved"));
+    CHECK(ReadBytes(sceneFile) == savedBytes);
+
+    REQUIRE(session.SaveAll());
+    CHECK(context.Assets.Read(id)->Roots.back().Name == "Unsaved");
+    CHECK_FALSE(std::filesystem::exists(copy));
+}
+
+TEST_CASE("Discarding a recovery copy keeps the file, and a stale one goes without asking", "[editor]")
+{
+    ShutdownGpu();
+
+    const TempFolder temp;
+    const Project project = MakeProject(temp, "Recovery", true);
+    const std::filesystem::path mainFile = project.AssetsDir() / "scenes/main.scene";
+
+    EditorApplication app(SelectedBackend(), project.Root());
+    RunFrames(app);
+
+    auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
+    EditorContext& context = session.GetContext();
+    const SceneID main = context.ActiveSceneAsset;
+    REQUIRE(main);
+
+    SceneID other;
+    context.Deferred.emplace_back([&] { other = context.Assets.Create<AssetType::Scene>("scenes/other.scene"); });
+    RunFrames(app);
+    REQUIRE(other);
+
+    const std::filesystem::path otherFile = project.AssetsDir() / "scenes/other.scene";
+    const std::string otherBytes = ReadBytes(otherFile);
+
+    // An hour newer than its file, as two writes close together can get the same time
+    const std::filesystem::path otherCopy = temp.Write("Recovery/.crimson/recovery/" + other.ToString() + ".scene",
+                                                       R"({ "version": 1, "entities": [ { "name": "From the copy" } ] })");
+    std::filesystem::last_write_time(otherCopy, std::filesystem::last_write_time(otherFile) + std::chrono::hours(1));
+
+    // An hour older than its file
+    const std::filesystem::path mainCopy = temp.Write("Recovery/.crimson/recovery/" + main.ToString() + ".scene",
+                                                      R"({ "version": 1, "entities": [ { "name": "Too old" } ] })");
+    std::filesystem::last_write_time(mainCopy, std::filesystem::last_write_time(mainFile) - std::chrono::hours(1));
+
+    context.OpenScene(other);
+    RunFrames(app);
+
+    REQUIRE(context.ActiveSceneAsset == other);
+    REQUIRE(session.IsAskingAboutRecovery());
+
+    session.DiscardRecovery();
+    CHECK_FALSE(session.IsAskingAboutRecovery());
+    CHECK_FALSE(std::filesystem::exists(otherCopy));
+    CHECK_FALSE(session.IsSceneChanged());
+    CHECK_FALSE(HasEntityNamed(context.ActiveScene, "From the copy"));
+    CHECK(ReadBytes(otherFile) == otherBytes);
+
+    context.OpenScene(main);
+    RunFrames(app);
+
+    CHECK(context.ActiveSceneAsset == main);
+    CHECK_FALSE(session.IsAskingAboutRecovery());
+    CHECK_FALSE(std::filesystem::exists(mainCopy));
+
+    app.RequestQuit();
+    CHECK_FALSE(app.IsRunning());
 }

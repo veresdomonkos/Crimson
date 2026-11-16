@@ -5,6 +5,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/core/embedded_resource.hpp
     include/crimson/core/engine_resources.hpp
     include/crimson/core/events.hpp
+    include/crimson/core/file_write.hpp
     include/crimson/core/hash.hpp
     include/crimson/core/input.hpp
     include/crimson/core/log.hpp
@@ -80,8 +81,6 @@ set(ENGINE_SOURCES
     src/asset_manager/asset_store.hpp
     src/asset_manager/binary_io.hpp
     src/asset_manager/engine_renames.hpp
-    src/asset_manager/file_write.cpp
-    src/asset_manager/file_write.hpp
     src/asset_manager/import_cache.cpp
     src/asset_manager/importers/material_importer.cpp
     src/asset_manager/importers/mesh_importer.cpp
@@ -99,6 +98,7 @@ set(ENGINE_SOURCES
     src/asset_manager/scene_data.cpp
     src/asset_manager/slot_materials.cpp
 
+    src/core/file_write.cpp
     src/core/input.cpp
     src/core/log.cpp
 
