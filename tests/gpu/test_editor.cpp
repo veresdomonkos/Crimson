@@ -944,7 +944,7 @@ TEST_CASE_METHOD(AssetFixture, "A scene's instances draw, and go empty without t
     {
         Assets().Refresh();
         source = Assets().Find<AssetType::Scene>("scenes/crate.scene");
-        instance = CreateSceneInstance(source, Context().ActiveScene, {}, Assets(), Context().ActiveSceneAsset);
+        instance = Context().AssetTypes.Get(AssetType::Scene).DropIntoScene(Context(), source);
     });
     RunFrames(App);
 

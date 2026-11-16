@@ -2,6 +2,8 @@
 
 #include <imgui.h>
 
+#include <crimson/scene/scene_serializer.hpp>
+
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
@@ -50,7 +52,11 @@ namespace crimson::editor::ui
                 .DefaultName = "New Scene",
                 .Create = [](AssetManager& assets, const std::string& path) { return AssetID(assets.Create<AssetType::Scene>(path + ".scene")); }
             },
-            .Open = [](EditorContext& context, AssetID id) { context.OpenScene(context.Assets.As<AssetType::Scene>(id)); }
+            .Open = [](EditorContext& context, AssetID id) { context.OpenScene(context.Assets.As<AssetType::Scene>(id)); },
+            .DropIntoScene = [](EditorContext& context, AssetID id)
+            {
+                return CreateSceneInstance(context.Assets.As<AssetType::Scene>(id), context.ActiveScene, {}, context.Assets, context.ActiveSceneAsset);
+            }
         };
     }
 }

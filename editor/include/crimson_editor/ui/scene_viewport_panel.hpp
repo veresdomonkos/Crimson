@@ -21,7 +21,7 @@ namespace crimson::editor::ui
         void HandlePicking(const ImVec2& position, const ImVec2& size);
         void HandleAssetDrop(const ImVec2& position, const ImVec2& size);
         void CreateEntityFromAsset(FieldRef spawn, AssetID asset, const glm::vec3& origin, const glm::vec3& direction);
-        void CreateInstanceOfScene(SceneID scene, const glm::vec3& origin, const glm::vec3& direction);
+        void PlaceDropped(Entity entity, const glm::vec3& origin, const glm::vec3& direction);
         void AssignAssetToEntity(AssetID asset, AssetType type, const glm::vec3& origin, const glm::vec3& direction);
 
         // False when the mouse is on the bars around the image. The ray starts on the near plane, as an orthographic view

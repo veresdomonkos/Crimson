@@ -13,6 +13,7 @@
 #include <imgui.h>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/scene/entity.hpp>
 
 #include "crimson_editor/ui/editor_theme.hpp"
 
@@ -100,6 +101,10 @@ namespace crimson::editor::ui
         std::function<void(EditorContext&, const std::filesystem::path&)> OpenFile;
 
         std::vector<AssetAction> Actions;
+
+        // Makes the entity an asset of this type becomes when it is dropped into the Scene view, in the active scene, or
+        // gives a null one. Empty for the types that spawn through a component's field instead.
+        std::function<Entity(EditorContext&, AssetID)> DropIntoScene;
     };
 
     class AssetTypeRegistry

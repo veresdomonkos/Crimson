@@ -5,8 +5,6 @@
 
 #include <glm/gtc/type_ptr.hpp>
 
-#include <crimson/scene/scene_serializer.hpp>
-
 #include "crimson_editor/ui/asset_drag.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
@@ -21,11 +19,13 @@ namespace crimson::editor::ui
         return origin + direction * (toGround > 0.0f ? toGround : kDistanceWithoutGround);
     }
 
-    // Whether dropping an asset of this type does anything: a scene is instanced, others need a component that makes an
-    // entity from them or takes them
-    static bool CanDrop(const ComponentRegistry& components, AssetType type)
+    // Whether dropping an asset of this type does anything: the type makes an entity of it itself, or a component makes an
+    // entity from it or takes it
+    static bool CanDrop(const EditorAssetType& kind, const ComponentRegistry& components)
     {
-        if (type == AssetType::Scene || FindSpawnField(components, type))
+        const AssetType type = kind.Type;
+
+        if (kind.DropIntoScene || FindSpawnField(components, type))
             return true;
 
         return std::ranges::any_of(components.Types(), [type](const ComponentType& component)
@@ -101,18 +101,17 @@ namespace crimson::editor::ui
         const ComponentRegistry& components = m_context.Assets.Components();
 
         AssetID dropped;
-        AssetType droppedType = AssetType::None;
+        const EditorAssetType* droppedKind = nullptr;
 
-        for (size_t index = 1; index < kAssetTypeCount; ++index)
+        for (const EditorAssetType& kind : m_context.AssetTypes.Types())
         {
-            const auto type = static_cast<AssetType>(index);
-            if (!CanDrop(components, type))
+            if (!CanDrop(kind, components))
                 continue;
 
-            if (const AssetID id = asset_drag::AcceptOnLastItem(m_context.Assets, type))
+            if (const AssetID id = asset_drag::AcceptOnLastItem(m_context.Assets, kind.Type))
             {
                 dropped = id;
-                droppedType = type;
+                droppedKind = &kind;
             }
         }
 
@@ -124,14 +123,17 @@ namespace crimson::editor::ui
         if (!GetRayUnderMouse(position, size, origin, direction))
             return;
 
-        m_context.Deferred.emplace_back([this, dropped, droppedType, origin, direction]
+        m_context.Deferred.emplace_back([this, dropped, droppedKind, origin, direction]
         {
-            if (droppedType == AssetType::Scene)
-                CreateInstanceOfScene(m_context.Assets.As<AssetType::Scene>(dropped), origin, direction);
-            else if (const FieldRef spawn = FindSpawnField(m_context.Assets.Components(), droppedType))
+            if (droppedKind->DropIntoScene)
+            {
+                if (const Entity entity = droppedKind->DropIntoScene(m_context, dropped))
+                    PlaceDropped(entity, origin, direction);
+            }
+            else if (const FieldRef spawn = FindSpawnField(m_context.Assets.Components(), droppedKind->Type))
                 CreateEntityFromAsset(spawn, dropped, origin, direction);
             else
-                AssignAssetToEntity(dropped, droppedType, origin, direction);
+                AssignAssetToEntity(dropped, droppedKind->Type, origin, direction);
         });
     }
 
@@ -142,21 +144,15 @@ namespace crimson::editor::ui
             return;
 
         const Entity entity = m_context.ActiveScene.CreateEntity(std::filesystem::path(info->Path).stem().string());
-        entity.GetComponent<TransformComponent>().Position = GetDropPosition(origin, direction);
 
         CreateComponent(*spawn.Type, entity, m_context.Assets);
         AssignAsset(*spawn.Type, spawn.Field, entity, asset, m_context.Assets);
 
-        m_context.SceneUndo.RecordCreated(entity);
-        m_context.SelectEntity(entity);
+        PlaceDropped(entity, origin, direction);
     }
 
-    void SceneViewportPanel::CreateInstanceOfScene(SceneID scene, const glm::vec3& origin, const glm::vec3& direction)
+    void SceneViewportPanel::PlaceDropped(Entity entity, const glm::vec3& origin, const glm::vec3& direction)
     {
-        const Entity entity = CreateSceneInstance(scene, m_context.ActiveScene, {}, m_context.Assets, m_context.ActiveSceneAsset);
-        if (!entity)
-            return;
-
         entity.GetComponent<TransformComponent>().Position = GetDropPosition(origin, direction);
 
         m_context.SceneUndo.RecordCreated(entity);

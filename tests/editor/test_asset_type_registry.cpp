@@ -94,3 +94,12 @@ TEST_CASE("Scenes open in the editor, and shaders, textures and meshes open outs
         CHECK(static_cast<bool>(type.OpenFile) == outside);
     }
 }
+
+TEST_CASE("Only scenes drop into the scene themselves", "[asset types]")
+{
+    AssetTypeRegistry registry;
+    RegisterAssetTypes(registry);
+
+    for (const EditorAssetType& type : registry.Types())
+        CHECK(static_cast<bool>(type.DropIntoScene) == (type.Type == AssetType::Scene));
+}
