@@ -10,11 +10,12 @@
 #include <crimson/scene/scene_renderer.hpp>
 
 #include "crimson_editor/app_mode.hpp"
+#include "crimson_editor/edit_history.hpp"
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/frame_stats.hpp"
 #include "crimson_editor/recovery_files.hpp"
 #include "crimson_editor/scene_camera_controller.hpp"
-#include "crimson_editor/scene_history.hpp"
+#include "crimson_editor/scene_edits.hpp"
 #include "crimson_editor/scene_view.hpp"
 #include "crimson_editor/ui/editor_ui.hpp"
 #include "crimson_editor/ui/viewport_panel.hpp"
@@ -37,6 +38,7 @@ namespace crimson::editor
         [[nodiscard]] bool IsAskingAboutUnsavedChanges() const { return static_cast<bool>(m_closeAction); }
 
         [[nodiscard]] SceneView& GetSceneView() { return m_sceneView; }
+        [[nodiscard]] EditHistory& GetHistory() { return m_history; }
         [[nodiscard]] SceneSettings& GetSettings() { return m_settings; }
 
         [[nodiscard]] bool IsSceneChanged();
@@ -117,7 +119,10 @@ namespace crimson::editor
         SceneView m_sceneView;
 
         SceneSettings m_settings;
-        SceneHistory m_history;
+        SceneEdits m_sceneEdits;
+
+        // After everything it takes changes from, as it and its changes refer to them
+        EditHistory m_history;
         EditorContext m_context;
         std::unique_ptr<SceneRenderer> m_sceneRenderer;
 
@@ -138,7 +143,7 @@ namespace crimson::editor
         float m_sinceRecovery = 0.0f;
 
         bool m_wasEditing = false;
-        AssetID m_selectedBeforeEdit; // for the step an edit makes, to select it again if undoing brings it back
+        bool m_editEnded = false; // editing stopped on the frame before
         float m_sinceSceneCheck = 0.0f;
         float m_sinceShaderCheck = 0.0f;
 

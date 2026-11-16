@@ -89,7 +89,7 @@ namespace crimson::editor::ui
                 m_deferred.emplace_back([this, dropped]
                 {
                     const Entity moved = m_context.ActiveScene.GetEntity(dropped);
-                    m_context.History.Record(moved);
+                    m_context.SceneUndo.Record(moved);
                     m_context.ActiveScene.SetParent(moved, {});
                 });
             }
@@ -121,7 +121,7 @@ namespace crimson::editor::ui
         ImGui::End();
 
         // They are edits made at once, so they are steps of their own right away
-        m_context.SceneEdited = m_context.SceneEdited || !m_deferred.empty();
+        m_context.Edited = m_context.Edited || !m_deferred.empty();
 
         for (const auto& action : m_deferred)
             action();
@@ -157,7 +157,7 @@ namespace crimson::editor::ui
     {
         m_deferred.emplace_back([this, entity]
         {
-            m_context.History.RecordDestroy(entity);
+            m_context.SceneUndo.RecordDestroy(entity);
             m_context.ActiveScene.DestroyEntity(entity);
         });
     }
@@ -254,7 +254,7 @@ namespace crimson::editor::ui
                 m_deferred.emplace_back([this, dropped, entity]
                 {
                     const Entity moved = m_context.ActiveScene.GetEntity(dropped);
-                    m_context.History.Record(moved);
+                    m_context.SceneUndo.Record(moved);
                     m_context.ActiveScene.SetParent(moved, entity);
                 });
             }
@@ -337,7 +337,7 @@ namespace crimson::editor::ui
         if (!name.empty())
             m_deferred.emplace_back([this, entity, name = std::move(name)]
             {
-                m_context.History.Record(entity);
+                m_context.SceneUndo.Record(entity);
                 entity.GetComponent<NameComponent>().Name = name;
             });
     }
@@ -352,7 +352,7 @@ namespace crimson::editor::ui
                 if (setup)
                     setup(created);
 
-                m_context.History.RecordCreated(created);
+                m_context.SceneUndo.RecordCreated(created);
                 m_context.SelectEntity(created);
             });
         };

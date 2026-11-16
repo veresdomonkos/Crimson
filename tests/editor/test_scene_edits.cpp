@@ -1,18 +1,17 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <string>
-#include <vector>
-
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/scene/scene_camera.hpp>
 #include <crimson/scene/scene_serializer.hpp>
-#include <crimson_editor/scene_history.hpp>
+#include <crimson_editor/edit_history.hpp>
+#include <crimson_editor/scene_edits.hpp>
 
 #include "support/fake_gpu.hpp"
 #include "support/temp_folder.hpp"
 
 using namespace crimson;
-using crimson::editor::SceneHistory;
+using crimson::editor::EditHistory;
+using crimson::editor::SceneEdits;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::TempFolder;
 
@@ -38,7 +37,10 @@ namespace
         Scene World;
         SceneSettings Settings;
         int SettingsChanges = 0;
-        SceneHistory History{ World, Assets, Settings, [this] { ++SettingsChanges; } };
+        SceneEdits Edits{ World, Assets, Settings, [this] { ++SettingsChanges; } };
+        EditHistory History;
+
+        Fixture() { History.AddSource(Edits); }
 
         SceneData Capture() { return CaptureScene(World, Settings, Assets); }
 
@@ -48,7 +50,7 @@ namespace
     };
 }
 
-TEST_CASE_METHOD(Fixture, "A change to an entity is undone and redone", "[scene history]")
+TEST_CASE_METHOD(Fixture, "A change to an entity is undone and redone", "[scene edits]")
 {
     const Entity lamp = World.CreateEntity("Lamp");
     lamp.AddComponent<LightComponent>();
@@ -56,7 +58,7 @@ TEST_CASE_METHOD(Fixture, "A change to an entity is undone and redone", "[scene 
 
     const SceneData before = Capture();
 
-    History.Record(lamp);
+    Edits.Record(lamp);
     lamp.GetComponent<TransformComponent>().Position = glm::vec3(1.0f, 2.0f, 3.0f);
     lamp.GetComponent<LightComponent>().Intensity = 5.0f;
     REQUIRE(History.Commit());
@@ -75,17 +77,17 @@ TEST_CASE_METHOD(Fixture, "A change to an entity is undone and redone", "[scene 
     CHECK(lamp);
 }
 
-TEST_CASE_METHOD(Fixture, "Nothing changed is no step", "[scene history]")
+TEST_CASE_METHOD(Fixture, "Nothing changed is no step", "[scene edits]")
 {
     const Entity entity = World.CreateEntity("Thing");
 
-    History.Record(entity);
-    History.RecordSettings();
+    Edits.Record(entity);
+    Edits.RecordSettings();
     CHECK_FALSE(History.Commit());
     CHECK_FALSE(History.CanUndo());
 }
 
-TEST_CASE_METHOD(Fixture, "A deleted entity comes back with what was under it", "[scene history]")
+TEST_CASE_METHOD(Fixture, "A deleted entity comes back with what was under it", "[scene edits]")
 {
     const ComponentType* health = Assets.Components().RegisterRuntime("health", "Health", {
         FieldInfo{ .Key = "max", .Label = "Max", .Type = FieldType::Int, .Default = int32_t{ 3 } }
@@ -104,7 +106,7 @@ TEST_CASE_METHOD(Fixture, "A deleted entity comes back with what was under it", 
     const AssetID guardId = IdOf(guard);
     const SceneData before = Capture();
 
-    History.RecordDestroy(parent);
+    Edits.RecordDestroy(parent);
     World.DestroyEntity(parent);
     REQUIRE(History.Commit());
 
@@ -124,13 +126,13 @@ TEST_CASE_METHOD(Fixture, "A deleted entity comes back with what was under it", 
     CHECK(World.GetRoots().size() == 2);
 }
 
-TEST_CASE_METHOD(Fixture, "A created entity goes on undo and comes back on redo", "[scene history]")
+TEST_CASE_METHOD(Fixture, "A created entity goes on undo and comes back on redo", "[scene edits]")
 {
     const Entity parent = World.CreateEntity("Parent");
 
     const Entity created = World.CreateEntity("New", parent);
     created.AddComponent<LightComponent>();
-    History.RecordCreated(created);
+    Edits.RecordCreated(created);
     REQUIRE(History.Commit());
 
     const AssetID id = IdOf(created);
@@ -145,7 +147,7 @@ TEST_CASE_METHOD(Fixture, "A created entity goes on undo and comes back on redo"
     CHECK(FindEntity(World, id).HasComponent<LightComponent>());
 }
 
-TEST_CASE_METHOD(Fixture, "A reparented entity goes back where it was", "[scene history]")
+TEST_CASE_METHOD(Fixture, "A reparented entity goes back where it was", "[scene edits]")
 {
     const Entity first = World.CreateEntity("First");
     first.GetComponent<TransformComponent>().Position = glm::vec3(10.0f, 0.0f, 0.0f);
@@ -155,7 +157,7 @@ TEST_CASE_METHOD(Fixture, "A reparented entity goes back where it was", "[scene 
 
     const SceneData before = Capture();
 
-    History.Record(moved);
+    Edits.Record(moved);
     World.SetParent(moved, first);
     REQUIRE(History.Commit());
 
@@ -168,13 +170,13 @@ TEST_CASE_METHOD(Fixture, "A reparented entity goes back where it was", "[scene 
     CHECK(moved.GetComponent<RelationshipComponent>().Parent == first.GetHandle());
 }
 
-TEST_CASE_METHOD(Fixture, "Adding and removing a component is undone", "[scene history]")
+TEST_CASE_METHOD(Fixture, "Adding and removing a component is undone", "[scene edits]")
 {
     const Entity entity = World.CreateEntity("Thing");
 
     SECTION("Added")
     {
-        History.Record(entity);
+        Edits.Record(entity);
         entity.AddComponent<LightComponent>();
         REQUIRE(History.Commit());
 
@@ -186,7 +188,7 @@ TEST_CASE_METHOD(Fixture, "Adding and removing a component is undone", "[scene h
     {
         entity.AddComponent<LightComponent>(LightComponent{ .Intensity = 7.0f });
 
-        History.Record(entity);
+        Edits.Record(entity);
         entity.RemoveComponent<LightComponent>();
         REQUIRE(History.Commit());
 
@@ -196,12 +198,12 @@ TEST_CASE_METHOD(Fixture, "Adding and removing a component is undone", "[scene h
     }
 }
 
-TEST_CASE_METHOD(Fixture, "A deleted instance comes back with its scene's entities", "[scene history]")
+TEST_CASE_METHOD(Fixture, "A deleted instance comes back with its scene's entities", "[scene edits]")
 {
     const Entity instance = CreateSceneInstance(Assets.Find<AssetType::Scene>("crate.scene"), World, {}, Assets, {});
     REQUIRE(instance);
 
-    History.RecordDestroy(instance);
+    Edits.RecordDestroy(instance);
     World.DestroyEntity(instance);
     REQUIRE(History.Commit());
 
@@ -214,19 +216,19 @@ TEST_CASE_METHOD(Fixture, "A deleted instance comes back with its scene's entiti
     CHECK(Child(Child(restored, 0), 0).GetComponent<NameComponent>().Name == "Knob");
 }
 
-TEST_CASE_METHOD(Fixture, "Entities inside an instance aren't recorded", "[scene history]")
+TEST_CASE_METHOD(Fixture, "Entities inside an instance aren't recorded", "[scene edits]")
 {
     const Entity instance = CreateSceneInstance(Assets.Find<AssetType::Scene>("crate.scene"), World, {}, Assets, {});
     const Entity lid = Child(instance, 0);
 
-    History.Record(lid);
+    Edits.Record(lid);
     lid.GetComponent<NameComponent>().Name = "Changed anyway";
     CHECK_FALSE(History.Commit());
 }
 
-TEST_CASE_METHOD(Fixture, "The scene's settings are part of a step", "[scene history]")
+TEST_CASE_METHOD(Fixture, "The scene's settings are part of a step", "[scene edits]")
 {
-    History.RecordSettings();
+    Edits.RecordSettings();
     Settings.PostProcessing.Exposure = 2.0f;
     REQUIRE(History.Commit());
 
@@ -239,54 +241,22 @@ TEST_CASE_METHOD(Fixture, "The scene's settings are part of a step", "[scene his
     CHECK(SettingsChanges == 2);
 }
 
-TEST_CASE_METHOD(Fixture, "Steps are kept in order, up to a limit", "[scene history]")
+TEST_CASE_METHOD(Fixture, "The selection before a step comes back with its undo, once", "[scene edits]")
 {
     const Entity entity = World.CreateEntity("Thing");
+    const Entity selected = World.CreateEntity("Selected");
 
-    const auto rename = [&](const std::string& name)
-    {
-        History.Record(entity);
-        entity.GetComponent<NameComponent>().Name = name;
-        return History.Commit();
-    };
+    Edits.RecordSelection(IdOf(selected));
+    Edits.Record(entity);
+    entity.GetComponent<TransformComponent>().Position = glm::vec3(1.0f, 0.0f, 0.0f);
+    REQUIRE(History.Commit());
 
-    SECTION("A new step drops what could be redone")
-    {
-        rename("A");
-        rename("B");
-        REQUIRE(History.Undo());
-        CHECK(History.CanRedo());
-
-        rename("C");
-        CHECK_FALSE(History.CanRedo());
-
-        REQUIRE(History.Undo());
-        CHECK(entity.GetComponent<NameComponent>().Name == "A");
-    }
-
-    SECTION("Only the latest ones")
-    {
-        for (size_t i = 0; i < SceneHistory::kMaxSteps + 10; ++i)
-            rename(std::to_string(i));
-
-        size_t undone = 0;
-        while (History.Undo())
-            ++undone;
-
-        CHECK(undone == SceneHistory::kMaxSteps);
-        CHECK(entity.GetComponent<NameComponent>().Name == "9");
-    }
-
-    SECTION("Clearing forgets them")
-    {
-        rename("A");
-        History.Clear();
-        CHECK_FALSE(History.CanUndo());
-        CHECK_FALSE(History.CanRedo());
-    }
+    REQUIRE(History.Undo());
+    CHECK(Edits.TakeRestoredSelection() == IdOf(selected));
+    CHECK_FALSE(Edits.TakeRestoredSelection());
 }
 
-TEST_CASE_METHOD(Fixture, "An assigned asset is undone and resolved again", "[scene history]")
+TEST_CASE_METHOD(Fixture, "An assigned asset is undone and resolved again", "[scene edits]")
 {
     const ComponentType* renderer = Assets.Components().Find<MeshRendererComponent>();
     REQUIRE(renderer);
@@ -304,7 +274,7 @@ TEST_CASE_METHOD(Fixture, "An assigned asset is undone and resolved again", "[sc
 
     const SceneData before = Capture();
 
-    History.Record(thing);
+    Edits.Record(thing);
     AssignAsset(*drop.Type, drop.Field, thing, material, Assets);
     REQUIRE(History.Commit());
 
@@ -322,12 +292,12 @@ TEST_CASE_METHOD(Fixture, "An assigned asset is undone and resolved again", "[sc
     CHECK(component.Resolved.Materials[0] != Assets.Load(material));
 }
 
-TEST_CASE_METHOD(Fixture, "Changing the main camera is a step", "[scene history]")
+TEST_CASE_METHOD(Fixture, "Changing the main camera is a step", "[scene edits]")
 {
     const Entity camera = World.CreateEntity("Camera");
     camera.AddComponent<CameraComponent>();
 
-    History.RecordSettings();
+    Edits.RecordSettings();
     Settings.MainCamera = IdOf(camera);
     REQUIRE(History.Commit());
 
@@ -340,13 +310,13 @@ TEST_CASE_METHOD(Fixture, "Changing the main camera is a step", "[scene history]
     CHECK(SettingsChanges == 2);
 }
 
-TEST_CASE_METHOD(Fixture, "A deleted main camera comes back as the main camera", "[scene history]")
+TEST_CASE_METHOD(Fixture, "A deleted main camera comes back as the main camera", "[scene edits]")
 {
     const Entity camera = World.CreateEntity("Camera");
     camera.AddComponent<CameraComponent>();
     Settings.MainCamera = IdOf(camera);
 
-    History.RecordDestroy(camera);
+    Edits.RecordDestroy(camera);
     World.DestroyEntity(camera);
     REQUIRE(History.Commit());
 

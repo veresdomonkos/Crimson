@@ -82,7 +82,7 @@ namespace crimson::editor::ui
         auto& name = entity.GetComponent<NameComponent>();
 
         if (theme::Checkbox("##Active", name.Active))
-            m_context.SceneEdited = true;
+            m_context.Edited = true;
         ImGui::SameLine();
 
         std::array<char, 256> buffer{};
@@ -92,7 +92,7 @@ namespace crimson::editor::ui
         if (ImGui::InputText("##Name", buffer.data(), buffer.size()))
         {
             name.Name = buffer.data();
-            m_context.SceneEdited = true;
+            m_context.Edited = true;
         }
     }
 
@@ -113,7 +113,7 @@ namespace crimson::editor::ui
                 // Between frames, as resolving its assets may load them
                 if (DrawComponentFields(type, component, m_context))
                 {
-                    m_context.SceneEdited = true;
+                    m_context.Edited = true;
 
                     if (type.ResolveAssets)
                     {
@@ -134,7 +134,7 @@ namespace crimson::editor::ui
         if (removed)
         {
             type.Remove(entity);
-            m_context.SceneEdited = true;
+            m_context.Edited = true;
         }
     }
 

@@ -1,6 +1,5 @@
 #pragma once
 #include <cstddef>
-#include <deque>
 #include <functional>
 #include <optional>
 #include <utility>
@@ -8,6 +7,8 @@
 
 #include <crimson/asset_manager/scene_data.hpp>
 #include <crimson/scene/entity.hpp>
+
+#include "crimson_editor/edit_history.hpp"
 
 namespace crimson
 {
@@ -34,24 +35,15 @@ namespace crimson::editor
         std::optional<EntityState> After;
     };
 
-    struct SceneStep
-    {
-        std::vector<EntityChange> Entities; // in the order they were recorded
-        std::optional<std::pair<SceneSettings, SceneSettings>> Settings;
-        AssetID Selected; // the entity that was selected before the edit, for undo to select again
-    };
-
-    // Undo and redo for a scene, by the entities each edit changed, as Unity's Undo.RecordObject does it. Code that changes
-    // the scene records what it is about to change, and Commit makes a step of what did change once the edit is done.
-    // A step keeps the entities' states rather than what was done to them, so an edit that wasn't recorded only means
-    // that one can't be undone.
-    class SceneHistory
+    // The scene's part of the edit history, by the entities each edit changed, as Unity's Undo.RecordObject does it. Code
+    // that changes the scene records what it is about to change, and the history's Commit takes what did change once the
+    // edit is done. A step keeps the entities' states rather than what was done to them, so an edit that wasn't recorded
+    // only means that one can't be undone.
+    class SceneEdits final : public EditSource
     {
     public:
-        static constexpr size_t kMaxSteps = 100;
-
         // The settings are the scene's, which a step puts back and then calls back about
-        SceneHistory(Scene& scene, AssetManager& assets, SceneSettings& settings, std::function<void()> onSettingsChanged);
+        SceneEdits(Scene& scene, AssetManager& assets, SceneSettings& settings, std::function<void()> onSettingsChanged);
 
         // Before changing an entity. Only its first state in a step counts, so recording it again is cheap.
         // Entities inside instances are left out, as they can't be changed.
@@ -66,23 +58,17 @@ namespace crimson::editor
         // Before changing the settings
         void RecordSettings();
 
-        // Ends the step that was being recorded, which is kept if anything in it changed. Returns whether it was.
-        // The selected entity is the one that was selected before the edit.
-        bool Commit(AssetID selected = {});
+        // The entity that is selected before the edit, for undo to select again
+        void RecordSelection(AssetID selected) { m_selected = selected; }
 
-        // Put the scene back to before the last step, or after the next one. They don't commit what is being recorded.
-        bool Undo();
-        bool Redo();
+        // The entity that was selected before the step that was undone or redone last, once
+        [[nodiscard]] AssetID TakeRestoredSelection() { return std::exchange(m_restoredSelection, {}); }
 
-        // The entity that was selected before the step that Undo or Redo last did
-        [[nodiscard]] AssetID RestoredSelection() const { return m_restoredSelection; }
-
-        [[nodiscard]] bool CanUndo() const { return m_done > 0; }
-        [[nodiscard]] bool CanRedo() const { return m_done < m_steps.size(); }
-
-        // Forgets every step, like when another scene is opened
-        void Clear();
+        void Collect(std::vector<std::unique_ptr<EditChange>>& changes) override;
+        void Discard() override;
     private:
+        class Change;
+
         struct Pending
         {
             AssetID Id;
@@ -101,9 +87,7 @@ namespace crimson::editor
 
         std::vector<Pending> m_pending;
         std::optional<SceneSettings> m_settingsBefore;
-
-        std::deque<SceneStep> m_steps;
+        AssetID m_selected;
         AssetID m_restoredSelection;
-        size_t m_done = 0; // the steps before this are done, the rest can be redone
     };
 }

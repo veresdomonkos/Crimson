@@ -2,6 +2,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/app_mode.hpp
     include/crimson_editor/asset_edits.hpp
     include/crimson_editor/asset_thumbnails.hpp
+    include/crimson_editor/edit_history.hpp
     include/crimson_editor/editor_application.hpp
     include/crimson_editor/editor_context.hpp
     include/crimson_editor/editor_icons.hpp
@@ -15,7 +16,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/project_session_mode.hpp
     include/crimson_editor/recent_projects.hpp
     include/crimson_editor/recovery_files.hpp
-    include/crimson_editor/scene_history.hpp
+    include/crimson_editor/scene_edits.hpp
     include/crimson_editor/scene_view.hpp
     include/crimson_editor/scene_camera_controller.hpp
     include/crimson_editor/script_editor.hpp
@@ -48,6 +49,7 @@ set(EDITOR_HEADERS
 set(EDITOR_SOURCES
     src/asset_edits.cpp
     src/asset_thumbnails.cpp
+    src/edit_history.cpp
     src/editor_application.cpp
     src/editor_icons.cpp
     src/editor_paths.cpp
@@ -57,7 +59,7 @@ set(EDITOR_SOURCES
     src/project_session_mode.cpp
     src/recent_projects.cpp
     src/recovery_files.cpp
-    src/scene_history.cpp
+    src/scene_edits.cpp
     src/scene_view.cpp
     src/scene_camera_controller.cpp
     src/script_editor.cpp
