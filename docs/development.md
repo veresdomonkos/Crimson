@@ -82,7 +82,7 @@ Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are alr
 
 ### `CrimsonGpuTests`
 
-This runs the real backends, once with `--backend gl` and once with `--backend vk`, and opens a window to do it. `ctest --label-exclude gpu` skips it. The whole run shares one folder of compiled shaders, so no editor test compiles the built-in ones again. It is the one `CRIMSON_SHADER_CACHE` names, or else a folder of the run's own, and never the user's real cache.
+This runs the real backends, once with `--backend gl` and once with `--backend vk`, and opens a window to do it. `ctest --label-exclude gpu` skips it. The whole run shares one import cache folder, so no editor test imports the built-in assets again. It is the one `CRIMSON_CACHE` names, or else a folder of the run's own, and never the user's real cache.
 
 - **Rendering:** renders into a target and checks the pixels with `ReadColorPixels`. It covers placement, depth, materials, textures, blending, lights, all three kinds of shadow, outlines, shader time and the space helpers.
 - **The editor:** drives the real `EditorApplication` frame by frame. It covers the project manager, opening and closing projects, projects with problems, and shaders reloading while a material is selected. The panels draw, but nothing clicks on them. It also opens the asset picker, in both views, and pings an asset.
@@ -101,7 +101,7 @@ This runs the real backends, once with `--backend gl` and once with `--backend v
 | `linux-asan` | Ubuntu 26.04 | the same, with AddressSanitizer |
 
 - **No GPU on Linux:** Mesa renders on the CPU, with llvmpipe for OpenGL and lavapipe for Vulkan, on an Xvfb display. A bug in a GPU's driver won't show up there, so `CrimsonGpuTests` is still worth running locally.
-- **Caches:** ccache, the Vulkan SDK, the Git LFS files, the downloaded Ubuntu packages and the compiled shaders are kept between runs. The shaders' key is the commits of glslang and SPIRV-Tools and the files in `engine/resources/shaders` and `engine/src/shader`. A run that finds only an older one still works, as each entry checks itself. The Ubuntu mirror can be slow, so the package install stops after 15 minutes. Running the job again goes on from what is in the cache.
+- **Caches:** ccache, the Vulkan SDK, the Git LFS files, the downloaded Ubuntu packages and the import cache are kept between runs. The import cache's key is the commit, like ccache's. A run that finds only an older one still works, as each entry checks itself. The Ubuntu mirror can be slow, so the package install stops after 15 minutes. Running the job again goes on from what is in the cache.
 
 ## Releases
 
