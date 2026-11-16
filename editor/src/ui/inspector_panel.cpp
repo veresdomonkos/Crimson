@@ -81,7 +81,7 @@ namespace crimson::editor::ui
     {
         auto& name = entity.GetComponent<NameComponent>();
 
-        if (ImGui::Checkbox("##Active", &name.Active))
+        if (theme::Checkbox("##Active", name.Active))
             m_context.Edited = true;
         ImGui::SameLine();
 

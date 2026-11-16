@@ -1,9 +1,11 @@
 #include "crimson_editor/ui/editor_theme.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #include <crimson/core/log.hpp>
 
@@ -246,6 +248,71 @@ namespace crimson::editor::ui
                 ImGui::PopStyleColor();
 
             return clicked;
+        }
+
+        bool Checkbox(const char* label, bool& value)
+        {
+            ImGuiWindow* window = ImGui::GetCurrentWindow();
+            if (window->SkipItems)
+                return false;
+
+            const ImGuiStyle& style = ImGui::GetStyle();
+            const ImGuiID id = window->GetID(label);
+            const ImVec2 labelSize = ImGui::CalcTextSize(label, nullptr, true);
+
+            // The box is as tall as the text, centered in a row as tall as the other fields
+            const float rowHeight = ImGui::GetFrameHeight();
+            const float box = std::round(ImGui::GetFontSize());
+            const float width = box + (labelSize.x > 0.0f ? style.ItemInnerSpacing.x + labelSize.x : 0.0f);
+
+            const ImVec2 pos = window->DC.CursorPos;
+            const ImRect bb(pos, ImVec2(pos.x + width, pos.y + rowHeight));
+
+            ImGui::ItemSize(bb, style.FramePadding.y);
+            if (!ImGui::ItemAdd(bb, id))
+                return false;
+
+            bool hovered = false;
+            bool held = false;
+            const bool pressed = ImGui::ButtonBehavior(bb, id, &hovered, &held);
+
+            if (pressed)
+            {
+                value = !value;
+                ImGui::MarkItemEdited(id);
+            }
+
+            const ImVec2 boxMin(pos.x, std::round(pos.y + (rowHeight - box) * 0.5f));
+            const ImVec2 boxMax(boxMin.x + box, boxMin.y + box);
+            const float rounding = Scaled(3.0f);
+
+            ImDrawList* drawList = window->DrawList;
+            ImGui::RenderNavCursor(ImRect(boxMin, boxMax), id);
+
+            if (value)
+            {
+                // The selection color, as a toggle button that is on has it, with an outline only while hovered
+                drawList->AddRectFilled(boxMin, boxMax, ImGui::GetColorU32(Selection), rounding);
+                if (hovered || held)
+                    drawList->AddRect(boxMin, boxMax, ImGui::GetColorU32(TextMuted), rounding, ImDrawFlags_None, Scaled(BorderSize));
+
+                // A tick of two strokes, thin enough to read as a mark rather than a glyph
+                const auto at = [&](float x, float y) { return ImVec2(boxMin.x + box * x, boxMin.y + box * y); };
+                const std::array tick = { at(0.26f, 0.53f), at(0.43f, 0.69f), at(0.75f, 0.34f) };
+                drawList->AddPolyline(tick.data(), static_cast<int>(tick.size()), ImGui::GetColorU32(Text), ImDrawFlags_None,
+                    std::max(1.5f, box * 0.13f));
+            }
+            else
+            {
+                const ImVec4& fill = held ? Pressed : hovered ? Hover : FrameBackground;
+                drawList->AddRectFilled(boxMin, boxMax, ImGui::GetColorU32(fill), rounding);
+                drawList->AddRect(boxMin, boxMax, ImGui::GetColorU32(hovered ? TextMuted : Hover), rounding, ImDrawFlags_None, Scaled(BorderSize));
+            }
+
+            if (labelSize.x > 0.0f)
+                ImGui::RenderText(ImVec2(boxMax.x + style.ItemInnerSpacing.x, pos.y + style.FramePadding.y), label);
+
+            return pressed;
         }
 
         bool IconTreeNode(const char* id, ImGuiTreeNodeFlags flags, const char* icon, const ImVec4& iconColor, const char* label)

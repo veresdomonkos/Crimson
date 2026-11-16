@@ -7,6 +7,7 @@
 #include <string>
 
 #include <imgui.h>
+#include <imgui_internal.h>
 
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/linear_color.hpp"
@@ -137,6 +138,70 @@ namespace crimson::editor::ui::props
         return changed;
     }
 
+    // A thin track with the part up to the value filled and a round handle, without the value as text, as the field next
+    // to it shows that. It moves as ImGui's slider does: dragging, clicking to jump, the arrow keys and logarithmic ranges.
+    static bool SliderTrack(float& value, float min, float max, ImGuiSliderFlags flags)
+    {
+        ImGuiWindow* window = ImGui::GetCurrentWindow();
+        if (window->SkipItems)
+            return false;
+
+        ImGuiContext& g = *ImGui::GetCurrentContext();
+        const ImGuiID id = window->GetID("##Value");
+        const ImVec2 pos = window->DC.CursorPos;
+        const ImRect bb(pos, ImVec2(pos.x + ImGui::CalcItemWidth(), pos.y + ImGui::GetFrameHeight()));
+
+        ImGui::ItemSize(bb, g.Style.FramePadding.y);
+        if (!ImGui::ItemAdd(bb, id))
+            return false;
+
+        // The whole row height can be grabbed, not only the thin track
+        const bool hovered = ImGui::ItemHoverable(bb, id, g.LastItemData.ItemFlags);
+        const bool clicked = hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left, ImGuiInputFlags_None, id);
+
+        if (clicked || g.NavActivateId == id)
+        {
+            if (clicked)
+                ImGui::SetKeyOwner(ImGuiKey_MouseLeft, id);
+
+            ImGui::SetActiveID(id, window);
+            ImGui::SetFocusID(id, window);
+            ImGui::FocusWindow(window);
+            g.ActiveIdUsingNavDirMask |= (1 << ImGuiDir_Left) | (1 << ImGuiDir_Right);
+        }
+
+        // The handle is the slider's grab, so its center reaches the track's ends exactly at min and max
+        const float handleRadius = std::max(3.0f, std::round(ImGui::GetFontSize() * 0.3f));
+
+        ImRect grab;
+        ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, handleRadius * 2.0f);
+        const bool changed = ImGui::SliderBehavior(bb, id, ImGuiDataType_Float, &value, &min, &max, "%.3f", flags | ImGuiSliderFlags_NoInput, &grab);
+        ImGui::PopStyleVar();
+
+        if (changed)
+            ImGui::MarkItemEdited(id);
+
+        // SliderBehavior keeps the grab this far inside the box
+        constexpr float kGrabPadding = 2.0f;
+
+        const float centerY = bb.GetCenter().y;
+        const float trackHalf = std::max(1.0f, std::round(ImGui::GetFontSize() * 0.12f));
+        const float trackLeft = bb.Min.x + kGrabPadding;
+        const float handleX = grab.Max.x > grab.Min.x ? grab.GetCenter().x : trackLeft + handleRadius;
+        const bool lit = hovered || g.ActiveId == id;
+
+        ImDrawList* drawList = window->DrawList;
+        ImGui::RenderNavCursor(bb, id);
+        drawList->AddRectFilled(ImVec2(trackLeft, centerY - trackHalf), ImVec2(bb.Max.x - kGrabPadding, centerY + trackHalf),
+            ImGui::GetColorU32(theme::FrameBackground), trackHalf);
+        drawList->AddRectFilled(ImVec2(trackLeft, centerY - trackHalf), ImVec2(handleX, centerY + trackHalf),
+            ImGui::GetColorU32(theme::TextMuted), trackHalf);
+        drawList->AddCircleFilled(ImVec2(handleX, centerY), handleRadius,
+            ImGui::GetColorU32(lit ? theme::Text : theme::WithAlpha(theme::Text, 0.8f)));
+
+        return changed;
+    }
+
     bool SliderField(float& value, float min, float max, const char* format, ImGuiSliderFlags flags)
     {
         const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
@@ -144,14 +209,14 @@ namespace crimson::editor::ui::props
         const float sliderWidth = std::max(1.0f, ImGui::CalcItemWidth() - fieldWidth - spacing);
 
         ImGui::SetNextItemWidth(sliderWidth);
-        bool changed = ImGui::SliderFloat("##Value", &value, min, max, format, flags);
+        bool changed = SliderTrack(value, min, max, flags);
         ResetTarget();
 
         ImGui::SameLine(0.0f, spacing);
         ImGui::SetNextItemWidth(fieldWidth);
 
         // A typed value can be anything, so it is held to the slider's range
-        if (ImGui::InputFloat("##Field", &value, 0.0f, 0.0f, "%.3f"))
+        if (ImGui::InputFloat("##Field", &value, 0.0f, 0.0f, format))
         {
             value = std::clamp(value, min, max);
             changed = true;
@@ -248,7 +313,7 @@ namespace crimson::editor::ui::props
     bool Checkbox(const char* label, bool& value, const bool* reset)
     {
         BeginRow(label);
-        bool changed = ImGui::Checkbox("##Value", &value);
+        bool changed = theme::Checkbox("##Value", value);
         ResetTarget();
 
         changed |= ApplyReset(EndRow(reset != nullptr), value, reset);
