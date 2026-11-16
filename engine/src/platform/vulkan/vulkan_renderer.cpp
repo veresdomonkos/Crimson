@@ -72,12 +72,7 @@ namespace crimson::vulkan
 
         for (InFlightFrame& resources : m_inFlight)
         {
-            vk::DescriptorSetAllocateInfo frameAllocInfo{};
-            frameAllocInfo.descriptorPool = m_resourceManager.GetDescriptorPool();
-            frameAllocInfo.descriptorSetCount = 1;
-            frameAllocInfo.pSetLayouts = &frameLayout;
-
-            resources.DescriptorSet = std::move(device.allocateDescriptorSets(frameAllocInfo).front());
+            resources.DescriptorSet = m_resourceManager.AllocateDescriptorSet(frameLayout);
 
             resources.FrameBlockBuffer = CreateAllocatedBuffer(allocator, sizeof(FrameBlock), vk::BufferUsageFlagBits::eUniformBuffer, BufferMemory::HostMapped);
 

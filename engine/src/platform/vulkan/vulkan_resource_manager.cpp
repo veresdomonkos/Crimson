@@ -16,7 +16,7 @@ namespace crimson::vulkan
     VulkanResourceManager::VulkanResourceManager(VulkanDevice& device)
         : m_device(device)
     {
-        CreateDescriptorPool();
+        AddDescriptorPool();
         CreateSamplers();
         CreateStandardSetLayouts();
         CreateDefaultTexture();
@@ -31,19 +31,23 @@ namespace crimson::vulkan
         DestroyResources();
     }
 
-    void VulkanResourceManager::CreateDescriptorPool()
+    void VulkanResourceManager::AddDescriptorPool()
     {
-        // Frame sets take one UBO, four storage buffers, the atlas and four samplers per frame in flight
+        // Mostly for materials, a uniform block and a few textures each. Frame sets take one UBO, four storage buffers,
+        // the atlas and four samplers per frame in flight.
+        constexpr uint32_t kSetsPerPool = 256;
+        constexpr uint32_t kTexturesPerSet = 8;
+
         std::array<vk::DescriptorPoolSize, 4> poolSizes{};
 
         poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
-        poolSizes[0].descriptorCount = 100 + kMaxFramesInFlight;
+        poolSizes[0].descriptorCount = kSetsPerPool;
 
         poolSizes[1].type = vk::DescriptorType::eStorageBuffer;
         poolSizes[1].descriptorCount = 4 * kMaxFramesInFlight;
 
         poolSizes[2].type = vk::DescriptorType::eSampledImage;
-        poolSizes[2].descriptorCount = 100 + kMaxFramesInFlight;
+        poolSizes[2].descriptorCount = kSetsPerPool * kTexturesPerSet;
 
         poolSizes[3].type = vk::DescriptorType::eSampler;
         poolSizes[3].descriptorCount = 4 * kMaxFramesInFlight;
@@ -51,10 +55,30 @@ namespace crimson::vulkan
         vk::DescriptorPoolCreateInfo poolInfo{};
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = 100;
+        poolInfo.maxSets = kSetsPerPool;
         poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
 
-        m_descriptorPool = m_device.GetDevice().createDescriptorPool(poolInfo);
+        m_descriptorPools.push_back(m_device.GetDevice().createDescriptorPool(poolInfo));
+    }
+
+    vk::raii::DescriptorSet VulkanResourceManager::AllocateDescriptorSet(vk::DescriptorSetLayout layout)
+    {
+        vk::DescriptorSetAllocateInfo allocateInfo{};
+        allocateInfo.descriptorPool = *m_descriptorPools.back();
+        allocateInfo.descriptorSetCount = 1;
+        allocateInfo.pSetLayouts = &layout;
+
+        try
+        {
+            return std::move(m_device.GetDevice().allocateDescriptorSets(allocateInfo).front());
+        }
+        catch (const vk::OutOfPoolMemoryError&) {}
+        catch (const vk::FragmentedPoolError&) {}
+
+        // A set that doesn't fit in a new pool either is an error the caller gets
+        AddDescriptorPool();
+        allocateInfo.descriptorPool = *m_descriptorPools.back();
+        return std::move(m_device.GetDevice().allocateDescriptorSets(allocateInfo).front());
     }
 
     void VulkanResourceManager::CreateSamplers()
@@ -313,14 +337,7 @@ namespace crimson::vulkan
             material.Settings = settings;
             material.UniformBufferSize = shader->Interface.MaterialBlockSize;
 
-            const vk::DescriptorSetLayout setLayout = *shader->MaterialSetLayout;
-
-            vk::DescriptorSetAllocateInfo allocateInfo{};
-            allocateInfo.descriptorPool = *m_descriptorPool;
-            allocateInfo.descriptorSetCount = 1;
-            allocateInfo.pSetLayouts = &setLayout;
-
-            material.DescriptorSet = std::move(m_device.GetDevice().allocateDescriptorSets(allocateInfo).front());
+            material.DescriptorSet = AllocateDescriptorSet(*shader->MaterialSetLayout);
 
             if (material.UniformBufferSize > 0)
             {

@@ -4,6 +4,7 @@
 #include <optional>
 #include <span>
 #include <string_view>
+#include <vector>
 
 #include "vulkan_device.hpp"
 #include "crimson/renderer/resource_manager_base.hpp"
@@ -57,7 +58,10 @@ namespace crimson::vulkan
         TextureHandle GetColorAttachment(RenderTargetHandle handle, uint32_t index) const override;
         std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const override;
 
-        [[nodiscard]] vk::DescriptorPool GetDescriptorPool() const { return *m_descriptorPool; }
+        // From the newest pool, or from a new one when that is full, so there is no limit on how many materials there are
+        [[nodiscard]] vk::raii::DescriptorSet AllocateDescriptorSet(vk::DescriptorSetLayout layout);
+
+        [[nodiscard]] size_t GetDescriptorPoolCount() const { return m_descriptorPools.size(); }
         [[nodiscard]] vk::DescriptorSetLayout GetFrameSetLayout() const { return *m_frameSetLayout; }
 
         VulkanGraphicsPipeline& GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info);
@@ -65,7 +69,7 @@ namespace crimson::vulkan
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
 
     private:
-        void CreateDescriptorPool();
+        void AddDescriptorPool();
         void CreateSamplers();
         void CreateStandardSetLayouts();
         void CreateDefaultTexture();
@@ -94,7 +98,7 @@ namespace crimson::vulkan
         vk::raii::Sampler m_pointClampSampler{ nullptr };
         vk::raii::Sampler m_shadowCompareSampler{ nullptr };
         vk::raii::DescriptorSetLayout m_frameSetLayout{ nullptr };
-        vk::raii::DescriptorPool m_descriptorPool{ nullptr };
+        std::vector<vk::raii::DescriptorPool> m_descriptorPools; // a set goes back to its own pool when it is destroyed
         TextureHandle m_defaultTexture; // what a material's textures show until they are set
         VulkanSurface m_primarySurface;
         GraphicsPipelineCache<VulkanGraphicsPipeline> m_graphicsPipelines;
