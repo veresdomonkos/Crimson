@@ -14,6 +14,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/project_manager_mode.hpp
     include/crimson_editor/project_session_mode.hpp
     include/crimson_editor/recent_projects.hpp
+    include/crimson_editor/recovery_files.hpp
     include/crimson_editor/scene_history.hpp
     include/crimson_editor/scene_view.hpp
     include/crimson_editor/scene_camera_controller.hpp
@@ -55,6 +56,7 @@ set(EDITOR_SOURCES
     src/project_manager_mode.cpp
     src/project_session_mode.cpp
     src/recent_projects.cpp
+    src/recovery_files.cpp
     src/scene_history.cpp
     src/scene_view.cpp
     src/scene_camera_controller.cpp
