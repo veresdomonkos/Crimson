@@ -272,6 +272,9 @@ namespace crimson::editor::ui
         // Holding alt is for moving the camera
         ImGuizmo::Enable(!ImGui::GetIO().KeyAlt);
 
+        // The handles always point along the positive axes, as in Unity, rather than turning to face the camera
+        ImGuizmo::AllowAxisFlip(false);
+
         ImGuizmo::SetDrawlist();
         ImGuizmo::SetRect(position.x, position.y, size.x, size.y);
 
