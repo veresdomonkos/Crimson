@@ -407,19 +407,18 @@ TEST_CASE_METHOD(AssetFixture, "The Scene view draws through a scene camera", "[
     RunFrames(App);
     CHECK(view.IsLookingThrough());
 
-    SECTION("Losing its camera component")
-    {
-        camera.RemoveComponent<CameraComponent>();
-        RunFrames(App);
-        CHECK_FALSE(view.IsLookingThrough());
-    }
+    // One after the other rather than in sections, as each section starts a whole editor
+    camera.RemoveComponent<CameraComponent>();
+    RunFrames(App);
+    CHECK_FALSE(view.IsLookingThrough());
 
-    SECTION("Being destroyed")
-    {
-        scene.DestroyEntity(camera);
-        RunFrames(App);
-        CHECK_FALSE(view.IsLookingThrough());
-    }
+    camera.AddComponent<CameraComponent>();
+    view.LookThrough(camera);
+    REQUIRE(view.IsLookingThrough());
+
+    scene.DestroyEntity(camera);
+    RunFrames(App);
+    CHECK_FALSE(view.IsLookingThrough());
 }
 
 // The panels queue these for after the frame, as they can't change GPU resources in the middle of it
@@ -649,10 +648,8 @@ TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[edit
 
         CHECK_FALSE(Session().IsSceneChanged());
         CHECK(Assets().Read(id)->Roots.back().Name == "New");
-    }
 
-    SECTION("The main camera is part of it")
-    {
+        // The main camera is part of it. In this section, as each one starts a whole editor.
         const Entity camera = Context().ActiveScene.CreateEntity("Camera");
         camera.AddComponent<CameraComponent>();
         REQUIRE(Session().SaveAll());
