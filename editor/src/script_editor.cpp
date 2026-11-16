@@ -46,92 +46,95 @@ namespace crimson::editor
             if (std::ranges::any_of(editors, [&](const CodeEditor& editor) { return editor.Program == program; }))
                 return;
 
-            editors.push_back({ std::move(name), program, DefaultScriptEditorArguments(program) });
+            editors.push_back({ std::move(name), program, script_editor::DefaultArguments(program) });
         }
     }
 
-    std::vector<CodeEditor> FindCodeEditors()
+    namespace script_editor
     {
-        std::vector<CodeEditor> editors;
-        for (const auto& [name, program] : platform::CodeEditorCandidates())
-            AddIfFound(editors, name, program);
-
-        return editors;
-    }
-
-    std::string DefaultScriptEditorArguments(const fs::path& program)
-    {
-        const std::string name = Lowercase(program.stem().string());
-
-        if (name == "code" || name == "code - insiders" || name == "codium")
-            return std::string(kVSCodeArguments);
-
-        if (name == "devenv")
-            return std::string(kVisualStudioArguments);
-
-        if (name.starts_with("rider") || name.starts_with("clion") || name.starts_with("idea") || name.starts_with("pycharm"))
-            return std::string(kJetBrainsArguments);
-
-        return std::string(kPlainArguments);
-    }
-
-    std::vector<std::string> ExpandScriptEditorArguments(const std::string& arguments, const fs::path& file, int line, const fs::path& project)
-    {
-        std::vector<std::string> split;
-        std::string current;
-        bool inQuotes = false;
-        bool started = false; // so "" is an argument of its own, even though it is empty
-
-        for (const char c : arguments)
+        std::vector<CodeEditor> FindCodeEditors()
         {
-            if (c == '"')
-            {
-                inQuotes = !inQuotes;
-                started = true;
-            }
-            else if (!inQuotes && (c == ' ' || c == '\t'))
-            {
-                if (started)
-                    split.push_back(std::move(current));
+            std::vector<CodeEditor> editors;
+            for (const auto& [name, program] : platform::CodeEditorCandidates())
+                AddIfFound(editors, name, program);
 
-                current.clear();
-                started = false;
-            }
-            else
-            {
-                current += c;
-                started = true;
-            }
+            return editors;
         }
 
-        if (started)
-            split.push_back(std::move(current));
-
-        // Filled in after splitting, so a space in a path never splits it
-        const std::string filePath = PathToUtf8(file.lexically_normal().make_preferred());
-        const std::string projectPath = PathToUtf8(project.lexically_normal().make_preferred());
-        const std::string lineText = std::to_string(std::max(line, 1));
-
-        for (std::string& argument : split)
+        std::string DefaultArguments(const fs::path& program)
         {
-            ReplaceAll(argument, "$(File)", filePath);
-            ReplaceAll(argument, "$(Line)", lineText);
-            ReplaceAll(argument, "$(ProjectPath)", projectPath);
+            const std::string name = Lowercase(program.stem().string());
+
+            if (name == "code" || name == "code - insiders" || name == "codium")
+                return std::string(kVSCodeArguments);
+
+            if (name == "devenv")
+                return std::string(kVisualStudioArguments);
+
+            if (name.starts_with("rider") || name.starts_with("clion") || name.starts_with("idea") || name.starts_with("pycharm"))
+                return std::string(kJetBrainsArguments);
+
+            return std::string(kPlainArguments);
         }
 
-        return split;
-    }
-
-    void OpenInScriptEditor(const EditorSettings::ScriptEditor& editor, const fs::path& file, const fs::path& project, int line)
-    {
-        if (!editor.Program.empty())
+        std::vector<std::string> ExpandArguments(const std::string& arguments, const fs::path& file, int line, const fs::path& project)
         {
-            if (StartProgram(editor.Program, ExpandScriptEditorArguments(editor.Arguments, file, line, project)))
-                return;
+            std::vector<std::string> split;
+            std::string current;
+            bool inQuotes = false;
+            bool started = false; // so "" is an argument of its own, even though it is empty
 
-            LOG_ERROR("[Editor] The script editor didn't start, so {} opens in the system's program for it", file.filename().string());
+            for (const char c : arguments)
+            {
+                if (c == '"')
+                {
+                    inQuotes = !inQuotes;
+                    started = true;
+                }
+                else if (!inQuotes && (c == ' ' || c == '\t'))
+                {
+                    if (started)
+                        split.push_back(std::move(current));
+
+                    current.clear();
+                    started = false;
+                }
+                else
+                {
+                    current += c;
+                    started = true;
+                }
+            }
+
+            if (started)
+                split.push_back(std::move(current));
+
+            // Filled in after splitting, so a space in a path never splits it
+            const std::string filePath = PathToUtf8(file.lexically_normal().make_preferred());
+            const std::string projectPath = PathToUtf8(project.lexically_normal().make_preferred());
+            const std::string lineText = std::to_string(std::max(line, 1));
+
+            for (std::string& argument : split)
+            {
+                ReplaceAll(argument, "$(File)", filePath);
+                ReplaceAll(argument, "$(Line)", lineText);
+                ReplaceAll(argument, "$(ProjectPath)", projectPath);
+            }
+
+            return split;
         }
 
-        OpenInDefaultApp(file);
+        void Open(const EditorSettings::ScriptEditor& editor, const fs::path& file, const fs::path& project, int line)
+        {
+            if (!editor.Program.empty())
+            {
+                if (shell::StartProgram(editor.Program, ExpandArguments(editor.Arguments, file, line, project)))
+                    return;
+
+                LOG_ERROR("[Editor] The script editor didn't start, so {} opens in the system's program for it", file.filename().string());
+            }
+
+            shell::OpenInDefaultApp(file);
+        }
     }
 }

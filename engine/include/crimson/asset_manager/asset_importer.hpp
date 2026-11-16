@@ -34,16 +34,16 @@ namespace crimson
         using Result = MaterialHandle;
         using Data = MaterialData;
 
-        static constexpr auto Parse = &ParseMaterialData;
-        static constexpr auto Write = &WriteMaterialData;
+        static constexpr auto Parse = &material_data::Parse;
+        static constexpr auto Write = &material_data::Write;
     };
 
     template <> struct AssetTraits<AssetType::Scene>
     {
         using Data = SceneData;
 
-        static constexpr auto Parse = &ParseSceneData;
-        static constexpr auto Write = &WriteSceneData;
+        static constexpr auto Parse = &scene_data::Parse;
+        static constexpr auto Write = &scene_data::Write;
     };
 
     template <AssetType T>

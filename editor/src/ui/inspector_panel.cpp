@@ -106,7 +106,7 @@ namespace crimson::editor::ui
 
         // What can be added can be removed, which every entity's own, like the transform, can't
         bool removed = false;
-        if (BeginComponentSection(icon ? icon : kIconEntity, type.Name.c_str(), type.Addable, removed))
+        if (BeginComponentSection(icon ? icon : icons::kEntity, type.Name.c_str(), type.Addable, removed))
         {
             if (props::BeginTable(type.Id.c_str()))
             {
@@ -147,7 +147,7 @@ namespace crimson::editor::ui
         // Like one from a script that isn't loaded. It can't be shown, but the scene keeps it.
         for (const SceneComponent& component : unknown->Components)
         {
-            ImGui::TextDisabled("%s  %s", kIconWarning, component.Type.c_str());
+            ImGui::TextDisabled("%s  %s", icons::kWarning, component.Type.c_str());
             ImGui::SetItemTooltip("A component this editor doesn't know. It stays as it is when the scene is saved.");
         }
     }

@@ -39,7 +39,7 @@ namespace crimson::editor::ui
         const ImVec2 min = ImGui::GetItemRectMin();
         const ImVec2 max = ImGui::GetItemRectMax();
 
-        const AssetID dropped = AcceptAssetOnLastItem(assets, type, ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+        const AssetID dropped = asset_drag::AcceptOnLastItem(assets, type, ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
 
         const float nameRight = max.x - height;
         const bool overName = ImGui::GetIO().MousePos.x < nameRight;
@@ -85,10 +85,10 @@ namespace crimson::editor::ui
         const auto drawIcon = [&](float left, const char* icon, const ImVec4& color)
         {
             const ImVec2 center(left + height * 0.5f, min.y + height * 0.5f);
-            DrawTileIcon(drawList, ImVec2(center.x - iconSize * 0.5f, center.y - iconSize * 0.5f), ImVec2(center.x + iconSize * 0.5f, center.y + iconSize * 0.5f), icon, color);
+            tiles::DrawIcon(drawList, ImVec2(center.x - iconSize * 0.5f, center.y - iconSize * 0.5f), ImVec2(center.x + iconSize * 0.5f, center.y + iconSize * 0.5f), icon, color);
         };
 
-        drawIcon(nameRight, kIconPicker, style.Colors[ImGuiCol_Text]);
+        drawIcon(nameRight, icons::kPicker, style.Colors[ImGuiCol_Text]);
 
         // Not for a missing one, as the empty thumbnail would be kept after the file is back
         const ImTextureID picture = type == AssetType::Texture && info ? context.Thumbnails.Get(assets.As<AssetType::Texture>(current)) : ImTextureID{ 0 };
@@ -101,7 +101,7 @@ namespace crimson::editor::ui
         }
         else
         {
-            drawIcon(min.x, AssetIcon(type), theme::AssetColor(type));
+            drawIcon(min.x, icons::ForAsset(type), theme::AssetColor(type));
         }
 
         const ImVec4 textColor = missing ? theme::Warning : info && info->ReadOnly ? theme::TextMuted : style.Colors[ImGuiCol_Text];
@@ -111,7 +111,7 @@ namespace crimson::editor::ui
         drawList->AddText(ImVec2(min.x + height, min.y + style.FramePadding.y), ImGui::GetColorU32(textColor), text.c_str());
         drawList->PopClipRect();
 
-        DrawAssetDropHighlight(assets, type, min, max, style.FrameRounding);
+        asset_drag::DrawDropHighlight(assets, type, min, max, style.FrameRounding);
 
         bool changed = false;
 

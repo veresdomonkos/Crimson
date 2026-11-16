@@ -40,7 +40,7 @@ namespace crimson::editor::ui
         ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 15.0f, 0.0f), ImGuiCond_FirstUseEver);
         ImGui::Begin(kSceneSettingsWindow);
 
-        LinearColorEdit("Ambient", &m_settings.Ambient.x, 3);
+        linear_color::Edit("Ambient", &m_settings.Ambient.x, 3);
         DrawMainCamera();
         DrawPostProcessing();
 

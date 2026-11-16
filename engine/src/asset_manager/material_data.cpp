@@ -75,106 +75,109 @@ namespace crimson
         }
     }
 
-    std::optional<MaterialData> ParseMaterialData(std::string_view text, const AssetManager& assets, std::string_view name)
+    namespace material_data
     {
-        nlohmann::json j;
-
-        try
+        std::optional<MaterialData> Parse(std::string_view text, const AssetManager& assets, std::string_view name)
         {
-            j = nlohmann::json::parse(text);
-        }
-        catch (const nlohmann::json::exception& e)
-        {
-            LOG_ERROR("[MaterialImporter] Invalid JSON in '{}': {}", name, e.what());
-            return std::nullopt;
-        }
+            nlohmann::json j;
 
-        if (!j.is_object())
-        {
-            LOG_ERROR("[MaterialImporter] '{}': expected an object", name);
-            return std::nullopt;
-        }
-
-        MaterialData data;
-        data.Settings = ParseSettings(j, name);
-
-        if (const auto shader = j.find("shader"); shader != j.end())
-            data.Shader = ResolveAssetRef<AssetType::Shader>(assets, *shader, name);
-        else
-            LOG_ERROR("[MaterialImporter] '{}': missing 'shader'", name);
-
-        if (const auto properties = j.find("properties"); properties != j.end() && properties->is_object())
-        {
-            for (const auto& [property, value] : properties->items())
+            try
             {
-                if (std::vector<float> values = ParseProperty(property, value); !values.empty())
-                    data.Properties[property] = std::move(values);
+                j = nlohmann::json::parse(text);
             }
-        }
-
-        if (const auto textures = j.find("textures"); textures != j.end() && textures->is_object())
-        {
-            for (const auto& [slot, ref] : textures->items())
+            catch (const nlohmann::json::exception& e)
             {
-                // One that is missing stays, for the file not to lose it
-                if (const TextureID texture = ResolveAssetRef<AssetType::Texture>(assets, ref, std::string(name) + " " + slot))
-                    data.Textures[slot] = texture;
+                LOG_ERROR("[MaterialImporter] Invalid JSON in '{}': {}", name, e.what());
+                return std::nullopt;
             }
+
+            if (!j.is_object())
+            {
+                LOG_ERROR("[MaterialImporter] '{}': expected an object", name);
+                return std::nullopt;
+            }
+
+            MaterialData data;
+            data.Settings = ParseSettings(j, name);
+
+            if (const auto shader = j.find("shader"); shader != j.end())
+                data.Shader = ResolveAssetRef<AssetType::Shader>(assets, *shader, name);
+            else
+                LOG_ERROR("[MaterialImporter] '{}': missing 'shader'", name);
+
+            if (const auto properties = j.find("properties"); properties != j.end() && properties->is_object())
+            {
+                for (const auto& [property, value] : properties->items())
+                {
+                    if (std::vector<float> values = ParseProperty(property, value); !values.empty())
+                        data.Properties[property] = std::move(values);
+                }
+            }
+
+            if (const auto textures = j.find("textures"); textures != j.end() && textures->is_object())
+            {
+                for (const auto& [slot, ref] : textures->items())
+                {
+                    // One that is missing stays, for the file not to lose it
+                    if (const TextureID texture = ResolveAssetRef<AssetType::Texture>(assets, ref, std::string(name) + " " + slot))
+                        data.Textures[slot] = texture;
+                }
+            }
+
+            return data;
         }
 
-        return data;
-    }
-
-    std::string WriteMaterialData(const MaterialData& data, const AssetManager& assets)
-    {
-        nlohmann::ordered_json j;
-
-        j["shader"] = WriteAssetRef(assets, data.Shader);
-        j["renderMode"] = data.Settings.RenderMode == MaterialRenderMode::Transparent ? "transparent"
-                        : data.Settings.RenderMode == MaterialRenderMode::Cutout ? "cutout"
-                        : "opaque";
-        j["cull"] = data.Settings.Cull == CullMode::Back ? "back" : data.Settings.Cull == CullMode::Front ? "front" : "none";
-
-        if (!data.Properties.empty())
+        std::string Write(const MaterialData& data, const AssetManager& assets)
         {
-            nlohmann::ordered_json properties = nlohmann::ordered_json::object();
+            nlohmann::ordered_json j;
 
-            for (const auto& [name, values] : data.Properties)
-                properties[name] = values.size() == 1 ? nlohmann::ordered_json(values[0]) : nlohmann::ordered_json(values);
+            j["shader"] = WriteAssetRef(assets, data.Shader);
+            j["renderMode"] = data.Settings.RenderMode == MaterialRenderMode::Transparent ? "transparent"
+                            : data.Settings.RenderMode == MaterialRenderMode::Cutout ? "cutout"
+                            : "opaque";
+            j["cull"] = data.Settings.Cull == CullMode::Back ? "back" : data.Settings.Cull == CullMode::Front ? "front" : "none";
 
-            j["properties"] = std::move(properties);
+            if (!data.Properties.empty())
+            {
+                nlohmann::ordered_json properties = nlohmann::ordered_json::object();
+
+                for (const auto& [name, values] : data.Properties)
+                    properties[name] = values.size() == 1 ? nlohmann::ordered_json(values[0]) : nlohmann::ordered_json(values);
+
+                j["properties"] = std::move(properties);
+            }
+
+            if (!data.Textures.empty())
+            {
+                nlohmann::ordered_json textures = nlohmann::ordered_json::object();
+
+                for (const auto& [slot, texture] : data.Textures)
+                    textures[slot] = WriteAssetRef(assets, texture);
+
+                j["textures"] = std::move(textures);
+            }
+
+            return j.dump(2) + "\n";
         }
 
-        if (!data.Textures.empty())
+        std::optional<std::string> UpdateReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets)
         {
-            nlohmann::ordered_json textures = nlohmann::ordered_json::object();
+            nlohmann::ordered_json j = nlohmann::ordered_json::parse(text, nullptr, false);
+            if (!j.is_object())
+                return std::nullopt;
 
-            for (const auto& [slot, texture] : data.Textures)
-                textures[slot] = WriteAssetRef(assets, texture);
+            bool updated = false;
 
-            j["textures"] = std::move(textures);
+            if (const auto shader = j.find("shader"); shader != j.end())
+                updated = UpdateAssetRef(*shader, moved, assets);
+
+            if (const auto textures = j.find("textures"); textures != j.end() && textures->is_object())
+            {
+                for (auto& [slot, ref] : textures->items())
+                    updated = UpdateAssetRef(ref, moved, assets) || updated;
+            }
+
+            return updated ? std::optional(j.dump(2) + "\n") : std::nullopt;
         }
-
-        return j.dump(2) + "\n";
-    }
-
-    std::optional<std::string> UpdateMaterialReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets)
-    {
-        nlohmann::ordered_json j = nlohmann::ordered_json::parse(text, nullptr, false);
-        if (!j.is_object())
-            return std::nullopt;
-
-        bool updated = false;
-
-        if (const auto shader = j.find("shader"); shader != j.end())
-            updated = UpdateAssetRef(*shader, moved, assets);
-
-        if (const auto textures = j.find("textures"); textures != j.end() && textures->is_object())
-        {
-            for (auto& [slot, ref] : textures->items())
-                updated = UpdateAssetRef(ref, moved, assets) || updated;
-        }
-
-        return updated ? std::optional(j.dump(2) + "\n") : std::nullopt;
     }
 }

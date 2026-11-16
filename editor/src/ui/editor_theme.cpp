@@ -159,57 +159,57 @@ namespace crimson::editor::ui
         }
     }
 
-    void ApplyEditorTheme(float scale)
-    {
-        ImGuiIO& io = ImGui::GetIO();
-        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-
-        LoadFonts();
-
-        ImGuiStyle& style = ImGui::GetStyle();
-
-        style.WindowRounding         = theme::Radius;
-        style.ChildRounding          = theme::Radius;
-        style.FrameRounding          = theme::Radius;
-        style.PopupRounding          = theme::Radius;
-        style.GrabRounding           = theme::Radius;
-        style.ScrollbarRounding      = theme::Radius;
-        style.TabRounding            = theme::Radius;
-        style.DragDropTargetRounding = 0.0f; // a highlight takes the shape of what it is on, so rounded targets draw their own
-
-        style.WindowPadding     = ImVec2(theme::SpaceS, theme::SpaceS);
-        style.FramePadding      = ImVec2(theme::SpaceS, theme::SpaceXS);
-        style.ItemSpacing       = ImVec2(theme::SpaceS, theme::SpaceXS);
-        style.ItemInnerSpacing  = ImVec2(theme::SpaceXS, theme::SpaceXS);
-        style.IndentSpacing     = theme::SpaceL;
-        style.ScrollbarSize     = theme::SpaceM;
-        style.GrabMinSize       = theme::SpaceS;
-
-        style.WindowBorderSize     = theme::BorderSize;
-        style.ChildBorderSize      = theme::BorderSize;
-        style.PopupBorderSize      = theme::BorderSize;
-        style.FrameBorderSize      = 0.0f;
-        style.TabBorderSize        = 0.0f;
-        style.TabBarBorderSize     = theme::BorderSize;
-        style.TabBarOverlineSize   = theme::AccentLineSize;
-        style.DockingSeparatorSize = theme::BorderSize;
-
-        style.FontSizeBase = theme::FontBody;
-
-        ApplyColors(style);
-
-        // The fonts are drawn at the bigger size rather than stretched, so they stay sharp
-        scale = std::clamp(scale, 0.5f, 4.0f);
-        if (scale != 1.0f)
-        {
-            style.ScaleAllSizes(scale);
-            style.FontScaleDpi = scale;
-        }
-    }
-
     namespace theme
     {
+        void Apply(float scale)
+        {
+            ImGuiIO& io = ImGui::GetIO();
+            io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+            io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+            LoadFonts();
+
+            ImGuiStyle& style = ImGui::GetStyle();
+
+            style.WindowRounding         = Radius;
+            style.ChildRounding          = Radius;
+            style.FrameRounding          = Radius;
+            style.PopupRounding          = Radius;
+            style.GrabRounding           = Radius;
+            style.ScrollbarRounding      = Radius;
+            style.TabRounding            = Radius;
+            style.DragDropTargetRounding = 0.0f; // a highlight takes the shape of what it is on, so rounded targets draw their own
+
+            style.WindowPadding     = ImVec2(SpaceS, SpaceS);
+            style.FramePadding      = ImVec2(SpaceS, SpaceXS);
+            style.ItemSpacing       = ImVec2(SpaceS, SpaceXS);
+            style.ItemInnerSpacing  = ImVec2(SpaceXS, SpaceXS);
+            style.IndentSpacing     = SpaceL;
+            style.ScrollbarSize     = SpaceM;
+            style.GrabMinSize       = SpaceS;
+
+            style.WindowBorderSize     = BorderSize;
+            style.ChildBorderSize      = BorderSize;
+            style.PopupBorderSize      = BorderSize;
+            style.FrameBorderSize      = 0.0f;
+            style.TabBorderSize        = 0.0f;
+            style.TabBarBorderSize     = BorderSize;
+            style.TabBarOverlineSize   = AccentLineSize;
+            style.DockingSeparatorSize = BorderSize;
+
+            style.FontSizeBase = FontBody;
+
+            ApplyColors(style);
+
+            // The fonts are drawn at the bigger size rather than stretched, so they stay sharp
+            scale = std::clamp(scale, 0.5f, 4.0f);
+            if (scale != 1.0f)
+            {
+                style.ScaleAllSizes(scale);
+                style.FontScaleDpi = scale;
+            }
+        }
+
         ImVec4 AssetColor(AssetType type)
         {
             switch (type)

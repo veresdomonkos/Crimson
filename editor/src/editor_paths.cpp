@@ -8,9 +8,9 @@
 
 namespace fs = std::filesystem;
 
-namespace crimson::editor
+namespace crimson::editor::paths
 {
-    fs::path GetUserConfigFolder()
+    fs::path UserConfigFolder()
     {
         const fs::path folder = platform::UserConfigFolder();
 
@@ -22,13 +22,13 @@ namespace crimson::editor
         return folder;
     }
 
-    fs::path GetEngineCacheFolder()
+    fs::path EngineCacheFolder()
     {
         const fs::path overridden = platform::EnvironmentPath("CRIMSON_CACHE");
         return overridden.empty() ? platform::UserCacheFolder() : overridden;
     }
 
-    fs::path GetDefaultProjectsFolder()
+    fs::path DefaultProjectsFolder()
     {
         const fs::path home = platform::HomeFolder();
 

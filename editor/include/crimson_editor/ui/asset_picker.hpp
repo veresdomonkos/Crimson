@@ -25,13 +25,16 @@ namespace crimson::editor::ui
         bool Engine = false;
     };
 
-    // What the picker lists: None first, then the project's assets, then the engine's, each by name without regard to
-    // case. Internal ones are left out, and the search matches the file name, also without regard to case.
-    [[nodiscard]] std::vector<PickerEntry> PickerEntries(std::span<const AssetInfo* const> assets, std::string_view search);
+    namespace asset_picker
+    {
+        // What the picker lists: None first, then the project's assets, then the engine's, each by name without regard to
+        // case. Internal ones are left out, and the search matches the file name, also without regard to case.
+        [[nodiscard]] std::vector<PickerEntry> Entries(std::span<const AssetInfo* const> assets, std::string_view search);
 
-    // The index after moving by dx and dy in a grid of that many columns (1 for a list), kept within the entries.
-    // Nothing selected (-1) goes to the first. -1 if there are no entries.
-    [[nodiscard]] int MovePickerSelection(int index, int count, int dx, int dy, int columns);
+        // The index after moving by dx and dy in a grid of that many columns (1 for a list), kept within the entries.
+        // Nothing selected (-1) goes to the first. -1 if there are no entries.
+        [[nodiscard]] int MoveSelection(int index, int count, int dx, int dy, int columns);
+    }
 
     // The window a field opens to pick an asset of one type from. Only one is open at a time: fields open it and take
     // what it chose on the next frame, as assets change between frames.

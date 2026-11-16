@@ -93,7 +93,7 @@ TEST_CASE_METHOD(Fixture, "A scene survives being saved and loaded", "[scene dat
     const SceneSettings settings{ .Ambient = glm::vec3(0.2f), .MainCamera = camera.GetComponent<NameComponent>().Id, .PostProcessing = { .Exposure = 2.5f, .Mapper = ToneMapper::None } };
     const SceneData saved = CaptureScene(scene, settings, assets);
 
-    const auto parsed = ParseSceneData(WriteSceneData(saved, assets), assets, "test");
+    const auto parsed = scene_data::Parse(scene_data::Write(saved, assets), assets, "test");
     REQUIRE(parsed);
     CHECK(*parsed == saved);
 
@@ -114,7 +114,7 @@ TEST_CASE_METHOD(Fixture, "Numbers are written the short way", "[scene data]")
     SceneData data;
     data.Settings.PostProcessing.Exposure = 0.1f;
 
-    const std::string text = WriteSceneData(data, assets);
+    const std::string text = scene_data::Write(data, assets);
     CHECK(text.find("\"exposure\": 0.1,") != std::string::npos);
     CHECK(text.find("0.100000") == std::string::npos);
     CHECK(text.find("\"ambient\": [0.05, 0.05, 0.05]") != std::string::npos);
@@ -125,7 +125,7 @@ TEST_CASE_METHOD(Fixture, "Scene files written by hand work", "[scene data]")
     Temp.Write("thing.obj", kTriangleObj);
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = ParseSceneData(SceneWith(R"({ "name": "A", "meshRenderer": { "mesh": "thing.obj" } })"), assets, "test");
+    const auto data = scene_data::Parse(SceneWith(R"({ "name": "A", "meshRenderer": { "mesh": "thing.obj" } })"), assets, "test");
 
     REQUIRE(data);
     REQUIRE(data->Roots.size() == 1);
@@ -139,13 +139,13 @@ TEST_CASE_METHOD(Fixture, "A broken scene file doesn't load", "[scene data]")
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    CHECK_FALSE(ParseSceneData("{ not json", assets, "test"));
-    CHECK_FALSE(ParseSceneData(R"({ "version": 2 })", assets, "test"));
-    CHECK_FALSE(ParseSceneData(R"({ "version": 0 })", assets, "test"));
-    CHECK_FALSE(ParseSceneData(SceneWith(R"({ "position": "here" })"), assets, "test"));
-    CHECK_FALSE(ParseSceneData(SceneWith(R"({ "id": "not hex" })"), assets, "test"));
-    CHECK_FALSE(ParseSceneData(SceneWith(R"({ "light": 5 })"), assets, "test"));
-    CHECK_FALSE(ParseSceneData(SceneWith(R"({ "light": { "intensity": "bright" } })"), assets, "test"));
+    CHECK_FALSE(scene_data::Parse("{ not json", assets, "test"));
+    CHECK_FALSE(scene_data::Parse(R"({ "version": 2 })", assets, "test"));
+    CHECK_FALSE(scene_data::Parse(R"({ "version": 0 })", assets, "test"));
+    CHECK_FALSE(scene_data::Parse(SceneWith(R"({ "position": "here" })"), assets, "test"));
+    CHECK_FALSE(scene_data::Parse(SceneWith(R"({ "id": "not hex" })"), assets, "test"));
+    CHECK_FALSE(scene_data::Parse(SceneWith(R"({ "light": 5 })"), assets, "test"));
+    CHECK_FALSE(scene_data::Parse(SceneWith(R"({ "light": { "intensity": "bright" } })"), assets, "test"));
 }
 
 TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[scene data]")
@@ -158,7 +158,7 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
     auto& renderer = scene.CreateEntity("Mesh").AddComponent<MeshRendererComponent>();
     renderer.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
     ResolveAssets(assets, renderer);
-    REQUIRE(renderer.MaterialAssets[0] == DefaultMaterial(assets));
+    REQUIRE(renderer.MaterialAssets[0] == slot_materials::DefaultMaterial(assets));
 
     const SceneData data = CaptureScene(scene, {}, assets);
     CHECK_FALSE(FieldOf<std::vector<AssetID>>(assets, data.Roots[0], "meshRenderer", "materials")[0]);
@@ -168,7 +168,7 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
     assets.Refresh();
 
     Scene loaded;
-    InstantiateScene(*ParseSceneData(WriteSceneData(data, assets), assets, "test"), loaded, {}, assets, {});
+    InstantiateScene(*scene_data::Parse(scene_data::Write(data, assets), assets, "test"), loaded, {}, assets, {});
 
     const Entity entity = loaded.GetEntity(loaded.GetRoots()[0]);
     CHECK(entity.GetComponent<MeshRendererComponent>().MaterialAssets[0] == assets.Find<AssetType::Material>("materials/Paint.mat"));
@@ -185,7 +185,7 @@ TEST_CASE_METHOD(Fixture, "A slot on the default material finds one made for it,
     auto& onDefault = scene.CreateEntity("Default").AddComponent<MeshRendererComponent>();
     onDefault.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
     ResolveAssets(assets, onDefault);
-    REQUIRE(onDefault.MaterialAssets[0] == DefaultMaterial(assets));
+    REQUIRE(onDefault.MaterialAssets[0] == slot_materials::DefaultMaterial(assets));
 
     auto& chosen = scene.CreateEntity("Chosen").AddComponent<MeshRendererComponent>();
     chosen.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
@@ -361,7 +361,7 @@ TEST_CASE_METHOD(Fixture, "An instance whose source can't be used stays an entit
         CHECK(assets.IsMissing(root.GetComponent<SceneInstanceComponent>().Scene));
 
         // Written by hand as a path, so it is written back that way
-        const std::string text = WriteSceneData(CaptureScene(scene, {}, assets), assets);
+        const std::string text = scene_data::Write(CaptureScene(scene, {}, assets), assets);
         CHECK(text.find(R"("instance": "gone.scene")") != std::string::npos);
     }
 }
@@ -389,7 +389,7 @@ TEST_CASE_METHOD(Fixture, "A scene keeps its references to missing files", "[sce
     for (const fs::path& file : { meshFile, materialFile, crateFile })
     {
         moved.push_back(file);
-        moved.push_back(meta::MetaPathFor(file));
+        moved.push_back(meta::PathFor(file));
     }
 
     for (const fs::path& file : moved)
@@ -431,7 +431,7 @@ TEST_CASE_METHOD(Fixture, "A missing material stays in its slot, with the defaul
     Temp.Write("thing.obj", kTriangleObj);
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = ParseSceneData(SceneWith(R"({ "meshRenderer": { "mesh": "thing.obj", "materials": [ "gone.mat" ] } })"), assets, "test");
+    const auto data = scene_data::Parse(SceneWith(R"({ "meshRenderer": { "mesh": "thing.obj", "materials": [ "gone.mat" ] } })"), assets, "test");
     REQUIRE(data);
 
     Scene scene;
@@ -439,7 +439,7 @@ TEST_CASE_METHOD(Fixture, "A missing material stays in its slot, with the defaul
 
     const auto& renderer = scene.GetEntity(scene.GetRoots()[0]).GetComponent<MeshRendererComponent>();
     CHECK(assets.IsMissing(renderer.MaterialAssets.at(0)));
-    CHECK(renderer.Resolved.Materials.at(0) == assets.Load(DefaultMaterial(assets)));
+    CHECK(renderer.Resolved.Materials.at(0) == assets.Load(slot_materials::DefaultMaterial(assets)));
     CHECK(CaptureScene(scene, {}, assets) == *data);
 }
 
@@ -550,7 +550,7 @@ TEST_CASE_METHOD(Fixture, "A component that isn't registered is kept as it was",
     const std::string text = SceneWith(R"({ "name": "Door", "health": { "max": 3, "armor": [ 1, 2 ] }, "light": { "type": "spot" } })");
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = ParseSceneData(text, assets, "test");
+    const auto data = scene_data::Parse(text, assets, "test");
     REQUIRE(data);
 
     const SceneComponent* health = data->Roots[0].FindComponent("health");
@@ -560,10 +560,10 @@ TEST_CASE_METHOD(Fixture, "A component that isn't registered is kept as it was",
 
     SECTION("Writing the file again keeps it")
     {
-        const std::string written = WriteSceneData(*data, assets);
+        const std::string written = scene_data::Write(*data, assets);
         CHECK(written.find(R"("max": 3)") != std::string::npos);
 
-        const auto again = ParseSceneData(written, assets, "test");
+        const auto again = scene_data::Parse(written, assets, "test");
         REQUIRE(again);
         CHECK(*again == *data);
     }
@@ -598,10 +598,10 @@ TEST_CASE_METHOD(Fixture, "A component registered at runtime is saved and loaded
     health->Add(guard);
     WriteComponent(*health, guard, { int32_t{ 10 }, AssetID(sword) });
 
-    const std::string text = WriteSceneData(CaptureScene(scene, {}, assets), assets);
+    const std::string text = scene_data::Write(CaptureScene(scene, {}, assets), assets);
     CHECK(text.find(R"("health")") != std::string::npos);
 
-    const auto data = ParseSceneData(text, assets, "test");
+    const auto data = scene_data::Parse(text, assets, "test");
     REQUIRE(data);
     CHECK(FieldOf<int32_t>(assets, data->Roots[0], "health", "max") == 10);
     CHECK(FieldOf<AssetID>(assets, data->Roots[0], "health", "weapon") == sword);
@@ -618,10 +618,10 @@ TEST_CASE_METHOD(Fixture, "A component registered at runtime is saved and loaded
     {
         AssetManager other(Gpu, Temp.Path());
 
-        const auto unregistered = ParseSceneData(text, other, "test");
+        const auto unregistered = scene_data::Parse(text, other, "test");
         REQUIRE(unregistered);
         CHECK_FALSE(unregistered->Roots[0].FindComponent("health")->Raw.empty());
-        CHECK(WriteSceneData(*unregistered, other) == text);
+        CHECK(scene_data::Write(*unregistered, other) == text);
     }
 }
 
@@ -629,7 +629,7 @@ TEST_CASE_METHOD(Fixture, "A light's fields are read from a file as they were wr
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = ParseSceneData(SceneWith(R"({ "light": { "type": "spot", "color": [ 1.0, 0.5, 0.2 ], "intensity": 10.0, "range": 12.0,
+    const auto data = scene_data::Parse(SceneWith(R"({ "light": { "type": "spot", "color": [ 1.0, 0.5, 0.2 ], "intensity": 10.0, "range": 12.0,
         "innerCone": 20.0, "outerCone": 35.0, "castsShadow": true } })"), assets, "test");
     REQUIRE(data);
 
@@ -642,7 +642,7 @@ TEST_CASE_METHOD(Fixture, "A light's fields are read from a file as they were wr
 
     SECTION("A type it doesn't know is a point light, with a warning")
     {
-        const auto unknown = ParseSceneData(SceneWith(R"({ "light": { "type": "laser" } })"), assets, "test");
+        const auto unknown = scene_data::Parse(SceneWith(R"({ "light": { "type": "laser" } })"), assets, "test");
         REQUIRE(unknown);
         CHECK(FieldOf<int32_t>(assets, unknown->Roots[0], "light", "type") == static_cast<int32_t>(LightType::Point));
     }
@@ -652,7 +652,7 @@ TEST_CASE_METHOD(Fixture, "A transform's keys stay at the node's level", "[scene
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = ParseSceneData(SceneWith(R"({ "name": "A", "position": [1, 2, 3], "scale": [2, 2, 2] })"), assets, "test");
+    const auto data = scene_data::Parse(SceneWith(R"({ "name": "A", "position": [1, 2, 3], "scale": [2, 2, 2] })"), assets, "test");
     REQUIRE(data);
     REQUIRE(data->Roots.size() == 1);
 
@@ -660,11 +660,11 @@ TEST_CASE_METHOD(Fixture, "A transform's keys stay at the node's level", "[scene
     CHECK(FieldOf<glm::vec3>(assets, data->Roots[0], "transform", "rotation") == glm::vec3(0.0f));
     CHECK(FieldOf<glm::vec3>(assets, data->Roots[0], "transform", "scale") == glm::vec3(2.0f));
 
-    const std::string text = WriteSceneData(*data, assets);
+    const std::string text = scene_data::Write(*data, assets);
     CHECK(text.find("\"position\": [1.0, 2.0, 3.0]") != std::string::npos);
     CHECK(text.find("\"transform\"") == std::string::npos);
 
-    CHECK(ParseSceneData(text, assets, "test") == *data);
+    CHECK(scene_data::Parse(text, assets, "test") == *data);
 }
 
 TEST_CASE_METHOD(Fixture, "Every kind of field survives saving and loading", "[scene data]")
@@ -704,10 +704,10 @@ TEST_CASE_METHOD(Fixture, "Every kind of field survives saving and loading", "[s
     SceneData data;
     data.Roots.push_back(node);
 
-    const std::string text = WriteSceneData(data, assets);
+    const std::string text = scene_data::Write(data, assets);
     CHECK(text.find("\"kind\": \"second\"") != std::string::npos);
 
-    const auto parsed = ParseSceneData(text, assets, "test");
+    const auto parsed = scene_data::Parse(text, assets, "test");
     REQUIRE(parsed);
     CHECK(*parsed == data);
 }
@@ -723,10 +723,10 @@ TEST_CASE_METHOD(Fixture, "A file saved before reads and writes back the same", 
 
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = ParseSceneData(text, assets, "demo.scene");
+    const auto data = scene_data::Parse(text, assets, "demo.scene");
     REQUIRE(data);
     CHECK_FALSE(data->Roots.empty());
-    CHECK(WriteSceneData(*data, assets) == text);
+    CHECK(scene_data::Write(*data, assets) == text);
 }
 
 TEST_CASE_METHOD(Fixture, "Moving a file updates a runtime component's asset field", "[scene data]")
@@ -742,14 +742,14 @@ TEST_CASE_METHOD(Fixture, "Moving a file updates a runtime component's asset fie
     const std::string text = SceneWith(R"({ "name": "A", "holder": { "mesh": "old/thing.obj", "title": "old/thing.obj" } })");
     const std::unordered_map<std::string, AssetID> moved = { { "old/thing.obj", assets.Find<AssetType::Mesh>("meshes/thing.obj") } };
 
-    const auto updated = UpdateSceneReferences(text, moved, assets);
+    const auto updated = scene_data::UpdateReferences(text, moved, assets);
     REQUIRE(updated);
     CHECK(updated->find("\"path\": \"meshes/thing.obj\"") != std::string::npos);
 
     // A string field that only looks like a reference is left alone
     CHECK(updated->find("\"title\": \"old/thing.obj\"") != std::string::npos);
 
-    CHECK_FALSE(UpdateSceneReferences(*updated, moved, assets));
+    CHECK_FALSE(scene_data::UpdateReferences(*updated, moved, assets));
 }
 
 TEST_CASE_METHOD(Fixture, "One entity can be captured and set from its node", "[scene data]")
@@ -822,10 +822,10 @@ TEST_CASE_METHOD(Fixture, "An orthographic camera survives being saved and loade
     Scene scene;
     scene.CreateEntity("Camera").AddComponent<CameraComponent>(camera);
 
-    const std::string text = WriteSceneData(CaptureScene(scene, {}, assets), assets);
+    const std::string text = scene_data::Write(CaptureScene(scene, {}, assets), assets);
     CHECK(text.find("\"projection\": \"orthographic\"") != std::string::npos);
 
-    const auto parsed = ParseSceneData(text, assets, "test");
+    const auto parsed = scene_data::Parse(text, assets, "test");
     REQUIRE(parsed);
 
     Scene loaded;
@@ -839,12 +839,12 @@ TEST_CASE_METHOD(Fixture, "A scene file without a main camera loads it as unset"
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = ParseSceneData(R"({ "version": 1, "environment": { "exposure": 2.0 }, "entities": [ { "name": "A" } ] })", assets, "test");
+    const auto data = scene_data::Parse(R"({ "version": 1, "environment": { "exposure": 2.0 }, "entities": [ { "name": "A" } ] })", assets, "test");
 
     REQUIRE(data);
     CHECK(data->Settings.MainCamera == AssetID{});
     CHECK(data->Settings.PostProcessing.Exposure == 2.0f);
-    CHECK(WriteSceneData(*data, assets).find("mainCamera") == std::string::npos);
+    CHECK(scene_data::Write(*data, assets).find("mainCamera") == std::string::npos);
 }
 
 TEST_CASE_METHOD(Fixture, "A main camera that isn't there keeps its reference", "[scene data]")
@@ -854,11 +854,11 @@ TEST_CASE_METHOD(Fixture, "A main camera that isn't there keeps its reference", 
     SceneData data;
     data.Settings.MainCamera = AssetID{ 0x1234abcd };
 
-    const std::string text = WriteSceneData(data, assets);
+    const std::string text = scene_data::Write(data, assets);
     CHECK(text.find("\"mainCamera\"") != std::string::npos);
 
-    const auto parsed = ParseSceneData(text, assets, "test");
+    const auto parsed = scene_data::Parse(text, assets, "test");
     REQUIRE(parsed);
     CHECK(parsed->Settings.MainCamera == data.Settings.MainCamera);
-    CHECK(WriteSceneData(*parsed, assets) == text);
+    CHECK(scene_data::Write(*parsed, assets) == text);
 }

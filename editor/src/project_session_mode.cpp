@@ -64,7 +64,7 @@ namespace crimson::editor
           m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails, .History = m_history,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
                      .OpenScene = [this](SceneID id) { OpenScene(id); },
-                     .OpenCodeFile = [this](const std::filesystem::path& file) { OpenInScriptEditor(m_services.Settings.GetScriptEditor(), file, m_project.Root()); } }
+                     .OpenCodeFile = [this](const std::filesystem::path& file) { script_editor::Open(m_services.Settings.GetScriptEditor(), file, m_project.Root()); } }
     {
         LOG_INFO("[Editor] Opening project '{}' at {}", m_project.Name(), m_project.Root().string());
 
@@ -335,7 +335,7 @@ namespace crimson::editor
         }
         else if (m_writtenRecovery != current)
         {
-            m_recovery.Write(RecoveryName(m_context.ActiveSceneAsset), WriteSceneData(current, *m_assetManager));
+            m_recovery.Write(RecoveryName(m_context.ActiveSceneAsset), scene_data::Write(current, *m_assetManager));
             m_writtenRecovery = std::move(current);
         }
     }
@@ -362,7 +362,7 @@ namespace crimson::editor
         const std::optional<std::string> text = m_recovery.Read(name);
         std::optional<SceneData> data;
         if (text && info)
-            data = ParseSceneData(*text, *m_assetManager, info->Path);
+            data = scene_data::Parse(*text, *m_assetManager, info->Path);
 
         if (!data)
         {

@@ -5,14 +5,14 @@
 
 namespace crimson::editor::ui
 {
-    // Sets the ImGui flags, fonts and colors. Call once, before the first ImGui frame. The scale is the monitor's
-    // content scale, 1 on a screen at 100%.
-    void ApplyEditorTheme(float scale = 1.0f);
-
     // The editor's colors and sizes, in one place so the panels agree. Colors are in ImGui's sRGB, sizes are in pixels
     // at 100%. docs/ui.md has the rules for using them.
     namespace theme
     {
+        // Sets the ImGui flags, fonts and colors. Call once, before the first ImGui frame. The scale is the monitor's
+        // content scale, 1 on a screen at 100%.
+        void Apply(float scale = 1.0f);
+
         // Surfaces, from the back to the front. They share one slight cool tint, so they read as one family of greys.
         inline constexpr ImVec4 AppBackground   = ImVec4(0.095f, 0.100f, 0.110f, 1.00f);
         inline constexpr ImVec4 PanelBackground = ImVec4(0.135f, 0.140f, 0.150f, 1.00f);

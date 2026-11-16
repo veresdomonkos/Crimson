@@ -19,7 +19,7 @@ namespace crimson::editor::ui
     static const char* EntityIcon(Entity entity, const ComponentRegistry& components)
     {
         if (entity.HasComponent<SceneInstanceComponent>())
-            return kIconSceneInstance;
+            return icons::kSceneInstance;
 
         // The first component with an icon, in the order they were registered, which puts a light before a mesh
         for (const ComponentType& type : components.Types())
@@ -34,7 +34,7 @@ namespace crimson::editor::ui
             }
         }
 
-        return kIconEntity;
+        return icons::kEntity;
     }
 
     void HierarchyPanel::OnImGui()
@@ -166,7 +166,7 @@ namespace crimson::editor::ui
     {
         ImGui::SetNextItemWidth(-FLT_MIN);
 
-        const std::string hint = std::string(kIconSearch) + "  Search";
+        const std::string hint = std::string(icons::kSearch) + "  Search";
         if (ImGui::InputTextWithHint("##Search", hint.c_str(), m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf)))
             m_filter.Build();
 

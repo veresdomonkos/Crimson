@@ -167,7 +167,7 @@ TEST_CASE_METHOD(Fixture, "An edit that can't be shown is undone", "[asset edits
 
 TEST_CASE_METHOD(Fixture, "Engine materials can't be edited", "[asset edits]")
 {
-    const MaterialID engine = DefaultMaterial(Assets);
+    const MaterialID engine = slot_materials::DefaultMaterial(Assets);
 
     MaterialData changed = *Edits.GetMaterial(engine);
     changed.Settings.Cull = CullMode::None;

@@ -74,7 +74,7 @@ TEST_CASE_METHOD(Fixture, "Material data survives being written and read back", 
     data.Properties["Color"] = { 0.25f, 0.5f, 0.75f, 1.0f };
     data.Textures["ColorMap"] = assets.Find<AssetType::Texture>("image.bmp");
 
-    const auto parsed = ParseMaterialData(WriteMaterialData(data, assets), assets, "test");
+    const auto parsed = material_data::Parse(material_data::Write(data, assets), assets, "test");
 
     REQUIRE(parsed);
     CHECK(*parsed == data);
@@ -85,7 +85,7 @@ TEST_CASE_METHOD(Fixture, "Materials written by hand keep working", "[asset edit
     Temp.Write("image.bmp", MakeImage());
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = ParseMaterialData(R"({
+    const auto data = material_data::Parse(R"({
         "shader": "engine/shaders/S_Lit.hlsl",
         "properties": { "Number": 2, "Color": [1, 0, 0, 1], "TooLong": [1, 2, 3, 4, 5] },
         "textures": { "ColorMap": "image.bmp", "Gone": "no/such.bmp" }
@@ -101,7 +101,7 @@ TEST_CASE_METHOD(Fixture, "Materials written by hand keep working", "[asset edit
     // A texture that isn't there is kept, and written back as it was
     REQUIRE(data->Textures.contains("Gone"));
     CHECK(assets.IsMissing(data->Textures.at("Gone")));
-    CHECK(WriteMaterialData(*data, assets).find(R"("Gone": "no/such.bmp")") != std::string::npos);
+    CHECK(material_data::Write(*data, assets).find(R"("Gone": "no/such.bmp")") != std::string::npos);
 }
 
 TEST_CASE_METHOD(Fixture, "A material keeps its references to missing files", "[asset editing]")
@@ -134,7 +134,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     for (const fs::path& file : { textureFile, shaderFile })
     {
         moved.push_back(file);
-        moved.push_back(meta::MetaPathFor(file));
+        moved.push_back(meta::PathFor(file));
     }
 
     for (const fs::path& file : moved)
@@ -277,7 +277,7 @@ TEST_CASE_METHOD(Fixture, "A file moved outside the editor updates the materials
 
     fs::create_directories(Temp.Path() / "folder");
     fs::rename(image, Temp.Path() / "folder/new.bmp");
-    fs::rename(meta::MetaPathFor(image), meta::MetaPathFor(Temp.Path() / "folder/new.bmp"));
+    fs::rename(meta::PathFor(image), meta::PathFor(Temp.Path() / "folder/new.bmp"));
     CHECK(assets.Refresh().empty());
 
     AssetManager reopened(Gpu, Temp.Path());
@@ -676,7 +676,7 @@ TEST_CASE_METHOD(Fixture, "Deleting removes the file, its meta and what it loade
 TEST_CASE_METHOD(Fixture, "Engine assets can't be changed", "[asset editing]")
 {
     AssetManager assets(Gpu, Temp.Path());
-    const MaterialID id = DefaultMaterial(assets);
+    const MaterialID id = slot_materials::DefaultMaterial(assets);
 
     REQUIRE(assets.GetInfo(id)->ReadOnly);
     CHECK(assets.GetFilePath(id).empty());
@@ -1106,7 +1106,7 @@ TEST_CASE_METHOD(SlotFixture, "An .obj's .mtl gives its slots materials", "[asse
     AssetManager assets(Gpu, Temp.Path());
     const MeshID mesh = assets.Find<AssetType::Mesh>("model/model.obj");
 
-    const SlotMaterials result = CreateSlotMaterials(assets, mesh);
+    const SlotMaterials result = slot_materials::Create(assets, mesh);
     CHECK(result.Created.size() == 3);
     CHECK(result.Kept == 0);
 
@@ -1115,7 +1115,7 @@ TEST_CASE_METHOD(SlotFixture, "An .obj's .mtl gives its slots materials", "[asse
 
     SECTION("Textures, without the gray an exporter puts next to them")
     {
-        const MaterialData* textured = assets.GetData(FindSlotMaterial(assets, mesh, "textured"));
+        const MaterialData* textured = assets.GetData(slot_materials::Find(assets, mesh, "textured"));
         REQUIRE(textured);
         CHECK(textured->Shader == assets.FindId("engine/shaders/S_Lit.hlsl"));
         CHECK(textured->Settings.RenderMode == MaterialRenderMode::Opaque);
@@ -1131,7 +1131,7 @@ TEST_CASE_METHOD(SlotFixture, "An .obj's .mtl gives its slots materials", "[asse
 
     SECTION("Values only")
     {
-        const MaterialData* plain = assets.GetData(FindSlotMaterial(assets, mesh, "plain"));
+        const MaterialData* plain = assets.GetData(slot_materials::Find(assets, mesh, "plain"));
         REQUIRE(plain);
         CHECK(plain->Textures.empty());
         CHECK(plain->Properties.at("Color") == std::vector{ 1.0f, 0.0f, 0.0f, 1.0f });
@@ -1144,7 +1144,7 @@ TEST_CASE_METHOD(SlotFixture, "An .obj's .mtl gives its slots materials", "[asse
 
     SECTION("See-through, and a texture that isn't there is only left out")
     {
-        const MaterialData* glass = assets.GetData(FindSlotMaterial(assets, mesh, "glass"));
+        const MaterialData* glass = assets.GetData(slot_materials::Find(assets, mesh, "glass"));
         REQUIRE(glass);
         CHECK(glass->Settings.RenderMode == MaterialRenderMode::Transparent);
         CHECK(glass->Properties.at("Color").at(3) == 0.5f);
@@ -1157,15 +1157,15 @@ TEST_CASE_METHOD(SlotFixture, "Making slot materials again changes nothing", "[a
     AssetManager assets(Gpu, Temp.Path());
     const MeshID mesh = assets.Find<AssetType::Mesh>("model/model.obj");
 
-    REQUIRE(CreateSlotMaterials(assets, mesh).Created.size() == 3);
+    REQUIRE(slot_materials::Create(assets, mesh).Created.size() == 3);
     const std::string textured = ReadMaterial("textured");
-    const std::string normalMeta = ReadFile(meta::MetaPathFor(Temp.Path() / "model/textures/color_ddn.bmp"));
+    const std::string normalMeta = ReadFile(meta::PathFor(Temp.Path() / "model/textures/color_ddn.bmp"));
 
-    const SlotMaterials again = CreateSlotMaterials(assets, mesh);
+    const SlotMaterials again = slot_materials::Create(assets, mesh);
     CHECK(again.Created.empty());
     CHECK(again.Kept == 3);
     CHECK(ReadMaterial("textured") == textured);
-    CHECK(ReadFile(meta::MetaPathFor(Temp.Path() / "model/textures/color_ddn.bmp")) == normalMeta);
+    CHECK(ReadFile(meta::PathFor(Temp.Path() / "model/textures/color_ddn.bmp")) == normalMeta);
 }
 
 TEST_CASE_METHOD(SlotFixture, "A slot material that is there already is never replaced", "[asset editing]")
@@ -1173,7 +1173,7 @@ TEST_CASE_METHOD(SlotFixture, "A slot material that is there already is never re
     Temp.Write("model/materials/plain.mat", kMainMaterial);
     AssetManager assets(Gpu, Temp.Path());
 
-    const SlotMaterials result = CreateSlotMaterials(assets, assets.Find<AssetType::Mesh>("model/model.obj"));
+    const SlotMaterials result = slot_materials::Create(assets, assets.Find<AssetType::Mesh>("model/model.obj"));
     CHECK(result.Created.size() == 2);
     CHECK(result.Kept == 1);
     CHECK(ReadMaterial("plain") == kMainMaterial);
@@ -1183,8 +1183,8 @@ TEST_CASE_METHOD(Fixture, "Only a project's .obj can get slot materials", "[asse
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    CHECK(CreateSlotMaterials(assets, assets.Find<AssetType::Mesh>("engine/meshes/SM_Cube.obj")).Created.empty());
-    CHECK(CreateSlotMaterials(assets, {}).Created.empty());
+    CHECK(slot_materials::Create(assets, assets.Find<AssetType::Mesh>("engine/meshes/SM_Cube.obj")).Created.empty());
+    CHECK(slot_materials::Create(assets, {}).Created.empty());
 }
 
 TEST_CASE_METHOD(Fixture, "A missing reference keeps the type it was read as", "[asset editing]")
@@ -1253,7 +1253,7 @@ TEST_CASE_METHOD(Fixture, "A cutout material cuts by its AlphaCutoff, and only a
 
         SECTION("It is written back as a cutout")
         {
-            CHECK(WriteMaterialData(*assets.GetData(id), assets).find(R"("renderMode": "cutout")") != std::string::npos);
+            CHECK(material_data::Write(*assets.GetData(id), assets).find(R"("renderMode": "cutout")") != std::string::npos);
         }
 
         SECTION("As an opaque one it doesn't cut, and as a cutout again it does")
@@ -1301,8 +1301,8 @@ TEST_CASE_METHOD(SlotFixture, "An .mtl alpha mask makes a cutout material", "[as
     AssetManager assets(Gpu, Temp.Path());
 
     const MeshID mesh = assets.Find<AssetType::Mesh>("model/model.obj");
-    REQUIRE(CreateSlotMaterials(assets, mesh).Created.size() == 4);
+    REQUIRE(slot_materials::Create(assets, mesh).Created.size() == 4);
 
-    CHECK(assets.GetData(FindSlotMaterial(assets, mesh, "leaves"))->Settings.RenderMode == MaterialRenderMode::Cutout);
-    CHECK(assets.GetData(FindSlotMaterial(assets, mesh, "plain"))->Settings.RenderMode == MaterialRenderMode::Opaque);
+    CHECK(assets.GetData(slot_materials::Find(assets, mesh, "leaves"))->Settings.RenderMode == MaterialRenderMode::Cutout);
+    CHECK(assets.GetData(slot_materials::Find(assets, mesh, "plain"))->Settings.RenderMode == MaterialRenderMode::Opaque);
 }

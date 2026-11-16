@@ -74,33 +74,36 @@ namespace crimson
         }
     }
 
-    std::unordered_map<std::string, ShaderAnnotation> ParseShaderAnnotations(std::string_view source)
+    namespace shader_compiler
     {
-        std::unordered_map<std::string, ShaderAnnotation> result;
-
-        while (!source.empty())
+        std::unordered_map<std::string, ShaderAnnotation> ParseAnnotations(std::string_view source)
         {
-            const size_t lineEnd = source.find('\n');
-            const std::string_view line = source.substr(0, lineEnd);
-            source = lineEnd == std::string_view::npos ? std::string_view{} : source.substr(lineEnd + 1);
+            std::unordered_map<std::string, ShaderAnnotation> result;
 
-            const size_t commentStart = line.find("//");
-            if (commentStart == std::string_view::npos)
-                continue;
+            while (!source.empty())
+            {
+                const size_t lineEnd = source.find('\n');
+                const std::string_view line = source.substr(0, lineEnd);
+                source = lineEnd == std::string_view::npos ? std::string_view{} : source.substr(lineEnd + 1);
 
-            std::string_view comment = line.substr(commentStart + 2);
-            const size_t firstTag = comment.find('@');
-            if (firstTag == std::string_view::npos)
-                continue;
+                const size_t commentStart = line.find("//");
+                if (commentStart == std::string_view::npos)
+                    continue;
 
-            const std::string_view name = DeclaredName(line.substr(0, commentStart));
-            if (name.empty())
-                continue;
+                std::string_view comment = line.substr(commentStart + 2);
+                const size_t firstTag = comment.find('@');
+                if (firstTag == std::string_view::npos)
+                    continue;
 
-            comment.remove_prefix(firstTag);
-            ParseTags(comment, name, result[std::string(name)]);
+                const std::string_view name = DeclaredName(line.substr(0, commentStart));
+                if (name.empty())
+                    continue;
+
+                comment.remove_prefix(firstTag);
+                ParseTags(comment, name, result[std::string(name)]);
+            }
+
+            return result;
         }
-
-        return result;
     }
 }

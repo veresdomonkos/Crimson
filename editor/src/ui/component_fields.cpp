@@ -42,7 +42,7 @@ namespace crimson::editor::ui
 
     const char* ComponentIcon(const ComponentType& type, const void* component)
     {
-        return IconNamed(type.Icon ? type.Icon(component) : std::string_view());
+        return icons::Named(type.Icon ? type.Icon(component) : std::string_view());
     }
 
     glm::vec3 ScaleUniformly(glm::vec3 previous, glm::vec3 edited)

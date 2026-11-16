@@ -22,7 +22,7 @@ namespace crimson
 
     // Everything of the input that the includes aren't: the name, the source, the compiler and the format
     [[nodiscard]] uint64_t ShaderCacheKey(std::string_view name, std::string_view source,
-                                          std::string_view compilerVersion = ShaderCompilerVersion(),
+                                          std::string_view compilerVersion = shader_compiler::Version(),
                                           uint32_t format = kShaderCacheFormat);
 
     // The stages and their interfaces. Annotations aren't written, as they are parsed from the source on every load.

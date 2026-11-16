@@ -234,7 +234,7 @@ namespace crimson::editor::ui::props
     {
         // The swatch has a menu of its own on right-click, so the reset is on the label alone
         BeginRow(label);
-        bool changed = LinearColorEdit("##Value", linearColor, channels);
+        bool changed = linear_color::Edit("##Value", linearColor, channels);
 
         if (EndRow(reset != nullptr))
         {

@@ -109,7 +109,7 @@ TEST_CASE("The compiler version and the format are part of the key", "[shader ca
 
 TEST_CASE("A shader binary is read back as it was written", "[shader cache]")
 {
-    const auto binary = CompileHlslShader("full", std::string(kFullShader), {});
+    const auto binary = shader_compiler::Compile("full", std::string(kFullShader), {});
     REQUIRE(binary);
     REQUIRE_FALSE(binary->PixelDepth.empty());
     REQUIRE(binary->Annotations.contains("Cutoff"));
@@ -122,7 +122,7 @@ TEST_CASE("A shader binary is read back as it was written", "[shader cache]")
 
 TEST_CASE("A broken shader payload is refused", "[shader cache]")
 {
-    const auto binary = CompileHlslShader("full", std::string(kFullShader), {});
+    const auto binary = shader_compiler::Compile("full", std::string(kFullShader), {});
     REQUIRE(binary);
 
     const std::string bytes = WriteShaderBinary(*binary);

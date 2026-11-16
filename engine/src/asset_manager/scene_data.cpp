@@ -374,85 +374,88 @@ namespace crimson
         }
     }
 
-    std::optional<SceneData> ParseSceneData(std::string_view text, const AssetManager& assets, std::string_view name)
+    namespace scene_data
     {
-        try
+        std::optional<SceneData> Parse(std::string_view text, const AssetManager& assets, std::string_view name)
         {
-            const nlohmann::ordered_json j = nlohmann::ordered_json::parse(text);
-
-            const int version = j.value("version", kSceneVersion);
-            if (version < 1 || version > kSceneVersion)
+            try
             {
-                LOG_ERROR("[Scene] '{}' has version {}, and this editor reads up to {}", name, version, kSceneVersion);
+                const nlohmann::ordered_json j = nlohmann::ordered_json::parse(text);
+
+                const int version = j.value("version", kSceneVersion);
+                if (version < 1 || version > kSceneVersion)
+                {
+                    LOG_ERROR("[Scene] '{}' has version {}, and this editor reads up to {}", name, version, kSceneVersion);
+                    return std::nullopt;
+                }
+
+                SceneData data;
+
+                if (const auto environment = j.find("environment"); environment != j.end())
+                {
+                    data.Settings.Ambient = ReadVec3(*environment, "ambient", data.Settings.Ambient);
+                    data.Settings.PostProcessing.Exposure = environment->value("exposure", data.Settings.PostProcessing.Exposure);
+                    data.Settings.PostProcessing.Mapper = environment->value("toneMapper", std::string("aces")) == "none" ? ToneMapper::None : ToneMapper::Aces;
+                }
+
+                if (const auto mainCamera = j.find("mainCamera"); mainCamera != j.end())
+                    data.Settings.MainCamera = AssetID::FromString(mainCamera->get<std::string>());
+
+                if (const auto entities = j.find("entities"); entities != j.end())
+                {
+                    for (const nlohmann::ordered_json& entity : *entities)
+                        data.Roots.push_back(ParseNode(entity, assets, name));
+                }
+
+                return data;
+            }
+            catch (const std::exception& e)
+            {
+                LOG_ERROR("[Scene] Invalid scene file '{}': {}", name, e.what());
                 return std::nullopt;
             }
+        }
 
-            SceneData data;
+        std::string Write(const SceneData& data, const AssetManager& assets)
+        {
+            nlohmann::ordered_json j;
 
-            if (const auto environment = j.find("environment"); environment != j.end())
+            j["version"] = kSceneVersion;
+            j["environment"] = {
+                { "ambient", WriteVec3(data.Settings.Ambient) },
+                { "exposure", ShortNumber(data.Settings.PostProcessing.Exposure) },
+                { "toneMapper", data.Settings.PostProcessing.Mapper == ToneMapper::None ? "none" : "aces" }
+            };
+
+            // Left out while unset, for a scene without one to be written as it always was
+            if (data.Settings.MainCamera)
+                j["mainCamera"] = data.Settings.MainCamera.ToString();
+
+            nlohmann::ordered_json entities = nlohmann::ordered_json::array();
+
+            for (const SceneNode& root : data.Roots)
+                entities.push_back(WriteNode(root, assets));
+
+            j["entities"] = std::move(entities);
+
+            return DumpScene(j);
+        }
+
+        std::optional<std::string> UpdateReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets)
+        {
+            nlohmann::ordered_json j = nlohmann::ordered_json::parse(text, nullptr, false);
+            if (!j.is_object())
+                return std::nullopt;
+
+            bool updated = false;
+
+            if (const auto entities = j.find("entities"); entities != j.end() && entities->is_array())
             {
-                data.Settings.Ambient = ReadVec3(*environment, "ambient", data.Settings.Ambient);
-                data.Settings.PostProcessing.Exposure = environment->value("exposure", data.Settings.PostProcessing.Exposure);
-                data.Settings.PostProcessing.Mapper = environment->value("toneMapper", std::string("aces")) == "none" ? ToneMapper::None : ToneMapper::Aces;
+                for (nlohmann::ordered_json& entity : *entities)
+                    updated = UpdateNodeReferences(entity, moved, assets) || updated;
             }
 
-            if (const auto mainCamera = j.find("mainCamera"); mainCamera != j.end())
-                data.Settings.MainCamera = AssetID::FromString(mainCamera->get<std::string>());
-
-            if (const auto entities = j.find("entities"); entities != j.end())
-            {
-                for (const nlohmann::ordered_json& entity : *entities)
-                    data.Roots.push_back(ParseNode(entity, assets, name));
-            }
-
-            return data;
+            return updated ? std::optional(DumpScene(j)) : std::nullopt;
         }
-        catch (const std::exception& e)
-        {
-            LOG_ERROR("[Scene] Invalid scene file '{}': {}", name, e.what());
-            return std::nullopt;
-        }
-    }
-
-    std::string WriteSceneData(const SceneData& data, const AssetManager& assets)
-    {
-        nlohmann::ordered_json j;
-
-        j["version"] = kSceneVersion;
-        j["environment"] = {
-            { "ambient", WriteVec3(data.Settings.Ambient) },
-            { "exposure", ShortNumber(data.Settings.PostProcessing.Exposure) },
-            { "toneMapper", data.Settings.PostProcessing.Mapper == ToneMapper::None ? "none" : "aces" }
-        };
-
-        // Left out while unset, for a scene without one to be written as it always was
-        if (data.Settings.MainCamera)
-            j["mainCamera"] = data.Settings.MainCamera.ToString();
-
-        nlohmann::ordered_json entities = nlohmann::ordered_json::array();
-
-        for (const SceneNode& root : data.Roots)
-            entities.push_back(WriteNode(root, assets));
-
-        j["entities"] = std::move(entities);
-
-        return DumpScene(j);
-    }
-
-    std::optional<std::string> UpdateSceneReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets)
-    {
-        nlohmann::ordered_json j = nlohmann::ordered_json::parse(text, nullptr, false);
-        if (!j.is_object())
-            return std::nullopt;
-
-        bool updated = false;
-
-        if (const auto entities = j.find("entities"); entities != j.end() && entities->is_array())
-        {
-            for (nlohmann::ordered_json& entity : *entities)
-                updated = UpdateNodeReferences(entity, moved, assets) || updated;
-        }
-
-        return updated ? std::optional(DumpScene(j)) : std::nullopt;
     }
 }

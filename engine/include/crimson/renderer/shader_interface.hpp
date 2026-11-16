@@ -62,26 +62,29 @@ namespace crimson
         std::unordered_map<std::string, ShaderMaterialTexture> Textures;
     };
 
-    // Resources are grouped by how often they change, each group is an HLSL space and a descriptor set.
-    // assets/shaders/crimson/bindings.hlsli declares the same layout for the shaders.
-    constexpr uint32_t kFrameSpace    = 0;
-    constexpr uint32_t kMaterialSpace = 1;
+    namespace shader_bindings
+    {
+        // Resources are grouped by how often they change, each group is an HLSL space and a descriptor set.
+        // assets/shaders/crimson/bindings.hlsli declares the same layout for the shaders.
+        constexpr uint32_t kFrameSpace    = 0;
+        constexpr uint32_t kMaterialSpace = 1;
 
-    // HLSL numbers b, t and s registers separately but SPIR-V has one range, the compiler shifts them apart
-    constexpr uint32_t kTextureBindingShift = 16;
-    constexpr uint32_t kSamplerBindingShift = 32;
-    constexpr uint32_t kStorageBindingShift = 48;
+        // HLSL numbers b, t and s registers separately but SPIR-V has one range, the compiler shifts them apart
+        constexpr uint32_t kTextureShift = 16;
+        constexpr uint32_t kSamplerShift = 32;
+        constexpr uint32_t kStorageShift = 48;
 
-    constexpr uint32_t kFrameBlockBinding        = 0;
-    constexpr uint32_t kLightsBinding            = kTextureBindingShift + 0;
-    constexpr uint32_t kShadowsBinding           = kTextureBindingShift + 1;
-    constexpr uint32_t kObjectsBinding           = kTextureBindingShift + 2;
-    constexpr uint32_t kShadowAtlasBinding       = kTextureBindingShift + 3;
-    constexpr uint32_t kViewsBinding             = kTextureBindingShift + 4;
-    constexpr uint32_t kLinearWrapBinding        = kSamplerBindingShift + 0;
-    constexpr uint32_t kLinearClampBinding       = kSamplerBindingShift + 1;
-    constexpr uint32_t kPointClampBinding        = kSamplerBindingShift + 2;
-    constexpr uint32_t kShadowCompareBinding     = kSamplerBindingShift + 3;
+        constexpr uint32_t kFrameBlock    = 0;
+        constexpr uint32_t kLights        = kTextureShift + 0;
+        constexpr uint32_t kShadows       = kTextureShift + 1;
+        constexpr uint32_t kObjects       = kTextureShift + 2;
+        constexpr uint32_t kShadowAtlas   = kTextureShift + 3;
+        constexpr uint32_t kViews         = kTextureShift + 4;
+        constexpr uint32_t kLinearWrap    = kSamplerShift + 0;
+        constexpr uint32_t kLinearClamp   = kSamplerShift + 1;
+        constexpr uint32_t kPointClamp    = kSamplerShift + 2;
+        constexpr uint32_t kShadowCompare = kSamplerShift + 3;
+    }
 
     // The per-draw push constant: where the draw's transform and its camera are in the frame's Objects and Views
     struct DrawData

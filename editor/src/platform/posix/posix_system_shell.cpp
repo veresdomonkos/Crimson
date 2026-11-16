@@ -59,62 +59,65 @@ namespace crimson::editor
         }
     }
 
-    bool StartProgram(const fs::path& program, const std::vector<std::string>& arguments)
+    namespace shell
     {
-        std::vector<std::string> command = { PathToUtf8(program) };
-        command.insert(command.end(), arguments.begin(), arguments.end());
-
-        // Without waiting, the program not existing only shows in the child, so it is checked first
-        std::error_code error;
-        const bool found = program.has_parent_path() ? fs::exists(program, error) : true;
-
-        if (!found || !Run(command, false))
+        bool StartProgram(const fs::path& program, const std::vector<std::string>& arguments)
         {
-            LOG_ERROR("[Editor] Can't start {}", program.string());
-            return false;
+            std::vector<std::string> command = { PathToUtf8(program) };
+            command.insert(command.end(), arguments.begin(), arguments.end());
+
+            // Without waiting, the program not existing only shows in the child, so it is checked first
+            std::error_code error;
+            const bool found = program.has_parent_path() ? fs::exists(program, error) : true;
+
+            if (!found || !Run(command, false))
+            {
+                LOG_ERROR("[Editor] Can't start {}", program.string());
+                return false;
+            }
+
+            return true;
         }
 
-        return true;
-    }
+        bool OpenInDefaultApp(const fs::path& path)
+        {
+        #ifdef __APPLE__
+            const bool opened = Run({ "open", path.string() }, false);
+        #else
+            const bool opened = Run({ "xdg-open", path.string() }, false);
+        #endif
 
-    bool OpenInDefaultApp(const fs::path& path)
-    {
-    #ifdef __APPLE__
-        const bool opened = Run({ "open", path.string() }, false);
-    #else
-        const bool opened = Run({ "xdg-open", path.string() }, false);
-    #endif
+            if (!opened)
+                LOG_ERROR("[Editor] Can't open {}", path.string());
 
-        if (!opened)
-            LOG_ERROR("[Editor] Can't open {}", path.string());
+            return opened;
+        }
 
-        return opened;
-    }
+        bool RevealInFileManager(const fs::path& path)
+        {
+        #ifdef __APPLE__
+            const bool revealed = Run({ "open", "-R", path.string() }, false);
+        #else
+            // The file managers that know this call, such as Nautilus and Dolphin, select the file. The others open its folder.
+            const bool revealed = Run({ "dbus-send", "--session", "--print-reply", "--dest=org.freedesktop.FileManager1", "--type=method_call",
+                                        "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems",
+                                        "array:string:" + FileUri(path), "string:" }, true)
+                || Run({ "xdg-open", path.parent_path().string() }, false);
+        #endif
 
-    bool RevealInFileManager(const fs::path& path)
-    {
-    #ifdef __APPLE__
-        const bool revealed = Run({ "open", "-R", path.string() }, false);
-    #else
-        // The file managers that know this call, such as Nautilus and Dolphin, select the file. The others open its folder.
-        const bool revealed = Run({ "dbus-send", "--session", "--print-reply", "--dest=org.freedesktop.FileManager1", "--type=method_call",
-                                    "/org/freedesktop/FileManager1", "org.freedesktop.FileManager1.ShowItems",
-                                    "array:string:" + FileUri(path), "string:" }, true)
-            || Run({ "xdg-open", path.parent_path().string() }, false);
-    #endif
+            if (!revealed)
+                LOG_ERROR("[Editor] Can't show {} in the file manager", path.string());
 
-        if (!revealed)
-            LOG_ERROR("[Editor] Can't show {} in the file manager", path.string());
+            return revealed;
+        }
 
-        return revealed;
-    }
-
-    const char* RevealInFileManagerLabel()
-    {
-    #ifdef __APPLE__
-        return "Reveal in Finder";
-    #else
-        return "Show in File Manager";
-    #endif
+        const char* RevealInFileManagerLabel()
+        {
+        #ifdef __APPLE__
+            return "Reveal in Finder";
+        #else
+            return "Show in File Manager";
+        #endif
+        }
     }
 }

@@ -253,14 +253,14 @@ namespace crimson::editor::ui
         // The project's folders, without the engine's
         {
             const bool selected = m_currentFolder.empty();
-            const bool open = theme::IconTreeNode("##AssetsRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), selected ? kIconFolderOpen : kIconFolder, theme::Folder, "Assets");
+            const bool open = theme::IconTreeNode("##AssetsRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), selected ? icons::kFolderOpen : icons::kFolder, theme::Folder, "Assets");
 
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                 m_currentFolder.clear();
 
             for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture, AssetType::Scene })
             {
-                if (const AssetID dropped = AcceptAssetOnLastItem(m_context.Assets, type))
+                if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Assets, type))
                     MoveAssetToFolder(dropped, {});
             }
 
@@ -283,7 +283,7 @@ namespace crimson::editor::ui
         const bool selected = m_currentFolder == engine;
 
         ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        const bool open = theme::IconTreeNode("##EngineRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), selected ? kIconFolderOpen : kIconFolder, theme::Folder, "Engine");
+        const bool open = theme::IconTreeNode("##EngineRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), selected ? icons::kFolderOpen : icons::kFolder, theme::Folder, "Engine");
         ImGui::PopStyleColor();
 
         ImGui::SetItemTooltip("The engine's built-in assets, which can be used but not changed");
@@ -313,7 +313,7 @@ namespace crimson::editor::ui
             if (folder == m_currentFolder)
                 flags |= ImGuiTreeNodeFlags_Selected;
 
-            const bool open = theme::IconTreeNode(folder.c_str(), flags, folder == m_currentFolder ? kIconFolderOpen : kIconFolder, theme::Folder, AssetFileName(folder).c_str());
+            const bool open = theme::IconTreeNode(folder.c_str(), flags, folder == m_currentFolder ? icons::kFolderOpen : icons::kFolder, theme::Folder, AssetFileName(folder).c_str());
 
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                 m_currentFolder = folder;
@@ -322,7 +322,7 @@ namespace crimson::editor::ui
             {
                 for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture, AssetType::Scene })
                 {
-                    if (const AssetID dropped = AcceptAssetOnLastItem(m_context.Assets, type))
+                    if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Assets, type))
                         MoveAssetToFolder(dropped, folder);
                 }
 
@@ -386,16 +386,16 @@ namespace crimson::editor::ui
     {
         ImGui::PushID(folder.c_str());
 
-        const TileLayout tile = DrawTileFrame("##Folder", tileSize, false);
+        const TileLayout tile = tiles::DrawFrame("##Folder", tileSize, false);
 
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
             m_currentFolder = folder;
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
-        DrawTileIcon(drawList, tile.IconMin, tile.IconMax, kIconFolder, theme::Folder);
+        tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, icons::kFolder, theme::Folder);
 
         const std::string name = AssetFileName(folder);
-        DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(ImGuiCol_Text));
+        tiles::DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(ImGuiCol_Text));
 
         if (!IsEngineFolder(folder))
         {
@@ -404,10 +404,10 @@ namespace crimson::editor::ui
                 const ImVec2 min = ImGui::GetItemRectMin();
                 const ImVec2 max = ImGui::GetItemRectMax();
 
-                if (const AssetID dropped = AcceptAssetOnLastItem(m_context.Assets, type, ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
+                if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Assets, type, ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
                     MoveAssetToFolder(dropped, folder);
 
-                DrawAssetDropHighlight(m_context.Assets, type, min, max, theme::Scaled(theme::Radius));
+                asset_drag::DrawDropHighlight(m_context.Assets, type, min, max, theme::Scaled(theme::Radius));
             }
 
             DrawFolderMenu(folder);
@@ -422,7 +422,7 @@ namespace crimson::editor::ui
 
         const bool selected = m_context.SelectedAsset == item.Id;
 
-        const TileLayout tile = DrawTileFrame("##Asset", tileSize, selected);
+        const TileLayout tile = tiles::DrawFrame("##Asset", tileSize, selected);
         if (tile.Clicked)
             m_context.SelectAsset(item.Id);
 
@@ -452,7 +452,7 @@ namespace crimson::editor::ui
             if (item.Type == AssetType::Shader && m_context.OpenCodeFile)
                 m_context.OpenCodeFile(file);
             else
-                OpenInDefaultApp(file);
+                shell::OpenInDefaultApp(file);
         };
 
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
@@ -467,7 +467,7 @@ namespace crimson::editor::ui
             ImGui::SetTooltip("%s", item.Path.c_str());
 
         if (const AssetInfo* info = m_context.Assets.GetInfo(item.Id))
-            DragAssetFromLastItem(*info);
+            asset_drag::DragFromLastItem(*info);
 
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
@@ -485,12 +485,12 @@ namespace crimson::editor::ui
         }
         else
         {
-            DrawTileIcon(drawList, tile.IconMin, tile.IconMax, AssetIcon(item.Type), theme::AssetColor(item.Type));
+            tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, icons::ForAsset(item.Type), theme::AssetColor(item.Type));
         }
 
         const bool dirty = item.Type == AssetType::Material && m_context.Edits.IsDirty(m_context.Assets.As<AssetType::Material>(item.Id));
         const std::string name = dirty ? "* " + item.Name : item.Name;
-        DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(item.ReadOnly ? ImGuiCol_TextDisabled : ImGuiCol_Text));
+        tiles::DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(item.ReadOnly ? ImGuiCol_TextDisabled : ImGuiCol_Text));
 
         if (ImGui::BeginPopupContextItem("##AssetMenu"))
         {
@@ -510,8 +510,8 @@ namespace crimson::editor::ui
                 explainIfBuiltIn();
             }
 
-            if (ImGui::MenuItem(RevealInFileManagerLabel(), nullptr, false, onDisk))
-                RevealInFileManager(file);
+            if (ImGui::MenuItem(shell::RevealInFileManagerLabel(), nullptr, false, onDisk))
+                shell::RevealInFileManager(file);
 
             explainIfBuiltIn();
 
@@ -531,7 +531,7 @@ namespace crimson::editor::ui
                 {
                     m_context.Deferred.emplace_back([this, id = item.Id]
                     {
-                        if (CreateSlotMaterials(m_context.Assets, m_context.Assets.As<AssetType::Mesh>(id)).Created.empty())
+                        if (slot_materials::Create(m_context.Assets, m_context.Assets.As<AssetType::Mesh>(id)).Created.empty())
                             return;
 
                         ++m_context.AssetsVersion;
@@ -566,8 +566,8 @@ namespace crimson::editor::ui
         if (!ImGui::BeginPopupContextItem("##FolderMenu"))
             return;
 
-        if (ImGui::MenuItem(RevealInFileManagerLabel()))
-            RevealInFileManager(m_context.Assets.GetRoot() / fs::path(folder));
+        if (ImGui::MenuItem(shell::RevealInFileManagerLabel()))
+            shell::RevealInFileManager(m_context.Assets.GetRoot() / fs::path(folder));
 
         ImGui::Separator();
 
@@ -621,8 +621,8 @@ namespace crimson::editor::ui
             return;
 
         // The folder being shown, opened in the file manager
-        if (ImGui::MenuItem(RevealInFileManagerLabel()))
-            OpenInDefaultApp(m_context.Assets.GetRoot() / fs::path(m_currentFolder));
+        if (ImGui::MenuItem(shell::RevealInFileManagerLabel()))
+            shell::OpenInDefaultApp(m_context.Assets.GetRoot() / fs::path(m_currentFolder));
 
         ImGui::Separator();
 

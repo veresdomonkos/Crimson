@@ -24,13 +24,16 @@ namespace crimson
         bool operator==(const MaterialData&) const = default;
     };
 
-    // Missing references leave those fields empty, and only invalid JSON gives nothing. The name is what errors report.
-    [[nodiscard]] std::optional<MaterialData> ParseMaterialData(std::string_view text, const AssetManager& assets, std::string_view name);
+    namespace material_data
+    {
+        // Missing references leave those fields empty, and only invalid JSON gives nothing. The name is what errors report.
+        [[nodiscard]] std::optional<MaterialData> Parse(std::string_view text, const AssetManager& assets, std::string_view name);
 
-    // References are written with both id and path, so they survive either one changing
-    [[nodiscard]] std::string WriteMaterialData(const MaterialData& data, const AssetManager& assets);
+        // References are written with both id and path, so they survive either one changing
+        [[nodiscard]] std::string Write(const MaterialData& data, const AssetManager& assets);
 
-    // Points a .mat file's references to assets that moved (old path to id) at where they are now, and leaves the rest
-    // of it as it is. Gives the new text, or nothing if no reference moved.
-    [[nodiscard]] std::optional<std::string> UpdateMaterialReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets);
+        // Points a .mat file's references to assets that moved (old path to id) at where they are now, and leaves the rest
+        // of it as it is. Gives the new text, or nothing if no reference moved.
+        [[nodiscard]] std::optional<std::string> UpdateReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets);
+    }
 }

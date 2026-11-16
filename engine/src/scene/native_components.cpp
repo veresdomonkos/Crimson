@@ -13,7 +13,7 @@ namespace crimson
         constexpr float kMinClipGap = 0.01f;
 
         // Loads the renderer's mesh and materials into Resolved and sizes MaterialAssets to the mesh's slots.
-        // Empty slots get the material made for them (FindSlotMaterial), or else the default one.
+        // Empty slots get the material made for them (slot_materials::Find), or else the default one.
         void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets)
         {
             renderer.Resolved = {};
@@ -29,17 +29,17 @@ namespace crimson
             {
                 // The default counts as empty, as that's how it's saved, so a slot material made since is found
                 MaterialID& asset = renderer.MaterialAssets[slot];
-                if ((!asset || asset == DefaultMaterial(assets)) && slot < renderer.Resolved.MaterialSlots.size())
+                if ((!asset || asset == slot_materials::DefaultMaterial(assets)) && slot < renderer.Resolved.MaterialSlots.size())
                 {
-                    if (const MaterialID found = FindSlotMaterial(assets, renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]))
+                    if (const MaterialID found = slot_materials::Find(assets, renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]))
                         asset = found;
                 }
 
                 if (!asset)
-                    asset = DefaultMaterial(assets);
+                    asset = slot_materials::DefaultMaterial(assets);
 
                 // A missing one stays in the slot, to be saved, and the default stands in for it
-                renderer.Resolved.Materials[slot] = assets.Load(assets.IsMissing(asset) ? DefaultMaterial(assets) : asset);
+                renderer.Resolved.Materials[slot] = assets.Load(assets.IsMissing(asset) ? slot_materials::DefaultMaterial(assets) : asset);
             }
         }
 
@@ -51,7 +51,7 @@ namespace crimson
         // The default is what an empty slot ends up with
         AssetID DefaultMaterialOf(const AssetManager& assets)
         {
-            return DefaultMaterial(assets);
+            return slot_materials::DefaultMaterial(assets);
         }
 
         // The engine's built-in meshes, in engine/resources/meshes

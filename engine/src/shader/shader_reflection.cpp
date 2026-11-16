@@ -23,16 +23,16 @@ namespace crimson
         };
 
         constexpr StandardResource kStandardResources[] = {
-            { "FrameBlock",    kFrameSpace, kFrameBlockBinding,    SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER, sizeof(FrameBlock) },
-            { "Lights",        kFrameSpace, kLightsBinding,        SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuLight) },
-            { "Shadows",       kFrameSpace, kShadowsBinding,       SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuShadow) },
-            { "Objects",       kFrameSpace, kObjectsBinding,       SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuObject) },
-            { "ShadowAtlas",   kFrameSpace, kShadowAtlasBinding,   SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  0 },
-            { "Views",         kFrameSpace, kViewsBinding,         SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuView) },
-            { "LinearWrap",    kFrameSpace, kLinearWrapBinding,    SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
-            { "LinearClamp",   kFrameSpace, kLinearClampBinding,   SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
-            { "PointClamp",    kFrameSpace, kPointClampBinding,    SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
-            { "ShadowCompare", kFrameSpace, kShadowCompareBinding, SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
+            { "FrameBlock",    shader_bindings::kFrameSpace, shader_bindings::kFrameBlock,    SPV_REFLECT_DESCRIPTOR_TYPE_UNIFORM_BUFFER, sizeof(FrameBlock) },
+            { "Lights",        shader_bindings::kFrameSpace, shader_bindings::kLights,        SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuLight) },
+            { "Shadows",       shader_bindings::kFrameSpace, shader_bindings::kShadows,       SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuShadow) },
+            { "Objects",       shader_bindings::kFrameSpace, shader_bindings::kObjects,       SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuObject) },
+            { "ShadowAtlas",   shader_bindings::kFrameSpace, shader_bindings::kShadowAtlas,   SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLED_IMAGE,  0 },
+            { "Views",         shader_bindings::kFrameSpace, shader_bindings::kViews,         SPV_REFLECT_DESCRIPTOR_TYPE_STORAGE_BUFFER, sizeof(GpuView) },
+            { "LinearWrap",    shader_bindings::kFrameSpace, shader_bindings::kLinearWrap,    SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
+            { "LinearClamp",   shader_bindings::kFrameSpace, shader_bindings::kLinearClamp,   SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
+            { "PointClamp",    shader_bindings::kFrameSpace, shader_bindings::kPointClamp,    SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
+            { "ShadowCompare", shader_bindings::kFrameSpace, shader_bindings::kShadowCompare, SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER,        0 },
         };
 
         std::size_t ReflectedSize(const SpvReflectDescriptorBinding& binding)
@@ -89,7 +89,7 @@ namespace crimson
                 {
                     if (result.MaterialBlockSize > 0 && result.MaterialBlockBinding != binding.binding)
                     {
-                        LOG_ERROR("[Shader] A shader can have only one constant buffer in space{}, '{}' is a second one", kMaterialSpace, GetResourceName(binding));
+                        LOG_ERROR("[Shader] A shader can have only one constant buffer in space{}, '{}' is a second one", shader_bindings::kMaterialSpace, GetResourceName(binding));
                         return false;
                     }
 
@@ -113,10 +113,10 @@ namespace crimson
                     return true;
                 }
                 case SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLER:
-                    LOG_ERROR("[Shader] Sampler '{}' can't be in space{}, use one of the shared samplers from crimson/bindings.hlsli", GetResourceName(binding), kMaterialSpace);
+                    LOG_ERROR("[Shader] Sampler '{}' can't be in space{}, use one of the shared samplers from crimson/bindings.hlsli", GetResourceName(binding), shader_bindings::kMaterialSpace);
                     return false;
                 default:
-                    LOG_ERROR("[Shader] '{}' in space{} has a resource type materials don't support", GetResourceName(binding), kMaterialSpace);
+                    LOG_ERROR("[Shader] '{}' in space{} has a resource type materials don't support", GetResourceName(binding), shader_bindings::kMaterialSpace);
                     return false;
             }
         }
@@ -139,17 +139,17 @@ namespace crimson
 
             for (const SpvReflectDescriptorBinding* binding : bindings)
             {
-                if (binding->set == kMaterialSpace)
+                if (binding->set == shader_bindings::kMaterialSpace)
                 {
                     valid = AddMaterialResource(*binding, vertex, result) && valid;
                 }
-                else if (binding->set == kFrameSpace)
+                else if (binding->set == shader_bindings::kFrameSpace)
                 {
                     valid = CheckStandardResource(*binding) && valid;
                 }
                 else
                 {
-                    LOG_ERROR("[Shader] '{}' is in space{}, only spaces 0 to {} exist", GetResourceName(*binding), binding->set, kMaterialSpace);
+                    LOG_ERROR("[Shader] '{}' is in space{}, only spaces 0 to {} exist", GetResourceName(*binding), binding->set, shader_bindings::kMaterialSpace);
                     valid = false;
                 }
             }

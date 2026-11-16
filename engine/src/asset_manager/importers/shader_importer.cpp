@@ -103,7 +103,7 @@ float4 PSMain(VertexOutput input) : SV_Target
             {
                 ctx.Dependencies.insert(ctx.Dependencies.end(), hit->Files.begin(), hit->Files.end());
                 // Annotations aren't cached, so that the warnings about ones that can't be understood show up every time
-                binary->Annotations = ParseShaderAnnotations(*text);
+                binary->Annotations = shader_compiler::ParseAnnotations(*text);
             }
         }
 
@@ -111,7 +111,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         {
             const fs::path directory = source.File.parent_path();
             std::vector<ShaderInclude> includes;
-            binary = CompileHlslShader(source.Info.Path, *text, directory, &includes);
+            binary = shader_compiler::Compile(source.Info.Path, *text, directory, &includes);
 
             // Also when it failed, as fixing one of them can fix it
             for (const ShaderInclude& include : includes)

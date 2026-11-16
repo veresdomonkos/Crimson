@@ -31,10 +31,10 @@ namespace crimson::editor::ui
         {
             switch (kind)
             {
-                case Notifications::Kind::Error:   return kIconError;
-                case Notifications::Kind::Warning: return kIconWarning;
-                case Notifications::Kind::Success: return kIconSuccess;
-                default:                           return kIconInfo;
+                case Notifications::Kind::Error:   return icons::kError;
+                case Notifications::Kind::Warning: return icons::kWarning;
+                case Notifications::Kind::Success: return icons::kSuccess;
+                default:                           return icons::kInfo;
             }
         }
 

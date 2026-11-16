@@ -6,7 +6,7 @@
 
 namespace crimson::meta
 {
-    std::filesystem::path MetaPathFor(const std::filesystem::path& src)
+    std::filesystem::path PathFor(const std::filesystem::path& src)
     {
         auto p = src;
         p += ".meta";

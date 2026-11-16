@@ -86,9 +86,9 @@ namespace crimson::editor::ui
         {
             switch (level)
             {
-                case LogLevel::Warn:  return kIconWarning;
-                case LogLevel::Error: return kIconError;
-                default:              return kIconInfo;
+                case LogLevel::Warn:  return icons::kWarning;
+                case LogLevel::Error: return icons::kError;
+                default:              return icons::kInfo;
             }
         }
 
@@ -184,16 +184,16 @@ namespace crimson::editor::ui
 
         ImGui::SameLine();
 
-        const std::string info = std::string(kIconInfo) + " " + std::to_string(m_InfoCount) + "##Info";
-        const std::string warnings = std::string(kIconWarning) + " " + std::to_string(m_WarningCount) + "##Warnings";
-        const std::string errors = std::string(kIconError) + " " + std::to_string(m_ErrorCount) + "##Errors";
+        const std::string info = std::string(icons::kInfo) + " " + std::to_string(m_InfoCount) + "##Info";
+        const std::string warnings = std::string(icons::kWarning) + " " + std::to_string(m_WarningCount) + "##Warnings";
+        const std::string errors = std::string(icons::kError) + " " + std::to_string(m_ErrorCount) + "##Errors";
 
         // The level toggles go on the right, sized to what they say, and the search takes what is left between
         const float togglesWidth = ButtonWidth(info.c_str()) + ButtonWidth(warnings.c_str()) + ButtonWidth(errors.c_str()) + style.ItemSpacing.x * 2.0f;
         const float searchWidth = ImGui::GetContentRegionAvail().x - togglesWidth - style.ItemSpacing.x;
         const bool oneLine = searchWidth >= ImGui::GetFontSize() * 6.0f;
 
-        const std::string hint = std::string(kIconSearch) + "  Search";
+        const std::string hint = std::string(icons::kSearch) + "  Search";
         ImGui::SetNextItemWidth(oneLine ? searchWidth : -FLT_MIN);
         if (ImGui::InputTextWithHint("##Search", hint.c_str(), m_Filter.InputBuf, IM_ARRAYSIZE(m_Filter.InputBuf)))
             m_Filter.Build();
