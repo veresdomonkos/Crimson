@@ -1,8 +1,6 @@
 #pragma once
 #include <imgui.h>
 
-#include <crimson/asset_manager/asset_types.hpp>
-
 namespace crimson::editor::ui
 {
     // The editor's colors and sizes, in one place so the panels agree. Colors are in ImGui's sRGB, sizes are in pixels
@@ -60,9 +58,6 @@ namespace crimson::editor::ui
 
         // Behind images and render targets, where nothing is drawn yet
         inline constexpr ImVec4 Backdrop = ImVec4(0.00f, 0.00f, 0.00f, 1.00f);
-
-        // What tells the kinds of assets apart in the Assets panel
-        ImVec4 AssetColor(AssetType type);
 
         // The spacing scale, and the one corner radius and border size
         inline constexpr float SpaceXS = 4.0f;

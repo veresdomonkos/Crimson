@@ -123,7 +123,8 @@ namespace crimson::editor::ui
         const std::string name = std::filesystem::path(info.Path).filename().string();
 
         // The asset's icon in its type's color, as the Assets panel shows it, then its name
-        ImGui::TextColored(theme::AssetColor(info.Type), "%s", icons::ForAsset(info.Type));
+        const EditorAssetType& kind = m_context.AssetTypes.Get(info.Type);
+        ImGui::TextColored(kind.Color, "%s", kind.Icon);
         ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x * 2.0f);
         {
             const theme::ScopedBold bold;
@@ -133,11 +134,10 @@ namespace crimson::editor::ui
         // What it is and where, in a smaller muted line
         {
             const theme::ScopedFont small(nullptr, theme::FontSmall);
-            const std::string_view type = ToString(info.Type);
             const std::string where = info.ReadOnly ? "engine, read-only" : info.Path;
 
             ImGui::PushStyleColor(ImGuiCol_Text, theme::TextMuted);
-            ImGui::TextWrapped("%.*s  \xC2\xB7  %s", static_cast<int>(type.size()), type.data(), where.c_str());
+            ImGui::TextWrapped("%s  \xC2\xB7  %s", kind.Name.c_str(), where.c_str());
             ImGui::PopStyleColor();
         }
 

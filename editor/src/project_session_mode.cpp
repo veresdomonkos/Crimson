@@ -61,11 +61,13 @@ namespace crimson::editor
           m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, GpuResources(), *m_services.Graphics.Imgui)),
           m_sceneView(m_scene, m_camera, static_cast<float>(kMainTargetWidth) / kMainTargetHeight),
           m_sceneEdits(m_scene, *m_assetManager, m_settings, [this] { m_sceneRenderer->SetToneMapping(m_settings.PostProcessing.Exposure, m_settings.PostProcessing.Mapper); }),
-          m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails, .SceneUndo = m_sceneEdits,
+          m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails, .AssetTypes = m_assetTypes, .SceneUndo = m_sceneEdits,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
                      .OpenScene = [this](SceneID id) { OpenScene(id); },
                      .OpenCodeFile = [this](const std::filesystem::path& file) { script_editor::Open(m_services.Settings.GetScriptEditor(), file, m_project.Root()); } }
     {
+        ui::RegisterAssetTypes(m_assetTypes);
+
         // In the order the sources are collected from, which is the order a step's changes are redone in
         m_history.AddSource(m_sceneEdits);
         m_history.AddSource(*m_assetEdits);
@@ -634,7 +636,7 @@ namespace crimson::editor
         m_context.GizmoInUse = false;
 
         m_ui->Draw();
-        m_context.Picker.Draw(m_context.Assets, m_context.Thumbnails);
+        m_context.Picker.Draw(m_context.Assets, m_context.Thumbnails, m_context.AssetTypes);
         DrawUnsavedChangesDialog();
         DrawRecoveryDialog();
     }

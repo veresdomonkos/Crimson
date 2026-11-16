@@ -12,6 +12,7 @@
 #include "crimson_editor/asset_thumbnails.hpp"
 #include "crimson_editor/scene_edits.hpp"
 #include "crimson_editor/ui/asset_picker.hpp"
+#include "crimson_editor/ui/asset_type_registry.hpp"
 
 namespace crimson::editor
 {
@@ -22,6 +23,7 @@ namespace crimson::editor
         AssetManager& Assets;
         AssetEdits& Edits;
         AssetThumbnails& Thumbnails;
+        const ui::AssetTypeRegistry& AssetTypes;
 
         // For undo of the scene: record an entity before changing it, or after creating it. The selected one is recorded already.
         SceneEdits& SceneUndo;

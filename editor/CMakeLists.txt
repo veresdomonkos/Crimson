@@ -28,6 +28,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/ui/asset_inspector.hpp
     include/crimson_editor/ui/asset_picker.hpp
     include/crimson_editor/ui/asset_tiles.hpp
+    include/crimson_editor/ui/asset_type_registry.hpp
     include/crimson_editor/ui/component_fields.hpp
     include/crimson_editor/ui/console_panel.hpp
     include/crimson_editor/ui/editor_theme.hpp
@@ -70,6 +71,12 @@ set(EDITOR_SOURCES
     src/ui/asset_inspector.cpp
     src/ui/asset_picker.cpp
     src/ui/asset_tiles.cpp
+    src/ui/asset_type_registry.cpp
+    src/ui/asset_views/material_view.cpp
+    src/ui/asset_views/mesh_view.cpp
+    src/ui/asset_views/scene_view.cpp
+    src/ui/asset_views/shader_view.cpp
+    src/ui/asset_views/texture_view.cpp
     src/ui/component_fields.cpp
     src/ui/console_panel.cpp
     src/ui/editor_theme.cpp

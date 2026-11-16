@@ -6,6 +6,7 @@
 
 #include "crimson_editor/asset_thumbnails.hpp"
 #include "crimson_editor/ui/asset_tiles.hpp"
+#include "crimson_editor/ui/asset_type_registry.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
@@ -144,7 +145,7 @@ namespace crimson::editor::ui
         return choice;
     }
 
-    void AssetPicker::Draw(const AssetManager& assets, AssetThumbnails& thumbnails)
+    void AssetPicker::Draw(const AssetManager& assets, AssetThumbnails& thumbnails, const AssetTypeRegistry& types)
     {
         // Before the popup, as ImGui closes it on Escape by itself
         if (m_open && !m_justOpened && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
@@ -237,7 +238,7 @@ namespace crimson::editor::ui
             Confirm();
 
         if (m_open)
-            DrawEntries(assets, thumbnails, entries, selectedIndex);
+            DrawEntries(assets, thumbnails, types, entries, selectedIndex);
 
         if (!m_open)
             ImGui::CloseCurrentPopup();
@@ -245,8 +246,9 @@ namespace crimson::editor::ui
         ImGui::EndPopup();
     }
 
-    void AssetPicker::DrawEntries(const AssetManager& assets, AssetThumbnails& thumbnails, const std::vector<PickerEntry>& entries, int selectedIndex)
+    void AssetPicker::DrawEntries(const AssetManager& assets, AssetThumbnails& thumbnails, const AssetTypeRegistry& types, const std::vector<PickerEntry>& entries, int selectedIndex)
     {
+        const EditorAssetType& kind = types.Get(m_type);
         const ImGuiStyle& style = ImGui::GetStyle();
         const float width = std::round(ImGui::GetFontSize() * kBodyWidthEms);
         const float height = std::round(ImGui::GetFontSize() * kBodyHeightEms);
@@ -261,7 +263,7 @@ namespace crimson::editor::ui
             const PickerEntry& entry = entries[index];
             const bool selected = index == selectedIndex;
             const ImVec4 nameColor = entry.Engine ? theme::TextMuted : style.Colors[ImGuiCol_Text];
-            const char* icon = entry.Id ? icons::ForAsset(m_type) : nullptr; // None has none
+            const char* icon = entry.Id ? kind.Icon : nullptr; // None has none
 
             ImGui::PushID(index);
 
@@ -281,8 +283,8 @@ namespace crimson::editor::ui
 
                 // Only pictures that are on screen get loaded
                 ImTextureID picture = 0;
-                if (m_type == AssetType::Texture && entry.Id && ImGui::IsItemVisible())
-                    picture = thumbnails.Get(assets.As<AssetType::Texture>(entry.Id));
+                if (kind.Thumbnail && entry.Id && ImGui::IsItemVisible())
+                    picture = kind.Thumbnail(assets, thumbnails, entry.Id);
 
                 if (picture)
                 {
@@ -292,7 +294,7 @@ namespace crimson::editor::ui
                 }
                 else if (icon)
                 {
-                    tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, icon, theme::AssetColor(m_type));
+                    tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, icon, kind.Color);
                 }
 
                 tiles::DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, entry.Name.c_str(), ImGui::GetColorU32(nameColor));
@@ -329,7 +331,7 @@ namespace crimson::editor::ui
 
                 if (icon)
                 {
-                    drawList->AddText(ImVec2(x, y), ImGui::GetColorU32(theme::AssetColor(m_type)), icon);
+                    drawList->AddText(ImVec2(x, y), ImGui::GetColorU32(kind.Color), icon);
                     x += ImGui::CalcTextSize(icon).x + style.ItemInnerSpacing.x;
                 }
 

@@ -472,9 +472,10 @@ namespace crimson::editor::ui
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
         // Only pictures that are on screen get loaded
+        const EditorAssetType& kind = m_context.AssetTypes.Get(item.Type);
         ImTextureID picture = 0;
-        if (item.Type == AssetType::Texture && ImGui::IsItemVisible())
-            picture = m_context.Thumbnails.Get(m_context.Assets.As<AssetType::Texture>(item.Id));
+        if (kind.Thumbnail && ImGui::IsItemVisible())
+            picture = kind.Thumbnail(m_context.Assets, m_context.Thumbnails, item.Id);
 
         if (picture)
         {
@@ -485,7 +486,7 @@ namespace crimson::editor::ui
         }
         else
         {
-            tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, icons::ForAsset(item.Type), theme::AssetColor(item.Type));
+            tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, kind.Icon, kind.Color);
         }
 
         const bool dirty = m_context.Edits.IsDirty(item.Id);

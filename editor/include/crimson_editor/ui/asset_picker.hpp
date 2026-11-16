@@ -17,6 +17,8 @@ namespace crimson::editor
 
 namespace crimson::editor::ui
 {
+    class AssetTypeRegistry;
+
     struct PickerEntry
     {
         AssetID Id; // empty for None
@@ -74,9 +76,9 @@ namespace crimson::editor::ui
         [[nodiscard]] std::optional<AssetID> TakeChoice(ImGuiID owner);
 
         // Call once a frame, after the panels
-        void Draw(const AssetManager& assets, AssetThumbnails& thumbnails);
+        void Draw(const AssetManager& assets, AssetThumbnails& thumbnails, const AssetTypeRegistry& types);
     private:
-        void DrawEntries(const AssetManager& assets, AssetThumbnails& thumbnails, const std::vector<PickerEntry>& entries, int selectedIndex);
+        void DrawEntries(const AssetManager& assets, AssetThumbnails& thumbnails, const AssetTypeRegistry& types, const std::vector<PickerEntry>& entries, int selectedIndex);
 
         ImGuiID m_owner = 0;
         AssetType m_type = AssetType::None;

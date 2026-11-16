@@ -123,6 +123,7 @@ namespace crimson::editor
 
         // After everything it takes changes from, as it and its changes refer to them
         EditHistory m_history;
+        ui::AssetTypeRegistry m_assetTypes;
         EditorContext m_context;
         std::unique_ptr<SceneRenderer> m_sceneRenderer;
 

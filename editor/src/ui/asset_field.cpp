@@ -91,7 +91,8 @@ namespace crimson::editor::ui
         drawIcon(nameRight, icons::kPicker, style.Colors[ImGuiCol_Text]);
 
         // Not for a missing one, as the empty thumbnail would be kept after the file is back
-        const ImTextureID picture = type == AssetType::Texture && info ? context.Thumbnails.Get(assets.As<AssetType::Texture>(current)) : ImTextureID{ 0 };
+        const EditorAssetType& kind = context.AssetTypes.Get(type);
+        const ImTextureID picture = kind.Thumbnail && info ? kind.Thumbnail(assets, context.Thumbnails, current) : ImTextureID{ 0 };
 
         if (picture)
         {
@@ -101,7 +102,7 @@ namespace crimson::editor::ui
         }
         else
         {
-            drawIcon(min.x, icons::ForAsset(type), theme::AssetColor(type));
+            drawIcon(min.x, kind.Icon, kind.Color);
         }
 
         const ImVec4 textColor = missing ? theme::Warning : info && info->ReadOnly ? theme::TextMuted : style.Colors[ImGuiCol_Text];
