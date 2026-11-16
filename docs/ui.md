@@ -31,10 +31,12 @@ The editor's colors, sizes and fonts are named in [`editor_theme.hpp`](../editor
 | Text | `Text`, `TextMuted`, `TextOnAccent` |
 | Accent | `Accent`, `AccentHover`, `AccentPressed`, `Selection`, `TextSelection` |
 | Status | `Success`, `Warning`, `Error`, with `TintAlpha`, `TintHoverAlpha` and `WithAlpha` for tinted controls |
-| Category | `AssetColor(type)`, `Folder`, `FolderTab`, and `AxisX` to `AxisW` |
+| Category | `Folder`, `FolderTab`, and `AxisX` to `AxisW` |
 | Spacing | `SpaceXS` 4, `SpaceS` 8, `SpaceM` 12, `SpaceL` 16, `SpaceXL` 24 |
 | Shape | `Radius` 4, `BorderSize` 1, `AccentLineSize` 2 |
 | Type | `FontBody` 14, `FontSmall` 12, `FontHeading` 16, `IconSize` 14 |
+
+Each asset type's color is part of its registration (`asset_type_registry.hpp`), muted and of similar lightness to `Folder`, so no kind of asset shouts over the others.
 
 Sizes are at 100%. The style scales them with the monitor, and `Scaled` does the same for a token used outside the style, such as a margin.
 
