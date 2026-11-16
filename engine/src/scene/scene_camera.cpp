@@ -7,13 +7,15 @@ namespace crimson
     namespace
     {
         constexpr float kMinAxisLength = 1e-6f;
+        constexpr float kMinCross = 1e-4f;
 
-        // An axis the matrix has squashed to nothing has no direction, so the default one stands in
-        glm::vec3 DirectionOf(const glm::mat4& world, const glm::vec3& axis, const glm::vec3& fallback)
+        // The direction an axis of the matrix points in, or nothing if it was squashed to a point
+        bool DirectionOf(const glm::mat4& world, const glm::vec3& axis, glm::vec3& direction)
         {
-            const glm::vec3 direction = glm::mat3(world) * axis;
-            const float length = glm::length(direction);
-            return length > kMinAxisLength ? direction / length : fallback;
+            const glm::vec3 scaled = glm::mat3(world) * axis;
+            const float length = glm::length(scaled);
+            direction = scaled / length;
+            return length > kMinAxisLength;
         }
 
         bool IsActiveInHierarchy(Entity entity)
@@ -52,8 +54,16 @@ namespace crimson
     CameraView ComputeCameraView(const CameraComponent& camera, const glm::mat4& world, float aspect)
     {
         const glm::vec3 position = glm::vec3(world[3]);
-        const glm::vec3 forward = DirectionOf(world, glm::vec3(0.0f, 0.0f, -1.0f), glm::vec3(0.0f, 0.0f, -1.0f));
-        const glm::vec3 up = DirectionOf(world, glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::vec3 forward;
+        glm::vec3 up;
+
+        // Both go back to the defaults together, as one of each could point the same way and leave no view
+        const bool valid = DirectionOf(world, glm::vec3(0.0f, 0.0f, -1.0f), forward) & DirectionOf(world, glm::vec3(0.0f, 1.0f, 0.0f), up);
+        if (!valid || glm::length(glm::cross(forward, up)) < kMinCross)
+        {
+            forward = glm::vec3(0.0f, 0.0f, -1.0f);
+            up = glm::vec3(0.0f, 1.0f, 0.0f);
+        }
 
         CameraView view;
         view.Position = position;

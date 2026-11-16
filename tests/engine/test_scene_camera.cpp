@@ -228,3 +228,37 @@ TEST_CASE("There is no main camera without an active camera", "[scene camera]")
     CHECK_FALSE(FindMainCamera(scene, {}));
     CHECK_FALSE(FindMainCamera(scene, IdOf(camera)));
 }
+
+TEST_CASE("A camera squashed along one axis still has a view", "[scene camera]")
+{
+    Scene scene;
+    const Entity entity = scene.CreateEntity("Camera");
+    auto& transform = entity.GetComponent<TransformComponent>();
+
+    const auto isFinite = [&]
+    {
+        const CameraView view = ComputeCameraView(CameraComponent{}, scene.ComputeWorldMatrix(entity), kAspect);
+        for (int column = 0; column < 4; ++column)
+        {
+            const glm::vec4& v = view.View[column];
+            if (!std::isfinite(v.x) || !std::isfinite(v.y) || !std::isfinite(v.z) || !std::isfinite(v.w))
+                return false;
+        }
+
+        return true;
+    };
+
+    SECTION("Pitched straight down with no height")
+    {
+        transform.RotationDegrees = glm::vec3(-90.0f, 0.0f, 0.0f);
+        transform.Scale = glm::vec3(1.0f, 0.0f, 1.0f);
+        CHECK(isFinite());
+    }
+
+    SECTION("Pitched straight up with no depth")
+    {
+        transform.RotationDegrees = glm::vec3(90.0f, 0.0f, 0.0f);
+        transform.Scale = glm::vec3(1.0f, 1.0f, 0.0f);
+        CHECK(isFinite());
+    }
+}
