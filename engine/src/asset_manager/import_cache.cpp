@@ -16,7 +16,7 @@
 #include "crimson/core/log.hpp"
 
 #include "asset_manager/binary_io.hpp"
-#include "asset_manager/file_write.hpp"
+#include <crimson/core/file_write.hpp>
 
 namespace fs = std::filesystem;
 
