@@ -29,6 +29,16 @@ TEST_CASE("The user config folder is Crimson's own", "[platform]")
 #endif
 }
 
+TEST_CASE("The user cache folder is Crimson's own", "[platform]")
+{
+#ifdef _WIN32
+    CHECK(platform::UserCacheFolder().filename() == "Cache");
+    CHECK(platform::UserCacheFolder().parent_path().filename() == "Crimson");
+#else
+    CHECK(platform::UserCacheFolder().filename() == "crimson");
+#endif
+}
+
 TEST_CASE("Program files have extensions only on Windows", "[platform]")
 {
 #ifdef _WIN32

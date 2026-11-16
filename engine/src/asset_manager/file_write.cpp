@@ -7,10 +7,10 @@ namespace fs = std::filesystem;
 
 namespace crimson
 {
-    bool WriteFileSafely(const fs::path& file, std::string_view contents)
+    bool WriteFileSafely(const fs::path& file, std::string_view contents, std::string_view temporarySuffix)
     {
         fs::path temporary = file;
-        temporary += ".saving";
+        temporary += temporarySuffix;
 
         {
             std::ofstream stream(temporary, std::ios::binary);

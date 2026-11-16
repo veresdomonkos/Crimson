@@ -16,6 +16,7 @@
 namespace crimson
 {
     class AssetManager;
+    class ImportCache;
 
     // What an asset's file says, for the types whose files hold nothing to edit
     struct NoAssetData {};
@@ -65,6 +66,7 @@ namespace crimson
     {
         GpuResourceManager& Gpu;
         AssetManager&       Assets;
+        ImportCache&        Cache; // where this import's results are kept, chosen by where its source comes from
         std::vector<std::filesystem::path> Dependencies{}; // other files the asset was made from, for reloading it when they change
         std::vector<AssetID> Uses{}; // the assets this one was made from, for it to be updated when they change
     };

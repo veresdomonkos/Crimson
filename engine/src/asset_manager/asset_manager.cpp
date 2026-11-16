@@ -15,6 +15,7 @@
 #include "crimson/asset_manager/meta_file.hpp"
 #include "asset_store.hpp"
 #include "crimson/core/engine_resources.hpp"
+#include "crimson/core/hash.hpp"
 #include "crimson/core/log.hpp"
 
 #include "engine_renames.hpp"
@@ -29,18 +30,10 @@ namespace crimson
     // Each can use the ones after it
     static constexpr std::array kUnloadOrder = { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader };
 
-    // FNV-1a. An engine resource has no meta to store an id in, and scenes must find it again in any project.
+    // An engine resource has no meta to store an id in, and scenes must find it again in any project.
     static AssetID EngineResourceId(std::string_view path)
     {
-        uint64_t hash = 0xcbf29ce484222325ull;
-
-        for (const unsigned char c : path)
-        {
-            hash ^= c;
-            hash *= 0x100000001b3ull;
-        }
-
-        return AssetID{ hash };
+        return AssetID{ Fnv1a(path) };
     }
 
     static std::string NormalizeExt(const fs::path& p)
@@ -65,8 +58,8 @@ namespace crimson
         return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
     }
 
-    AssetManager::AssetManager(GpuResourceManager& gpuResources, fs::path root)
-        : m_gpuResources(gpuResources), m_root(fs::absolute(std::move(root)).lexically_normal())
+    AssetManager::AssetManager(GpuResourceManager& gpuResources, fs::path root, fs::path cacheFolder)
+        : m_gpuResources(gpuResources), m_root(fs::absolute(std::move(root)).lexically_normal()), m_cache(std::move(cacheFolder), m_root)
     {
         RegisterNativeComponents(m_components);
 
@@ -377,7 +370,7 @@ namespace crimson
 
         if (slot && !slot->Tried())
         {
-            ImportContext ctx{ m_gpuResources, *this };
+            ImportContext ctx{ m_gpuResources, *this, CacheFor(m_assets.at(id)) };
 
             slot->Loaded = slot->Import(SourceOf(m_assets.at(id)), ctx);
             slot->Failed = !slot->Loaded;
@@ -418,7 +411,7 @@ namespace crimson
         const AssetData<T>* current = GetData(id);
 
         auto& slot = *SlotFor<T>(id);
-        ImportContext ctx{ m_gpuResources, *this };
+        ImportContext ctx{ m_gpuResources, *this, CacheFor(m_assets.at(id)) };
 
         if (slot.Loaded && current && slot.Importer->Update(*slot.Loaded, *current, data, ctx))
         {
@@ -574,7 +567,7 @@ namespace crimson
                 if (it == m_assets.end())
                     continue;
 
-                ImportContext ctx{ m_gpuResources, *this };
+                ImportContext ctx{ m_gpuResources, *this, CacheFor(it->second) };
 
                 if (store->UpdateUser(user, used, removed, SourceOf(it->second), ctx) && replaced)
                     replaced->push_back(user);
@@ -791,7 +784,7 @@ namespace crimson
     std::vector<AssetID> AssetManager::Reload(AssetID id)
     {
         const Record& record = m_assets.at(id);
-        ImportContext ctx{ m_gpuResources, *this };
+        ImportContext ctx{ m_gpuResources, *this, CacheFor(record) };
 
         std::vector<AssetID> replaced = { id };
 

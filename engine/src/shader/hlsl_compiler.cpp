@@ -1,6 +1,8 @@
 #include "crimson/renderer/shader_compiler.hpp"
 
 #include <algorithm>
+#include <array>
+#include <format>
 #include <fstream>
 #include <regex>
 #include <sstream>
@@ -20,36 +22,47 @@ namespace crimson
 {
     namespace
     {
-        // Includes resolve relative to the shader's folder, then to the engine's shaders.
-        // A shader without a folder only sees the engine's. The files read from the folder are added to included.
+        // Includes resolve relative to the shader's folder, then to the engine's shaders. A shader without a folder only
+        // sees the engine's.
+        std::optional<ShaderInclude> ResolveInclude(const std::filesystem::path& directory, std::string_view headerName)
+        {
+            if (!directory.empty())
+            {
+                const std::filesystem::path file = directory / headerName;
+                if (std::ifstream stream(file, std::ios::binary); stream)
+                {
+                    std::stringstream contents;
+                    contents << stream.rdbuf();
+                    return ShaderInclude{ std::string(headerName), file, {}, std::move(contents).str() };
+                }
+            }
+
+            std::string enginePath = std::string("shaders/") + std::string(headerName);
+            if (const EmbeddedFile* file = FindEmbeddedFile(GetEngineResources(), enginePath))
+                return ShaderInclude{ std::string(headerName), {}, std::move(enginePath), std::string(file->Text()) };
+
+            return std::nullopt;
+        }
+
+        // Each include is added to the log once
         class ShaderIncluder final : public glslang::TShader::Includer
         {
         public:
-            ShaderIncluder(std::filesystem::path directory, std::vector<std::filesystem::path>& included)
-                : m_directory(std::move(directory)), m_included(included) {}
+            ShaderIncluder(std::filesystem::path directory, std::vector<ShaderInclude>& log)
+                : m_directory(std::move(directory)), m_log(log) {}
 
             IncludeResult* includeLocal(const char* headerName, const char*, size_t) override
             {
-                if (!m_directory.empty())
-                {
-                    const std::filesystem::path file = m_directory / headerName;
+                auto resolved = ResolveInclude(m_directory, headerName);
+                if (!resolved)
+                    return nullptr;
 
-                    if (std::ifstream stream(file, std::ios::binary); stream)
-                    {
-                        if (std::ranges::find(m_included, file) == m_included.end())
-                            m_included.push_back(file);
+                IncludeResult* result = MakeResult(headerName, resolved->Text);
 
-                        std::stringstream contents;
-                        contents << stream.rdbuf();
-                        return MakeResult(headerName, std::move(contents).str());
-                    }
-                }
+                if (std::ranges::find(m_log, headerName, &ShaderInclude::Name) == m_log.end())
+                    m_log.push_back(std::move(*resolved));
 
-                const std::string enginePath = std::string("shaders/") + headerName;
-                if (const EmbeddedFile* file = FindEmbeddedFile(GetEngineResources(), enginePath))
-                    return MakeResult(headerName, std::string(file->Text()));
-
-                return nullptr;
+                return result;
             }
 
             IncludeResult* includeSystem(const char* headerName, const char* includerName, size_t depth) override
@@ -74,8 +87,39 @@ namespace crimson
             }
 
             std::filesystem::path m_directory;
-            std::vector<std::filesystem::path>& m_included;
+            std::vector<ShaderInclude>& m_log;
         };
+
+        // What the compile is set to, which is also in ShaderCompilerVersion, as a different one makes different SPIR-V
+        constexpr int kDefaultVersion = 100;
+        constexpr EShMessages kMessages = static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgReadHlsl);
+        constexpr glslang::EShTargetClientVersion kClientVersion = glslang::EShTargetVulkan_1_3;
+        constexpr glslang::EShTargetLanguageVersion kSpirvVersion = glslang::EShTargetSpv_1_5;
+        constexpr spv_target_env kTarget = SPV_ENV_VULKAN_1_3;
+        constexpr const char* kEntryPoint = "main";
+        constexpr bool kAutoMapLocations = true;
+
+        // Which resources are shifted by how much. StructuredBuffers use t registers but count as storage buffers here.
+        struct BindingShift
+        {
+            glslang::TResourceType Resource;
+            uint32_t Shift;
+        };
+
+        constexpr std::array<BindingShift, 5> kBindingShifts = { {
+            { glslang::EResTexture, kTextureBindingShift },
+            { glslang::EResSsbo, kTextureBindingShift },
+            { glslang::EResSampler, kSamplerBindingShift },
+            { glslang::EResImage, kStorageBindingShift },
+            { glslang::EResUav, kStorageBindingShift }
+        } };
+
+        // The one place the passes are chosen, as their names are part of ShaderCompilerVersion
+        void RegisterPasses(spvtools::Optimizer& optimizer)
+        {
+            optimizer.RegisterLegalizationPasses();
+        }
+
 
         void InitializeGlslang()
         {
@@ -94,15 +138,13 @@ namespace crimson
         // SPIRV-Cross then can't name after the texture. Inlining and copy propagation remove those copies.
         std::optional<std::vector<uint32_t>> Legalize(const std::string& name, const std::vector<uint32_t>& spirv)
         {
-            constexpr spv_target_env kTarget = SPV_ENV_VULKAN_1_3;
-
             spvtools::Optimizer optimizer(kTarget);
             optimizer.SetMessageConsumer([&name](spv_message_level_t level, const char*, const spv_position_t&, const char* message)
             {
                 if (level <= SPV_MSG_ERROR)
                     LOG_ERROR("[Shader] {}: {}", name, message);
             });
-            optimizer.RegisterLegalizationPasses();
+            RegisterPasses(optimizer);
 
             // The input is what is invalid, so only the result is validated, below
             spvtools::OptimizerOptions options;
@@ -130,33 +172,26 @@ namespace crimson
             return legalized;
         }
 
-        std::optional<CompiledStage> CompileStage(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<std::filesystem::path>& included, EShLanguage stage, const char* entryPoint)
+        std::optional<CompiledStage> CompileStage(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<ShaderInclude>& includes, EShLanguage stage, const char* entryPoint)
         {
             const char* sourceData = source.data();
             const int sourceLength = static_cast<int>(source.size());
             const char* sourceName = name.c_str();
 
-            constexpr int kDefaultVersion = 100;
-            constexpr EShMessages kMessages = static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgReadHlsl);
-
             glslang::TShader shader(stage);
             shader.setStringsWithLengthsAndNames(&sourceData, &sourceLength, &sourceName, 1);
             shader.setEnvInput(glslang::EShSourceHlsl, stage, glslang::EShClientVulkan, kDefaultVersion);
-            shader.setEnvClient(glslang::EShClientVulkan, glslang::EShTargetVulkan_1_3);
+            shader.setEnvClient(glslang::EShClientVulkan, kClientVersion);
             // Not 1.6, where discard and clip become a demote to a helper invocation, which GLSL for OpenGL can't do
-            shader.setEnvTarget(glslang::EShTargetSpv, glslang::EShTargetSpv_1_5);
-            shader.setEntryPoint("main");
+            shader.setEnvTarget(glslang::EShTargetSpv, kSpirvVersion);
+            shader.setEntryPoint(kEntryPoint);
             shader.setSourceEntryPoint(entryPoint);
-            shader.setAutoMapLocations(true);
+            shader.setAutoMapLocations(kAutoMapLocations);
 
-            // StructuredBuffers use t registers but count as storage buffers here
-            shader.setShiftBinding(glslang::EResTexture, kTextureBindingShift);
-            shader.setShiftBinding(glslang::EResSsbo, kTextureBindingShift);
-            shader.setShiftBinding(glslang::EResSampler, kSamplerBindingShift);
-            shader.setShiftBinding(glslang::EResImage, kStorageBindingShift);
-            shader.setShiftBinding(glslang::EResUav, kStorageBindingShift);
+            for (const auto& [resource, shift] : kBindingShifts)
+                shader.setShiftBinding(resource, shift);
 
-            ShaderIncluder includer(includeDirectory, included);
+            ShaderIncluder includer(includeDirectory, includes);
 
             if (!shader.parse(GetDefaultResources(), kDefaultVersion, false, kMessages, includer))
             {
@@ -185,11 +220,36 @@ namespace crimson
         }
     }
 
-    std::optional<ShaderBinary> CompileHlslShader(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<std::filesystem::path>* includedFiles)
+    std::string_view ShaderCompilerVersion()
+    {
+        static const std::string version = [] {
+            const glslang::Version compiler = glslang::GetVersion();
+            std::string text = std::format("glslang {}.{}.{} {}; {}; input {}, messages {}, client {}, spirv {}, target {}, entry {}, auto map {}",
+                                              compiler.major, compiler.minor, compiler.patch, compiler.flavor ? compiler.flavor : "",
+                                              spvSoftwareVersionDetailsString(), kDefaultVersion, static_cast<int>(kMessages),
+                                              static_cast<int>(kClientVersion), static_cast<int>(kSpirvVersion),
+                                              static_cast<int>(kTarget), kEntryPoint, kAutoMapLocations);
+
+            for (const auto& [resource, shift] : kBindingShifts)
+                text += std::format("; binding {} {}", static_cast<int>(resource), shift);
+
+            // The passes the legalization runs, as they are part of what it makes
+            spvtools::Optimizer optimizer(kTarget);
+            RegisterPasses(optimizer);
+            for (const char* pass : optimizer.GetPassNames())
+                text += std::format("; pass {}", pass);
+
+            return text;
+        }();
+
+        return version;
+    }
+
+    std::optional<ShaderBinary> CompileHlslShader(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<ShaderInclude>* includes)
     {
         InitializeGlslang();
 
-        std::vector<std::filesystem::path> included;
+        std::vector<ShaderInclude> included;
         auto vertex = CompileStage(name, source, includeDirectory, included, EShLangVertex, "VSMain");
         auto pixel = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSMain");
 
@@ -199,8 +259,8 @@ namespace crimson
         if (std::regex_search(source, kDepthEntryPoint))
             pixelDepth = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSDepth");
 
-        if (includedFiles)
-            *includedFiles = std::move(included);
+        if (includes)
+            *includes = std::move(included);
 
         if (!vertex || !pixel || !pixelDepth)
             return std::nullopt;

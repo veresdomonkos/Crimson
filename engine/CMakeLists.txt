@@ -5,6 +5,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/core/embedded_resource.hpp
     include/crimson/core/engine_resources.hpp
     include/crimson/core/events.hpp
+    include/crimson/core/hash.hpp
     include/crimson/core/input.hpp
     include/crimson/core/log.hpp
     include/crimson/core/profiler.hpp
@@ -44,6 +45,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/asset_manager/asset_importer.hpp
     include/crimson/asset_manager/asset_manager.hpp
     include/crimson/asset_manager/asset_types.hpp
+    include/crimson/asset_manager/import_cache.hpp
     include/crimson/asset_manager/material_data.hpp
     include/crimson/asset_manager/meta_file.hpp
     include/crimson/asset_manager/scene_data.hpp
@@ -76,14 +78,18 @@ set(ENGINE_SOURCES
     src/asset_manager/asset_ref.cpp
     src/asset_manager/asset_ref.hpp
     src/asset_manager/asset_store.hpp
+    src/asset_manager/binary_io.hpp
     src/asset_manager/engine_renames.hpp
     src/asset_manager/file_write.cpp
     src/asset_manager/file_write.hpp
+    src/asset_manager/import_cache.cpp
     src/asset_manager/importers/material_importer.cpp
     src/asset_manager/importers/mesh_importer.cpp
     src/asset_manager/importers/mesh_tangents.cpp
     src/asset_manager/importers/mesh_tangents.hpp
     src/asset_manager/importers/scene_importer.cpp
+    src/asset_manager/importers/shader_cache_format.cpp
+    src/asset_manager/importers/shader_cache_format.hpp
     src/asset_manager/importers/shader_importer.cpp
     src/asset_manager/importers/texture_importer.cpp
     src/asset_manager/material_data.cpp

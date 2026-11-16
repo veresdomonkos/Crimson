@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "crimson/asset_manager/asset_importer.hpp"
+#include "crimson/asset_manager/import_cache.hpp"
 #include "crimson/asset_manager/material_data.hpp"
 #include "crimson/asset_manager/scene_data.hpp"
 #include "crimson/scene/component_registry.hpp"
@@ -42,7 +43,9 @@ namespace crimson
     class AssetManager
     {
     public:
-        AssetManager(GpuResourceManager& gpuResources, std::filesystem::path root);
+        // What importing the project's files makes is kept in cacheFolder, or only in memory if it is empty, with the
+        // dependencies on files under root relative to it. The engine's own assets have their own, ImportCache::Engine().
+        AssetManager(GpuResourceManager& gpuResources, std::filesystem::path root, std::filesystem::path cacheFolder = {});
         ~AssetManager();
 
         AssetManager(const AssetManager&) = delete;
@@ -185,6 +188,7 @@ namespace crimson
         typename AssetStore<T>::Slot* SlotFor(AssetID id);
 
         [[nodiscard]] AssetSource SourceOf(const Record& record) const;
+        [[nodiscard]] ImportCache& CacheFor(const Record& record) { return record.Embedded ? ImportCache::Engine() : m_cache; }
         AssetID FindIdOrWarn(std::string_view path) const;
 
         template <AssetType T>
@@ -202,6 +206,7 @@ namespace crimson
         GpuResourceManager& m_gpuResources;
         ComponentRegistry m_components{ *this };
         std::filesystem::path m_root;
+        ImportCache m_cache;
 
         std::vector<std::unique_ptr<AssetImporterBase>> m_importers;
         std::unordered_map<std::string, AssetImporterBase*> m_importersByExtension;

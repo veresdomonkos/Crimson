@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -11,6 +12,7 @@
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/import_cache.hpp>
 #include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/asset_manager/importers/texture_importer.hpp>
 #include <crimson/core/log.hpp>
@@ -808,4 +810,110 @@ TEST_CASE("Opening a project writes the engine's new names into its files", "[as
     CHECK_THAT(sceneText, Catch::Matchers::ContainsSubstring(R"("path": "engine/meshes/SM_Cube.obj")"));
     CHECK_THAT(sceneText, Catch::Matchers::ContainsSubstring(assets.FindId("engine/meshes/SM_Cube.obj").ToString()));
     CHECK_THAT(sceneText, !Catch::Matchers::ContainsSubstring("meshes/cube.obj"));
+}
+
+namespace
+{
+    // The engine's cache is shared by the whole process, so a test that gives it a folder has to take it back
+    class EngineCacheFolder
+    {
+    public:
+        explicit EngineCacheFolder(const fs::path& folder) { ImportCache::Engine().SetFolder(folder); }
+        ~EngineCacheFolder() { ImportCache::Engine().SetFolder({}); }
+
+        EngineCacheFolder(const EngineCacheFolder&) = delete;
+        EngineCacheFolder& operator=(const EngineCacheFolder&) = delete;
+    };
+}
+
+TEST_CASE("A project's shaders load from its cache the second time", "[assets]")
+{
+    const TempFolder temp;
+    const fs::path helper = temp.Write("assets/helper.hlsli", "#define HELPER_VALUE 1.0\n");
+    temp.Write("assets/mine.hlsl", R"(
+#include "helper.hlsli"
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, HELPER_VALUE); }
+float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+)");
+
+    const fs::path cacheFolder = temp.Path() / ".crimson" / "cache";
+    FakeGpuResourceManager gpu;
+    ImportCache::ForgetMemory();
+
+    ImportCacheStats before = ImportCache::Stats();
+    {
+        AssetManager assets(gpu, temp.Path() / "assets", cacheFolder);
+        CHECK(assets.Load<AssetType::Shader>("mine.hlsl"));
+    }
+    CHECK(ImportCache::Stats().Stores - before.Stores == 1);
+
+    // As the next run of the editor would find it
+    ImportCache::ForgetMemory();
+    before = ImportCache::Stats();
+
+    AssetManager assets(gpu, temp.Path() / "assets", cacheFolder);
+    CHECK(assets.Load<AssetType::Shader>("mine.hlsl"));
+    CHECK(ImportCache::Stats().Stores == before.Stores);
+    CHECK(ImportCache::Stats().Hits - before.Hits == 1);
+
+    temp.Write("assets/helper.hlsli", "#define HELPER_VALUE 2.0\n");
+    fs::last_write_time(helper, fs::last_write_time(helper) + std::chrono::seconds(2));
+
+    before = ImportCache::Stats();
+    CHECK_FALSE(assets.ReloadChanged().empty());
+    CHECK(ImportCache::Stats().Stores - before.Stores == 1);
+}
+
+TEST_CASE("The engine's shaders use the engine cache", "[assets]")
+{
+    const TempFolder temp;
+    const fs::path engineCache = temp.Path() / "engine_cache";
+    const fs::path projectCache = temp.Path() / ".crimson" / "cache";
+
+    ImportCache::ForgetMemory();
+    const EngineCacheFolder guard(engineCache);
+
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path() / "assets", projectCache);
+    REQUIRE(assets.Load<AssetType::Shader>("engine/shaders/S_Lit.hlsl"));
+
+    REQUIRE(fs::is_directory(engineCache / "shaders"));
+    CHECK_FALSE(fs::is_empty(engineCache / "shaders"));
+    CHECK_FALSE(fs::exists(projectCache));
+}
+
+TEST_CASE("A moved project still loads its shaders from its cache", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("a/assets/helper.hlsli", "#define HELPER_VALUE 1.0\n");
+    temp.Write("a/assets/mine.hlsl", R"(
+#include "helper.hlsli"
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, HELPER_VALUE); }
+float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+)");
+
+    FakeGpuResourceManager gpu;
+    ImportCache::ForgetMemory();
+
+    {
+        AssetManager assets(gpu, temp.Path() / "a" / "assets", temp.Path() / "a" / ".crimson" / "cache");
+        REQUIRE(assets.Load<AssetType::Shader>("mine.hlsl"));
+    }
+
+    ImportCache::ForgetMemory();
+    fs::rename(temp.Path() / "a", temp.Path() / "b");
+
+    const ImportCacheStats before = ImportCache::Stats();
+    AssetManager assets(gpu, temp.Path() / "b" / "assets", temp.Path() / "b" / ".crimson" / "cache");
+    CHECK(assets.Load<AssetType::Shader>("mine.hlsl"));
+    CHECK(ImportCache::Stats().Hits - before.Hits == 1);
+    CHECK(ImportCache::Stats().Stores == before.Stores);
+
+    // The restored dependency has to be the moved file, or this change wouldn't reload it
+    const fs::path helper = temp.Write("b/assets/helper.hlsli", "#define HELPER_VALUE 2.0\n");
+    fs::last_write_time(helper, fs::last_write_time(helper) + std::chrono::seconds(2));
+
+    const ImportCacheStats beforeChange = ImportCache::Stats();
+    CHECK_FALSE(assets.ReloadChanged().empty());
+    CHECK(ImportCache::Stats().Stores - beforeChange.Stores == 1);
 }

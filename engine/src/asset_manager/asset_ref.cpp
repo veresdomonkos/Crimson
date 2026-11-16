@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "crimson/asset_manager/asset_manager.hpp"
+#include "crimson/core/hash.hpp"
 #include "crimson/core/log.hpp"
 
 namespace crimson
@@ -37,14 +38,7 @@ namespace crimson
     // An id for a reference written as only a path, the same every time it is read. FNV-1a.
     static AssetID IdForPath(std::string_view path)
     {
-        uint64_t hash = 14695981039346656037ull;
-
-        for (const char c : path)
-        {
-            hash ^= static_cast<unsigned char>(c);
-            hash *= 1099511628211ull;
-        }
-
+        const uint64_t hash = Fnv1a(path);
         return AssetID{ hash != 0 ? hash : 1 };
     }
 

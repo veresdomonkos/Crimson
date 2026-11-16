@@ -364,6 +364,16 @@ jobs:
           key: ccache-linux-${{ matrix.flavor }}-${{ github.sha }}
           restore-keys: ccache-linux-${{ matrix.flavor }}-
 
+      # The GPU tests import every built-in asset again for each editor test, so the import cache is kept. Each entry
+      # checks its own inputs and dependencies, so one restored from an older commit is only a miss. A bump of the
+      # glslang or SPIRV-Tools pin needs kShaderCacheFormat bumped, as their versions can stay the same.
+      - name: Restore the import cache
+        uses: actions/cache@v6
+        with:
+          path: .crimson-cache
+          key: crimson-cache-linux-${{ matrix.flavor }}-${{ github.sha }}
+          restore-keys: crimson-cache-linux-${{ matrix.flavor }}-
+
       - name: Configure
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
@@ -384,4 +394,5 @@ jobs:
       - name: Test
         env:
           ASAN_OPTIONS: detect_leaks=0
+          CRIMSON_CACHE: ${{ github.workspace }}/.crimson-cache
         run: xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" ctest --test-dir build --output-on-failure

@@ -22,6 +22,12 @@ namespace crimson::editor
         return folder;
     }
 
+    fs::path GetEngineCacheFolder()
+    {
+        const fs::path overridden = platform::EnvironmentPath("CRIMSON_CACHE");
+        return overridden.empty() ? platform::UserCacheFolder() : overridden;
+    }
+
     fs::path GetDefaultProjectsFolder()
     {
         const fs::path home = platform::HomeFolder();
