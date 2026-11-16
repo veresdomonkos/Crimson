@@ -10,7 +10,7 @@ int main(int argc, char* argv[])
 {
     const crimson::ProfilerSession profiler;
 
-    crimson::GraphicsApi apiType = crimson::GraphicsApi::OpenGL;
+    crimson::GraphicsApi apiType = crimson::GraphicsApi::Vulkan;
     std::filesystem::path projectPath;
 
     for (int i = 1; i < argc; ++i)
@@ -33,8 +33,8 @@ int main(int argc, char* argv[])
         {
             std::cout << "Usage: CrimsonEditor [options]\n"
                       << "Options:\n"
-                      << "  -gl, --opengl    Use OpenGL backend (default)\n"
-                      << "  -vk, --vulkan    Use Vulkan backend\n"
+                      << "  -vk, --vulkan    Use Vulkan backend (default, falls back to OpenGL if it can't start)\n"
+                      << "  -gl, --opengl    Use OpenGL backend\n"
                       << "  -p,  --project   The project folder to open\n"
                       << "  -h,  --help      Show this help message\n";
             return 0;

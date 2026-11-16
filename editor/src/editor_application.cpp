@@ -8,6 +8,7 @@
 #include <crimson/graphics/graphics_api.hpp>
 #include <GLFW/glfw3.h>
 #include <nfd.h>
+#include <exception>
 #include <utility>
 
 #include "crimson_editor/editor_paths.hpp"
@@ -33,8 +34,28 @@ namespace crimson::editor
         const std::filesystem::path configFolder = GetUserConfigFolder();
         m_imguiIniPath = (configFolder / "imgui.ini").string();
 
-        m_window          = Window::Create(rendererType, WindowData{ "Crimson", kProjectManagerWidth, kProjectManagerHeight, BIND_FN(OnEvent) });
-        m_graphicsBackend = GraphicsBackend::Create(rendererType, *m_window);
+        // The window is made for its API, as OpenGL needs a context and Vulkan has none, so a fallback makes a new one
+        const auto createGraphics = [this](GraphicsApi api)
+        {
+            m_graphicsBackend.reset();
+            m_window          = Window::Create(api, WindowData{ "Crimson", kProjectManagerWidth, kProjectManagerHeight, BIND_FN(OnEvent) });
+            m_graphicsBackend = GraphicsBackend::Create(api, *m_window);
+        };
+
+        try
+        {
+            createGraphics(rendererType);
+        }
+        catch (const std::exception& error)
+        {
+            if (rendererType != GraphicsApi::Vulkan)
+                throw;
+
+            LOG_ERROR("[Editor] Vulkan couldn't start ({}), using OpenGL", error.what());
+            rendererType = GraphicsApi::OpenGL;
+            createGraphics(rendererType);
+        }
+
         m_input           = std::make_unique<Input>(*m_window);
         m_icons           = std::make_unique<EditorIcons>(*m_graphicsBackend->GPUResources, *m_graphicsBackend->Imgui);
         m_recentProjects  = std::make_unique<RecentProjects>(configFolder / "recent_projects.json");
