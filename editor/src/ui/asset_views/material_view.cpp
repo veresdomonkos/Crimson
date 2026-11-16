@@ -267,7 +267,12 @@ namespace crimson::editor::ui
             .Name = "Material",
             .Icon = icons::kMaterial,
             .Color = ImVec4(0.66f, 0.42f, 0.52f, 1.00f),
-            .MakeView = [](EditorContext& context) { return std::make_unique<MaterialView>(context); }
+            .MakeView = [](EditorContext& context) { return std::make_unique<MaterialView>(context); },
+            .Creation = AssetCreation{
+                .Label = "New Material",
+                .DefaultName = "New Material",
+                .Create = [](AssetManager& assets, const std::string& path) { return AssetID(assets.Create<AssetType::Material>(path + ".mat")); }
+            }
         };
     }
 }

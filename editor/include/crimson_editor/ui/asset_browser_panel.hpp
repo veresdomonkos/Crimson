@@ -43,9 +43,7 @@ namespace crimson::editor::ui
         {
             None,
             NewFolder,
-            NewMaterial,
-            NewScene,
-            NewShader,
+            NewAsset,
             RenameAsset,
             RenameFolder,
             DeleteAsset,
@@ -96,6 +94,7 @@ namespace crimson::editor::ui
         bool m_openDialog = false;
         std::array<char, 256> m_dialogName{};
         AssetID m_dialogAsset;
+        const EditorAssetType* m_dialogType = nullptr; // what NewAsset makes
         std::string m_dialogFolder;
     };
 }

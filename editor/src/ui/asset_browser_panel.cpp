@@ -7,7 +7,6 @@
 #include <set>
 #include <system_error>
 
-#include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/core/log.hpp>
 #include <crimson/project/project.hpp>
 
@@ -38,13 +37,6 @@ namespace crimson::editor::ui
     bool ListsAsset(const AssetInfo& info, bool showEngineContent)
     {
         return !IsInternal(info) && (showEngineContent || !info.ReadOnly);
-    }
-
-    // Whether an asset is edited in another program. Scenes and materials are edited in the editor, and their JSON
-    // isn't meant to be changed by hand.
-    static bool OpensOutside(AssetType type)
-    {
-        return type == AssetType::Shader || type == AssetType::Texture || type == AssetType::Mesh;
     }
 
     void AssetBrowserPanel::Rebuild()
@@ -258,9 +250,9 @@ namespace crimson::editor::ui
             if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
                 m_currentFolder.clear();
 
-            for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture, AssetType::Scene })
+            for (const EditorAssetType& kind : m_context.AssetTypes.Types())
             {
-                if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Assets, type))
+                if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Assets, kind.Type))
                     MoveAssetToFolder(dropped, {});
             }
 
@@ -320,9 +312,9 @@ namespace crimson::editor::ui
 
             if (!IsEngineFolder(folder))
             {
-                for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture, AssetType::Scene })
+                for (const EditorAssetType& kind : m_context.AssetTypes.Types())
                 {
-                    if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Assets, type))
+                    if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Assets, kind.Type))
                         MoveAssetToFolder(dropped, folder);
                 }
 
@@ -399,15 +391,15 @@ namespace crimson::editor::ui
 
         if (!IsEngineFolder(folder))
         {
-            for (const AssetType type : { AssetType::Material, AssetType::Mesh, AssetType::Shader, AssetType::Texture, AssetType::Scene })
+            for (const EditorAssetType& kind : m_context.AssetTypes.Types())
             {
                 const ImVec2 min = ImGui::GetItemRectMin();
                 const ImVec2 max = ImGui::GetItemRectMax();
 
-                if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Assets, type, ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
+                if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Assets, kind.Type, ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
                     MoveAssetToFolder(dropped, folder);
 
-                asset_drag::DrawDropHighlight(m_context.Assets, type, min, max, theme::Scaled(theme::Radius));
+                asset_drag::DrawDropHighlight(m_context.Assets, kind.Type, min, max, theme::Scaled(theme::Radius));
             }
 
             DrawFolderMenu(folder);
@@ -442,25 +434,17 @@ namespace crimson::editor::ui
             }
         }
 
-        // A scene opens in the editor. Shaders open in the script editor from the preferences, and textures and
-        // meshes in the program the system has for them. A material's editor is the Inspector, so it only gets selected.
+        // A type that opens in the editor does that, and one edited in another program opens its file there. A material's
+        // editor is the Inspector, so it only gets selected.
+        const EditorAssetType& kind = m_context.AssetTypes.Get(item.Type);
         const fs::path file = m_context.Assets.GetFilePath(item.Id);
-        const bool editedOutside = OpensOutside(item.Type);
-
-        const auto openOutside = [&]
-        {
-            if (item.Type == AssetType::Shader && m_context.OpenCodeFile)
-                m_context.OpenCodeFile(file);
-            else
-                shell::OpenInDefaultApp(file);
-        };
 
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         {
-            if (const SceneID scene = m_context.Assets.As<AssetType::Scene>(item.Id))
-                m_context.OpenScene(scene);
-            else if (editedOutside && !file.empty())
-                openOutside();
+            if (kind.Open)
+                kind.Open(m_context, item.Id);
+            else if (kind.OpenFile && !file.empty())
+                kind.OpenFile(m_context, file);
         }
 
         if (ImGui::IsItemHovered())
@@ -472,7 +456,6 @@ namespace crimson::editor::ui
         ImDrawList* drawList = ImGui::GetWindowDrawList();
 
         // Only pictures that are on screen get loaded
-        const EditorAssetType& kind = m_context.AssetTypes.Get(item.Type);
         ImTextureID picture = 0;
         if (kind.Thumbnail && ImGui::IsItemVisible())
             picture = kind.Thumbnail(m_context.Assets, m_context.Thumbnails, item.Id);
@@ -503,10 +486,10 @@ namespace crimson::editor::ui
                     ImGui::SetTooltip("Built into the editor, so there is no file");
             };
 
-            if (editedOutside)
+            if (kind.OpenFile)
             {
                 if (ImGui::MenuItem("Open", nullptr, false, onDisk))
-                    openOutside();
+                    kind.OpenFile(m_context, file);
 
                 explainIfBuiltIn();
             }
@@ -525,22 +508,15 @@ namespace crimson::editor::ui
 
             ImGui::Separator();
 
-            // The materials its .mtl describes, one for each slot that has none
-            if (item.Type == AssetType::Mesh && file.extension() == ".obj")
+            for (const AssetAction& action : kind.Actions)
             {
-                if (ImGui::MenuItem("Create Materials from .mtl"))
-                {
-                    m_context.Deferred.emplace_back([this, id = item.Id]
-                    {
-                        if (slot_materials::Create(m_context.Assets, m_context.Assets.As<AssetType::Mesh>(id)).Created.empty())
-                            return;
+                if (!action.Shown(file))
+                    continue;
 
-                        ++m_context.AssetsVersion;
-                        ResolveSceneAssets(m_context.ActiveScene, m_context.Assets);
-                    });
-                }
+                if (ImGui::MenuItem(action.Label.c_str()))
+                    action.Run(m_context, item.Id);
 
-                ImGui::SetItemTooltip("Makes materials/<slot>.mat next to it for each slot, and leaves the ones that are there");
+                ImGui::SetItemTooltip("%s", action.Tooltip.c_str());
                 ImGui::Separator();
             }
 
@@ -573,22 +549,14 @@ namespace crimson::editor::ui
         ImGui::Separator();
 
         // New things go where the folder is, so that is where the grid shows them
-        if (ImGui::MenuItem("New Material"))
+        for (const EditorAssetType& kind : m_context.AssetTypes.Types())
         {
-            m_currentFolder = folder;
-            OpenDialog(Dialog::NewMaterial, "New Material");
-        }
-
-        if (ImGui::MenuItem("New Scene"))
-        {
-            m_currentFolder = folder;
-            OpenDialog(Dialog::NewScene, "New Scene");
-        }
-
-        if (ImGui::MenuItem("New Shader"))
-        {
-            m_currentFolder = folder;
-            OpenDialog(Dialog::NewShader, "New Shader");
+            if (kind.Creation && ImGui::MenuItem(kind.Creation->Label.c_str()))
+            {
+                m_currentFolder = folder;
+                m_dialogType = &kind;
+                OpenDialog(Dialog::NewAsset, kind.Creation->DefaultName);
+            }
         }
 
         if (ImGui::MenuItem("New Folder"))
@@ -627,14 +595,14 @@ namespace crimson::editor::ui
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("New Material"))
-            OpenDialog(Dialog::NewMaterial, "New Material");
-
-        if (ImGui::MenuItem("New Scene"))
-            OpenDialog(Dialog::NewScene, "New Scene");
-
-        if (ImGui::MenuItem("New Shader"))
-            OpenDialog(Dialog::NewShader, "New Shader");
+        for (const EditorAssetType& kind : m_context.AssetTypes.Types())
+        {
+            if (kind.Creation && ImGui::MenuItem(kind.Creation->Label.c_str()))
+            {
+                m_dialogType = &kind;
+                OpenDialog(Dialog::NewAsset, kind.Creation->DefaultName);
+            }
+        }
 
         if (ImGui::MenuItem("New Folder"))
             OpenDialog(Dialog::NewFolder, "New Folder");
@@ -661,14 +629,12 @@ namespace crimson::editor::ui
             m_openDialog = false;
         }
 
-        const auto getTitle = [this]
+        const auto getTitle = [this]() -> std::string
         {
             switch (m_dialog)
             {
                 case Dialog::NewFolder:    return "New Folder###AssetDialog";
-                case Dialog::NewMaterial:  return "New Material###AssetDialog";
-                case Dialog::NewScene:     return "New Scene###AssetDialog";
-                case Dialog::NewShader:    return "New Shader###AssetDialog";
+                case Dialog::NewAsset:     return m_dialogType->Creation->Label + "###AssetDialog";
                 case Dialog::RenameAsset:
                 case Dialog::RenameFolder: return "Rename###AssetDialog";
                 case Dialog::DeleteAsset:
@@ -679,7 +645,7 @@ namespace crimson::editor::ui
             return kPopupId;
         };
 
-        if (!ImGui::BeginPopupModal(getTitle(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (!ImGui::BeginPopupModal(getTitle().c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
             return;
 
         const bool deleting = m_dialog == Dialog::DeleteAsset || m_dialog == Dialog::DeleteFolder;
@@ -752,26 +718,10 @@ namespace crimson::editor::ui
                 });
                 break;
 
-            case Dialog::NewMaterial:
-                refreshAfter([this, path = JoinToCurrent(name + ".mat")]
+            case Dialog::NewAsset:
+                refreshAfter([this, type = m_dialogType, path = JoinToCurrent(name)]
                 {
-                    if (const AssetID id = m_context.Assets.Create<AssetType::Material>(path))
-                        m_context.SelectAsset(id);
-                });
-                break;
-
-            case Dialog::NewScene:
-                refreshAfter([this, path = JoinToCurrent(name + ".scene")]
-                {
-                    if (const AssetID id = m_context.Assets.Create<AssetType::Scene>(path))
-                        m_context.SelectAsset(id);
-                });
-                break;
-
-            case Dialog::NewShader:
-                refreshAfter([this, path = JoinToCurrent(name + ".hlsl")]
-                {
-                    if (const AssetID id = m_context.Assets.Create<AssetType::Shader>(path))
+                    if (const AssetID id = type->Creation->Create(m_context.Assets, path))
                         m_context.SelectAsset(id);
                 });
                 break;

@@ -16,6 +16,7 @@
 
 #include "crimson_editor/asset_thumbnails.hpp"
 #include "crimson_editor/editor_context.hpp"
+#include "crimson_editor/system_shell.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
@@ -172,7 +173,8 @@ namespace crimson::editor::ui
             {
                 return thumbnails.Get(assets.As<AssetType::Texture>(id));
             },
-            .MakeView = [](EditorContext& context) { return std::make_unique<TextureView>(context); }
+            .MakeView = [](EditorContext& context) { return std::make_unique<TextureView>(context); },
+            .OpenFile = [](EditorContext&, const std::filesystem::path& file) { shell::OpenInDefaultApp(file); }
         };
     }
 }

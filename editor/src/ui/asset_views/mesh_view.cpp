@@ -3,11 +3,16 @@
 #include <array>
 #include <cstdint>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 
 #include <imgui.h>
 
+#include <crimson/asset_manager/slot_materials.hpp>
+#include <crimson/scene/component_registry.hpp>
+
 #include "crimson_editor/editor_context.hpp"
+#include "crimson_editor/system_shell.hpp"
 #include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
 
@@ -83,7 +88,27 @@ namespace crimson::editor::ui
             .Name = "Mesh",
             .Icon = icons::kMesh,
             .Color = ImVec4(0.38f, 0.54f, 0.68f, 1.00f),
-            .MakeView = [](EditorContext& context) { return std::make_unique<MeshView>(context); }
+            .MakeView = [](EditorContext& context) { return std::make_unique<MeshView>(context); },
+            .OpenFile = [](EditorContext&, const std::filesystem::path& file) { shell::OpenInDefaultApp(file); },
+            .Actions = {
+                AssetAction{
+                    .Label = "Create Materials from .mtl",
+                    .Tooltip = "Makes materials/<slot>.mat next to it for each slot, and leaves the ones that are there",
+                    .Shown = [](const std::filesystem::path& file) { return file.extension() == ".obj"; },
+                    .Run = [](EditorContext& context, AssetID id)
+                    {
+                        // The materials its .mtl describes, one for each slot that has none
+                        context.Deferred.emplace_back([&context, id]
+                        {
+                            if (slot_materials::Create(context.Assets, context.Assets.As<AssetType::Mesh>(id)).Created.empty())
+                                return;
+
+                            ++context.AssetsVersion;
+                            ResolveSceneAssets(context.ActiveScene, context.Assets);
+                        });
+                    }
+                }
+            }
         };
     }
 }

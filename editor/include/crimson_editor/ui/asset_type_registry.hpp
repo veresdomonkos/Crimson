@@ -1,8 +1,10 @@
 #pragma once
 #include <algorithm>
 #include <deque>
+#include <filesystem>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -54,6 +56,23 @@ namespace crimson::editor::ui
         }
     };
 
+    // How the Assets panel's menus make a new asset of a type
+    struct AssetCreation
+    {
+        std::string Label;       // the menu entry and the dialog's title
+        std::string DefaultName; // what the dialog starts with
+        std::function<AssetID(AssetManager&, const std::string& pathWithoutExtension)> Create; // gives an empty ID if it fails
+    };
+
+    // An entry of the Assets panel's context menu for the assets of a type
+    struct AssetAction
+    {
+        std::string Label;
+        std::string Tooltip;
+        std::function<bool(const std::filesystem::path& file)> Shown;
+        std::function<void(EditorContext&, AssetID)> Run;
+    };
+
     // What the editor knows about one type of asset, registered in RegisterAssetTypes. The editor's panels draw and offer
     // any type from this, as they do a component from its ComponentType.
     struct EditorAssetType
@@ -69,6 +88,18 @@ namespace crimson::editor::ui
 
         // Makes the Inspector's view of this type
         std::function<std::unique_ptr<AssetView>(EditorContext&)> MakeView;
+
+        // Empty for the types that aren't made from the Assets panel
+        std::optional<AssetCreation> Creation;
+
+        // What a double-click does in the editor itself, like opening a scene. Without it a double-click opens the file.
+        std::function<void(EditorContext&, AssetID)> Open;
+
+        // Opens the file in another program, from the context menu's Open and from a double-click without Open. Empty for
+        // the types that are edited in the editor, whose files aren't meant to be changed by hand.
+        std::function<void(EditorContext&, const std::filesystem::path&)> OpenFile;
+
+        std::vector<AssetAction> Actions;
     };
 
     class AssetTypeRegistry

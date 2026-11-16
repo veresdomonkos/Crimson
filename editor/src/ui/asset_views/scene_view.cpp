@@ -44,7 +44,13 @@ namespace crimson::editor::ui
             .Name = "Scene",
             .Icon = icons::kScene,
             .Color = ImVec4(0.70f, 0.50f, 0.36f, 1.00f),
-            .MakeView = [](EditorContext& context) { return std::make_unique<SceneAssetView>(context); }
+            .MakeView = [](EditorContext& context) { return std::make_unique<SceneAssetView>(context); },
+            .Creation = AssetCreation{
+                .Label = "New Scene",
+                .DefaultName = "New Scene",
+                .Create = [](AssetManager& assets, const std::string& path) { return AssetID(assets.Create<AssetType::Scene>(path + ".scene")); }
+            },
+            .Open = [](EditorContext& context, AssetID id) { context.OpenScene(context.Assets.As<AssetType::Scene>(id)); }
         };
     }
 }
