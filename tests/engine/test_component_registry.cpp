@@ -82,10 +82,11 @@ namespace
 
 TEST_CASE_METHOD(Fixture, "The engine's components are registered in the order they are saved in", "[components]")
 {
-    REQUIRE(Registry.Types().size() >= 3);
+    REQUIRE(Registry.Types().size() >= 4);
     CHECK(Registry.Types()[0].Id == "transform");
     CHECK(Registry.Types()[1].Id == "light");
-    CHECK(Registry.Types()[2].Id == "meshRenderer");
+    CHECK(Registry.Types()[2].Id == "camera");
+    CHECK(Registry.Types()[3].Id == "meshRenderer");
 
     CHECK(Type("transform").InlineInFile);
     CHECK_FALSE(Type("transform").Addable);
