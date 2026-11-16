@@ -56,6 +56,9 @@ C++23, in the style the code already has:
   - `PascalCase` for types, functions and public members
   - `m_camelCase` for private members, `s_camelCase` for statics, `kPascalCase` for constants
   - the engine in `crimson::`, the editor in `crimson::editor::`, and its panels in `crimson::editor::ui::`
+  - `snake_case` for namespaces, such as `scene_data` next to the `SceneData` type, so `scene_data::Parse` doesn't read as a static member
+- **Groups:** in a public header (`include/`), free functions and constants that belong together go in a small namespace named after what they share, inside the header's namespace, and that part comes out of their names: `scene_data::Parse`, not `ParseSceneData`. One that is on its own stays as it is, with no namespace for a single function. Names private to the engine and the editor, and tests, are not grouped.
+- **Code private to a `.cpp`:** functions and variables are `static`, and constants need nothing, as `const` and `constexpr` are already private to the file. If the private code has a type, all of it (types, constants and functions) goes in one unnamed namespace at the top of the file instead. Only that keeps two files' types of the same name apart, and it draws one line between the file's private code and its public functions. Tests too, where a file may have several blocks, each next to the tests that use it, and each follows the same rule: `static` functions when it has no types, an unnamed namespace when it has.
 - **Files:** headers in `include/` (`crimson/...` and `crimson_editor/...`), sources in `src/`. Paths are `snake_case`.
 - **Comments say why,** or what isn't plain from the code, as a short sentence. Not what the next line does.
 - **No cost for testability:** nothing gets a virtual function, or anything else that costs per frame, only so a test can fake it. See [Testing](docs/development.md#testing).
