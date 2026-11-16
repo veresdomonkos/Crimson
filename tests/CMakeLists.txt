@@ -23,7 +23,6 @@ add_executable(CrimsonTests
 
     editor/test_asset_browser.cpp
     editor/test_asset_edits.cpp
-    editor/test_asset_inspector_prune.cpp
     editor/test_asset_picker.cpp
     editor/test_asset_thumbnails.cpp
     editor/test_asset_type_registry.cpp
@@ -31,6 +30,7 @@ add_executable(CrimsonTests
     editor/test_edit_history.cpp
     editor/test_editor_theme.cpp
     editor/test_linear_color.cpp
+    editor/test_material_view.cpp
     editor/test_platform.cpp
     editor/test_recent_projects.cpp
     editor/test_recovery_files.cpp

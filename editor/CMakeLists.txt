@@ -37,6 +37,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/ui/icons.hpp
     include/crimson_editor/ui/inspector_panel.hpp
     include/crimson_editor/ui/linear_color.hpp
+    include/crimson_editor/ui/material_view.hpp
     include/crimson_editor/ui/notifications.hpp
     include/crimson_editor/ui/panel.hpp
     include/crimson_editor/ui/preferences_panel.hpp

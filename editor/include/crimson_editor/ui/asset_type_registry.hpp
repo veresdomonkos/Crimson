@@ -1,11 +1,18 @@
 #pragma once
+#include <algorithm>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #include <imgui.h>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+
+#include "crimson_editor/ui/editor_theme.hpp"
 
 namespace crimson::editor
 {
@@ -15,6 +22,38 @@ namespace crimson::editor
 
 namespace crimson::editor::ui
 {
+    // How the Inspector draws an asset of one type: its sections, and the state they keep between frames, such as a
+    // texture's import settings that aren't applied yet. One is made for a type when it is first selected.
+    class AssetView
+    {
+    public:
+        virtual ~AssetView() = default;
+
+        virtual void Draw(const AssetInfo& info) = 0;
+    protected:
+        // A section whose content is disabled, as a read-only asset's is, while the section itself can still be collapsed
+        template <typename Content>
+        static void Section(const char* label, bool disabled, Content&& draw)
+        {
+            if (!theme::BeginSection(label))
+                return;
+
+            ImGui::BeginDisabled(disabled);
+            draw();
+            ImGui::EndDisabled();
+
+            theme::EndSection();
+        }
+
+        template <typename T>
+        static std::vector<std::pair<std::string, T>> SortedByName(const std::unordered_map<std::string, T>& map)
+        {
+            std::vector<std::pair<std::string, T>> items(map.begin(), map.end());
+            std::ranges::sort(items, {}, [](const auto& item) { return item.first; });
+            return items;
+        }
+    };
+
     // What the editor knows about one type of asset, registered in RegisterAssetTypes. The editor's panels draw and offer
     // any type from this, as they do a component from its ComponentType.
     struct EditorAssetType
@@ -27,6 +66,9 @@ namespace crimson::editor::ui
         // The picture an asset of this type is shown as in the grid, the picker and fields, or 0 if it can't be loaded.
         // Empty for the types that are shown by their icon.
         std::function<ImTextureID(const AssetManager&, AssetThumbnails&, AssetID)> Thumbnail;
+
+        // Makes the Inspector's view of this type
+        std::function<std::unique_ptr<AssetView>(EditorContext&)> MakeView;
     };
 
     class AssetTypeRegistry

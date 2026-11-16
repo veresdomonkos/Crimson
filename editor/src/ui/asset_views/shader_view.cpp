@@ -1,16 +1,63 @@
 #include "crimson_editor/ui/asset_type_registry.hpp"
 
+#include <imgui.h>
+
+#include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
 namespace crimson::editor::ui
 {
+    namespace
+    {
+        class ShaderView : public AssetView
+        {
+        public:
+            explicit ShaderView(EditorContext& context) : m_context(context) {}
+
+            void Draw(const AssetInfo& info) override;
+        private:
+            EditorContext& m_context;
+        };
+
+        void ShaderView::Draw(const AssetInfo& info)
+        {
+            const ShaderHandle shader = m_context.Assets.Load(m_context.Assets.As<AssetType::Shader>(info.Id));
+            if (!shader)
+            {
+                ImGui::TextDisabled("This shader doesn't compile, see the console");
+                return;
+            }
+
+            const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(shader);
+
+            if (!shaderInterface.Properties.empty())
+            {
+                Section("Properties", false, [&]
+                {
+                    for (const auto& [name, property] : SortedByName(shaderInterface.Properties))
+                        ImGui::BulletText("%s (%zu bytes)", name.c_str(), property.Size);
+                });
+            }
+
+            if (!shaderInterface.Textures.empty())
+            {
+                Section("Textures", false, [&]
+                {
+                    for (const auto& [name, texture] : SortedByName(shaderInterface.Textures))
+                        ImGui::BulletText("%s", name.c_str());
+                });
+            }
+        }
+    }
+
     EditorAssetType ShaderAssetType()
     {
         return {
             .Type = AssetType::Shader,
             .Name = "Shader",
             .Icon = icons::kShader,
-            .Color = ImVec4(0.52f, 0.46f, 0.70f, 1.00f)
+            .Color = ImVec4(0.52f, 0.46f, 0.70f, 1.00f),
+            .MakeView = [](EditorContext& context) { return std::make_unique<ShaderView>(context); }
         };
     }
 }

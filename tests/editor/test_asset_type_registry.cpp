@@ -40,3 +40,12 @@ TEST_CASE("Only textures have thumbnails", "[asset types]")
     for (const EditorAssetType& type : registry.Types())
         CHECK(static_cast<bool>(type.Thumbnail) == (type.Type == AssetType::Texture));
 }
+
+TEST_CASE("Every registered type has an Inspector view", "[asset types]")
+{
+    AssetTypeRegistry registry;
+    RegisterAssetTypes(registry);
+
+    for (const EditorAssetType& type : registry.Types())
+        CHECK(static_cast<bool>(type.MakeView));
+}

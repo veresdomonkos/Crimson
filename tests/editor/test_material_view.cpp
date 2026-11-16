@@ -1,11 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <crimson_editor/ui/asset_inspector.hpp>
+#include <crimson_editor/ui/material_view.hpp>
 
 using namespace crimson;
 using crimson::editor::ui::PruneToShader;
 
-TEST_CASE("A material keeps what its shader has and drops the rest", "[asset inspector]")
+TEST_CASE("A material keeps what its shader has and drops the rest", "[material view]")
 {
     ShaderInterface shader;
     shader.Properties["Color"] = {};
