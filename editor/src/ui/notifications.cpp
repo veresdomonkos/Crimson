@@ -11,42 +11,39 @@
 
 namespace crimson::editor::ui
 {
-    namespace
+    constexpr size_t kMaxShown = 5;
+    constexpr float kFadeSeconds = 0.6f;
+
+    // Problems stay up long enough to be read, news only briefly
+    static float Lifetime(Notifications::Kind kind)
     {
-        constexpr size_t kMaxShown = 5;
-        constexpr float kFadeSeconds = 0.6f;
-
-        // Problems stay up long enough to be read, news only briefly
-        float Lifetime(Notifications::Kind kind)
+        switch (kind)
         {
-            switch (kind)
-            {
-                case Notifications::Kind::Error:   return 8.0f;
-                case Notifications::Kind::Warning: return 6.0f;
-                default:                           return 3.0f;
-            }
+            case Notifications::Kind::Error:   return 8.0f;
+            case Notifications::Kind::Warning: return 6.0f;
+            default:                           return 3.0f;
         }
+    }
 
-        const char* Icon(Notifications::Kind kind)
+    static const char* Icon(Notifications::Kind kind)
+    {
+        switch (kind)
         {
-            switch (kind)
-            {
-                case Notifications::Kind::Error:   return kIconError;
-                case Notifications::Kind::Warning: return kIconWarning;
-                case Notifications::Kind::Success: return kIconSuccess;
-                default:                           return kIconInfo;
-            }
+            case Notifications::Kind::Error:   return icons::kError;
+            case Notifications::Kind::Warning: return icons::kWarning;
+            case Notifications::Kind::Success: return icons::kSuccess;
+            default:                           return icons::kInfo;
         }
+    }
 
-        ImVec4 Color(Notifications::Kind kind)
+    static ImVec4 Color(Notifications::Kind kind)
+    {
+        switch (kind)
         {
-            switch (kind)
-            {
-                case Notifications::Kind::Error:   return theme::Error;
-                case Notifications::Kind::Warning: return theme::Warning;
-                case Notifications::Kind::Success: return theme::Success;
-                default:                           return theme::Text;
-            }
+            case Notifications::Kind::Error:   return theme::Error;
+            case Notifications::Kind::Warning: return theme::Warning;
+            case Notifications::Kind::Success: return theme::Success;
+            default:                           return theme::Text;
         }
     }
 

@@ -11,7 +11,7 @@ namespace fs = std::filesystem;
 namespace crimson
 {
     // What a new shader starts as: lit like the default one, with fewer slots, to have something to change
-    static constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space1,
+    constexpr std::string_view kNewShaderSource = R"(// VSMain and PSMain are the entry points. The material's properties go in the one cbuffer in space1,
 // and its textures in space1 too. A comment like "@default 0.5 @range 0 1" sets how a property starts.
 // Time and DeltaTime, in seconds, come from crimson/bindings.hlsli. crimson/lighting.hlsli also brings
 // crimson/math.hlsli (PI, TAU, EPSILON, ...) and crimson/transforms.hlsli (ObjectToWorldPosition, WorldToClip, ...).
@@ -103,7 +103,7 @@ float4 PSMain(VertexOutput input) : SV_Target
             {
                 ctx.Dependencies.insert(ctx.Dependencies.end(), hit->Files.begin(), hit->Files.end());
                 // Annotations aren't cached, so that the warnings about ones that can't be understood show up every time
-                binary->Annotations = ParseShaderAnnotations(*text);
+                binary->Annotations = shader_compiler::ParseAnnotations(*text);
             }
         }
 
@@ -111,7 +111,7 @@ float4 PSMain(VertexOutput input) : SV_Target
         {
             const fs::path directory = source.File.parent_path();
             std::vector<ShaderInclude> includes;
-            binary = CompileHlslShader(source.Info.Path, *text, directory, &includes);
+            binary = shader_compiler::Compile(source.Info.Path, *text, directory, &includes);
 
             // Also when it failed, as fixing one of them can fix it
             for (const ShaderInclude& include : includes)

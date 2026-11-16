@@ -38,7 +38,7 @@ namespace crimson
     // component's empty asset slot needs no check.
     //
     // What changes or removes GPU resources has to run between frames: Refresh, Delete, Apply, Reimport, ReloadChanged
-    // and CreateSlotMaterials, which reimports.
+    // and slot_materials::Create, which reimports.
     // Handles that were copied elsewhere stop working when these remove what they refer to.
     class AssetManager
     {

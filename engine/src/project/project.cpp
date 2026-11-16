@@ -14,7 +14,7 @@ namespace fs = std::filesystem;
 
 namespace crimson
 {
-    static constexpr int kProjectVersion = 1;
+    constexpr int kProjectVersion = 1;
 
     std::expected<Project, std::string> Project::Load(const fs::path& path)
     {

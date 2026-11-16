@@ -16,7 +16,7 @@ using namespace crimson::editor::ui;
 
 namespace
 {
-    // ApplyEditorTheme needs a context, but no window or GPU
+    // theme::Apply needs a context, but no window or GPU
     struct ImGuiContextGuard
     {
         ImGuiContextGuard() { ImGui::CreateContext(); }
@@ -41,7 +41,7 @@ namespace
 TEST_CASE("The theme's hovers and presses are grey", "[editor][theme]")
 {
     const ImGuiContextGuard context;
-    ApplyEditorTheme();
+    theme::Apply();
 
     const ImVec4* colors = ImGui::GetStyle().Colors;
 
@@ -58,7 +58,7 @@ TEST_CASE("The theme's hovers and presses are grey", "[editor][theme]")
 TEST_CASE("The accent appears only on selection, focus, the active tab line and drop targets", "[editor][theme]")
 {
     const ImGuiContextGuard context;
-    ApplyEditorTheme();
+    theme::Apply();
 
     const ImVec4* colors = ImGui::GetStyle().Colors;
 
@@ -85,7 +85,7 @@ TEST_CASE("Body text is 13 to 14 px and follows the monitor's scale", "[editor][
     SECTION("At 100%")
     {
         const ImGuiContextGuard context;
-        ApplyEditorTheme(1.0f);
+        theme::Apply(1.0f);
 
         const ImGuiStyle& style = ImGui::GetStyle();
         CHECK(style.FontSizeBase >= 13.0f);
@@ -100,7 +100,7 @@ TEST_CASE("Body text is 13 to 14 px and follows the monitor's scale", "[editor][
     SECTION("At 200% the text is drawn larger rather than stretched")
     {
         const ImGuiContextGuard context;
-        ApplyEditorTheme(2.0f);
+        theme::Apply(2.0f);
 
         const ImGuiStyle& style = ImGui::GetStyle();
         CHECK(style.FontScaleDpi == 2.0f);
@@ -120,7 +120,7 @@ TEST_CASE("Every corner has the one radius and every border is 1 px", "[editor][
     SECTION("At 100%")
     {
         const ImGuiContextGuard context;
-        ApplyEditorTheme(1.0f);
+        theme::Apply(1.0f);
 
         const ImGuiStyle& style = ImGui::GetStyle();
         for (const float rounding : roundings(style))
@@ -139,7 +139,7 @@ TEST_CASE("Every corner has the one radius and every border is 1 px", "[editor][
     SECTION("At 200% the corners grow with the screen")
     {
         const ImGuiContextGuard context;
-        ApplyEditorTheme(2.0f);
+        theme::Apply(2.0f);
 
         for (const float rounding : roundings(ImGui::GetStyle()))
             CHECK(rounding == theme::Radius * 2.0f);

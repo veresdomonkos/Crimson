@@ -8,27 +8,24 @@
 using namespace crimson;
 using Catch::Approx;
 
-namespace
+// A unit square in the XY plane facing +Z, as two triangles, with the UV of each corner from uvOf(x, y)
+template <typename UvOf>
+static std::vector<MeshVertex> Square(UvOf uvOf)
 {
-    // A unit square in the XY plane facing +Z, as two triangles, with the UV of each corner from uvOf(x, y)
-    template <typename UvOf>
-    std::vector<MeshVertex> Square(UvOf uvOf)
-    {
-        const glm::vec2 corners[] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 0 }, { 1, 1 }, { 0, 1 } };
+    const glm::vec2 corners[] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 0 }, { 1, 1 }, { 0, 1 } };
 
-        std::vector<MeshVertex> vertices;
-        for (const glm::vec2& corner : corners)
-            vertices.push_back({ .Position = glm::vec3(corner, 0.0f), .Normal = glm::vec3(0.0f, 0.0f, 1.0f), .UV = uvOf(corner.x, corner.y) });
-        return vertices;
-    }
+    std::vector<MeshVertex> vertices;
+    for (const glm::vec2& corner : corners)
+        vertices.push_back({ .Position = glm::vec3(corner, 0.0f), .Normal = glm::vec3(0.0f, 0.0f, 1.0f), .UV = uvOf(corner.x, corner.y) });
+    return vertices;
+}
 
-    void CheckTangent(const MeshVertex& vertex, const glm::vec3& expected, float side)
-    {
-        CHECK(vertex.Tangent.x == Approx(expected.x).margin(1e-4));
-        CHECK(vertex.Tangent.y == Approx(expected.y).margin(1e-4));
-        CHECK(vertex.Tangent.z == Approx(expected.z).margin(1e-4));
-        CHECK(vertex.Tangent.w == side);
-    }
+static void CheckTangent(const MeshVertex& vertex, const glm::vec3& expected, float side)
+{
+    CHECK(vertex.Tangent.x == Approx(expected.x).margin(1e-4));
+    CHECK(vertex.Tangent.y == Approx(expected.y).margin(1e-4));
+    CHECK(vertex.Tangent.z == Approx(expected.z).margin(1e-4));
+    CHECK(vertex.Tangent.w == side);
 }
 
 TEST_CASE("A tangent points along +U, with the bitangent along +V", "[mesh tangents]")

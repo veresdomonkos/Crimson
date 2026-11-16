@@ -11,36 +11,33 @@
 using namespace crimson;
 using crimson::editor::ui::AssetFieldText;
 using crimson::editor::ui::AssetPicker;
-using crimson::editor::ui::MovePickerSelection;
-using crimson::editor::ui::PickerEntries;
 using crimson::editor::ui::PickerEntry;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::TempFolder;
 
-namespace
+namespace asset_picker = crimson::editor::ui::asset_picker;
+
+static std::vector<const AssetInfo*> Pointers(const std::vector<AssetInfo>& assets)
 {
-    std::vector<const AssetInfo*> Pointers(const std::vector<AssetInfo>& assets)
-    {
-        std::vector<const AssetInfo*> pointers;
-        for (const AssetInfo& info : assets)
-            pointers.push_back(&info);
+    std::vector<const AssetInfo*> pointers;
+    for (const AssetInfo& info : assets)
+        pointers.push_back(&info);
 
-        return pointers;
-    }
+    return pointers;
+}
 
-    std::vector<std::string> NamesOf(const std::vector<PickerEntry>& entries)
-    {
-        std::vector<std::string> names;
-        for (const PickerEntry& entry : entries)
-            names.push_back(entry.Name);
+static std::vector<std::string> NamesOf(const std::vector<PickerEntry>& entries)
+{
+    std::vector<std::string> names;
+    for (const PickerEntry& entry : entries)
+        names.push_back(entry.Name);
 
-        return names;
-    }
+    return names;
+}
 
-    AssetInfo Material(const char* path, bool engine = false)
-    {
-        return AssetInfo{ .Id = AssetID::Generate(), .Type = AssetType::Material, .Path = path, .ReadOnly = engine };
-    }
+static AssetInfo Material(const char* path, bool engine = false)
+{
+    return AssetInfo{ .Id = AssetID::Generate(), .Type = AssetType::Material, .Path = path, .ReadOnly = engine };
 }
 
 TEST_CASE("The picker lists None first, then the project's assets, then the engine's", "[asset picker]")
@@ -54,7 +51,7 @@ TEST_CASE("The picker lists None first, then the project's assets, then the engi
     };
 
     const std::vector<const AssetInfo*> pointers = Pointers(assets);
-    const std::vector<PickerEntry> entries = PickerEntries(pointers, "");
+    const std::vector<PickerEntry> entries = asset_picker::Entries(pointers, "");
 
     REQUIRE(entries.size() == 5);
     CHECK_FALSE(entries[0].Id);
@@ -73,43 +70,43 @@ TEST_CASE("The picker's search matches names, ignoring case", "[asset picker]")
     const std::vector<AssetInfo> assets = { Material("materials/wood.mat"), Material("materials/stone.mat") };
     const std::vector<const AssetInfo*> pointers = Pointers(assets);
 
-    CHECK(NamesOf(PickerEntries(pointers, "WOOD")) == std::vector<std::string>{ "None", "wood.mat" });
+    CHECK(NamesOf(asset_picker::Entries(pointers, "WOOD")) == std::vector<std::string>{ "None", "wood.mat" });
 
     // The folder isn't part of the name
-    CHECK(NamesOf(PickerEntries(pointers, "materials")) == std::vector<std::string>{ "None" });
+    CHECK(NamesOf(asset_picker::Entries(pointers, "materials")) == std::vector<std::string>{ "None" });
 
-    CHECK(NamesOf(PickerEntries(pointers, "nothing like it")) == std::vector<std::string>{ "None" });
-    CHECK(PickerEntries(pointers, "").size() == 3);
+    CHECK(NamesOf(asset_picker::Entries(pointers, "nothing like it")) == std::vector<std::string>{ "None" });
+    CHECK(asset_picker::Entries(pointers, "").size() == 3);
 }
 
 TEST_CASE("Arrow keys move the selection within the entries", "[asset picker]")
 {
     SECTION("A list")
     {
-        CHECK(MovePickerSelection(1, 4, 0, 1, 1) == 2);
-        CHECK(MovePickerSelection(1, 4, 0, -1, 1) == 0);
-        CHECK(MovePickerSelection(0, 4, 0, -1, 1) == 0);
-        CHECK(MovePickerSelection(3, 4, 0, 1, 1) == 3);
+        CHECK(asset_picker::MoveSelection(1, 4, 0, 1, 1) == 2);
+        CHECK(asset_picker::MoveSelection(1, 4, 0, -1, 1) == 0);
+        CHECK(asset_picker::MoveSelection(0, 4, 0, -1, 1) == 0);
+        CHECK(asset_picker::MoveSelection(3, 4, 0, 1, 1) == 3);
     }
 
     SECTION("A grid")
     {
-        CHECK(MovePickerSelection(1, 10, 1, 0, 4) == 2);
-        CHECK(MovePickerSelection(1, 10, -1, 0, 4) == 0);
-        CHECK(MovePickerSelection(1, 10, 0, 1, 4) == 5);
-        CHECK(MovePickerSelection(5, 10, 0, -1, 4) == 1);
+        CHECK(asset_picker::MoveSelection(1, 10, 1, 0, 4) == 2);
+        CHECK(asset_picker::MoveSelection(1, 10, -1, 0, 4) == 0);
+        CHECK(asset_picker::MoveSelection(1, 10, 0, 1, 4) == 5);
+        CHECK(asset_picker::MoveSelection(5, 10, 0, -1, 4) == 1);
 
         // Down from the second row goes to the last entry, which is short of the third row's column
-        CHECK(MovePickerSelection(7, 10, 0, 1, 4) == 9);
-        CHECK(MovePickerSelection(9, 10, 1, 0, 4) == 9);
+        CHECK(asset_picker::MoveSelection(7, 10, 0, 1, 4) == 9);
+        CHECK(asset_picker::MoveSelection(9, 10, 1, 0, 4) == 9);
     }
 
     SECTION("Nothing selected goes to the first, and nothing to select stays that way")
     {
-        CHECK(MovePickerSelection(-1, 5, 0, 1, 1) == 0);
-        CHECK(MovePickerSelection(-1, 5, 1, 0, 4) == 0);
-        CHECK(MovePickerSelection(0, 0, 0, 1, 1) == -1);
-        CHECK(MovePickerSelection(-1, 0, 0, 1, 1) == -1);
+        CHECK(asset_picker::MoveSelection(-1, 5, 0, 1, 1) == 0);
+        CHECK(asset_picker::MoveSelection(-1, 5, 1, 0, 4) == 0);
+        CHECK(asset_picker::MoveSelection(0, 0, 0, 1, 1) == -1);
+        CHECK(asset_picker::MoveSelection(-1, 0, 0, 1, 1) == -1);
     }
 }
 

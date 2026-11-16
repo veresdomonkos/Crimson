@@ -9,7 +9,7 @@
 
 namespace crimson
 {
-    static constexpr std::string_view kDefaultShaderPath = "engine/shaders/S_Lit.hlsl";
+    constexpr std::string_view kDefaultShaderPath = "engine/shaders/S_Lit.hlsl";
 
     void ApplyMaterialProperty(GpuResourceManager& gpu, MaterialHandle material, const std::string& name, const std::vector<float>& v)
     {
@@ -138,13 +138,13 @@ namespace crimson
         data.Shader = assets.Find<AssetType::Shader>(kDefaultShaderPath);
         data.Properties["Color"] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
-        return WriteMaterialData(data, assets);
+        return material_data::Write(data, assets);
     }
 
     std::optional<std::string> MaterialImporter::UpdateReferences(const AssetSource& source, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets) const
     {
         const std::optional<std::string> text = source.Read();
-        return text ? UpdateMaterialReferences(*text, moved, assets) : std::nullopt;
+        return text ? material_data::UpdateReferences(*text, moved, assets) : std::nullopt;
     }
 
     void MaterialImporter::ReleaseShared(GpuResourceManager& gpu)
@@ -162,7 +162,7 @@ namespace crimson
         if (!text)
             return {};
 
-        const auto data = ParseMaterialData(*text, ctx.Assets, source.Info.Path);
+        const auto data = material_data::Parse(*text, ctx.Assets, source.Info.Path);
         if (!data)
             return {};
 

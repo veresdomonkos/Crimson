@@ -80,50 +80,47 @@ namespace crimson::editor::ui
         m_SelectedIndex = -1;
     }
 
-    namespace
+    static const char* LevelIcon(LogLevel level)
     {
-        const char* LevelIcon(LogLevel level)
+        switch (level)
         {
-            switch (level)
-            {
-                case LogLevel::Warn:  return kIconWarning;
-                case LogLevel::Error: return kIconError;
-                default:              return kIconInfo;
-            }
+            case LogLevel::Warn:  return icons::kWarning;
+            case LogLevel::Error: return icons::kError;
+            default:              return icons::kInfo;
         }
+    }
 
-        ImVec4 LevelColor(LogLevel level)
+    static ImVec4 LevelColor(LogLevel level)
+    {
+        switch (level)
         {
-            switch (level)
-            {
-                case LogLevel::Warn:  return theme::Warning;
-                case LogLevel::Error: return theme::Error;
-                default:              return theme::TextMuted;
-            }
+            case LogLevel::Warn:  return theme::Warning;
+            case LogLevel::Error: return theme::Error;
+            default:              return theme::TextMuted;
         }
+    }
 
-        float ButtonWidth(const char* label)
+    static float ButtonWidth(const char* label)
+    {
+        return ImGui::CalcTextSize(label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    }
+
+    // A button that shows or hides a level's messages, tinted with the level's color while they are shown
+    static bool LevelToggle(const char* label, LogLevel level, bool shown)
+    {
+        const ImVec4 color = LevelColor(level);
+
+        // A hidden level keeps the normal button, so only the shown ones carry a tint
+        if (shown)
         {
-            return ImGui::CalcTextSize(label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+            ImGui::PushStyleColor(ImGuiCol_Button, theme::WithAlpha(color, theme::TintAlpha));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::WithAlpha(color, theme::TintHoverAlpha));
         }
+        ImGui::PushStyleColor(ImGuiCol_Text, shown ? theme::Text : theme::TextMuted);
+        const bool clicked = ImGui::Button(label);
+        ImGui::PopStyleColor(shown ? 3 : 1);
 
-        // A button that shows or hides a level's messages, tinted with the level's color while they are shown
-        bool LevelToggle(const char* label, LogLevel level, bool shown)
-        {
-            const ImVec4 color = LevelColor(level);
-
-            // A hidden level keeps the normal button, so only the shown ones carry a tint
-            if (shown)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, theme::WithAlpha(color, theme::TintAlpha));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::WithAlpha(color, theme::TintHoverAlpha));
-            }
-            ImGui::PushStyleColor(ImGuiCol_Text, shown ? theme::Text : theme::TextMuted);
-            const bool clicked = ImGui::Button(label);
-            ImGui::PopStyleColor(shown ? 3 : 1);
-
-            return clicked;
-        }
+        return clicked;
     }
 
     void ConsolePanel::OnImGui()
@@ -184,16 +181,16 @@ namespace crimson::editor::ui
 
         ImGui::SameLine();
 
-        const std::string info = std::string(kIconInfo) + " " + std::to_string(m_InfoCount) + "##Info";
-        const std::string warnings = std::string(kIconWarning) + " " + std::to_string(m_WarningCount) + "##Warnings";
-        const std::string errors = std::string(kIconError) + " " + std::to_string(m_ErrorCount) + "##Errors";
+        const std::string info = std::string(icons::kInfo) + " " + std::to_string(m_InfoCount) + "##Info";
+        const std::string warnings = std::string(icons::kWarning) + " " + std::to_string(m_WarningCount) + "##Warnings";
+        const std::string errors = std::string(icons::kError) + " " + std::to_string(m_ErrorCount) + "##Errors";
 
         // The level toggles go on the right, sized to what they say, and the search takes what is left between
         const float togglesWidth = ButtonWidth(info.c_str()) + ButtonWidth(warnings.c_str()) + ButtonWidth(errors.c_str()) + style.ItemSpacing.x * 2.0f;
         const float searchWidth = ImGui::GetContentRegionAvail().x - togglesWidth - style.ItemSpacing.x;
         const bool oneLine = searchWidth >= ImGui::GetFontSize() * 6.0f;
 
-        const std::string hint = std::string(kIconSearch) + "  Search";
+        const std::string hint = std::string(icons::kSearch) + "  Search";
         ImGui::SetNextItemWidth(oneLine ? searchWidth : -FLT_MIN);
         if (ImGui::InputTextWithHint("##Search", hint.c_str(), m_Filter.InputBuf, IM_ARRAYSIZE(m_Filter.InputBuf)))
             m_Filter.Build();

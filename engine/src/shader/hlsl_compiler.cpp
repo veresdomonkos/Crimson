@@ -90,7 +90,7 @@ namespace crimson
             std::vector<ShaderInclude>& m_log;
         };
 
-        // What the compile is set to, which is also in ShaderCompilerVersion, as a different one makes different SPIR-V
+        // What the compile is set to, which is also in shader_compiler::Version, as a different one makes different SPIR-V
         constexpr int kDefaultVersion = 100;
         constexpr EShMessages kMessages = static_cast<EShMessages>(EShMsgSpvRules | EShMsgVulkanRules | EShMsgReadHlsl);
         constexpr glslang::EShTargetClientVersion kClientVersion = glslang::EShTargetVulkan_1_3;
@@ -107,14 +107,14 @@ namespace crimson
         };
 
         constexpr std::array<BindingShift, 5> kBindingShifts = { {
-            { glslang::EResTexture, kTextureBindingShift },
-            { glslang::EResSsbo, kTextureBindingShift },
-            { glslang::EResSampler, kSamplerBindingShift },
-            { glslang::EResImage, kStorageBindingShift },
-            { glslang::EResUav, kStorageBindingShift }
+            { glslang::EResTexture, shader_bindings::kTextureShift },
+            { glslang::EResSsbo, shader_bindings::kTextureShift },
+            { glslang::EResSampler, shader_bindings::kSamplerShift },
+            { glslang::EResImage, shader_bindings::kStorageShift },
+            { glslang::EResUav, shader_bindings::kStorageShift }
         } };
 
-        // The one place the passes are chosen, as their names are part of ShaderCompilerVersion
+        // The one place the passes are chosen, as their names are part of shader_compiler::Version
         void RegisterPasses(spvtools::Optimizer& optimizer)
         {
             optimizer.RegisterLegalizationPasses();
@@ -220,54 +220,57 @@ namespace crimson
         }
     }
 
-    std::string_view ShaderCompilerVersion()
+    namespace shader_compiler
     {
-        static const std::string version = [] {
-            const glslang::Version compiler = glslang::GetVersion();
-            std::string text = std::format("glslang {}.{}.{} {}; {}; input {}, messages {}, client {}, spirv {}, target {}, entry {}, auto map {}",
-                                              compiler.major, compiler.minor, compiler.patch, compiler.flavor ? compiler.flavor : "",
-                                              spvSoftwareVersionDetailsString(), kDefaultVersion, static_cast<int>(kMessages),
-                                              static_cast<int>(kClientVersion), static_cast<int>(kSpirvVersion),
-                                              static_cast<int>(kTarget), kEntryPoint, kAutoMapLocations);
+        std::string_view Version()
+        {
+            static const std::string version = [] {
+                const glslang::Version compiler = glslang::GetVersion();
+                std::string text = std::format("glslang {}.{}.{} {}; {}; input {}, messages {}, client {}, spirv {}, target {}, entry {}, auto map {}",
+                                                  compiler.major, compiler.minor, compiler.patch, compiler.flavor ? compiler.flavor : "",
+                                                  spvSoftwareVersionDetailsString(), kDefaultVersion, static_cast<int>(kMessages),
+                                                  static_cast<int>(kClientVersion), static_cast<int>(kSpirvVersion),
+                                                  static_cast<int>(kTarget), kEntryPoint, kAutoMapLocations);
 
-            for (const auto& [resource, shift] : kBindingShifts)
-                text += std::format("; binding {} {}", static_cast<int>(resource), shift);
+                for (const auto& [resource, shift] : kBindingShifts)
+                    text += std::format("; binding {} {}", static_cast<int>(resource), shift);
 
-            // The passes the legalization runs, as they are part of what it makes
-            spvtools::Optimizer optimizer(kTarget);
-            RegisterPasses(optimizer);
-            for (const char* pass : optimizer.GetPassNames())
-                text += std::format("; pass {}", pass);
+                // The passes the legalization runs, as they are part of what it makes
+                spvtools::Optimizer optimizer(kTarget);
+                RegisterPasses(optimizer);
+                for (const char* pass : optimizer.GetPassNames())
+                    text += std::format("; pass {}", pass);
 
-            return text;
-        }();
+                return text;
+            }();
 
-        return version;
-    }
+            return version;
+        }
 
-    std::optional<ShaderBinary> CompileHlslShader(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<ShaderInclude>* includes)
-    {
-        InitializeGlslang();
+        std::optional<ShaderBinary> Compile(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<ShaderInclude>* includes)
+        {
+            InitializeGlslang();
 
-        std::vector<ShaderInclude> included;
-        auto vertex = CompileStage(name, source, includeDirectory, included, EShLangVertex, "VSMain");
-        auto pixel = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSMain");
+            std::vector<ShaderInclude> included;
+            auto vertex = CompileStage(name, source, includeDirectory, included, EShLangVertex, "VSMain");
+            auto pixel = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSMain");
 
-        // Only when it is there, as glslang reports a missing entry point as an error
-        static const std::regex kDepthEntryPoint(R"(\bvoid\s+PSDepth\s*\()");
-        std::optional<CompiledStage> pixelDepth = CompiledStage();
-        if (std::regex_search(source, kDepthEntryPoint))
-            pixelDepth = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSDepth");
+            // Only when it is there, as glslang reports a missing entry point as an error
+            static const std::regex kDepthEntryPoint(R"(\bvoid\s+PSDepth\s*\()");
+            std::optional<CompiledStage> pixelDepth = CompiledStage();
+            if (std::regex_search(source, kDepthEntryPoint))
+                pixelDepth = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSDepth");
 
-        if (includes)
-            *includes = std::move(included);
+            if (includes)
+                *includes = std::move(included);
 
-        if (!vertex || !pixel || !pixelDepth)
-            return std::nullopt;
+            if (!vertex || !pixel || !pixelDepth)
+                return std::nullopt;
 
-        return ShaderBinary{
-            std::move(vertex->Code), std::move(pixel->Code), ParseShaderAnnotations(source), std::move(pixelDepth->Code),
-            std::move(vertex->Interface), std::move(pixel->Interface), std::move(pixelDepth->Interface)
-        };
+            return ShaderBinary{
+                std::move(vertex->Code), std::move(pixel->Code), ParseAnnotations(source), std::move(pixelDepth->Code),
+                std::move(vertex->Interface), std::move(pixel->Interface), std::move(pixelDepth->Interface)
+            };
+        }
     }
 }

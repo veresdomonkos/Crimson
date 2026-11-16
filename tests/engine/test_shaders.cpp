@@ -18,12 +18,12 @@
 using namespace crimson;
 using crimson::tests::TempFolder;
 
-static constexpr std::string_view kMinimalShader = R"(
+constexpr std::string_view kMinimalShader = R"(
 float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
 float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 )";
 
-static constexpr uint32_t kSpirvMagic = 0x07230203;
+constexpr uint32_t kSpirvMagic = 0x07230203;
 
 // Everything a backend does with a shader that doesn't need a GPU, so a shader that only breaks on one backend is caught too
 TEST_CASE("Every engine shader compiles, reflects and translates to GLSL", "[shaders]")
@@ -38,7 +38,7 @@ TEST_CASE("Every engine shader compiles, reflects and translates to GLSL", "[sha
         ++shaders;
         DYNAMIC_SECTION(file.Path)
         {
-            const auto binary = CompileHlslShader(std::string(file.Path), std::string(file.Text()), {});
+            const auto binary = shader_compiler::Compile(std::string(file.Path), std::string(file.Text()), {});
             REQUIRE(binary);
             REQUIRE_FALSE(binary->Vertex.empty());
             REQUIRE_FALSE(binary->Pixel.empty());
@@ -71,21 +71,21 @@ TEST_CASE("A shader can have its own depth version, for the shadows and the outl
         const EmbeddedFile* lit = FindEmbeddedFile(GetEngineResources(), "shaders/S_Lit.hlsl");
         REQUIRE(lit);
 
-        const auto binary = CompileHlslShader("S_Lit.hlsl", std::string(lit->Text()), {});
+        const auto binary = shader_compiler::Compile("S_Lit.hlsl", std::string(lit->Text()), {});
         REQUIRE(binary);
         CHECK_FALSE(binary->PixelDepth.empty());
     }
 
     SECTION("Without one there is none, and nothing goes wrong")
     {
-        const auto binary = CompileHlslShader("minimal", std::string(kMinimalShader), {});
+        const auto binary = shader_compiler::Compile("minimal", std::string(kMinimalShader), {});
         REQUIRE(binary);
         CHECK(binary->PixelDepth.empty());
     }
 
     SECTION("What only it uses is part of the material")
     {
-        const auto binary = CompileHlslShader("depth_only", std::string(kMinimalShader) + R"(
+        const auto binary = shader_compiler::Compile("depth_only", std::string(kMinimalShader) + R"(
 cbuffer MaterialBlock : register(b0, space1) { float Cutoff; };
 Texture2D Mask : register(t0, space1);
 void PSDepth(float4 position : SV_Position) { clip(Mask.Load(int3(0, 0, 0)).a - Cutoff); }
@@ -103,7 +103,7 @@ void PSDepth(float4 position : SV_Position) { clip(Mask.Load(int3(0, 0, 0)).a - 
     }
 }
 
-static constexpr std::string_view kTextureArgumentShader = R"(
+constexpr std::string_view kTextureArgumentShader = R"(
 Texture2D HeightMap : register(t0, space1);
 SamplerState LinearWrap : register(s0, space0);
 
@@ -117,7 +117,7 @@ TEST_CASE("A texture passed to a function keeps its own name and unit on OpenGL"
 {
     const auto translate = [](std::string_view source, std::vector<opengl::GlslTextureUnit>& units)
     {
-        const auto binary = CompileHlslShader("argument.hlsl", std::string(source), {});
+        const auto binary = shader_compiler::Compile("argument.hlsl", std::string(source), {});
         REQUIRE(binary);
         REQUIRE(opengl::TranslateSpirvToGlsl(binary->Pixel, units));
         return *binary;
@@ -135,7 +135,7 @@ TEST_CASE("A texture passed to a function keeps its own name and unit on OpenGL"
         const auto shaderInterface = ReflectShaderInterface(binary);
         REQUIRE(shaderInterface);
         REQUIRE(shaderInterface->Textures.contains("HeightMap"));
-        CHECK(shaderInterface->Textures.at("HeightMap").Binding == kTextureBindingShift);
+        CHECK(shaderInterface->Textures.at("HeightMap").Binding == shader_bindings::kTextureShift);
         CHECK(shaderInterface->Textures.at("HeightMap").Pixel);
     }
 
@@ -203,7 +203,7 @@ float4 PSMain(float2 uv : TEXCOORD0) : SV_Target { return March(HeightMap, uv, 8
 TEST_CASE("A texture that is declared but not used is still in the shader's interface", "[shaders]")
 {
     // Legalization drops it from the code that runs, but the material still has the slot
-    const auto binary = CompileHlslShader("unused.hlsl", R"(
+    const auto binary = shader_compiler::Compile("unused.hlsl", R"(
 Texture2D Unused : register(t3, space1);
 
 float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
@@ -214,7 +214,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     const auto shaderInterface = ReflectShaderInterface(*binary);
     REQUIRE(shaderInterface);
     REQUIRE(shaderInterface->Textures.contains("Unused"));
-    CHECK(shaderInterface->Textures.at("Unused").Binding == 3 + kTextureBindingShift);
+    CHECK(shaderInterface->Textures.at("Unused").Binding == 3 + shader_bindings::kTextureShift);
 }
 
 TEST_CASE("Every engine material names an engine shader", "[shaders]")
@@ -248,9 +248,9 @@ TEST_CASE("Embedded files can be found by their path", "[shaders]")
 
 TEST_CASE("Broken shaders report failure instead of crashing", "[shaders]")
 {
-    CHECK_FALSE(CompileHlslShader("broken", "this does not compile", {}));
-    CHECK_FALSE(CompileHlslShader("empty", "", {}));
-    CHECK_FALSE(CompileHlslShader("missing include", "#include \"no/such/file.hlsli\"\n" + std::string(kMinimalShader), {}));
+    CHECK_FALSE(shader_compiler::Compile("broken", "this does not compile", {}));
+    CHECK_FALSE(shader_compiler::Compile("empty", "", {}));
+    CHECK_FALSE(shader_compiler::Compile("missing include", "#include \"no/such/file.hlsli\"\n" + std::string(kMinimalShader), {}));
 }
 
 TEST_CASE("Shader includes look in the shader's folder, then in the engine's", "[shaders]")
@@ -260,27 +260,27 @@ TEST_CASE("Shader includes look in the shader's folder, then in the engine's", "
     SECTION("The engine's are found from any folder")
     {
         const std::string source = "#include \"crimson/lighting.hlsli\"\n" + std::string(kMinimalShader);
-        CHECK(CompileHlslShader("project.hlsl", source, temp.Path()));
+        CHECK(shader_compiler::Compile("project.hlsl", source, temp.Path()));
     }
 
     SECTION("And without any folder")
     {
         const std::string source = "#include \"crimson/lighting.hlsli\"\n" + std::string(kMinimalShader);
-        CHECK(CompileHlslShader("embedded.hlsl", source, {}));
+        CHECK(shader_compiler::Compile("embedded.hlsl", source, {}));
     }
 
     SECTION("The shader's own folder is used")
     {
         temp.Write("helper.hlsli", "#define HELPER_VALUE 1.0\n");
         const std::string source = "#include \"helper.hlsli\"\n" + std::string(kMinimalShader);
-        CHECK(CompileHlslShader("project.hlsl", source, temp.Path()));
+        CHECK(shader_compiler::Compile("project.hlsl", source, temp.Path()));
     }
 
     SECTION("And wins over the engine's")
     {
         temp.Write("crimson/bindings.hlsli", "this is not the engine's file");
         const std::string source = "#include \"crimson/bindings.hlsli\"\n" + std::string(kMinimalShader);
-        CHECK_FALSE(CompileHlslShader("project.hlsl", source, temp.Path()));
+        CHECK_FALSE(shader_compiler::Compile("project.hlsl", source, temp.Path()));
     }
 }
 
@@ -312,21 +312,21 @@ TEST_CASE("A compile lists the includes it read", "[shaders]")
     SECTION("When it compiles")
     {
         const std::string source = "#include \"helper.hlsli\"\n" + std::string(kMinimalShader);
-        REQUIRE(CompileHlslShader("project.hlsl", source, temp.Path(), &included));
+        REQUIRE(shader_compiler::Compile("project.hlsl", source, temp.Path(), &included));
         checkIncludes();
     }
 
     SECTION("Even when it fails, as fixing an included file can fix it")
     {
         const std::string source = "#include \"helper.hlsli\"\nthis does not compile";
-        REQUIRE_FALSE(CompileHlslShader("project.hlsl", source, temp.Path(), &included));
+        REQUIRE_FALSE(shader_compiler::Compile("project.hlsl", source, temp.Path(), &included));
         checkIncludes();
     }
 }
 
 TEST_CASE("Annotations are read from the comments after declarations", "[shaders]")
 {
-    const auto annotations = ParseShaderAnnotations(R"(
+    const auto annotations = shader_compiler::ParseAnnotations(R"(
 // A comment @default 3 on its own line isn't about anything
 cbuffer MaterialBlock : register(b0, space1)
 {
@@ -359,7 +359,7 @@ Texture2D NormalMap : register(t1, space1); // @default normal
 
 TEST_CASE("Annotations reach the shader's interface", "[shaders]")
 {
-    const auto binary = CompileHlslShader("annotated", R"(
+    const auto binary = shader_compiler::Compile("annotated", R"(
 #include "crimson/bindings.hlsli"
 
 cbuffer MaterialBlock : register(b0, space1)
@@ -411,7 +411,7 @@ float4 PSMain() : SV_Target
 }
 )";
 
-    const auto binary = CompileHlslShader("view.hlsl", std::string(kShader), {});
+    const auto binary = shader_compiler::Compile("view.hlsl", std::string(kShader), {});
     REQUIRE(binary);
     CHECK(ReflectShaderInterface(*binary));
 
@@ -434,7 +434,7 @@ float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position
 float4 PSMain() : SV_Target { return Color; }
 )";
 
-    const auto binary = CompileHlslShader("old_spaces.hlsl", std::string(kShader), {});
+    const auto binary = shader_compiler::Compile("old_spaces.hlsl", std::string(kShader), {});
     REQUIRE(binary);
     CHECK_FALSE(ReflectShaderInterface(*binary));
 }
@@ -467,7 +467,7 @@ float4 PSMain(VertexOutput input) : SV_Target
 }
 )";
 
-    const auto binary = CompileHlslShader("helpers.hlsl", std::string(kShader), {});
+    const auto binary = shader_compiler::Compile("helpers.hlsl", std::string(kShader), {});
     REQUIRE(binary);
     CHECK(ReflectShaderInterface(*binary));
 
@@ -524,7 +524,7 @@ float4 PSMain(VertexOutput input) : SV_Target
 }
 )";
 
-    const auto binary = CompileHlslShader("helpers.hlsl", std::string(kShader), {});
+    const auto binary = shader_compiler::Compile("helpers.hlsl", std::string(kShader), {});
     REQUIRE(binary);
     CHECK(ReflectShaderInterface(*binary));
 

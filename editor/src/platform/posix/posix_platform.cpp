@@ -8,34 +8,31 @@ namespace fs = std::filesystem;
 
 namespace crimson::editor::platform
 {
-    namespace
+    static bool IsFile(const fs::path& path)
     {
-        bool IsFile(const fs::path& path)
-        {
-            std::error_code error;
-            return fs::is_regular_file(path, error);
-        }
+        std::error_code error;
+        return fs::is_regular_file(path, error);
+    }
 
-        // Where a program is on the PATH, empty if it isn't there
-        fs::path FindOnPath(const std::string& program)
-        {
-            const std::string path = EnvironmentPath("PATH").string();
+    // Where a program is on the PATH, empty if it isn't there
+    static fs::path FindOnPath(const std::string& program)
+    {
+        const std::string path = EnvironmentPath("PATH").string();
 
-            for (size_t start = 0; start <= path.size();)
+        for (size_t start = 0; start <= path.size();)
+        {
+            const size_t end = std::min(path.find(':', start), path.size());
+            if (end > start)
             {
-                const size_t end = std::min(path.find(':', start), path.size());
-                if (end > start)
-                {
-                    const fs::path candidate = fs::path(path.substr(start, end - start)) / program;
-                    if (IsFile(candidate))
-                        return candidate;
-                }
-
-                start = end + 1;
+                const fs::path candidate = fs::path(path.substr(start, end - start)) / program;
+                if (IsFile(candidate))
+                    return candidate;
             }
 
-            return {};
+            start = end + 1;
         }
+
+        return {};
     }
 
     fs::path EnvironmentPath(const char* name)

@@ -10,7 +10,7 @@ namespace crimson
         Int, Int2, Int3, Int4
     };
 
-    namespace ShaderData
+    namespace shader_data
     {
         static constexpr uint32_t Size(ShaderDataType type)
         {
@@ -56,9 +56,9 @@ namespace crimson
         uint32_t Offset = 0;
         uint32_t Size = 0;
 
-        BufferElement(ShaderDataType type) : Type(type), Size(ShaderData::Size(type)) {}
+        BufferElement(ShaderDataType type) : Type(type), Size(shader_data::Size(type)) {}
 
-        [[nodiscard]] uint32_t ComponentCount() const { return ShaderData::ComponentCount(Type); }
+        [[nodiscard]] uint32_t ComponentCount() const { return shader_data::ComponentCount(Type); }
 
         bool operator==(const BufferElement&) const = default;
     };

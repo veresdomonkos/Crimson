@@ -109,7 +109,7 @@ namespace crimson::editor::ui
             if (!CanDrop(components, type))
                 continue;
 
-            if (const AssetID id = AcceptAssetOnLastItem(m_context.Assets, type))
+            if (const AssetID id = asset_drag::AcceptOnLastItem(m_context.Assets, type))
             {
                 dropped = id;
                 droppedType = type;
@@ -223,12 +223,12 @@ namespace crimson::editor::ui
             ImGui::SameLine();
         };
 
-        operationButton(kIconMove, "Move", "W", ImGuizmo::TRANSLATE);
-        operationButton(kIconRotate, "Rotate", "E", ImGuizmo::ROTATE);
-        operationButton(kIconScale, "Scale", "R", ImGuizmo::SCALE);
+        operationButton(icons::kMove, "Move", "W", ImGuizmo::TRANSLATE);
+        operationButton(icons::kRotate, "Rotate", "E", ImGuizmo::ROTATE);
+        operationButton(icons::kScale, "Scale", "R", ImGuizmo::SCALE);
 
         const bool local = m_mode == ImGuizmo::LOCAL;
-        if (ImGui::Button(local ? kIconLocalSpace : kIconWorldSpace))
+        if (ImGui::Button(local ? icons::kLocalSpace : icons::kWorldSpace))
             m_mode = local ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
 
         ImGui::SetItemTooltip(local ? "Local axes, click for world axes" : "World axes, click for local axes");
@@ -242,7 +242,7 @@ namespace crimson::editor::ui
         ImGui::BeginDisabled(!looking && !(selected && selected.HasComponent<CameraComponent>()));
 
         ImGui::PushID("LookThrough");
-        if (theme::ToggleButton(kIconCamera, looking))
+        if (theme::ToggleButton(icons::kCamera, looking))
         {
             if (looking)
                 m_view.StopLookingThrough();

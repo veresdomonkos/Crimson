@@ -17,8 +17,8 @@ namespace fs = std::filesystem;
 
 namespace crimson::editor
 {
-    static constexpr const char* kNewProjectPopup = "New Project";
-    static constexpr const char* kLogoIcon = "icons/crimson.png";
+    constexpr const char* kNewProjectPopup = "New Project";
+    constexpr const char* kLogoIcon = "icons/crimson.png";
 
     ProjectManagerMode::ProjectManagerMode(EditorServices& services, std::string error)
         : m_services(services), m_error(std::move(error))
@@ -178,7 +178,7 @@ namespace crimson::editor
     void ProjectManagerMode::BeginNewProject()
     {
         const auto recents = m_services.Recents.GetEntries();
-        const fs::path parent = recents.empty() ? GetDefaultProjectsFolder() : recents.front().Path.parent_path();
+        const fs::path parent = recents.empty() ? paths::DefaultProjectsFolder() : recents.front().Path.parent_path();
         const std::string parentText = parent.string();
 
         m_newName = {};
@@ -295,7 +295,7 @@ namespace crimson::editor
     void ProjectManagerMode::Import()
     {
         const auto recents = m_services.Recents.GetEntries();
-        const fs::path start = recents.empty() ? GetDefaultProjectsFolder() : recents.front().Path.parent_path();
+        const fs::path start = recents.empty() ? paths::DefaultProjectsFolder() : recents.front().Path.parent_path();
 
         const auto folder = PickFolder(m_services.AppWindow, start);
         if (!folder)

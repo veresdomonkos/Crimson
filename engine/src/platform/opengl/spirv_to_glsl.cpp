@@ -10,38 +10,35 @@
 
 namespace crimson::opengl
 {
-    namespace
+    static uint32_t GetUniformBlockSlot(uint32_t space)
     {
-        uint32_t GetUniformBlockSlot(uint32_t space)
+        return space == shader_bindings::kFrameSpace ? kFrameBlockSlot : kMaterialBlockSlot;
+    }
+
+    static uint32_t GetStorageBufferSlot(uint32_t binding)
+    {
+        switch (binding)
         {
-            return space == kFrameSpace ? kFrameBlockSlot : kMaterialBlockSlot;
+            case shader_bindings::kLights:  return kLightsSlot;
+            case shader_bindings::kShadows: return kShadowsSlot;
+            case shader_bindings::kViews:   return kViewsSlot;
+            default:                        return kObjectsSlot;
         }
+    }
 
-        uint32_t GetStorageBufferSlot(uint32_t binding)
+    static uint32_t GetTextureUnit(std::vector<GlslTextureUnit>& units, const std::string& texture, const std::string& sampler)
+    {
+        const auto existing = std::ranges::find_if(units, [&](const GlslTextureUnit& unit)
         {
-            switch (binding)
-            {
-                case kLightsBinding:  return kLightsSlot;
-                case kShadowsBinding: return kShadowsSlot;
-                case kViewsBinding:   return kViewsSlot;
-                default:              return kObjectsSlot;
-            }
-        }
+            return unit.Texture == texture && unit.Sampler == sampler;
+        });
 
-        uint32_t GetTextureUnit(std::vector<GlslTextureUnit>& units, const std::string& texture, const std::string& sampler)
-        {
-            const auto existing = std::ranges::find_if(units, [&](const GlslTextureUnit& unit)
-            {
-                return unit.Texture == texture && unit.Sampler == sampler;
-            });
+        if (existing != units.end())
+            return existing->Unit;
 
-            if (existing != units.end())
-                return existing->Unit;
-
-            const uint32_t unit = static_cast<uint32_t>(units.size());
-            units.push_back({ texture, sampler, unit });
-            return unit;
-        }
+        const uint32_t unit = static_cast<uint32_t>(units.size());
+        units.push_back({ texture, sampler, unit });
+        return unit;
     }
 
     std::optional<std::string> TranslateSpirvToGlsl(std::span<const uint32_t> spirv, std::vector<GlslTextureUnit>& units)

@@ -13,7 +13,7 @@ namespace fs = std::filesystem;
 
 namespace crimson
 {
-    static constexpr std::string_view kLitShaderPath = "engine/shaders/S_Lit.hlsl";
+    constexpr std::string_view kLitShaderPath = "engine/shaders/S_Lit.hlsl";
 
     bool MaterialFolderReader::operator()(const std::string& matId, std::vector<tinyobj::material_t>* materials,
                                           std::map<std::string, int>* matMap, std::string* warn, std::string* err)

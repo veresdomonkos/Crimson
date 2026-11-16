@@ -32,9 +32,9 @@ TEST_CASE("Uniform scaling keeps the ratio of the axis that changed", "[componen
 
 TEST_CASE("Icons are found by their Lucide name", "[component fields]")
 {
-    CHECK(IconNamed("sun") == kIconDirectionalLight);
-    CHECK(IconNamed("move-3d") == kIconTransform);
-    CHECK(IconNamed("box") == kIconMesh);
-    CHECK_FALSE(IconNamed("no-such-icon"));
-    CHECK_FALSE(IconNamed(""));
+    CHECK(icons::Named("sun") == icons::kDirectionalLight);
+    CHECK(icons::Named("move-3d") == icons::kTransform);
+    CHECK(icons::Named("box") == icons::kMesh);
+    CHECK_FALSE(icons::Named("no-such-icon"));
+    CHECK_FALSE(icons::Named(""));
 }

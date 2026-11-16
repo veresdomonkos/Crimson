@@ -428,7 +428,7 @@ TEST_CASE_METHOD(Fixture, "An asset fallback is saved as empty", "[components]")
 
     const auto& component = Thing.GetComponent<MeshRendererComponent>();
     REQUIRE(component.MaterialAssets.size() == 2);
-    CHECK(component.MaterialAssets[1] == DefaultMaterial(Assets));
+    CHECK(component.MaterialAssets[1] == slot_materials::DefaultMaterial(Assets));
 
     const SceneComponent captured = CaptureComponent(renderer, Thing, Assets);
     const auto& saved = std::get<std::vector<AssetID>>(captured.Values[materials]);
@@ -438,7 +438,7 @@ TEST_CASE_METHOD(Fixture, "An asset fallback is saved as empty", "[components]")
     CHECK_FALSE(saved[1]);
 
     // Only what is saved is changed
-    CHECK(component.MaterialAssets[1] == DefaultMaterial(Assets));
+    CHECK(component.MaterialAssets[1] == slot_materials::DefaultMaterial(Assets));
 }
 
 TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")

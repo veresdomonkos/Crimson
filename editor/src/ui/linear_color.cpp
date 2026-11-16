@@ -5,14 +5,14 @@
 
 #include <imgui.h>
 
-namespace crimson::editor::ui
+namespace crimson::editor::ui::linear_color
 {
-    bool LinearColorEdit(const char* label, float* linearColor, int channels)
+    bool Edit(const char* label, float* linearColor, int channels)
     {
         std::array<float, 4> shown{};
 
         for (int i = 0; i < 3; ++i)
-            shown[i] = LinearToSrgb(std::max(linearColor[i], 0.0f));
+            shown[i] = ToSrgb(std::max(linearColor[i], 0.0f));
 
         if (channels == 4)
             shown[3] = linearColor[3];
@@ -26,7 +26,7 @@ namespace crimson::editor::ui
             return false;
 
         for (int i = 0; i < 3; ++i)
-            linearColor[i] = SrgbToLinear(shown[i]);
+            linearColor[i] = FromSrgb(shown[i]);
 
         if (channels == 4)
             linearColor[3] = shown[3];

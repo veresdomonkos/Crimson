@@ -61,13 +61,16 @@ namespace crimson
         bool operator==(const SceneData&) const = default;
     };
 
-    // Invalid JSON, a newer version or a wrongly typed field give nothing, for a broken file not to be saved over.
-    // A reference to an asset that isn't there keeps its id, and is written back as it was. The name is what errors report.
-    [[nodiscard]] std::optional<SceneData> ParseSceneData(std::string_view text, const AssetManager& assets, std::string_view name);
+    namespace scene_data
+    {
+        // Invalid JSON, a newer version or a wrongly typed field give nothing, for a broken file not to be saved over.
+        // A reference to an asset that isn't there keeps its id, and is written back as it was. The name is what errors report.
+        [[nodiscard]] std::optional<SceneData> Parse(std::string_view text, const AssetManager& assets, std::string_view name);
 
-    [[nodiscard]] std::string WriteSceneData(const SceneData& data, const AssetManager& assets);
+        [[nodiscard]] std::string Write(const SceneData& data, const AssetManager& assets);
 
-    // Points a .scene file's references to assets that moved (old path to id) at where they are now, and leaves the rest
-    // of it as it is. Gives the new text, or nothing if no reference moved.
-    [[nodiscard]] std::optional<std::string> UpdateSceneReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets);
+        // Points a .scene file's references to assets that moved (old path to id) at where they are now, and leaves the rest
+        // of it as it is. Gives the new text, or nothing if no reference moved.
+        [[nodiscard]] std::optional<std::string> UpdateReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets);
+    }
 }

@@ -5,7 +5,7 @@
 
 namespace crimson
 {
-    static constexpr std::string_view kNewSceneTemplate = "engine/scenes/internal/SC_NewScene.scene";
+    constexpr std::string_view kNewSceneTemplate = "engine/scenes/internal/SC_NewScene.scene";
 
     std::span<const std::string_view> SceneImporter::Extensions() const
     {
@@ -23,12 +23,12 @@ namespace crimson
             return std::nullopt;
         }
 
-        return WriteSceneData(*data, assets);
+        return scene_data::Write(*data, assets);
     }
 
     std::optional<std::string> SceneImporter::UpdateReferences(const AssetSource& source, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets) const
     {
         const std::optional<std::string> text = source.Read();
-        return text ? UpdateSceneReferences(*text, moved, assets) : std::nullopt;
+        return text ? scene_data::UpdateReferences(*text, moved, assets) : std::nullopt;
     }
 }

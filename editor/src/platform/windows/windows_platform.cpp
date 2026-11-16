@@ -11,13 +11,10 @@ namespace fs = std::filesystem;
 
 namespace crimson::editor::platform
 {
-    namespace
+    static bool IsFile(const fs::path& path)
     {
-        bool IsFile(const fs::path& path)
-        {
-            std::error_code error;
-            return fs::is_regular_file(path, error);
-        }
+        std::error_code error;
+        return fs::is_regular_file(path, error);
     }
 
     fs::path EnvironmentPath(const char* name)

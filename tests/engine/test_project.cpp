@@ -26,18 +26,15 @@ using Catch::Matchers::ContainsSubstring;
 
 namespace fs = std::filesystem;
 
-namespace
+static std::string ReadFile(const fs::path& file)
 {
-    std::string ReadFile(const fs::path& file)
-    {
-        std::ifstream stream(file, std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
-    }
+    std::ifstream stream(file, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+}
 
-    void WriteFile(const fs::path& file, std::string_view text)
-    {
-        std::ofstream(file, std::ios::binary) << text;
-    }
+static void WriteFile(const fs::path& file, std::string_view text)
+{
+    std::ofstream(file, std::ios::binary) << text;
 }
 
 TEST_CASE("Creating a project makes the folder, the file and the assets folder", "[project]")

@@ -131,16 +131,16 @@ namespace crimson::vulkan
         const vk::Sampler shadowCompare = *m_shadowCompareSampler;
 
         const std::array frameBindings = {
-            makeBinding(kFrameBlockBinding, vk::DescriptorType::eUniformBuffer),
-            makeBinding(kLightsBinding, vk::DescriptorType::eStorageBuffer),
-            makeBinding(kShadowsBinding, vk::DescriptorType::eStorageBuffer),
-            makeBinding(kObjectsBinding, vk::DescriptorType::eStorageBuffer),
-            makeBinding(kShadowAtlasBinding, vk::DescriptorType::eSampledImage),
-            makeBinding(kViewsBinding, vk::DescriptorType::eStorageBuffer),
-            makeBinding(kLinearWrapBinding, vk::DescriptorType::eSampler, &linearWrap),
-            makeBinding(kLinearClampBinding, vk::DescriptorType::eSampler, &linearClamp),
-            makeBinding(kPointClampBinding, vk::DescriptorType::eSampler, &pointClamp),
-            makeBinding(kShadowCompareBinding, vk::DescriptorType::eSampler, &shadowCompare),
+            makeBinding(shader_bindings::kFrameBlock, vk::DescriptorType::eUniformBuffer),
+            makeBinding(shader_bindings::kLights, vk::DescriptorType::eStorageBuffer),
+            makeBinding(shader_bindings::kShadows, vk::DescriptorType::eStorageBuffer),
+            makeBinding(shader_bindings::kObjects, vk::DescriptorType::eStorageBuffer),
+            makeBinding(shader_bindings::kShadowAtlas, vk::DescriptorType::eSampledImage),
+            makeBinding(shader_bindings::kViews, vk::DescriptorType::eStorageBuffer),
+            makeBinding(shader_bindings::kLinearWrap, vk::DescriptorType::eSampler, &linearWrap),
+            makeBinding(shader_bindings::kLinearClamp, vk::DescriptorType::eSampler, &linearClamp),
+            makeBinding(shader_bindings::kPointClamp, vk::DescriptorType::eSampler, &pointClamp),
+            makeBinding(shader_bindings::kShadowCompare, vk::DescriptorType::eSampler, &shadowCompare),
         };
 
         vk::DescriptorSetLayoutCreateInfo frameInfo{};

@@ -11,38 +11,35 @@
 
 namespace crimson::editor::ui
 {
-    namespace
+    // One row per entry, as a list of assets is usually short and each entry has a meaning of its own, like a slot
+    static bool DrawAssetList(const FieldInfo& field, const void* component, std::vector<AssetID>& ids, EditorContext& context)
     {
-        // One row per entry, as a list of assets is usually short and each entry has a meaning of its own, like a slot
-        bool DrawAssetList(const FieldInfo& field, const void* component, std::vector<AssetID>& ids, EditorContext& context)
+        bool changed = false;
+
+        for (size_t index = 0; index < ids.size(); ++index)
         {
-            bool changed = false;
+            const std::string label = field.ItemLabel ? field.ItemLabel(component, index) : field.Label + " " + std::to_string(index);
 
-            for (size_t index = 0; index < ids.size(); ++index)
+            ImGui::PushID(static_cast<int>(index));
+            props::BeginRow(label.c_str());
+            changed |= AssetField("##Asset", context, field.Asset, ids[index]);
+            props::ResetTarget();
+
+            if (props::EndRow(true) && ids[index])
             {
-                const std::string label = field.ItemLabel ? field.ItemLabel(component, index) : field.Label + " " + std::to_string(index);
-
-                ImGui::PushID(static_cast<int>(index));
-                props::BeginRow(label.c_str());
-                changed |= AssetField("##Asset", context, field.Asset, ids[index]);
-                props::ResetTarget();
-
-                if (props::EndRow(true) && ids[index])
-                {
-                    ids[index] = {};
-                    changed = true;
-                }
-
-                ImGui::PopID();
+                ids[index] = {};
+                changed = true;
             }
 
-            return changed;
+            ImGui::PopID();
         }
+
+        return changed;
     }
 
     const char* ComponentIcon(const ComponentType& type, const void* component)
     {
-        return IconNamed(type.Icon ? type.Icon(component) : std::string_view());
+        return icons::Named(type.Icon ? type.Icon(component) : std::string_view());
     }
 
     glm::vec3 ScaleUniformly(glm::vec3 previous, glm::vec3 edited)

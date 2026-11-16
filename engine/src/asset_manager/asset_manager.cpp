@@ -25,10 +25,10 @@ namespace fs = std::filesystem;
 
 namespace crimson
 {
-    static constexpr std::string_view kEnginePathPrefix = "engine/";
+    constexpr std::string_view kEnginePathPrefix = "engine/";
 
     // Each can use the ones after it
-    static constexpr std::array kUnloadOrder = { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader };
+    constexpr std::array kUnloadOrder = { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader };
 
     // An engine resource has no meta to store an id in, and scenes must find it again in any project.
     static AssetID EngineResourceId(std::string_view path)
@@ -189,7 +189,7 @@ namespace crimson
             return;
         }
 
-        const fs::path metaPath = meta::MetaPathFor(file);
+        const fs::path metaPath = meta::PathFor(file);
         std::optional<AssetInfo> existing = meta::Read(metaPath);
 
         // Already known from an earlier scan. If only its meta is gone, it keeps the id it has.
@@ -664,7 +664,7 @@ namespace crimson
             return false;
         }
 
-        fs::rename(meta::MetaPathFor(from), meta::MetaPathFor(to), error);
+        fs::rename(meta::PathFor(from), meta::PathFor(to), error);
         if (error)
             LOG_WARN("[Assets] {} lost its meta file: {}", newPath, error.message());
 
@@ -699,7 +699,7 @@ namespace crimson
             return false;
         }
 
-        fs::remove(meta::MetaPathFor(file), error);
+        fs::remove(meta::PathFor(file), error);
 
         const std::array removed = { id };
         RemoveAssets(removed);
@@ -743,7 +743,7 @@ namespace crimson
         Record& record = it->second;
         record.Info.Settings = std::move(settings);
 
-        if (!meta::Write(meta::MetaPathFor(m_root / fs::path(record.Info.Path)), record.Info))
+        if (!meta::Write(meta::PathFor(m_root / fs::path(record.Info.Path)), record.Info))
             LOG_ERROR("[Assets] Failed to write the meta file of {}", record.Info.Path);
 
         AssetStoreBase* store = StoreOf(record.Info.Type);

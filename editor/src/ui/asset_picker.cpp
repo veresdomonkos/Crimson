@@ -11,67 +11,67 @@
 
 namespace crimson::editor::ui
 {
-    namespace
+    constexpr const char* kPopupId = "##AssetPicker";
+    constexpr int kGridColumns = 4;
+
+    // The window is sized in ems, so the popup keeps its size while the entries change
+    constexpr float kBodyWidthEms = 22.0f;
+    constexpr float kBodyHeightEms = 24.0f;
+
+    static std::string Lowered(std::string_view text)
     {
-        constexpr const char* kPopupId = "##AssetPicker";
-        constexpr int kGridColumns = 4;
-
-        // The window is sized in ems, so the popup keeps its size while the entries change
-        constexpr float kBodyWidthEms = 22.0f;
-        constexpr float kBodyHeightEms = 24.0f;
-
-        std::string Lowered(std::string_view text)
-        {
-            std::string lowered(text);
-            std::ranges::transform(lowered, lowered.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            return lowered;
-        }
-
-        int IndexOf(const std::vector<PickerEntry>& entries, AssetID id)
-        {
-            const auto it = std::ranges::find(entries, id, &PickerEntry::Id);
-            return it == entries.end() ? -1 : static_cast<int>(it - entries.begin());
-        }
+        std::string lowered(text);
+        std::ranges::transform(lowered, lowered.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return lowered;
     }
 
-    std::vector<PickerEntry> PickerEntries(std::span<const AssetInfo* const> assets, std::string_view search)
+    static int IndexOf(const std::vector<PickerEntry>& entries, AssetID id)
     {
-        const std::string needle = Lowered(search);
-
-        std::vector<PickerEntry> entries;
-        for (const AssetInfo* info : assets)
-        {
-            if (IsInternal(*info))
-                continue;
-
-            std::string name = AssetFileName(info->Path);
-            if (!needle.empty() && !Lowered(name).contains(needle))
-                continue;
-
-            entries.push_back({ info->Id, std::move(name), info->Path, info->ReadOnly });
-        }
-
-        std::ranges::stable_sort(entries, [](const PickerEntry& a, const PickerEntry& b)
-        {
-            if (a.Engine != b.Engine)
-                return !a.Engine;
-
-            return Lowered(a.Name) < Lowered(b.Name);
-        });
-
-        entries.insert(entries.begin(), PickerEntry{ .Name = "None" });
-        return entries;
+        const auto it = std::ranges::find(entries, id, &PickerEntry::Id);
+        return it == entries.end() ? -1 : static_cast<int>(it - entries.begin());
     }
 
-    int MovePickerSelection(int index, int count, int dx, int dy, int columns)
+    namespace asset_picker
     {
-        if (count <= 0)
-            return -1;
+        std::vector<PickerEntry> Entries(std::span<const AssetInfo* const> assets, std::string_view search)
+        {
+            const std::string needle = Lowered(search);
 
-        if (index < 0)
-            return 0;
+            std::vector<PickerEntry> entries;
+            for (const AssetInfo* info : assets)
+            {
+                if (IsInternal(*info))
+                    continue;
 
-        return std::clamp(index + dx + dy * columns, 0, count - 1);
+                std::string name = AssetFileName(info->Path);
+                if (!needle.empty() && !Lowered(name).contains(needle))
+                    continue;
+
+                entries.push_back({ info->Id, std::move(name), info->Path, info->ReadOnly });
+            }
+
+            std::ranges::stable_sort(entries, [](const PickerEntry& a, const PickerEntry& b)
+            {
+                if (a.Engine != b.Engine)
+                    return !a.Engine;
+
+                return Lowered(a.Name) < Lowered(b.Name);
+            });
+
+            entries.insert(entries.begin(), PickerEntry{ .Name = "None" });
+            return entries;
+        }
+
+        int MoveSelection(int index, int count, int dx, int dy, int columns)
+        {
+            if (count <= 0)
+                return -1;
+
+            if (index < 0)
+                return 0;
+
+            return std::clamp(index + dx + dy * columns, 0, count - 1);
+        }
     }
 
     void AssetPicker::Open(ImGuiID owner, AssetType type, AssetID current, ImVec2 below)
@@ -195,7 +195,7 @@ namespace crimson::editor::ui
         if (appearing)
             ImGui::SetKeyboardFocusHere();
 
-        const std::string hint = std::string(kIconSearch) + " Search";
+        const std::string hint = std::string(icons::kSearch) + " Search";
         ImGui::SetNextItemWidth(bodyWidth - buttonWidth * 2.0f - style.ItemSpacing.x * 2.0f);
         ImGui::InputTextWithHint("##Search", hint.c_str(), m_search.data(), m_search.size());
         const bool typing = ImGui::IsItemActive() && m_search[0] != '\0';
@@ -209,7 +209,7 @@ namespace crimson::editor::ui
             m_view = View::Grid;
 
         const std::vector<const AssetInfo*> listed = assets.List(m_type);
-        const std::vector<PickerEntry> entries = PickerEntries(listed, m_search.data());
+        const std::vector<PickerEntry> entries = asset_picker::Entries(listed, m_search.data());
         int selectedIndex = IndexOf(entries, m_selected);
 
         const bool grid = m_view == View::Grid;
@@ -225,7 +225,7 @@ namespace crimson::editor::ui
 
         if (dx != 0 || dy != 0)
         {
-            if (const int moved = MovePickerSelection(selectedIndex, static_cast<int>(entries.size()), dx, dy, columns); moved >= 0)
+            if (const int moved = asset_picker::MoveSelection(selectedIndex, static_cast<int>(entries.size()), dx, dy, columns); moved >= 0)
             {
                 Choose(entries[moved].Id);
                 selectedIndex = moved;
@@ -261,13 +261,13 @@ namespace crimson::editor::ui
             const PickerEntry& entry = entries[index];
             const bool selected = index == selectedIndex;
             const ImVec4 nameColor = entry.Engine ? theme::TextMuted : style.Colors[ImGuiCol_Text];
-            const char* icon = entry.Id ? AssetIcon(m_type) : nullptr; // None has none
+            const char* icon = entry.Id ? icons::ForAsset(m_type) : nullptr; // None has none
 
             ImGui::PushID(index);
 
             if (grid)
             {
-                const TileLayout tile = DrawTileFrame("##Tile", tileSize, selected);
+                const TileLayout tile = tiles::DrawFrame("##Tile", tileSize, selected);
                 if (tile.Clicked)
                     Choose(entry.Id);
 
@@ -292,10 +292,10 @@ namespace crimson::editor::ui
                 }
                 else if (icon)
                 {
-                    DrawTileIcon(drawList, tile.IconMin, tile.IconMax, icon, theme::AssetColor(m_type));
+                    tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, icon, theme::AssetColor(m_type));
                 }
 
-                DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, entry.Name.c_str(), ImGui::GetColorU32(nameColor));
+                tiles::DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, entry.Name.c_str(), ImGui::GetColorU32(nameColor));
 
                 if ((index + 1) % kGridColumns != 0 && index + 1 < static_cast<int>(entries.size()))
                     ImGui::SameLine();

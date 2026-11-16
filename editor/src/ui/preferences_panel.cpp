@@ -18,7 +18,7 @@ namespace fs = std::filesystem;
 
 namespace crimson::editor::ui
 {
-    static constexpr const char* kSystemDefault = "System default";
+    constexpr const char* kSystemDefault = "System default";
 
     void PreferencesPanel::OnMainMenuBar()
     {
@@ -30,7 +30,7 @@ namespace crimson::editor::ui
             if (ImGui::MenuItem("Preferences..."))
             {
                 m_open = true;
-                m_found = FindCodeEditors();
+                m_found = script_editor::FindCodeEditors();
                 ImGui::SetWindowFocus("Preferences");
             }
 
@@ -120,7 +120,7 @@ namespace crimson::editor::ui
                 props::ResetTarget();
 
                 if (props::EndRow(true))
-                    m_settings.SetScriptEditor({ .Program = current.Program, .Arguments = DefaultScriptEditorArguments(current.Program) });
+                    m_settings.SetScriptEditor({ .Program = current.Program, .Arguments = script_editor::DefaultArguments(current.Program) });
             }
 
             props::EndTable();
@@ -146,7 +146,7 @@ namespace crimson::editor::ui
             const fs::path start = current.Program.empty() ? fs::path() : current.Program.parent_path();
 
             if (const std::optional<fs::path> picked = PickProgram(m_window, start))
-                m_settings.SetScriptEditor({ .Program = *picked, .Arguments = DefaultScriptEditorArguments(*picked) });
+                m_settings.SetScriptEditor({ .Program = *picked, .Arguments = script_editor::DefaultArguments(*picked) });
         }
     }
 }

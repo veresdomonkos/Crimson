@@ -18,10 +18,10 @@
 
 namespace crimson::editor
 {
-    static constexpr uint32_t kProjectManagerWidth = 1000;
-    static constexpr uint32_t kProjectManagerHeight = 620;
-    static constexpr uint32_t kEditorWidth = 1280;
-    static constexpr uint32_t kEditorHeight = 720;
+    constexpr uint32_t kProjectManagerWidth = 1000;
+    constexpr uint32_t kProjectManagerHeight = 620;
+    constexpr uint32_t kEditorWidth = 1280;
+    constexpr uint32_t kEditorHeight = 720;
 
 	EditorApplication::EditorApplication(GraphicsApi rendererType, const std::filesystem::path& projectPath)
         : m_running(true), m_lastTime(0.0)
@@ -29,9 +29,9 @@ namespace crimson::editor
         if (NFD_Init() != NFD_OKAY)
             LOG_ERROR("[Editor] The folder picker is unavailable: {}", NFD_GetError());
 
-        ImportCache::Engine().SetFolder(GetEngineCacheFolder());
+        ImportCache::Engine().SetFolder(paths::EngineCacheFolder());
 
-        const std::filesystem::path configFolder = GetUserConfigFolder();
+        const std::filesystem::path configFolder = paths::UserConfigFolder();
         m_imguiIniPath = (configFolder / "imgui.ini").string();
 
         // The window is made for its API, as OpenGL needs a context and Vulkan has none, so a fallback makes a new one
@@ -74,7 +74,7 @@ namespace crimson::editor
         });
 
         ImGui::GetIO().IniFilename = m_imguiIniPath.c_str();
-        ui::ApplyEditorTheme(m_window->GetContentScale());
+        ui::theme::Apply(m_window->GetContentScale());
 
         m_lastTime = glfwGetTime();
 

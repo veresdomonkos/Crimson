@@ -6,13 +6,10 @@
 
 namespace crimson::vulkan
 {
-    namespace
+    static void SetViewportAndScissor(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
     {
-        void SetViewportAndScissor(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
-        {
-            cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
-            cmdBuffer.setScissor(0, vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } });
-        }
+        cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
+        cmdBuffer.setScissor(0, vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } });
     }
 
     VulkanRenderer::VulkanRenderer(VulkanDevice& device, VulkanResourceManager& resourceManager)
@@ -89,7 +86,7 @@ namespace crimson::vulkan
 
             vk::WriteDescriptorSet frameWrite{};
             frameWrite.dstSet = *resources.DescriptorSet;
-            frameWrite.dstBinding = kFrameBlockBinding;
+            frameWrite.dstBinding = shader_bindings::kFrameBlock;
             frameWrite.descriptorType = vk::DescriptorType::eUniformBuffer;
             frameWrite.descriptorCount = 1;
             frameWrite.pBufferInfo = &frameBufferInfo;
@@ -98,10 +95,10 @@ namespace crimson::vulkan
 
             // Every binding has to point at something before the first frame, whatever it ends up holding
             constexpr std::size_t kInitialStorageSize = 16 * 1024;
-            UploadStorageBuffer(resources, resources.Lights, kLightsBinding, nullptr, kInitialStorageSize);
-            UploadStorageBuffer(resources, resources.Shadows, kShadowsBinding, nullptr, kInitialStorageSize);
-            UploadStorageBuffer(resources, resources.Objects, kObjectsBinding, nullptr, kInitialStorageSize);
-            UploadStorageBuffer(resources, resources.Views, kViewsBinding, nullptr, kInitialStorageSize);
+            UploadStorageBuffer(resources, resources.Lights, shader_bindings::kLights, nullptr, kInitialStorageSize);
+            UploadStorageBuffer(resources, resources.Shadows, shader_bindings::kShadows, nullptr, kInitialStorageSize);
+            UploadStorageBuffer(resources, resources.Objects, shader_bindings::kObjects, nullptr, kInitialStorageSize);
+            UploadStorageBuffer(resources, resources.Views, shader_bindings::kViews, nullptr, kInitialStorageSize);
         }
     }
 
@@ -185,7 +182,7 @@ namespace crimson::vulkan
         {
             vk::WriteDescriptorSet write{};
             write.dstSet = *resources.DescriptorSet;
-            write.dstBinding = kShadowAtlasBinding;
+            write.dstBinding = shader_bindings::kShadowAtlas;
             write.descriptorType = vk::DescriptorType::eSampledImage;
             write.descriptorCount = 1;
             write.pImageInfo = &imageInfo;
@@ -467,13 +464,13 @@ namespace crimson::vulkan
 
         if (!m_bound.FrameSetBound)
         {
-            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, kFrameSpace, *m_inFlight[m_inFlightIndex].DescriptorSet, nullptr);
+            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, shader_bindings::kFrameSpace, *m_inFlight[m_inFlightIndex].DescriptorSet, nullptr);
             m_bound.FrameSetBound = true;
         }
 
         if (m_bound.MaterialSet != *material.DescriptorSet)
         {
-            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, kMaterialSpace, *material.DescriptorSet, nullptr);
+            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, shader_bindings::kMaterialSpace, *material.DescriptorSet, nullptr);
             m_bound.MaterialSet = *material.DescriptorSet;
             ++m_stats.MaterialBinds;
         }
@@ -564,12 +561,12 @@ namespace crimson::vulkan
         m_gpuData.Build(packet.GetLighting(), packet.GetViews(), m_clock.Tick(std::chrono::steady_clock::now()));
 
         std::memcpy(frame.FrameBlockBuffer.Mapped(), &m_gpuData.Block, sizeof(FrameBlock));
-        UploadStorageBuffer(frame, frame.Lights, kLightsBinding, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes());
-        UploadStorageBuffer(frame, frame.Shadows, kShadowsBinding, m_gpuData.Shadows.data(), std::span(m_gpuData.Shadows).size_bytes());
+        UploadStorageBuffer(frame, frame.Lights, shader_bindings::kLights, m_gpuData.Lights.data(), std::span(m_gpuData.Lights).size_bytes());
+        UploadStorageBuffer(frame, frame.Shadows, shader_bindings::kShadows, m_gpuData.Shadows.data(), std::span(m_gpuData.Shadows).size_bytes());
 
         const std::span<const GpuObject> objects = packet.GetObjects();
-        UploadStorageBuffer(frame, frame.Objects, kObjectsBinding, objects.data(), objects.size_bytes());
-        UploadStorageBuffer(frame, frame.Views, kViewsBinding, m_gpuData.Views.data(), std::span(m_gpuData.Views).size_bytes());
+        UploadStorageBuffer(frame, frame.Objects, shader_bindings::kObjects, objects.data(), objects.size_bytes());
+        UploadStorageBuffer(frame, frame.Views, shader_bindings::kViews, m_gpuData.Views.data(), std::span(m_gpuData.Views).size_bytes());
 
         uint32_t imageIndex = 0;
         vk::Result result = vk::Result::eSuccess;

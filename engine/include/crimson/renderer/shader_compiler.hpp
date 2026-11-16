@@ -19,17 +19,20 @@ namespace crimson
         std::string Text; // what was read
     };
 
-    // Compiles VSMain and PSMain from HLSL source to SPIR-V, and PSDepth if the source declares a "void PSDepth(".
-    // Includes resolve relative to includeDirectory,
-    // then to the engine's shaders, and the name is what errors report. Errors go to the log.
-    // includes gets what was read, even when it fails, as fixing one of them can fix it.
-    [[nodiscard]] std::optional<ShaderBinary> CompileHlslShader(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory,
-                                                                std::vector<ShaderInclude>* includes = nullptr);
+    namespace shader_compiler
+    {
+        // Compiles VSMain and PSMain from HLSL source to SPIR-V, and PSDepth if the source declares a "void PSDepth(".
+        // Includes resolve relative to includeDirectory,
+        // then to the engine's shaders, and the name is what errors report. Errors go to the log.
+        // includes gets what was read, even when it fails, as fixing one of them can fix it.
+        [[nodiscard]] std::optional<ShaderBinary> Compile(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory,
+                                                          std::vector<ShaderInclude>* includes = nullptr);
 
-    // What the compilers are and how they are set, for anything that keeps what they make
-    [[nodiscard]] std::string_view ShaderCompilerVersion();
+        // What the compilers are and how they are set, for anything that keeps what they make
+        [[nodiscard]] std::string_view Version();
 
-    // Reads the annotations of the source itself, not of what it includes, by the name of what they follow.
-    // The ones it can't understand go to the log.
-    [[nodiscard]] std::unordered_map<std::string, ShaderAnnotation> ParseShaderAnnotations(std::string_view source);
+        // Reads the annotations of the source itself, not of what it includes, by the name of what they follow.
+        // The ones it can't understand go to the log.
+        [[nodiscard]] std::unordered_map<std::string, ShaderAnnotation> ParseAnnotations(std::string_view source);
+    }
 }

@@ -34,23 +34,20 @@ using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
 
-namespace
-{
-    constexpr std::string_view kTriangleObj = "v 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n";
-    constexpr std::string_view kValidMaterial = R"({ "shader": "engine/shaders/S_Lit.hlsl" })";
-    constexpr std::string_view kBrokenShader = "this does not compile";
+constexpr std::string_view kTriangleObj = "v 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n";
+constexpr std::string_view kValidMaterial = R"({ "shader": "engine/shaders/S_Lit.hlsl" })";
+constexpr std::string_view kBrokenShader = "this does not compile";
 
-    // A 1x1 uncompressed BMP, as PNGs are hard to write out by hand
-    std::string MakeImage()
-    {
-        constexpr std::array<unsigned char, 58> kBytes = {
-            'B', 'M', 58, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0,
-            40, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 4, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            255, 0, 0, 0
-        };
-        return std::string(reinterpret_cast<const char*>(kBytes.data()), kBytes.size());
-    }
+// A 1x1 uncompressed BMP, as PNGs are hard to write out by hand
+static std::string MakeImage()
+{
+    constexpr std::array<unsigned char, 58> kBytes = {
+        'B', 'M', 58, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0,
+        40, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 4, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        255, 0, 0, 0
+    };
+    return std::string(reinterpret_cast<const char*>(kBytes.data()), kBytes.size());
 }
 
 TEST_CASE("Scanning finds a folder's assets and skips the rest", "[assets]")
@@ -247,7 +244,7 @@ TEST_CASE("Engine assets are always there, with the same id everywhere", "[asset
         CHECK(a.FindId(path) == b.FindId(path));
     }
 
-    CHECK(DefaultMaterial(a) == a.Find<AssetType::Material>("engine/materials/M_Default.mat"));
+    CHECK(slot_materials::DefaultMaterial(a) == a.Find<AssetType::Material>("engine/materials/M_Default.mat"));
 
     // Includes aren't assets, and engine assets don't write metas anywhere
     CHECK_FALSE(a.FindId("engine/shaders/crimson/bindings.hlsli"));
@@ -609,9 +606,9 @@ TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
     const MeshID mesh = assets.Find<AssetType::Mesh>("model/two.obj");
     const MaterialID stone = assets.Find<AssetType::Material>("model/materials/stone.mat");
 
-    CHECK(FindSlotMaterial(assets, mesh, "stone") == stone);
-    CHECK_FALSE(FindSlotMaterial(assets, mesh, "wood"));
-    CHECK_FALSE(FindSlotMaterial(assets, MeshID{}, "stone"));
+    CHECK(slot_materials::Find(assets, mesh, "stone") == stone);
+    CHECK_FALSE(slot_materials::Find(assets, mesh, "wood"));
+    CHECK_FALSE(slot_materials::Find(assets, MeshID{}, "stone"));
 
     MeshRendererComponent renderer;
     renderer.MeshAsset = mesh;
@@ -622,7 +619,7 @@ TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
 
         REQUIRE(renderer.MaterialAssets.size() == 2);
         CHECK(renderer.MaterialAssets[0] == stone);
-        CHECK(renderer.MaterialAssets[1] == DefaultMaterial(assets));
+        CHECK(renderer.MaterialAssets[1] == slot_materials::DefaultMaterial(assets));
         CHECK(renderer.Resolved.Materials[0] == assets.Load(stone));
     }
 
@@ -658,8 +655,8 @@ TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
         ResolveAssets(assets, renderer);
 
         REQUIRE(renderer.MaterialAssets.size() == 1);
-        CHECK(renderer.MaterialAssets[0] == DefaultMaterial(assets));
-        CHECK(renderer.Resolved.Materials[0] == assets.Load(DefaultMaterial(assets)));
+        CHECK(renderer.MaterialAssets[0] == slot_materials::DefaultMaterial(assets));
+        CHECK(renderer.Resolved.Materials[0] == assets.Load(slot_materials::DefaultMaterial(assets)));
     }
 
     SECTION("A chosen material is kept")
@@ -692,25 +689,22 @@ TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
     }
 }
 
-namespace
+static std::string ReadFile(const fs::path& file)
 {
-    std::string ReadFile(const fs::path& file)
-    {
-        std::ifstream stream(file, std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
-    }
+    std::ifstream stream(file, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+}
 
-    // The id an engine asset had at a path, FNV-1a of it
-    std::string EngineIdOf(std::string_view path)
+// The id an engine asset had at a path, FNV-1a of it
+static std::string EngineIdOf(std::string_view path)
+{
+    uint64_t hash = 0xcbf29ce484222325ull;
+    for (const unsigned char c : path)
     {
-        uint64_t hash = 0xcbf29ce484222325ull;
-        for (const unsigned char c : path)
-        {
-            hash ^= c;
-            hash *= 0x100000001b3ull;
-        }
-        return AssetID{ hash }.ToString();
+        hash ^= c;
+        hash *= 0x100000001b3ull;
     }
+    return AssetID{ hash }.ToString();
 }
 
 TEST_CASE("Engine assets saved under their old names still load", "[assets]")
@@ -729,10 +723,10 @@ TEST_CASE("Engine assets saved under their old names still load", "[assets]")
 
         for (const std::string& text : { saved, std::string(R"({ "shader": "engine/shaders/main.hlsl" })") })
         {
-            const auto data = ParseMaterialData(text, assets, "test");
+            const auto data = material_data::Parse(text, assets, "test");
             REQUIRE(data);
             CHECK(data->Shader == lit);
-            CHECK_THAT(WriteMaterialData(*data, assets), Catch::Matchers::ContainsSubstring(R"("path": "engine/shaders/S_Lit.hlsl")"));
+            CHECK_THAT(material_data::Write(*data, assets), Catch::Matchers::ContainsSubstring(R"("path": "engine/shaders/S_Lit.hlsl")"));
         }
     }
 
@@ -741,12 +735,12 @@ TEST_CASE("Engine assets saved under their old names still load", "[assets]")
         const std::string text = R"({ "version": 1, "entities": [ { "meshRenderer": { "mesh": { "guid": ")" + EngineIdOf("engine/meshes/cube.obj")
             + R"(", "path": "engine/meshes/cube.obj" }, "materials": [ "engine/materials/default.mat" ] } } ] })";
 
-        const auto data = ParseSceneData(text, assets, "test");
+        const auto data = scene_data::Parse(text, assets, "test");
         REQUIRE(data);
         CHECK(FieldOf<AssetID>(assets, data->Roots.at(0), "meshRenderer", "mesh") == cube);
-        CHECK(FieldOf<std::vector<AssetID>>(assets, data->Roots.at(0), "meshRenderer", "materials").at(0) == DefaultMaterial(assets));
+        CHECK(FieldOf<std::vector<AssetID>>(assets, data->Roots.at(0), "meshRenderer", "materials").at(0) == slot_materials::DefaultMaterial(assets));
 
-        const std::string written = WriteSceneData(*data, assets);
+        const std::string written = scene_data::Write(*data, assets);
         CHECK_THAT(written, Catch::Matchers::ContainsSubstring("engine/meshes/SM_Cube.obj"));
         CHECK_THAT(written, Catch::Matchers::ContainsSubstring("engine/materials/M_Default.mat"));
     }

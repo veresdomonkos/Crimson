@@ -30,44 +30,41 @@ using crimson::editor::EditorSettings;
 using crimson::editor::ProjectManagerMode;
 using crimson::editor::ProjectSessionMode;
 
-namespace
+constexpr std::string_view kQuad = "v -1 0 1\nv 1 0 1\nv 1 0 -1\nv -1 0 -1\nvn 0 1 0\nf 1//1 2//1 3//1 4//1\n";
+
+constexpr int kFrames = 4;
+
+static void RunFrames(EditorApplication& app, int frames = kFrames)
 {
-    constexpr std::string_view kQuad = "v -1 0 1\nv 1 0 1\nv 1 0 -1\nv -1 0 -1\nvn 0 1 0\nf 1//1 2//1 3//1 4//1\n";
+    for (int i = 0; i < frames; ++i)
+        app.RunFrame();
+}
 
-    constexpr int kFrames = 4;
+template <typename Mode>
+static bool IsShowing(const EditorApplication& app)
+{
+    return dynamic_cast<const Mode*>(&app.CurrentMode()) != nullptr;
+}
 
-    void RunFrames(EditorApplication& app, int frames = kFrames)
+// A project with some meshes and a scene using them, and an empty one otherwise
+static Project MakeProject(const TempFolder& temp, const char* name, bool withMeshes)
+{
+    const auto project = Project::Create(temp.Path(), name);
+    REQUIRE(project);
+
+    if (withMeshes)
     {
-        for (int i = 0; i < frames; ++i)
-            app.RunFrame();
-    }
-
-    template <typename Mode>
-    bool IsShowing(const EditorApplication& app)
-    {
-        return dynamic_cast<const Mode*>(&app.CurrentMode()) != nullptr;
-    }
-
-    // A project with some meshes and a scene using them, and an empty one otherwise
-    Project MakeProject(const TempFolder& temp, const char* name, bool withMeshes)
-    {
-        const auto project = Project::Create(temp.Path(), name);
-        REQUIRE(project);
-
-        if (withMeshes)
-        {
-            temp.Write(std::string(name) + "/assets/meshes/floor.obj", kQuad);
-            temp.Write(std::string(name) + "/assets/meshes/pyramid.obj", kQuad);
-            temp.Write(std::string(name) + "/assets/materials/floor.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl" })");
-            temp.Write(std::string(name) + "/assets/scenes/main.scene", R"({ "version": 1, "entities": [
+        temp.Write(std::string(name) + "/assets/meshes/floor.obj", kQuad);
+        temp.Write(std::string(name) + "/assets/meshes/pyramid.obj", kQuad);
+        temp.Write(std::string(name) + "/assets/materials/floor.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl" })");
+        temp.Write(std::string(name) + "/assets/scenes/main.scene", R"({ "version": 1, "entities": [
                 { "name": "Floor", "meshRenderer": { "mesh": "meshes/floor.obj", "materials": [ "materials/floor.mat" ] } },
                 { "name": "Pyramid", "meshRenderer": { "mesh": "meshes/pyramid.obj" } },
                 { "name": "Sun", "light": { "type": "directional" } }
             ] })");
-        }
-
-        return *project;
     }
+
+    return *project;
 }
 
 // The editor brings its own window and backend, and each of these tests starts one
