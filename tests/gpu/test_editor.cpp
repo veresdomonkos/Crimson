@@ -11,6 +11,7 @@
 
 #include <crimson/core/log.hpp>
 #include <crimson/project/project.hpp>
+#include <crimson/renderer/shader_cache.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 #include <crimson_editor/editor_application.hpp>
 #include <crimson_editor/editor_settings.hpp>
@@ -140,6 +141,9 @@ TEST_CASE("Projects can be opened and closed again and again", "[editor]")
     EditorApplication app(SelectedBackend(), {});
     RunFrames(app);
 
+    // The built-in shaders are what these projects use, so it is the engine's cache that fills
+    std::size_t compiledAfterBoth = 0;
+
     for (int i = 0; i < 10; ++i)
     {
         CAPTURE(i);
@@ -151,7 +155,16 @@ TEST_CASE("Projects can be opened and closed again and again", "[editor]")
         app.Services().CloseProject();
         RunFrames(app);
         REQUIRE(IsShowing<ProjectManagerMode>(app));
+
+        if (i == 0)
+            CHECK_FALSE(std::filesystem::is_empty(ShaderCache::Engine().Folder()));
+
+        if (i == 1)
+            compiledAfterBoth = ShaderCache::Stats().Compiled;
     }
+
+    // Opening a project again compiles nothing that didn't change
+    CHECK(ShaderCache::Stats().Compiled == compiledAfterBoth);
 
     // The console was destroyed with the project, so this would call through a dangling pointer
     LOG_INFO("Still logging after closing the project");

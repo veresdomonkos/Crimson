@@ -32,6 +32,11 @@ namespace crimson::editor::platform
         return EnvironmentPath("APPDATA") / "Crimson";
     }
 
+    fs::path UserCacheFolder()
+    {
+        return EnvironmentPath("LOCALAPPDATA") / "Crimson";
+    }
+
     fs::path HomeFolder()
     {
         return EnvironmentPath("USERPROFILE");

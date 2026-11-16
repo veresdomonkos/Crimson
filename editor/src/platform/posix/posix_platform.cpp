@@ -53,6 +53,15 @@ namespace crimson::editor::platform
         return base / "crimson";
     }
 
+    fs::path UserCacheFolder()
+    {
+        fs::path base = EnvironmentPath("XDG_CACHE_HOME");
+        if (base.empty())
+            base = EnvironmentPath("HOME") / ".cache";
+
+        return base / "crimson";
+    }
+
     fs::path HomeFolder()
     {
         return EnvironmentPath("HOME");

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -14,6 +15,7 @@
 #include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/asset_manager/importers/texture_importer.hpp>
 #include <crimson/core/log.hpp>
+#include <crimson/renderer/shader_cache.hpp>
 #include <crimson/scene/scene_renderer.hpp>
 
 #include "asset_manager/engine_renames.hpp"
@@ -808,4 +810,74 @@ TEST_CASE("Opening a project writes the engine's new names into its files", "[as
     CHECK_THAT(sceneText, Catch::Matchers::ContainsSubstring(R"("path": "engine/meshes/SM_Cube.obj")"));
     CHECK_THAT(sceneText, Catch::Matchers::ContainsSubstring(assets.FindId("engine/meshes/SM_Cube.obj").ToString()));
     CHECK_THAT(sceneText, !Catch::Matchers::ContainsSubstring("meshes/cube.obj"));
+}
+
+namespace
+{
+    // The engine's cache is shared by the whole process, so a test that gives it a folder has to take it back
+    class EngineShaderCacheFolder
+    {
+    public:
+        explicit EngineShaderCacheFolder(const fs::path& folder) { ShaderCache::Engine().SetFolder(folder); }
+        ~EngineShaderCacheFolder() { ShaderCache::Engine().SetFolder({}); }
+
+        EngineShaderCacheFolder(const EngineShaderCacheFolder&) = delete;
+        EngineShaderCacheFolder& operator=(const EngineShaderCacheFolder&) = delete;
+    };
+}
+
+TEST_CASE("A project's shaders load from its cache the second time", "[assets]")
+{
+    const TempFolder temp;
+    const fs::path helper = temp.Write("assets/helper.hlsli", "#define HELPER_VALUE 1.0\n");
+    temp.Write("assets/mine.hlsl", R"(
+#include "helper.hlsli"
+float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, HELPER_VALUE); }
+float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
+)");
+
+    const fs::path cacheFolder = temp.Path() / ".crimson" / "shader_cache";
+    FakeGpuResourceManager gpu;
+    ShaderCache::ForgetMemory();
+
+    ShaderCacheStats before = ShaderCache::Stats();
+    {
+        AssetManager assets(gpu, temp.Path() / "assets", cacheFolder);
+        CHECK(assets.Load<AssetType::Shader>("mine.hlsl"));
+    }
+    CHECK(ShaderCache::Stats().Compiled - before.Compiled == 1);
+
+    // As the next run of the editor would find it
+    ShaderCache::ForgetMemory();
+    before = ShaderCache::Stats();
+
+    AssetManager assets(gpu, temp.Path() / "assets", cacheFolder);
+    CHECK(assets.Load<AssetType::Shader>("mine.hlsl"));
+    CHECK(ShaderCache::Stats().Compiled == before.Compiled);
+    CHECK(ShaderCache::Stats().Reused - before.Reused == 1);
+
+    temp.Write("assets/helper.hlsli", "#define HELPER_VALUE 2.0\n");
+    fs::last_write_time(helper, fs::last_write_time(helper) + std::chrono::seconds(2));
+
+    before = ShaderCache::Stats();
+    CHECK_FALSE(assets.ReloadChanged().empty());
+    CHECK(ShaderCache::Stats().Compiled - before.Compiled == 1);
+}
+
+TEST_CASE("The engine's shaders use the engine cache", "[assets]")
+{
+    const TempFolder temp;
+    const fs::path engineCache = temp.Path() / "engine_cache";
+    const fs::path projectCache = temp.Path() / ".crimson" / "shader_cache";
+
+    ShaderCache::ForgetMemory();
+    const EngineShaderCacheFolder guard(engineCache);
+
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path() / "assets", projectCache);
+    REQUIRE(assets.Load<AssetType::Shader>("engine/shaders/S_Lit.hlsl"));
+
+    REQUIRE(fs::is_directory(engineCache));
+    CHECK_FALSE(fs::is_empty(engineCache));
+    CHECK_FALSE(fs::exists(projectCache));
 }

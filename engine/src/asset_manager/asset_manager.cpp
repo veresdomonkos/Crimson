@@ -58,13 +58,13 @@ namespace crimson
         return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
     }
 
-    AssetManager::AssetManager(GpuResourceManager& gpuResources, fs::path root)
+    AssetManager::AssetManager(GpuResourceManager& gpuResources, fs::path root, fs::path shaderCacheFolder)
         : m_gpuResources(gpuResources), m_root(fs::absolute(std::move(root)).lexically_normal())
     {
         RegisterNativeComponents(m_components);
 
         AddImporter(std::make_unique<TextureImporter>());
-        AddImporter(std::make_unique<ShaderImporter>());
+        AddImporter(std::make_unique<ShaderImporter>(std::move(shaderCacheFolder)));
         AddImporter(std::make_unique<MaterialImporter>());
         AddImporter(std::make_unique<MeshImporter>());
         AddImporter(std::make_unique<SceneImporter>());

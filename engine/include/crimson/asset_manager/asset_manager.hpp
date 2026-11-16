@@ -42,7 +42,9 @@ namespace crimson
     class AssetManager
     {
     public:
-        AssetManager(GpuResourceManager& gpuResources, std::filesystem::path root);
+        // The project's compiled shaders are kept in shaderCacheFolder, or only in memory if it is empty.
+        // The engine's own shaders have their own cache, ShaderCache::Engine().
+        AssetManager(GpuResourceManager& gpuResources, std::filesystem::path root, std::filesystem::path shaderCacheFolder = {});
         ~AssetManager();
 
         AssetManager(const AssetManager&) = delete;

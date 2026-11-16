@@ -8,6 +8,7 @@
 #include <string>
 
 #include <crimson/core/profiler.hpp>
+#include <crimson/renderer/shader_cache.hpp>
 
 #include "gpu/gpu_test.hpp"
 #include "support/temp_folder.hpp"
@@ -22,6 +23,22 @@ static void RedirectUserConfig(const std::filesystem::path& folder)
 #else
     setenv("XDG_CONFIG_HOME", folder.c_str(), 1);
 #endif
+}
+
+// The compiled shaders of the whole run are kept in one folder, the one CRIMSON_SHADER_CACHE names, as CI does to keep
+// them between runs. Without it they go in the run's own folder, and never in the user's real cache.
+static std::filesystem::path RedirectShaderCache(const std::filesystem::path& fallback)
+{
+    if (const char* chosen = std::getenv("CRIMSON_SHADER_CACHE"); chosen && *chosen)
+        return chosen;
+
+#ifdef _WIN32
+    _wputenv_s(L"CRIMSON_SHADER_CACHE", fallback.c_str());
+#else
+    setenv("CRIMSON_SHADER_CACHE", fallback.c_str(), 1);
+#endif
+
+    return fallback;
 }
 
 int main(int argc, char* argv[])
@@ -47,6 +64,9 @@ int main(int argc, char* argv[])
 
     const tests::TempFolder config;
     RedirectUserConfig(config.Path());
+
+    // The tests that don't start an editor use it too
+    ShaderCache::Engine().SetFolder(RedirectShaderCache(config.Path() / "shader_cache"));
 
     tests::StartCollectingErrors();
 

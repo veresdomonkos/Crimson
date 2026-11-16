@@ -238,6 +238,8 @@ A loaded asset knows what it was made from (`ImportContext::Uses`: a material's 
 
 Every file the manager writes (assets, new files, updated references and `.meta` files) goes through a temporary file next to it that is then renamed over it, so a write that fails halfway leaves the old file. A `.saving` file left by a crash isn't picked up as an asset.
 
+Compiled shaders are cached (`ShaderCache`), as glslang and SPIRV-Tools take most of the time of opening a project. An entry holds a shader's stages and its interface SPIR-V. It is keyed by a hash of the shader's name, its source, the compilers' versions, their settings and the optimizer passes, and the cache's format, and it lists every include the compile resolved, with where each came from (the shader's folder or the engine) and a hash of its text. A hit resolves those includes again, so a changed source, project include or engine header is a miss, and so is a project file that now shadows an engine header. A file that can't be read or is broken is a miss too, and the shader compiles and writes it again. Annotations aren't stored. They are read from the source on every load, so the warnings about ones that can't be understood show up whether it was cached or not. Entries are kept in memory for the process, which is shared by every cache, and in files that are written to a temporary file of their own and renamed, so two editors can use one folder. A project's shaders are cached in `.crimson/shader_cache`, and the engine's built-in shaders in a folder per user, as every project uses them. Nothing removes old entries, and the folders can be deleted at any time.
+
 A file moved along with its `.meta` keeps its id. Moving an asset while the engine runs also updates the `.mat` and `.scene` files that reference it, even if they only name its path. A reference with only a path breaks if the file moves while nothing is running. A reference to an asset that isn't there, because its file is gone or was deleted, keeps its id and path: it is saved as it was, shows as missing in the Inspector, and works again once the file is back. Opening a scene that has any warns about how many. Anything that changes GPU resources has to run between frames, which is why panels queue these in `EditorContext::Deferred`.
 
 A mesh's material slots fill themselves in: an empty slot uses `materials/<slot name>.mat` next to the mesh if that file exists, and the default material if not. For an `.obj`, the slot names are the material names in its `.mtl`. **Create Materials from .mtl**, on an `.obj` in the Assets panel (`CreateSlotMaterials`, in `slot_materials.hpp`), writes those files from the `.mtl` for the slots that have none, and never replaces one. Each is a material on `S_Lit`:
@@ -274,7 +276,7 @@ The embedded files are kept in Git LFS, like the editor's, and CI pulls `engine/
 - `ProjectManagerMode` - shown on start. Lists the recent projects, and creates, imports or opens one. `--project <folder>` skips it.
 - `ProjectSessionMode` - the editor with one project open. Its asset manager, scene and panels all live and die with it, and **File > Close Project** goes back to the project manager.
 
-A project is a folder with a `project.crimson` file and an `assets/` folder. It opens on the scene that was last open, or on its first one, and one with no scenes gets a new `scenes/main.scene`. Opening a project also copies the engine's shader headers into its data folder and lists them in `shadertoolsconfig.json`, so code editors with HLSL Tools find them.
+A project is a folder with a `project.crimson` file and an `assets/` folder. It opens on the scene that was last open, or on its first one, and one with no scenes gets a new `scenes/main.scene`. Opening a project also copies the engine's shader headers into its data folder and lists them in `shadertoolsconfig.json`, so code editors with HLSL Tools find them. The data folder also holds `shader_cache/`, the project's compiled shaders.
 
 ### Panels and menus
 
@@ -324,3 +326,7 @@ Kept in `%APPDATA%/Crimson` on Windows, and `~/.config/crimson` elsewhere:
 - `imgui.ini`: the layout
 - `recent_projects.json`: the projects the project manager lists, and the scene each was last on
 - `settings.json`: the preferences, such as the External Script Editor
+
+What can be made again is kept in the cache folder instead, `%LOCALAPPDATA%/Crimson` on Windows, and `~/.cache/crimson` elsewhere (`$XDG_CACHE_HOME/crimson` if it is set):
+
+- `shaders/`: the compiled built-in shaders. `CRIMSON_SHADER_CACHE` names another folder for them, as the GPU tests and CI do to share one.

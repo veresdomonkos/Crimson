@@ -22,6 +22,12 @@ namespace crimson::editor
         return folder;
     }
 
+    fs::path GetShaderCacheFolder()
+    {
+        const fs::path overridden = platform::EnvironmentPath("CRIMSON_SHADER_CACHE");
+        return overridden.empty() ? platform::UserCacheFolder() / "shaders" : overridden;
+    }
+
     fs::path GetDefaultProjectsFolder()
     {
         const fs::path home = platform::HomeFolder();

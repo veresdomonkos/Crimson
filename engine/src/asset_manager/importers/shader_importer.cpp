@@ -89,7 +89,8 @@ float4 PSMain(VertexOutput input) : SV_Target
         if (!text)
             return {};
 
-        const auto binary = CompileHlslShader(source.Info.Path, *text, source.File.parent_path(), &ctx.Dependencies);
+        ShaderCache& cache = source.Embedded ? ShaderCache::Engine() : m_cache;
+        const auto binary = CompileHlslShader(source.Info.Path, *text, source.File.parent_path(), &ctx.Dependencies, &cache);
         if (!binary)
         {
             LOG_ERROR("[ShaderImporter] Compilation failed for '{}'", source.Info.Path);

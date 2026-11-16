@@ -33,7 +33,7 @@ namespace crimson::editor
     ProjectSessionMode::ProjectSessionMode(EditorServices& services, Project project)
         : m_services(services),
           m_project(std::move(project)),
-          m_assetManager(std::make_unique<AssetManager>(GpuResources(), m_project.AssetsDir())),
+          m_assetManager(std::make_unique<AssetManager>(GpuResources(), m_project.AssetsDir(), m_project.DataDir() / "shader_cache")),
           m_assetEdits(std::make_unique<AssetEdits>(*m_assetManager)),
           m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, GpuResources(), *m_services.Graphics.Imgui)),
           m_sceneView(m_scene, m_camera, static_cast<float>(kMainTargetWidth) / kMainTargetHeight),
