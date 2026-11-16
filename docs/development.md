@@ -32,7 +32,7 @@ cmake --build build --target Editor
 - **SPIRV-Tools:** glslang uses it to legalize the SPIR-V it makes from HLSL, so `external/SPIRV-Tools` and `external/SPIRV-Headers` are submodules of their own. When glslang is updated, move both to the commits in its `known_good.json`.
 - **Platform code:** what differs between Windows and Linux goes in files for each platform, `src/platform/windows/` and `src/platform/posix/`, which CMake picks, not in `#ifdef` blocks in shared code. Engine's compile definitions give every target that links it `NOMINMAX` and `WIN32_LEAN_AND_MEAN` on Windows, so `windows.h` is included plainly.
 - **Measuring performance:** use **Release** (or RelWithDebInfo). Debug builds, especially with validation layers enabled, are many times slower and give misleading numbers. The Stats panel says when it is a Debug build.
-- **Choosing a backend:** `--vulkan` or `--opengl` on the command line picks the backend, and `--project <folder>` opens a project straight away.
+- **Choosing a backend:** Vulkan is the default, and the editor falls back to OpenGL, with an error in the log, when Vulkan can't start. `--opengl` (or `--vulkan`) on the command line picks the backend, and `--project <folder>` opens a project straight away.
 
 | Setting | Does |
 |:--------|:-----|
