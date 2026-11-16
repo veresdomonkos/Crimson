@@ -128,9 +128,12 @@ jobs:
           key: ccache-mingw-release-${{ github.sha }}
           restore-keys: ccache-mingw-release-
 
+      # The toolchain is installed again on every run, so ccache knows the compiler by its contents rather than its
+      # file times, which would make every compile a miss
       - name: Configure
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_COMPILERCHECK: content
           VULKAN_SDK: C:\VulkanSDK\${{ env.VULKAN_SDK_VERSION }}
         run: >-
           cmake -S . -B build -G Ninja
@@ -140,8 +143,12 @@ jobs:
       - name: Build
         env:
           CCACHE_DIR: ${{ github.workspace }}/.ccache
+          CCACHE_COMPILERCHECK: content
           CCACHE_MAXSIZE: 1G
-        run: cmake --build build --target Editor CrimsonTests CrimsonGpuTests
+        run: |
+          ccache --zero-stats
+          cmake --build build --target Editor CrimsonTests CrimsonGpuTests
+          ccache --show-stats
 
       - name: Test
         run: ctest --test-dir build --label-exclude gpu --output-on-failure
