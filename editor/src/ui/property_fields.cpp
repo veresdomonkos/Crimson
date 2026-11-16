@@ -313,7 +313,7 @@ namespace crimson::editor::ui::props
     bool Checkbox(const char* label, bool& value, const bool* reset)
     {
         BeginRow(label);
-        bool changed = ImGui::Checkbox("##Value", &value);
+        bool changed = theme::Checkbox("##Value", value);
         ResetTarget();
 
         changed |= ApplyReset(EndRow(reset != nullptr), value, reset);

@@ -209,7 +209,7 @@ namespace crimson::editor::ui
         }
 
         ImGui::SameLine();
-        if (bool show = m_settings.GetShowEngineContent(); ImGui::Checkbox("Show Engine Content", &show))
+        if (bool show = m_settings.GetShowEngineContent(); theme::Checkbox("Show Engine Content", show))
             m_settings.SetShowEngineContent(show);
 
         // The path to the current folder, each part leading back to it. The engine's start at a root of their own.

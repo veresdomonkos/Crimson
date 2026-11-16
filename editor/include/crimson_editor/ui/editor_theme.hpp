@@ -111,6 +111,9 @@ namespace crimson::editor::ui
         // A button that stays pressed while its setting is on
         bool ToggleButton(const char* label, bool on, const ImVec2& size = ImVec2(0.0f, 0.0f));
 
+        // A checkbox: a text-sized rounded box, filled with the selection color, as a toggle button that is on, and ticked when on. A label after "##" isn't shown.
+        bool Checkbox(const char* label, bool& value);
+
         // A tree node whose icon has a color of its own, which one label can't have. The node is drawn without a label,
         // and the icon and the name are drawn over it, where the label would be. It needs ImGuiTreeNodeFlags_SpanAvailWidth
         // or _Framed, so the item covers the row. An empty label draws just the icon.
