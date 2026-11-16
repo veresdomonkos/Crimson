@@ -57,7 +57,7 @@ namespace crimson::editor::ui
         if (!m_settings.MainCamera)
         {
             const Entity first = FindMainCamera(scene, {});
-            preview = "First camera (" + (first ? nameOf(first) : std::string("none")) + ")";
+            preview = "Automatic (" + (first ? nameOf(first) : std::string("no cameras")) + ")";
         }
         else if (const Entity referenced = FindEntity(scene, m_settings.MainCamera); referenced && referenced.HasComponent<CameraComponent>())
         {
@@ -73,7 +73,7 @@ namespace crimson::editor::ui
 
         AssetID chosen = m_settings.MainCamera;
 
-        if (ImGui::Selectable("First camera", !m_settings.MainCamera))
+        if (ImGui::Selectable("Automatic", !m_settings.MainCamera))
             chosen = {};
 
         std::vector<Entity> cameras;
