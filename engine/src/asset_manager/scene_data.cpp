@@ -391,10 +391,13 @@ namespace crimson
 
             if (const auto environment = j.find("environment"); environment != j.end())
             {
-                data.Environment.Ambient = ReadVec3(*environment, "ambient", data.Environment.Ambient);
-                data.Environment.Exposure = environment->value("exposure", data.Environment.Exposure);
-                data.Environment.Mapper = environment->value("toneMapper", std::string("aces")) == "none" ? ToneMapper::None : ToneMapper::Aces;
+                data.Settings.Ambient = ReadVec3(*environment, "ambient", data.Settings.Ambient);
+                data.Settings.PostProcessing.Exposure = environment->value("exposure", data.Settings.PostProcessing.Exposure);
+                data.Settings.PostProcessing.Mapper = environment->value("toneMapper", std::string("aces")) == "none" ? ToneMapper::None : ToneMapper::Aces;
             }
+
+            if (const auto mainCamera = j.find("mainCamera"); mainCamera != j.end())
+                data.Settings.MainCamera = AssetID::FromString(mainCamera->get<std::string>());
 
             if (const auto entities = j.find("entities"); entities != j.end())
             {
@@ -417,10 +420,14 @@ namespace crimson
 
         j["version"] = kSceneVersion;
         j["environment"] = {
-            { "ambient", WriteVec3(data.Environment.Ambient) },
-            { "exposure", ShortNumber(data.Environment.Exposure) },
-            { "toneMapper", data.Environment.Mapper == ToneMapper::None ? "none" : "aces" }
+            { "ambient", WriteVec3(data.Settings.Ambient) },
+            { "exposure", ShortNumber(data.Settings.PostProcessing.Exposure) },
+            { "toneMapper", data.Settings.PostProcessing.Mapper == ToneMapper::None ? "none" : "aces" }
         };
+
+        // Left out while unset, for a scene without one to be written as it always was
+        if (data.Settings.MainCamera)
+            j["mainCamera"] = data.Settings.MainCamera.ToString();
 
         nlohmann::ordered_json entities = nlohmann::ordered_json::array();
 

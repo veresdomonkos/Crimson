@@ -13,6 +13,7 @@ add_executable(CrimsonTests
     engine/test_mesh_tangents.cpp
     engine/test_project.cpp
     engine/test_scene.cpp
+    engine/test_scene_camera.cpp
     engine/test_scene_data.cpp
     engine/test_scene_renderer.cpp
     engine/test_shaders.cpp
@@ -29,6 +30,7 @@ add_executable(CrimsonTests
     editor/test_platform.cpp
     editor/test_recent_projects.cpp
     editor/test_scene_history.cpp
+    editor/test_scene_view.cpp
     editor/test_script_editor.cpp
     editor/test_system_shell.cpp
 )

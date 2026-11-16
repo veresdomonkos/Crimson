@@ -158,7 +158,7 @@ renderer.Icon("box")
 registry.RegisterRuntime("health", "Health", { FieldInfo{ .Key = "max", .Label = "Max", .Type = FieldType::Int, .Default = int32_t{ 3 } } });
 ```
 
-- **Native components** register their fields through pointers to their members, which also give their defaults: `Field` for a bool, int, float, vector or string, and `Color`, `Enum`, `Asset` and `AssetList` for the others. Enums are stored as their index, and asset references as `AssetID`s, typed again when they are set. `native_components.cpp` registers Transform, Light and Mesh Renderer; Name, Relationship, Scene Instance and Instanced are part of what a node is rather than components a file lists. `ComponentRegistry::Find<T>()` finds the type of a C++ component.
+- **Native components** register their fields through pointers to their members, which also give their defaults: `Field` for a bool, int, float, vector or string, and `Color`, `Enum`, `Asset` and `AssetList` for the others. Enums are stored as their index, and asset references as `AssetID`s, typed again when they are set. `native_components.cpp` registers Transform, Light, Camera and Mesh Renderer; Name, Relationship, Scene Instance and Instanced are part of what a node is rather than components a file lists. `ComponentRegistry::Find<T>()` finds the type of a C++ component.
 - **Runtime components** have no C++ type, like those a script will define (#36). Their values are a `RuntimeComponent` in a pool of the scene's named after their id.
 - **Options of a field:** `Range` and `Speed`, `VisibleIf` for what only matters with the component's other values, `ItemLabel` to name a list's entries (a mesh's material slots), and `UniformToggle` for a vector that can change along all axes together.
 - **What the editor does with a component:** `Icon` names a Lucide icon, which can depend on the values. `Preset` adds a way to set it up to the Create menu, under the menu name it is given. `SpawnsFrom` makes an asset dropped in the Scene view an entity with the component, and `DropTarget` sets it on the entity under the mouse.
@@ -167,18 +167,21 @@ registry.RegisterRuntime("health", "Health", { FieldInfo{ .Key = "max", .Label =
 
 In the editor, the Inspector draws each registered component an entity has from its fields (`ui::DrawComponentFields`): a row per visible field, by its type, that resets to its default. An asset field is drawn by `ui::AssetField`. No component has a look of its own, so a new one gets the same rows, entry names and uniform toggle by registering them. Edits that change assets are resolved after the frame, as resolving may load them. **Add Component** lists the types that can be added, and a component the editor doesn't know shows as a line that says it is kept. Icons come from `ui::ComponentIcon`, which the Hierarchy uses too.
 
+A camera looks along its -Z axis from its entity's position, like a light, and is either perspective (a vertical field of view) or orthographic (a size, which is half the height of the view in world units). `ComputeCameraView` (`scene_camera.hpp`) gives its view, projection and position for an aspect ratio and the entity's world matrix, with the scale left out, using the same clip space as the editor camera. `FindMainCamera` resolves the scene's main camera: the one its settings refer to while it is active and has a camera, otherwise the first active one in hierarchy order, otherwise none.
+
 The renderer, picking and the camera still use the C++ types directly, as they are what the components are for rather than ways to edit or save them.
 
 `SceneRenderer` turns a scene into a frame: it gathers the active lights into `FrameLighting`, gives every active renderer an object transform, and records the passes under [Rendering](#rendering).
 
 ### Scene files
 
-A scene is saved as a `.scene` asset: readable JSON with the entities nested the way they are in the hierarchy, and the scene's exposure, tone mapper and ambient light. `CaptureScene` turns a `Scene` into a `SceneData` that `WriteSceneData` writes, and `ParseSceneData` and `InstantiateScene` go the other way.
+A scene is saved as a `.scene` asset: readable JSON with the entities nested the way they are in the hierarchy, and the scene's ambient light, main camera, exposure and tone mapper (`SceneSettings`). `CaptureScene` turns a `Scene` into a `SceneData` that `WriteSceneData` writes, and `ParseSceneData` and `InstantiateScene` go the other way.
 
 ```json
 {
   "version": 1,
   "environment": { "ambient": [0.05, 0.05, 0.05], "exposure": 1.0, "toneMapper": "aces" },
+  "mainCamera": "5be2c90d7a41f3a8",
   "entities": [
     {
       "id": "a7c31e5d90b24f16",
@@ -191,6 +194,8 @@ A scene is saved as a `.scene` asset: readable JSON with the entities nested the
   ]
 }
 ```
+
+`mainCamera` is the id of the entity that is the scene's main camera, and is left out while none is chosen. A file without it, as older ones are, loads as none chosen, and an id with no entity keeps its reference, so that undoing a delete makes it work again.
 
 `CaptureNode` and `ApplyNode` capture and set one entity apart from its children, which undo uses.
 
@@ -280,21 +285,23 @@ Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the 
 
 | Panel | What it does |
 |:------|:-------------|
-| **Scene** | the scene's render target, with an [ImGuizmo](https://github.com/CedricGuillemet/ImGuizmo) gizmo on the selection and a toolbar for its tool and axes. Picking raycasts the meshes' bounds. |
+| **Scene** | the scene's render target, with an [ImGuizmo](https://github.com/CedricGuillemet/ImGuizmo) gizmo on the selection and a toolbar for its tool and axes. Picking raycasts the meshes' bounds. The toolbar's camera button looks through the selected camera, which stays the one looked through when the selection changes, and pauses the editor camera without moving it. It turns off when that camera is destroyed or loses its component. |
 | **Hierarchy** | the entity tree, with search, rename in place and the create menu, which has a submenu for each menu name the components' presets use. Dragging onto an entity reparents, and onto the empty area makes a root. |
 | **Inspector** | the selected entity or asset. Entities show their components, drawn from their registered fields (see [Components](#components)), and **Add Component** lists what is registered. Materials show their shader's properties and textures, and edits reach the file on **Save** (`AssetEdits`). Asset fields, a component's and a material's shader and texture slots, are object fields with a picker button: the asset's icon or thumbnail and its name, and a window with a search box, a list or grid view, **None** and the current asset highlighted (`ui::AssetPicker`). A choice applies at once, Enter or a double-click closes it, and Escape puts back what the field had. Clicking the name shows the asset in the Assets panel. Textures show their import settings, and meshes and shaders their details. |
 | **Assets** | the project's files and the engine's, with a folder tree, a grid, search, and dragging into the Inspector or the Scene view. In the Scene view, what a component registered as `SpawnsFrom` (a mesh) makes a new entity, what one registered as `DropTarget` (a material) goes on the entity under the mouse, and a scene becomes an instance. Shaders open in the External Script Editor, other files in the system's program (`system_shell.hpp`). Files changed outside the editor appear when it regains focus. |
 | **Console** | the log, grouped and filtered by level |
-| **Render Settings** | exposure, tone mapper and ambient light, saved with the scene |
+| **Scene Settings** | what is saved with the scene apart from its entities: ambient light, the main camera (a picker of its cameras, or Automatic, the first active one), and post-processing (exposure and tone mapper) for now |
 | **Stats** | FPS, frame, CPU and wait times, draw calls, triangles, passes and bind counts |
 | **Shadow Map** | the shadow atlas |
+
+The Scene view is seen from the editor's own camera (`PerspectiveCamera`, moved by `SceneCameraController`), which isn't part of the scene and is never saved. `SceneView` picks what the view is seen from, rendering, picking, drops and the gizmo all read: that camera, or a scene camera while one is looked through. Looking through only pauses the editor camera, so turning it off puts the view back where it was.
 
 ### Undo
 
 `SceneHistory` works like Unity's `Undo.RecordObject`: code that changes the scene records what it is about to change (`Record`), creates (`RecordCreated`) or destroys (`RecordDestroy`), and `Commit` ends the step, keeping each recorded entity that did change as it was before and after. Undo puts back only those, so the rest of the scene, its entity handles and the Hierarchy's open nodes stay as they are. A deleted entity comes back with what was under it, its ids and its place among its siblings. A step keeps whole states rather than what was done, so an edit nobody recorded only means that one can't be undone.
 
 - **Capturing and setting:** `CaptureNode` and `ApplyNode` capture and set one entity through the component registry, the way a scene file does. A component's fallbacks are captured as empty by `CaptureComponent` and resolved again by `ResolveComponentAssets`, so an undone material drop gets its default material back.
-- **Who records:** the Hierarchy and the Scene view record their edits through `EditorContext::History`. The Inspector and the gizmo change the selected entity directly, and Render Settings the environment, so the session records those whenever nothing is being edited.
+- **Who records:** the Hierarchy and the Scene view record their edits through `EditorContext::History`. The Inspector and the gizmo change the selected entity directly, and Scene Settings the scene's settings, so the session records those whenever nothing is being edited.
 - **When a step ends:** on the frame an ImGui item stops being active, the gizmo stops being dragged (`EditorContext::GizmoInUse`) or the asset picker closes, after deferred actions ran, or after a panel sets `EditorContext::SceneEdited` for an edit done at once. The Inspector sets it too, so a drop onto a field ends its step right away. The check a few times a second for the unsaved mark ends any other. A whole drag, typing a name or a visit to the picker is one step, and undo first ends the step being recorded.
 - **The selection:** an entity that undo brings back is a new one, so it is selected again by its id if it was selected before the edit.
 - **What resets it:** opening a scene. Undoing back to the saved state clears the unsaved mark, as that compares the scene with what was saved.

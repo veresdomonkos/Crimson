@@ -82,10 +82,11 @@ namespace
 
 TEST_CASE_METHOD(Fixture, "The engine's components are registered in the order they are saved in", "[components]")
 {
-    REQUIRE(Registry.Types().size() >= 3);
+    REQUIRE(Registry.Types().size() >= 4);
     CHECK(Registry.Types()[0].Id == "transform");
     CHECK(Registry.Types()[1].Id == "light");
-    CHECK(Registry.Types()[2].Id == "meshRenderer");
+    CHECK(Registry.Types()[2].Id == "camera");
+    CHECK(Registry.Types()[3].Id == "meshRenderer");
 
     CHECK(Type("transform").InlineInFile);
     CHECK_FALSE(Type("transform").Addable);
@@ -378,6 +379,15 @@ TEST_CASE_METHOD(Fixture, "Presets set up a component and resolve its assets", "
         CHECK(Thing.GetComponent<LightComponent>().Type == LightType::Directional);
     }
 
+    SECTION("A camera")
+    {
+        const ComponentType& camera = Type("camera");
+        CHECK(preset(camera, "Camera").Menu == "Camera");
+
+        ApplyPreset(camera, preset(camera, "Camera"), Thing, Assets);
+        CHECK(Thing.GetComponent<CameraComponent>() == CameraComponent{});
+    }
+
     SECTION("A built-in mesh")
     {
         const ComponentType& renderer = Type("meshRenderer");
@@ -543,4 +553,39 @@ TEST_CASE_METHOD(Fixture, "Every component with assets resolves with the scene",
 
     CHECK_FALSE(Thing.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
     CHECK_FALSE(other.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
+}
+
+TEST_CASE_METHOD(Fixture, "A camera's far clip stays beyond its near clip", "[components]")
+{
+    const ComponentType& camera = Type("camera");
+
+    const CameraComponent defaults;
+    std::vector<FieldValue> values = ReadFields(camera, &defaults);
+    values[*camera.FindField("near")] = 20.0f;
+    values[*camera.FindField("far")] = 5.0f;
+
+    WriteComponent(camera, Thing, values);
+
+    const auto& written = Thing.GetComponent<CameraComponent>();
+    CHECK(written.NearClip == 20.0f);
+    CHECK(written.FarClip > written.NearClip);
+}
+
+TEST_CASE_METHOD(Fixture, "A camera shows the field of view or the size for its projection", "[components]")
+{
+    const ComponentType& camera = Type("camera");
+
+    const CameraComponent perspective{ .Projection = CameraProjection::Perspective };
+    const CameraComponent orthographic{ .Projection = CameraProjection::Orthographic };
+
+    REQUIRE(Field(camera, "fov").Visible);
+    REQUIRE(Field(camera, "orthographicSize").Visible);
+    CHECK(Field(camera, "fov").Visible(&perspective));
+    CHECK_FALSE(Field(camera, "fov").Visible(&orthographic));
+    CHECK_FALSE(Field(camera, "orthographicSize").Visible(&perspective));
+    CHECK(Field(camera, "orthographicSize").Visible(&orthographic));
+
+    CHECK_FALSE(Field(camera, "projection").Visible);
+    CHECK_FALSE(Field(camera, "near").Visible);
+    CHECK_FALSE(Field(camera, "far").Visible);
 }

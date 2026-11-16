@@ -60,6 +60,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/scene/entity.hpp
     include/crimson/scene/scene.hpp
     include/crimson/scene/scene_renderer.hpp
+    include/crimson/scene/scene_camera.hpp
     include/crimson/scene/scene_serializer.hpp
     include/crimson/scene/tone_mapper.hpp
 
@@ -139,6 +140,7 @@ set(ENGINE_SOURCES
     src/scene/native_components.cpp
     src/scene/scene.cpp
     src/scene/scene_renderer.cpp
+    src/scene/scene_camera.cpp
     src/scene/scene_serializer.cpp
 
     src/shader/hlsl_compiler.cpp

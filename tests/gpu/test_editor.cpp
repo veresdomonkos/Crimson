@@ -348,6 +348,13 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[
         entities.push_back(light);
     }
 
+    for (const CameraProjection projection : { CameraProjection::Perspective, CameraProjection::Orthographic })
+    {
+        const Entity camera = scene.CreateEntity("Camera");
+        camera.AddComponent<CameraComponent>().Projection = projection;
+        entities.push_back(camera);
+    }
+
     const Entity guard = scene.CreateEntity("Guard");
     health->Add(guard);
     entities.push_back(guard);
@@ -379,6 +386,40 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[
     }
 
     CHECK(health->Has(guard));
+}
+
+TEST_CASE_METHOD(AssetFixture, "The Scene view draws through a scene camera", "[editor]")
+{
+    Scene& scene = Context().ActiveScene;
+
+    const Entity camera = scene.CreateEntity("Camera");
+    camera.AddComponent<CameraComponent>();
+    camera.GetComponent<TransformComponent>().Position = glm::vec3(0.0f, 2.0f, 6.0f);
+    Context().SelectEntity(camera);
+
+    auto& view = Session().GetSceneView();
+    view.LookThrough(camera);
+    REQUIRE(view.IsLookingThrough());
+    RunFrames(App);
+    CHECK(view.IsLookingThrough());
+
+    camera.GetComponent<CameraComponent>().Projection = CameraProjection::Orthographic;
+    RunFrames(App);
+    CHECK(view.IsLookingThrough());
+
+    SECTION("Losing its camera component")
+    {
+        camera.RemoveComponent<CameraComponent>();
+        RunFrames(App);
+        CHECK_FALSE(view.IsLookingThrough());
+    }
+
+    SECTION("Being destroyed")
+    {
+        scene.DestroyEntity(camera);
+        RunFrames(App);
+        CHECK_FALSE(view.IsLookingThrough());
+    }
 }
 
 // The panels queue these for after the frame, as they can't change GPU resources in the middle of it
@@ -608,6 +649,24 @@ TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[edit
 
         CHECK_FALSE(Session().IsSceneChanged());
         CHECK(Assets().Read(id)->Roots.back().Name == "New");
+    }
+
+    SECTION("The main camera is part of it")
+    {
+        const Entity camera = Context().ActiveScene.CreateEntity("Camera");
+        camera.AddComponent<CameraComponent>();
+        REQUIRE(Session().SaveAll());
+        REQUIRE_FALSE(Session().IsSceneChanged());
+
+        const AssetID cameraId = camera.GetComponent<NameComponent>().Id;
+        Session().GetSettings().MainCamera = cameraId;
+        CHECK(Session().IsSceneChanged());
+
+        REQUIRE(Session().SaveAll());
+        CHECK_FALSE(Session().IsSceneChanged());
+
+        // What a reopened scene is made from
+        CHECK(Assets().Read(id)->Settings.MainCamera == cameraId);
     }
 
     SECTION("Closing asks first")

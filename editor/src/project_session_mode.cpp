@@ -20,7 +20,7 @@
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 #include "crimson_editor/ui/inspector_panel.hpp"
 #include "crimson_editor/ui/preferences_panel.hpp"
-#include "crimson_editor/ui/render_settings_panel.hpp"
+#include "crimson_editor/ui/scene_settings_panel.hpp"
 #include "crimson_editor/ui/scene_viewport_panel.hpp"
 #include "crimson_editor/ui/stats_panel.hpp"
 #include "crimson_editor/ui/viewport_panel.hpp"
@@ -36,7 +36,8 @@ namespace crimson::editor
           m_assetManager(std::make_unique<AssetManager>(GpuResources(), m_project.AssetsDir())),
           m_assetEdits(std::make_unique<AssetEdits>(*m_assetManager)),
           m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, GpuResources(), *m_services.Graphics.Imgui)),
-          m_history(m_scene, *m_assetManager, m_environment, [this] { m_sceneRenderer->SetToneMapping(m_environment.Exposure, m_environment.Mapper); }),
+          m_sceneView(m_scene, m_camera, static_cast<float>(kMainTargetWidth) / kMainTargetHeight),
+          m_history(m_scene, *m_assetManager, m_settings, [this] { m_sceneRenderer->SetToneMapping(m_settings.PostProcessing.Exposure, m_settings.PostProcessing.Mapper); }),
           m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails, .History = m_history,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
                      .OpenScene = [this](SceneID id) { OpenScene(id); },
@@ -103,14 +104,14 @@ namespace crimson::editor
     {
         auto& imgui = *m_services.Graphics.Imgui;
 
-        m_sceneViewport = &m_ui->AddPanel<ui::SceneViewportPanel>("Scene", imgui.GetOrCreateTextureId(m_mainColor), 16.0f / 9.0f, m_context, m_camera);
+        m_sceneViewport = &m_ui->AddPanel<ui::SceneViewportPanel>("Scene", imgui.GetOrCreateTextureId(m_mainColor), 16.0f / 9.0f, m_context, m_sceneView);
         m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_sceneRenderer->GetShadowAtlas()), 1.0f);
         m_ui->AddPanel<ui::AssetBrowserPanel>(m_context, m_services.Settings, m_services.AppWindow); // before the console, for its tab to be in front
         m_ui->AddPanel<ui::ConsolePanel>();
         m_ui->AddPanel<ui::HierarchyPanel>(m_context);
         m_ui->AddPanel<ui::InspectorPanel>(m_context);
         m_ui->AddPanel<ui::StatsPanel>(m_frameStats, m_services.RendererType);
-        m_ui->AddPanel<ui::RenderSettingsPanel>(m_context, *m_sceneRenderer, m_environment);
+        m_ui->AddPanel<ui::SceneSettingsPanel>(m_context, *m_sceneRenderer, m_settings);
 
         // Last, for its Edit menu item to come after the Hierarchy's
         m_ui->AddPanel<ui::PreferencesPanel>(m_services.Settings, m_services.AppWindow);
@@ -246,11 +247,11 @@ namespace crimson::editor
             m_ui->GetNotifications().Push(ui::Notifications::Kind::Warning, text);
         }
 
-        m_environment = data->Environment;
-        m_sceneRenderer->SetToneMapping(m_environment.Exposure, m_environment.Mapper);
+        m_settings = data->Settings;
+        m_sceneRenderer->SetToneMapping(m_settings.PostProcessing.Exposure, m_settings.PostProcessing.Mapper);
 
         // Not the file's data, as loading can fill things in that shouldn't count as a change
-        m_savedScene = CaptureScene(m_scene, m_environment, *m_assetManager);
+        m_savedScene = CaptureScene(m_scene, m_settings, *m_assetManager);
         m_context.ActiveSceneAsset = id;
 
         m_services.Recents.SetLastScene(m_project.Root(), id);
@@ -258,7 +259,7 @@ namespace crimson::editor
 
     bool ProjectSessionMode::IsSceneChanged()
     {
-        return m_context.ActiveSceneAsset && CaptureScene(m_scene, m_environment, *m_assetManager) != m_savedScene;
+        return m_context.ActiveSceneAsset && CaptureScene(m_scene, m_settings, *m_assetManager) != m_savedScene;
     }
 
     bool ProjectSessionMode::IsEditing() const
@@ -268,9 +269,9 @@ namespace crimson::editor
 
     void ProjectSessionMode::RecordWatched()
     {
-        // The Inspector and the gizmo change the selection directly, and Render Settings the environment
+        // The Inspector and the gizmo change the selection directly, and Scene Settings the scene's settings
         m_history.Record(m_context.Selected);
-        m_history.RecordEnvironment();
+        m_history.RecordSettings();
 
         m_selectedBeforeEdit = m_context.Selected ? m_context.Selected.GetComponent<NameComponent>().Id : AssetID{};
     }
@@ -318,7 +319,7 @@ namespace crimson::editor
             return saved;
         }
 
-        SceneData current = CaptureScene(m_scene, m_environment, *m_assetManager);
+        SceneData current = CaptureScene(m_scene, m_settings, *m_assetManager);
 
         if (current != m_savedScene)
         {
@@ -419,13 +420,15 @@ namespace crimson::editor
         m_scene.UpdateWorldTransforms();
 
         FrameLighting& lighting = frame.Lighting();
-        lighting.AmbientColor = m_environment.Ambient;
+        lighting.AmbientColor = m_settings.Ambient;
         m_sceneRenderer->BuildLighting(m_scene, lighting);
+
+        const CameraView view = m_sceneView.GetView();
 
         const PassInfo info{
             .Target = m_mainTarget,
             .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(0.02f, 0.02f, 0.035f, 1.0f) },
-            .View = { .ViewProj = m_camera.GetViewProj(), .CameraPosition = m_camera.GetPosition() }
+            .View = { .ViewProj = view.GetViewProj(), .CameraPosition = view.Position }
         };
 
         m_sceneRenderer->Record(frame, m_scene, info, m_context.Selected);
@@ -445,6 +448,7 @@ namespace crimson::editor
     {
         const bool ranDeferred = !m_context.Deferred.empty();
         RunDeferred();
+        m_sceneView.Update();
         UpdateFrameStats();
 
         // An edit is a step as soon as it is done. Those that aren't noticed here are by the check below.
@@ -484,7 +488,12 @@ namespace crimson::editor
                 ResolveSceneAssets(m_scene, *m_assetManager);
         }
 
-        m_cameraController->Update(deltaTime);
+        // The editor camera stays where it is while a scene camera is looked through
+        if (m_sceneView.IsLookingThrough())
+            m_cameraController->CancelGesture();
+        else
+            m_cameraController->Update(deltaTime);
+
         HandleShortcuts();
     }
 
@@ -541,7 +550,7 @@ namespace crimson::editor
         }
 
         if (!ImGui::GetIO().WantTextInput && !m_services.AppInput.IsMouseButtonDown(MouseButton::Right)
-            && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_context.Selected)
+            && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_context.Selected && !m_sceneView.IsLookingThrough())
         {
             m_cameraController->Frame(m_context.Selected);
         }

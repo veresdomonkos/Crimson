@@ -128,10 +128,10 @@ namespace crimson
         return node;
     }
 
-    SceneData CaptureScene(Scene& scene, const SceneEnvironment& environment, const AssetManager& assets)
+    SceneData CaptureScene(Scene& scene, const SceneSettings& settings, const AssetManager& assets)
     {
         SceneData data;
-        data.Environment = environment;
+        data.Settings = settings;
 
         for (const entt::entity root : scene.GetRoots())
             data.Roots.push_back(CaptureNode(scene.GetEntity(root), scene, assets, true));

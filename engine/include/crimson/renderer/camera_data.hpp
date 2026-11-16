@@ -7,6 +7,16 @@
 
 namespace crimson
 {
+    // What a view is drawn with: the editor camera's, or a scene camera's
+    struct CameraView
+    {
+        glm::mat4 View{1.0f};
+        glm::mat4 Projection{1.0f};
+        glm::vec3 Position{0.0f};
+
+        [[nodiscard]] glm::mat4 GetViewProj() const { return Projection * View; }
+    };
+
     class PerspectiveCamera
     {
     public:
@@ -95,6 +105,7 @@ namespace crimson
         [[nodiscard]] glm::mat4 GetView() const { return m_view; }
         [[nodiscard]] glm::mat4 GetProjection() const { return m_proj; }
         [[nodiscard]] glm::mat4 GetViewProj() const { return m_proj * m_view; }
+        [[nodiscard]] CameraView GetCameraView() const { return { m_view, m_proj, m_position }; }
 
     private:
         void RecalculateView()

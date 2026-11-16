@@ -18,6 +18,7 @@ Crimson is a small real-time 3D engine in C++23, with an editor. It renders with
 
 - **Physically based rendering:** metallic-roughness materials with the same slots as glTF, rendered in linear HDR and tone mapped for the screen.
 - **Lights and shadows:** any number of directional, point and spot lights, each of which can cast a shadow.
+- **Scene cameras:** perspective or orthographic cameras that look along their -Z axis, one of them the scene's main camera, which the Scene view can look through.
 - **Built-in shaders:** lit with glTF or mask-map packing, with parallax or triplanar and biplanar projection, unlit, and debug views of normals and UVs.
 - **Shaders that reload as you save:** HLSL, compiled inside the editor for both backends, with the material's properties and textures read from the shader itself.
 - **Scenes inside scenes:** any scene can be placed in another one as an instance. That's how reusable pieces are made, without a separate prefab type.
@@ -63,12 +64,12 @@ It needs a C++23 compiler, CMake 3.22+, the [Vulkan SDK](https://vulkan.lunarg.c
 
 | Panel | What it's for |
 |:------|:--------------|
-| **Scene** | the scene, with a gizmo on the selection |
+| **Scene** | the scene, with a gizmo on the selection. The camera button in its toolbar looks through the selected camera. |
 | **Hierarchy** | the scene's entities. Drag to reparent, `F2` or double-click to rename, `Delete` to delete, and search at the top. |
 | **Inspector** | the selected entity or asset. Right-click any field to reset it. Pick assets with the button next to a field, or drop them on it. |
 | **Assets** | the project's files. Drag them into the scene or the Inspector, and right-click for more. **Show Engine Content** adds the engine's built-in ones under an Engine root of their own, named with a prefix for their kind: `S_Lit.hlsl`, `M_Default.mat`, `SM_Cube.obj`. |
 | **Console** | everything the engine logs |
-| **Render Settings** | exposure, tone mapping and ambient light, saved with the scene |
+| **Scene Settings** | ambient light, the main camera and post-processing (exposure and tone mapping), saved with the scene |
 | **Stats** | frame times, draw calls and triangles |
 
 ## Editor controls

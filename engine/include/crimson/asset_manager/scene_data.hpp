@@ -15,14 +15,23 @@ namespace crimson
 {
     class AssetManager;
 
-    // How a scene is lit and shown, apart from its lights
-    struct SceneEnvironment
+    // Post-processing of what the scene's cameras see
+    struct PostProcessSettings
     {
-        glm::vec3 Ambient{0.05f};
         float Exposure = 1.0f;
         ToneMapper Mapper = ToneMapper::Aces;
 
-        bool operator==(const SceneEnvironment&) const = default;
+        bool operator==(const PostProcessSettings&) const = default;
+    };
+
+    // What a scene saves apart from its entities
+    struct SceneSettings
+    {
+        glm::vec3 Ambient{0.05f};
+        AssetID MainCamera; // a node's id, unset means the first active camera (FindMainCamera)
+        PostProcessSettings PostProcessing;
+
+        bool operator==(const SceneSettings&) const = default;
     };
 
     // One entity. An instance only has what can differ between instances, the rest comes from its scene when it is loaded.
@@ -46,7 +55,7 @@ namespace crimson
     // What a .scene file says. It is separate from the running Scene, as an instance's file can be read without one.
     struct SceneData
     {
-        SceneEnvironment Environment;
+        SceneSettings Settings;
         std::vector<SceneNode> Roots;
 
         bool operator==(const SceneData&) const = default;

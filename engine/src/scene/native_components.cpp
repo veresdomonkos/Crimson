@@ -9,6 +9,9 @@ namespace crimson
 {
     namespace
     {
+        // The smallest distance the far clip keeps beyond the near one
+        constexpr float kMinClipGap = 0.01f;
+
         // Loads the renderer's mesh and materials into Resolved and sizes MaterialAssets to the mesh's slots.
         // Empty slots get the material made for them (FindSlotMaterial), or else the default one.
         void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets)
@@ -103,6 +106,19 @@ namespace crimson
             .Preset("Light", "Directional", [](LightComponent& light, const AssetManager&) { light.Type = LightType::Directional; })
             .Preset("Light", "Point", [](LightComponent& light, const AssetManager&) { light.Type = LightType::Point; })
             .Preset("Light", "Spot", [](LightComponent& light, const AssetManager&) { light.Type = LightType::Spot; });
+
+        const auto isPerspective = [](const CameraComponent& camera) { return camera.Projection == CameraProjection::Perspective; };
+        const auto isOrthographic = [](const CameraComponent& camera) { return camera.Projection == CameraProjection::Orthographic; };
+
+        registry.Register<CameraComponent>("camera", "Camera")
+            .Icon("video")
+            .Enum("projection", "Projection", &CameraComponent::Projection, { { "perspective", "Perspective" }, { "orthographic", "Orthographic" } })
+            .Field("fov", "Field of View", &CameraComponent::FieldOfViewDegrees, { .Range = std::pair(1.0f, 179.0f), .Speed = 0.25f, .VisibleIf = isPerspective })
+            .Field("orthographicSize", "Size", &CameraComponent::OrthographicSize, { .Range = std::pair(0.001f, 100000.0f), .Speed = 0.05f, .VisibleIf = isOrthographic })
+            .Field("near", "Near Clip", &CameraComponent::NearClip, { .Range = std::pair(0.001f, 10000.0f), .Speed = 0.01f })
+            .Field("far", "Far Clip", &CameraComponent::FarClip, { .Range = std::pair(0.01f, 100000.0f), .Speed = 1.0f })
+            .Constrain([](CameraComponent& camera) { camera.FarClip = std::max(camera.FarClip, camera.NearClip + kMinClipGap); })
+            .Preset("Camera", "Camera", [](CameraComponent&, const AssetManager&) {});
 
         auto meshRenderer = registry.Register<MeshRendererComponent>("meshRenderer", "Mesh Renderer");
         meshRenderer.Icon("box")

@@ -15,6 +15,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/project_session_mode.hpp
     include/crimson_editor/recent_projects.hpp
     include/crimson_editor/scene_history.hpp
+    include/crimson_editor/scene_view.hpp
     include/crimson_editor/scene_camera_controller.hpp
     include/crimson_editor/script_editor.hpp
     include/crimson_editor/system_shell.hpp
@@ -37,7 +38,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/ui/panel.hpp
     include/crimson_editor/ui/preferences_panel.hpp
     include/crimson_editor/ui/property_fields.hpp
-    include/crimson_editor/ui/render_settings_panel.hpp
+    include/crimson_editor/ui/scene_settings_panel.hpp
     include/crimson_editor/ui/scene_viewport_panel.hpp
     include/crimson_editor/ui/stats_panel.hpp
     include/crimson_editor/ui/viewport_panel.hpp
@@ -55,6 +56,7 @@ set(EDITOR_SOURCES
     src/project_session_mode.cpp
     src/recent_projects.cpp
     src/scene_history.cpp
+    src/scene_view.cpp
     src/scene_camera_controller.cpp
     src/script_editor.cpp
     src/system_shell.cpp
@@ -74,7 +76,7 @@ set(EDITOR_SOURCES
     src/ui/notifications.cpp
     src/ui/preferences_panel.cpp
     src/ui/property_fields.cpp
-    src/ui/render_settings_panel.cpp
+    src/ui/scene_settings_panel.cpp
     src/ui/scene_viewport_panel.cpp
     src/ui/stats_panel.cpp
     src/ui/viewport_panel.cpp

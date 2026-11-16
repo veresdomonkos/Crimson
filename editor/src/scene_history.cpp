@@ -19,8 +19,8 @@ namespace crimson::editor
         }
     }
 
-    SceneHistory::SceneHistory(Scene& scene, AssetManager& assets, SceneEnvironment& environment, std::function<void()> onEnvironmentChanged)
-        : m_scene(scene), m_assets(assets), m_environment(environment), m_onEnvironmentChanged(std::move(onEnvironmentChanged))
+    SceneHistory::SceneHistory(Scene& scene, AssetManager& assets, SceneSettings& settings, std::function<void()> onSettingsChanged)
+        : m_scene(scene), m_assets(assets), m_settings(settings), m_onSettingsChanged(std::move(onSettingsChanged))
     {
     }
 
@@ -85,10 +85,10 @@ namespace crimson::editor
         m_pending.push_back({ state.Node.Id, state, true });
     }
 
-    void SceneHistory::RecordEnvironment()
+    void SceneHistory::RecordSettings()
     {
-        if (!m_environmentBefore)
-            m_environmentBefore = m_environment;
+        if (!m_settingsBefore)
+            m_settingsBefore = m_settings;
     }
 
     bool SceneHistory::Commit(AssetID selected)
@@ -105,13 +105,13 @@ namespace crimson::editor
                 step.Entities.push_back({ pending.Id, pending.Before, after });
         }
 
-        if (m_environmentBefore && *m_environmentBefore != m_environment)
-            step.Environment = std::pair(*m_environmentBefore, m_environment);
+        if (m_settingsBefore && *m_settingsBefore != m_settings)
+            step.Settings = std::pair(*m_settingsBefore, m_settings);
 
         m_pending.clear();
-        m_environmentBefore.reset();
+        m_settingsBefore.reset();
 
-        if (step.Entities.empty() && !step.Environment)
+        if (step.Entities.empty() && !step.Settings)
             return false;
 
         // What could be redone was undone before this, and goes
@@ -167,10 +167,10 @@ namespace crimson::editor
         for (const EntityChange& change : std::views::reverse(step.Entities))
             Apply(change.Id, change.Before);
 
-        if (step.Environment)
+        if (step.Settings)
         {
-            m_environment = step.Environment->first;
-            m_onEnvironmentChanged();
+            m_settings = step.Settings->first;
+            m_onSettingsChanged();
         }
 
         return true;
@@ -187,10 +187,10 @@ namespace crimson::editor
         for (const EntityChange& change : step.Entities)
             Apply(change.Id, change.After);
 
-        if (step.Environment)
+        if (step.Settings)
         {
-            m_environment = step.Environment->second;
-            m_onEnvironmentChanged();
+            m_settings = step.Settings->second;
+            m_onSettingsChanged();
         }
 
         return true;
@@ -199,7 +199,7 @@ namespace crimson::editor
     void SceneHistory::Clear()
     {
         m_pending.clear();
-        m_environmentBefore.reset();
+        m_settingsBefore.reset();
         m_steps.clear();
         m_restoredSelection = {};
         m_done = 0;
