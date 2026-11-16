@@ -33,7 +33,7 @@ add_executable(CrimsonTests
     editor/test_platform.cpp
     editor/test_recent_projects.cpp
     editor/test_recovery_files.cpp
-    editor/test_scene_history.cpp
+    editor/test_scene_edits.cpp
     editor/test_scene_view.cpp
     editor/test_script_editor.cpp
     editor/test_system_shell.cpp

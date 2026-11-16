@@ -103,7 +103,7 @@ namespace crimson::editor::ui
     {
         const std::string name = std::filesystem::path(info.Path).filename().string();
 
-        ImGui::TextUnformatted(m_context.Edits.IsDirty(m_context.Assets.As<AssetType::Material>(info.Id)) ? (name + " *").c_str() : name.c_str());
+        ImGui::TextUnformatted(m_context.Edits.IsDirty(info.Id) ? (name + " *").c_str() : name.c_str());
         ImGui::TextDisabled("%.*s", static_cast<int>(ToString(info.Type).size()), ToString(info.Type).data());
 
         if (info.ReadOnly)
@@ -121,7 +121,7 @@ namespace crimson::editor::ui
         AssetEdits& edits = m_context.Edits;
         const MaterialID id = m_context.Assets.As<AssetType::Material>(info.Id);
 
-        const MaterialData* current = edits.GetMaterial(id);
+        const MaterialData* current = edits.Get(id);
         if (!current)
         {
             ImGui::TextDisabled("This material can't be read, see the console");
@@ -151,25 +151,10 @@ namespace crimson::editor::ui
         ImGui::EndDisabled();
 
         if (changed)
-            edits.SetMaterial(id, data);
-
-        if (info.ReadOnly)
-            return;
-
-        ImGui::Spacing();
-        ImGui::Separator();
-
-        const bool dirty = edits.IsDirty(id);
-        ImGui::BeginDisabled(!dirty);
-
-        if (theme::PrimaryButton("Save"))
-            edits.Save(id);
-
-        ImGui::SameLine();
-        if (ImGui::Button("Revert"))
-            edits.Revert(id);
-
-        ImGui::EndDisabled();
+        {
+            edits.Set(id, data);
+            m_context.Edited = true; // a drop or a choice from a list is a step right away, a drag only when it is let go
+        }
     }
 
     void AssetInspector::DrawMaterialSettings(MaterialID id, MaterialData& data, bool& changed)
@@ -177,11 +162,11 @@ namespace crimson::editor::ui
         // Another material is drawn, so the picker was left by selecting it and the first one is still unpruned
         if (m_pickingShaderFor && m_pickingShaderFor != id)
         {
-            if (const MaterialData* left = m_context.Edits.GetMaterial(m_pickingShaderFor))
+            if (const MaterialData* left = m_context.Edits.Get(m_pickingShaderFor))
             {
                 MaterialData pruned = *left;
                 if (PruneToShader(m_context.Assets, pruned))
-                    m_context.Edits.SetMaterial(m_pickingShaderFor, pruned);
+                    m_context.Edits.Set(m_pickingShaderFor, pruned);
             }
 
             m_pickingShaderFor = {};

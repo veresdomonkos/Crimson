@@ -465,7 +465,7 @@ TEST_CASE_METHOD(AssetFixture, "Creating from the Hierarchy's presets and resolv
     CHECK_FALSE(created.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
 }
 
-TEST_CASE_METHOD(AssetFixture, "A material's edits show and can be saved or reverted", "[editor]")
+TEST_CASE_METHOD(AssetFixture, "A material's edits show, undo, redo and save", "[editor]")
 {
     const MaterialID id = Assets().Find<AssetType::Material>("materials/floor.mat");
     const MaterialHandle handle = Assets().Load(id);
@@ -473,28 +473,53 @@ TEST_CASE_METHOD(AssetFixture, "A material's edits show and can be saved or reve
     Context().SelectAsset(id);
     RunFrames(App);
 
-    MaterialData data = *Context().Edits.GetMaterial(id);
+    MaterialData data = *Context().Edits.Get(id);
     data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
     data.Textures["ColorMap"] = Assets().Find<AssetType::Texture>("textures/picture.bmp");
-    Context().Edits.SetMaterial(id, data);
+    Context().Edits.Set(id, data);
     RunFrames(App);
 
     CHECK(Assets().Load(id) == handle);
     CHECK(*Assets().GetData(id) == data);
     CHECK(Context().Edits.IsDirty(id));
 
-    SECTION("Reverting")
-    {
-        Context().Edits.Revert(id);
-        RunFrames(App);
-        CHECK_FALSE(Assets().GetData(id)->Textures.contains("ColorMap"));
-    }
+    Session().Undo();
+    RunFrames(App);
 
-    SECTION("Saving")
-    {
-        REQUIRE(Context().Edits.Save(id));
-        CHECK(Assets().Read(id)->Properties.at("Color") == data.Properties.at("Color"));
-    }
+    CHECK_FALSE(Assets().GetData(id)->Textures.contains("ColorMap"));
+    CHECK_FALSE(Context().Edits.IsDirty(id));
+
+    Session().Redo();
+    RunFrames(App);
+
+    CHECK(*Assets().GetData(id) == data);
+    CHECK(Context().Edits.IsDirty(id));
+
+    REQUIRE(Context().Edits.Save(id));
+    CHECK(Assets().Read(id)->Properties.at("Color") == data.Properties.at("Color"));
+
+    // A scene step undone with its entity still selected leaves no selection behind for a later step to undo into
+    Scene& scene = Context().ActiveScene;
+    const Entity entity = scene.GetEntity(scene.GetRoots()[0]);
+    Context().SelectEntity(entity);
+    RunFrames(App);
+
+    Context().SceneUndo.Record(entity);
+    entity.GetComponent<TransformComponent>().Position.x += 1.0f;
+    REQUIRE(Session().GetHistory().Commit());
+    Session().Undo();
+    Session().Redo();
+
+    Context().SelectAsset(id);
+    RunFrames(App);
+
+    MaterialData again = *Context().Edits.Get(id);
+    again.Properties["Color"] = { 0.0f, 0.0f, 1.0f, 1.0f };
+    Context().Edits.Set(id, again);
+    Session().Undo();
+
+    CHECK(Context().SelectedAsset == AssetID(id));
+    CHECK_FALSE(Context().Selected);
 }
 
 TEST_CASE_METHOD(AssetFixture, "Changing a material's shader keeps the scene drawing", "[editor]")
@@ -502,9 +527,9 @@ TEST_CASE_METHOD(AssetFixture, "Changing a material's shader keeps the scene dra
     const MaterialID id = Assets().Find<AssetType::Material>("materials/floor.mat");
     const MaterialHandle before = Assets().Load(id);
 
-    MaterialData data = *Context().Edits.GetMaterial(id);
+    MaterialData data = *Context().Edits.Get(id);
     data.Shader = Assets().Find<AssetType::Shader>("shaders/own.hlsl");
-    Context().Edits.SetMaterial(id, data);
+    Context().Edits.Set(id, data);
     RunFrames(App);
 
     CHECK(Assets().Load(id) != before);
@@ -568,9 +593,9 @@ TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
     {
         const MaterialID material = Assets().Find<AssetType::Material>("materials/floor.mat");
 
-        MaterialData data = *Context().Edits.GetMaterial(material);
+        MaterialData data = *Context().Edits.Get(material);
         data.Textures["ColorMap"] = Assets().Find<AssetType::Texture>("textures/picture.bmp");
-        Context().Edits.SetMaterial(material, data);
+        Context().Edits.Set(material, data);
         Context().SelectAsset(material);
         RunFrames(App);
 
@@ -607,9 +632,9 @@ TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[edit
 {
     const MaterialID id = Assets().Find<AssetType::Material>("materials/floor.mat");
 
-    MaterialData data = *Context().Edits.GetMaterial(id);
+    MaterialData data = *Context().Edits.Get(id);
     data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
-    Context().Edits.SetMaterial(id, data);
+    Context().Edits.Set(id, data);
     RunFrames(App);
 
     App.RequestQuit();
@@ -717,7 +742,7 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
 {
     Scene& scene = Context().ActiveScene;
     REQUIRE(scene.GetRoots().size() >= 2);
-    CHECK_FALSE(Context().History.CanUndo());
+    CHECK_FALSE(Session().GetHistory().CanUndo());
 
     const auto root = [&scene](size_t index) { return scene.GetEntity(scene.GetRoots()[index]); };
     const auto idOf = [](Entity entity) { return entity.GetComponent<NameComponent>().Id; };
@@ -727,10 +752,10 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
 
     SECTION("A deleted entity comes back where it was, with its id, and the scene is as saved again")
     {
-        Context().History.RecordDestroy(root(0));
+        Context().SceneUndo.RecordDestroy(root(0));
         scene.DestroyEntity(root(0));
-        Context().History.Commit();
-        REQUIRE(Context().History.CanUndo());
+        Session().GetHistory().Commit();
+        REQUIRE(Session().GetHistory().CanUndo());
 
         Session().Undo();
 
@@ -752,7 +777,7 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
 
         Context().Deferred.emplace_back([&]
         {
-            Context().History.RecordDestroy(root(0));
+            Context().SceneUndo.RecordDestroy(root(0));
             scene.DestroyEntity(root(0));
         });
         RunFrames(App, 1);
@@ -765,7 +790,7 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
         CHECK(Context().Selected == root(0));
 
         // With nothing left to undo, the selection stays as it is
-        REQUIRE_FALSE(Context().History.CanUndo());
+        REQUIRE_FALSE(Session().GetHistory().CanUndo());
         Context().SelectEntity({});
         Session().Undo();
         CHECK_FALSE(Context().Selected);
@@ -781,7 +806,7 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
         for (int frame = 0; frame < 3; ++frame)
             selected.GetComponent<TransformComponent>().Position.x += 1.0f;
 
-        Context().SceneEdited = true;
+        Context().Edited = true;
         RunFrames(App, 1);
 
         Session().Undo();
@@ -789,16 +814,16 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
         // The same entity, as only it was put back
         CHECK(Context().Selected == selected);
         CHECK(selected.GetComponent<TransformComponent>().Position.x == 0.0f);
-        CHECK_FALSE(Context().History.CanUndo());
+        CHECK_FALSE(Session().GetHistory().CanUndo());
     }
 
     SECTION("Edits recorded between frames are each a step of their own, right away")
     {
-        Context().Deferred.emplace_back([&] { Context().History.RecordCreated(scene.CreateEntity("First")); });
+        Context().Deferred.emplace_back([&] { Context().SceneUndo.RecordCreated(scene.CreateEntity("First")); });
         RunFrames(App, 1);
-        CHECK(Context().History.CanUndo());
+        CHECK(Session().GetHistory().CanUndo());
 
-        Context().Deferred.emplace_back([&] { Context().History.RecordCreated(scene.CreateEntity("Second")); });
+        Context().Deferred.emplace_back([&] { Context().SceneUndo.RecordCreated(scene.CreateEntity("Second")); });
         RunFrames(App, 1);
 
         Session().Undo();
@@ -810,7 +835,7 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
 
     SECTION("Nothing is undone while the asset picker is open")
     {
-        Context().Deferred.emplace_back([&] { Context().History.RecordCreated(scene.CreateEntity("First")); });
+        Context().Deferred.emplace_back([&] { Context().SceneUndo.RecordCreated(scene.CreateEntity("First")); });
         RunFrames(App, 1);
 
         Context().Picker.Open(1, AssetType::Texture, {}, {});
@@ -829,9 +854,9 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
 
     SECTION("Opening another scene forgets the steps")
     {
-        Context().History.RecordDestroy(root(0));
+        Context().SceneUndo.RecordDestroy(root(0));
         scene.DestroyEntity(root(0));
-        Context().History.Commit();
+        Session().GetHistory().Commit();
         REQUIRE(Session().SaveAll());
 
         SceneID other;
@@ -842,8 +867,8 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
         RunFrames(App);
 
         REQUIRE(Context().ActiveSceneAsset == other);
-        CHECK_FALSE(Context().History.CanUndo());
-        CHECK_FALSE(Context().History.CanRedo());
+        CHECK_FALSE(Session().GetHistory().CanUndo());
+        CHECK_FALSE(Session().GetHistory().CanRedo());
     }
 }
 
