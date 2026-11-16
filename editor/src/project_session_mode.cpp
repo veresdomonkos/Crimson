@@ -60,12 +60,16 @@ namespace crimson::editor
           m_assetEdits(std::make_unique<AssetEdits>(*m_assetManager)),
           m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, GpuResources(), *m_services.Graphics.Imgui)),
           m_sceneView(m_scene, m_camera, static_cast<float>(kMainTargetWidth) / kMainTargetHeight),
-          m_history(m_scene, *m_assetManager, m_settings, [this] { m_sceneRenderer->SetToneMapping(m_settings.PostProcessing.Exposure, m_settings.PostProcessing.Mapper); }),
-          m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails, .History = m_history,
+          m_sceneEdits(m_scene, *m_assetManager, m_settings, [this] { m_sceneRenderer->SetToneMapping(m_settings.PostProcessing.Exposure, m_settings.PostProcessing.Mapper); }),
+          m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails, .SceneUndo = m_sceneEdits,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
                      .OpenScene = [this](SceneID id) { OpenScene(id); },
                      .OpenCodeFile = [this](const std::filesystem::path& file) { script_editor::Open(m_services.Settings.GetScriptEditor(), file, m_project.Root()); } }
     {
+        // In the order the sources are collected from, which is the order a step's changes are redone in
+        m_history.AddSource(m_sceneEdits);
+        m_history.AddSource(*m_assetEdits);
+
         LOG_INFO("[Editor] Opening project '{}' at {}", m_project.Name(), m_project.Root().string());
 
         // For code editors to find the engine's shader headers, which may have changed since the project was last open
@@ -400,10 +404,10 @@ namespace crimson::editor
     void ProjectSessionMode::RecordWatched()
     {
         // The Inspector and the gizmo change the selection directly, and Scene Settings the scene's settings
-        m_history.Record(m_context.Selected);
-        m_history.RecordSettings();
+        m_sceneEdits.Record(m_context.Selected);
+        m_sceneEdits.RecordSettings();
 
-        m_selectedBeforeEdit = m_context.Selected ? m_context.Selected.GetComponent<NameComponent>().Id : AssetID{};
+        m_sceneEdits.RecordSelection(m_context.Selected ? m_context.Selected.GetComponent<NameComponent>().Id : AssetID{});
     }
 
     void ProjectSessionMode::Undo()
@@ -412,7 +416,7 @@ namespace crimson::editor
             return;
 
         // An edit that wasn't a step yet is the one to undo
-        m_history.Commit(m_selectedBeforeEdit);
+        m_history.Commit();
         FinishUndoRedo(m_history.Undo());
     }
 
@@ -422,17 +426,20 @@ namespace crimson::editor
             return;
 
         // An edit since the last undo makes a step, which leaves nothing to redo
-        m_history.Commit(m_selectedBeforeEdit);
+        m_history.Commit();
         FinishUndoRedo(m_history.Redo());
     }
 
     void ProjectSessionMode::FinishUndoRedo(bool applied)
     {
+        // Taken even when it isn't used, so a step without a scene part can't find an old one
+        const AssetID restored = m_sceneEdits.TakeRestoredSelection();
+
         // An entity that comes back is a new one, so what was selected is found again by its id
         if (applied && !m_context.Selected)
         {
-            if (const Entity restored = FindEntity(m_scene, m_history.RestoredSelection()))
-                m_context.SelectEntity(restored);
+            if (const Entity entity = FindEntity(m_scene, restored))
+                m_context.SelectEntity(entity);
         }
 
         RecordWatched();
@@ -639,13 +646,17 @@ namespace crimson::editor
         m_sceneView.Update();
         UpdateFrameStats();
 
-        // An edit is a step as soon as it is done. Those that aren't noticed here are by the check below.
+        // An edit is a step on the frame after it is done, as fields take what the asset picker chose, and the material
+        // Inspector prunes to a new shader, once the picker is closed. Those that aren't noticed here are by the check below.
         const bool editing = IsEditing();
-        if (!editing && (m_wasEditing || ranDeferred || m_context.SceneEdited))
-            m_history.Commit(m_selectedBeforeEdit);
+        const bool ended = m_wasEditing && !editing;
+        const bool settled = !editing && !ended;
+        if (settled && (m_editEnded || ranDeferred || m_context.Edited))
+            m_history.Commit();
 
         m_wasEditing = editing;
-        m_context.SceneEdited = false;
+        m_editEnded = ended;
+        m_context.Edited = false;
 
         constexpr float kSceneCheckSeconds = 0.25f;
 
@@ -654,8 +665,8 @@ namespace crimson::editor
         {
             m_sinceSceneCheck = 0.0f;
 
-            if (!editing)
-                m_history.Commit(m_selectedBeforeEdit);
+            if (settled)
+                m_history.Commit();
 
             m_context.SceneChanged = IsSceneChanged();
         }
@@ -671,7 +682,7 @@ namespace crimson::editor
         }
 
         // The next edit's state from before it, once nothing is being edited
-        if (!editing)
+        if (settled)
             RecordWatched();
 
         // Often enough for a shader saved in another program to show up about right away

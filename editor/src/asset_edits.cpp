@@ -1,126 +1,89 @@
 #include "crimson_editor/asset_edits.hpp"
 
-#include <algorithm>
-
 namespace crimson::editor
 {
-    AssetEdits::Edit* AssetEdits::GetOrCreateEdit(MaterialID id)
-    {
-        if (const auto it = m_edits.find(id); it != m_edits.end())
-            return &it->second;
-
-        const MaterialData* live = m_assets.GetData(id);
-        if (!live)
-            return nullptr;
-
-        const auto saved = m_assets.Read(id);
-
-        return &m_edits.emplace(id, Edit{ .Working = *live, .Saved = saved.value_or(*live) }).first->second;
-    }
-
-    const MaterialData* AssetEdits::GetMaterial(MaterialID id)
-    {
-        const Edit* edit = GetOrCreateEdit(id);
-        return edit ? &edit->Working : nullptr;
-    }
-
-    void AssetEdits::SetMaterial(MaterialID id, const MaterialData& data)
+    AssetEdits::TableBase* AssetEdits::TableOf(AssetID id) const
     {
         const AssetInfo* info = m_assets.GetInfo(id);
-        if (!info || info->ReadOnly)
-            return;
-
-        if (Edit* edit = GetOrCreateEdit(id))
-        {
-            edit->Working = data;
-            edit->Pending = true;
-        }
+        return info ? m_tables[static_cast<size_t>(info->Type)].get() : nullptr;
     }
 
-    bool AssetEdits::IsDirty(MaterialID id) const
+    bool AssetEdits::IsDirty(AssetID id) const
     {
-        const auto it = m_edits.find(id);
-        return it != m_edits.end() && it->second.Working != it->second.Saved;
+        const TableBase* table = TableOf(id);
+        return table && table->IsDirty(id);
     }
 
     bool AssetEdits::HasUnsavedChanges() const
     {
-        return std::ranges::any_of(m_edits, [](const auto& entry) { return entry.second.Working != entry.second.Saved; });
+        return std::ranges::any_of(m_tables, [](const auto& table) { return table && table->HasUnsavedChanges(); });
     }
 
-    bool AssetEdits::Save(MaterialID id)
+    bool AssetEdits::Save(AssetID id)
     {
-        const auto it = m_edits.find(id);
-        if (it == m_edits.end())
-            return true;
-
-        if (!m_assets.Save(id, it->second.Working))
-            return false;
-
-        it->second.Saved = it->second.Working;
-        return true;
+        TableBase* table = TableOf(id);
+        return !table || table->Save(id);
     }
 
     bool AssetEdits::SaveAll()
     {
         bool saved = true;
 
-        for (auto& [id, edit] : m_edits)
+        for (const auto& table : m_tables)
         {
-            if (edit.Working != edit.Saved)
-                saved = Save(id) && saved;
+            if (table)
+                saved = table->SaveAll() && saved;
         }
 
         return saved;
     }
 
-    void AssetEdits::Revert(MaterialID id)
-    {
-        if (const auto it = m_edits.find(id); it != m_edits.end() && it->second.Working != it->second.Saved)
-        {
-            it->second.Working = it->second.Saved;
-            it->second.Pending = true;
-        }
-    }
-
     void AssetEdits::DiscardAll()
     {
-        for (auto& [id, edit] : m_edits)
-            Revert(id);
+        for (const auto& table : m_tables)
+        {
+            if (table)
+                table->DiscardAll();
+        }
     }
 
     void AssetEdits::Forget(AssetID id)
     {
-        std::erase_if(m_edits, [id](const auto& entry) { return AssetID(entry.first) == id; });
+        for (const auto& table : m_tables)
+        {
+            if (table)
+                table->Forget(id);
+        }
     }
 
     bool AssetEdits::Apply()
     {
         bool replaced = false;
 
-        for (auto& [id, edit] : m_edits)
+        for (const auto& table : m_tables)
         {
-            if (!edit.Pending)
-                continue;
-
-            edit.Pending = false;
-
-            switch (m_assets.Apply(id, edit.Working))
-            {
-                case AssetUpdate::Replaced:
-                    replaced = true;
-                    break;
-
-                case AssetUpdate::Updated:
-                    break;
-
-                case AssetUpdate::Failed:
-                    if (const MaterialData* live = m_assets.GetData(id))
-                        edit.Working = *live;
-                    break;
-            }
+            if (table)
+                replaced = table->Apply() || replaced;
         }
 
         return replaced;
+    }
+
+    void AssetEdits::Collect(std::vector<std::unique_ptr<EditChange>>& changes)
+    {
+        for (const auto& table : m_tables)
+        {
+            if (table)
+                table->Collect(changes);
+        }
+    }
+
+    void AssetEdits::Discard()
+    {
+        for (const auto& table : m_tables)
+        {
+            if (table)
+                table->Discard();
+        }
     }
 }

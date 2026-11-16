@@ -97,7 +97,7 @@ namespace crimson::editor::ui
             m_settings.MainCamera = chosen;
 
             // A step at once, the state from before it is already recorded
-            m_context.SceneEdited = true;
+            m_context.Edited = true;
         }
     }
 

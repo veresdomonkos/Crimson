@@ -488,7 +488,7 @@ namespace crimson::editor::ui
             tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, icons::ForAsset(item.Type), theme::AssetColor(item.Type));
         }
 
-        const bool dirty = item.Type == AssetType::Material && m_context.Edits.IsDirty(m_context.Assets.As<AssetType::Material>(item.Id));
+        const bool dirty = m_context.Edits.IsDirty(item.Id);
         const std::string name = dirty ? "* " + item.Name : item.Name;
         tiles::DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(item.ReadOnly ? ImGuiCol_TextDisabled : ImGuiCol_Text));
 

@@ -1,6 +1,7 @@
-#include "crimson_editor/scene_history.hpp"
+#include "crimson_editor/scene_edits.hpp"
 
 #include <algorithm>
+#include <memory>
 #include <ranges>
 #include <utility>
 
@@ -16,12 +17,12 @@ namespace crimson::editor
             CollectIds(child, ids);
     }
 
-    SceneHistory::SceneHistory(Scene& scene, AssetManager& assets, SceneSettings& settings, std::function<void()> onSettingsChanged)
+    SceneEdits::SceneEdits(Scene& scene, AssetManager& assets, SceneSettings& settings, std::function<void()> onSettingsChanged)
         : m_scene(scene), m_assets(assets), m_settings(settings), m_onSettingsChanged(std::move(onSettingsChanged))
     {
     }
 
-    EntityState SceneHistory::Capture(Entity entity, bool withChildren)
+    EntityState SceneEdits::Capture(Entity entity, bool withChildren)
     {
         const entt::entity parent = entity.GetComponent<RelationshipComponent>().Parent;
 
@@ -32,13 +33,13 @@ namespace crimson::editor
         };
     }
 
-    SceneHistory::Pending* SceneHistory::FindPending(AssetID id)
+    SceneEdits::Pending* SceneEdits::FindPending(AssetID id)
     {
         const auto found = std::ranges::find(m_pending, id, &Pending::Id);
         return found != m_pending.end() ? &*found : nullptr;
     }
 
-    void SceneHistory::Record(Entity entity)
+    void SceneEdits::Record(Entity entity)
     {
         if (!entity || entity.HasComponent<InstancedComponent>())
             return;
@@ -48,7 +49,7 @@ namespace crimson::editor
             m_pending.push_back({ id, Capture(entity, false) });
     }
 
-    void SceneHistory::RecordCreated(Entity entity)
+    void SceneEdits::RecordCreated(Entity entity)
     {
         if (!entity || entity.HasComponent<InstancedComponent>())
             return;
@@ -58,7 +59,7 @@ namespace crimson::editor
             m_pending.push_back({ id, std::nullopt });
     }
 
-    void SceneHistory::RecordDestroy(Entity entity)
+    void SceneEdits::RecordDestroy(Entity entity)
     {
         if (!entity || entity.HasComponent<InstancedComponent>())
             return;
@@ -82,16 +83,58 @@ namespace crimson::editor
         m_pending.push_back({ state.Node.Id, state, true });
     }
 
-    void SceneHistory::RecordSettings()
+    void SceneEdits::RecordSettings()
     {
         if (!m_settingsBefore)
             m_settingsBefore = m_settings;
     }
 
-    bool SceneHistory::Commit(AssetID selected)
+    // What one commit took from the scene, which puts the entities and the settings back or forward again
+    class SceneEdits::Change final : public EditChange
     {
-        SceneStep step;
-        step.Selected = selected;
+    public:
+        Change(SceneEdits& edits, std::vector<EntityChange> entities, std::optional<std::pair<SceneSettings, SceneSettings>> settings, AssetID selected)
+            : m_edits(edits), m_entities(std::move(entities)), m_settings(std::move(settings)), m_selected(selected)
+        {
+        }
+
+        void Undo() override
+        {
+            m_edits.m_restoredSelection = m_selected;
+
+            for (const EntityChange& change : std::views::reverse(m_entities))
+                m_edits.Apply(change.Id, change.Before);
+
+            if (m_settings)
+            {
+                m_edits.m_settings = m_settings->first;
+                m_edits.m_onSettingsChanged();
+            }
+        }
+
+        void Redo() override
+        {
+            m_edits.m_restoredSelection = m_selected;
+
+            for (const EntityChange& change : m_entities)
+                m_edits.Apply(change.Id, change.After);
+
+            if (m_settings)
+            {
+                m_edits.m_settings = m_settings->second;
+                m_edits.m_onSettingsChanged();
+            }
+        }
+    private:
+        SceneEdits& m_edits;
+        std::vector<EntityChange> m_entities; // in the order they were recorded
+        std::optional<std::pair<SceneSettings, SceneSettings>> m_settings;
+        AssetID m_selected; // the entity that was selected before the edit, for undo to select again
+    };
+
+    void SceneEdits::Collect(std::vector<std::unique_ptr<EditChange>>& changes)
+    {
+        std::vector<EntityChange> entities;
 
         for (const Pending& pending : m_pending)
         {
@@ -99,30 +142,21 @@ namespace crimson::editor
             const std::optional<EntityState> after = entity ? std::optional(Capture(entity, false)) : std::nullopt;
 
             if (after != pending.Before)
-                step.Entities.push_back({ pending.Id, pending.Before, after });
+                entities.push_back({ pending.Id, pending.Before, after });
         }
 
+        std::optional<std::pair<SceneSettings, SceneSettings>> settings;
         if (m_settingsBefore && *m_settingsBefore != m_settings)
-            step.Settings = std::pair(*m_settingsBefore, m_settings);
+            settings = std::pair(*m_settingsBefore, m_settings);
 
         m_pending.clear();
         m_settingsBefore.reset();
 
-        if (step.Entities.empty() && !step.Settings)
-            return false;
-
-        // What could be redone was undone before this, and goes
-        m_steps.erase(m_steps.begin() + static_cast<std::ptrdiff_t>(m_done), m_steps.end());
-        m_steps.push_back(std::move(step));
-
-        if (m_steps.size() > kMaxSteps)
-            m_steps.pop_front();
-
-        m_done = m_steps.size();
-        return true;
+        if (!entities.empty() || settings)
+            changes.push_back(std::make_unique<Change>(*this, std::move(entities), std::move(settings), m_selected));
     }
 
-    void SceneHistory::Apply(AssetID id, const std::optional<EntityState>& state)
+    void SceneEdits::Apply(AssetID id, const std::optional<EntityState>& state)
     {
         Entity entity = FindEntity(m_scene, id);
 
@@ -153,52 +187,11 @@ namespace crimson::editor
             m_scene.SetSiblingIndex(entity, state->Index);
     }
 
-    bool SceneHistory::Undo()
-    {
-        if (!CanUndo())
-            return false;
-
-        const SceneStep& step = m_steps[--m_done];
-        m_restoredSelection = step.Selected;
-
-        for (const EntityChange& change : std::views::reverse(step.Entities))
-            Apply(change.Id, change.Before);
-
-        if (step.Settings)
-        {
-            m_settings = step.Settings->first;
-            m_onSettingsChanged();
-        }
-
-        return true;
-    }
-
-    bool SceneHistory::Redo()
-    {
-        if (!CanRedo())
-            return false;
-
-        const SceneStep& step = m_steps[m_done++];
-        m_restoredSelection = step.Selected;
-
-        for (const EntityChange& change : step.Entities)
-            Apply(change.Id, change.After);
-
-        if (step.Settings)
-        {
-            m_settings = step.Settings->second;
-            m_onSettingsChanged();
-        }
-
-        return true;
-    }
-
-    void SceneHistory::Clear()
+    void SceneEdits::Discard()
     {
         m_pending.clear();
         m_settingsBefore.reset();
-        m_steps.clear();
+        m_selected = {};
         m_restoredSelection = {};
-        m_done = 0;
     }
 }
