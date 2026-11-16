@@ -1,10 +1,10 @@
 #include "crimson_editor/editor_application.hpp"
 
+#include <crimson/asset_manager/import_cache.hpp>
 #include <crimson/core/core.hpp>
 #include <crimson/core/log.hpp>
 #include <crimson/core/profiler.hpp>
 #include <crimson/project/project.hpp>
-#include <crimson/renderer/shader_cache.hpp>
 #include <crimson/graphics/graphics_api.hpp>
 #include <GLFW/glfw3.h>
 #include <nfd.h>
@@ -28,7 +28,7 @@ namespace crimson::editor
         if (NFD_Init() != NFD_OKAY)
             LOG_ERROR("[Editor] The folder picker is unavailable: {}", NFD_GetError());
 
-        ShaderCache::Engine().SetFolder(GetShaderCacheFolder());
+        ImportCache::Engine().SetFolder(GetEngineCacheFolder());
 
         const std::filesystem::path configFolder = GetUserConfigFolder();
         m_imguiIniPath = (configFolder / "imgui.ini").string();

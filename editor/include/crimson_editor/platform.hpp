@@ -16,7 +16,7 @@ namespace crimson::editor::platform
     // $XDG_CONFIG_HOME (else ~/.config)/crimson
     [[nodiscard]] std::filesystem::path UserConfigFolder();
 
-    // Where programs keep what they can make again, with Crimson's folder in it: %LOCALAPPDATA%/Crimson, or
+    // Where Crimson keeps what it can make again, and nothing else: %LOCALAPPDATA%/Crimson/Cache, or
     // $XDG_CACHE_HOME (else ~/.cache)/crimson
     [[nodiscard]] std::filesystem::path UserCacheFolder();
 

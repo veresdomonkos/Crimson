@@ -4,6 +4,10 @@
 #include "crimson/core/log.hpp"
 #include "crimson/renderer/shader_compiler.hpp"
 
+#include "asset_manager/importers/shader_cache_format.hpp"
+
+namespace fs = std::filesystem;
+
 namespace crimson
 {
     // What a new shader starts as: lit like the default one, with fewer slots, to have something to change
@@ -89,12 +93,40 @@ float4 PSMain(VertexOutput input) : SV_Target
         if (!text)
             return {};
 
-        ShaderCache& cache = source.Embedded ? ShaderCache::Engine() : m_cache;
-        const auto binary = CompileHlslShader(source.Info.Path, *text, source.File.parent_path(), &ctx.Dependencies, &cache);
+        const uint64_t key = ShaderCacheKey(source.Info.Path, *text);
+        std::optional<ShaderBinary> binary;
+
+        if (const auto hit = ctx.Cache.Find(kShaderCacheKind, key))
+        {
+            binary = ReadShaderBinary(hit->Bytes);
+            if (binary)
+            {
+                ctx.Dependencies.insert(ctx.Dependencies.end(), hit->Files.begin(), hit->Files.end());
+                // Annotations aren't cached, so that the warnings about ones that can't be understood show up every time
+                binary->Annotations = ParseShaderAnnotations(*text);
+            }
+        }
+
         if (!binary)
         {
-            LOG_ERROR("[ShaderImporter] Compilation failed for '{}'", source.Info.Path);
-            return {};
+            const fs::path directory = source.File.parent_path();
+            std::vector<ShaderInclude> includes;
+            binary = CompileHlslShader(source.Info.Path, *text, directory, &includes);
+
+            // Also when it failed, as fixing one of them can fix it
+            for (const ShaderInclude& include : includes)
+            {
+                if (!include.File.empty())
+                    ctx.Dependencies.push_back(include.File);
+            }
+
+            if (!binary)
+            {
+                LOG_ERROR("[ShaderImporter] Compilation failed for '{}'", source.Info.Path);
+                return {};
+            }
+
+            ctx.Cache.Store(kShaderCacheKind, key, ShaderDependencies(includes, directory), WriteShaderBinary(*binary));
         }
 
         const ShaderHandle handle = ctx.Gpu.CreateShader(*binary);

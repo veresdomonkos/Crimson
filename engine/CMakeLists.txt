@@ -34,7 +34,6 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/renderer/resource_manager.hpp
     include/crimson/renderer/resource_manager_base.hpp
     include/crimson/renderer/resource_tags.hpp
-    include/crimson/renderer/shader_cache.hpp
     include/crimson/renderer/shader_compiler.hpp
     include/crimson/renderer/shader_interface.hpp
     include/crimson/renderer/shader_property_info.hpp
@@ -89,6 +88,8 @@ set(ENGINE_SOURCES
     src/asset_manager/importers/mesh_tangents.cpp
     src/asset_manager/importers/mesh_tangents.hpp
     src/asset_manager/importers/scene_importer.cpp
+    src/asset_manager/importers/shader_cache_format.cpp
+    src/asset_manager/importers/shader_cache_format.hpp
     src/asset_manager/importers/shader_importer.cpp
     src/asset_manager/importers/texture_importer.cpp
     src/asset_manager/material_data.cpp
@@ -150,7 +151,6 @@ set(ENGINE_SOURCES
 
     src/shader/hlsl_compiler.cpp
     src/shader/shader_annotations.cpp
-    src/shader/shader_cache.cpp
     src/shader/shader_reflection.cpp
     src/shader/shader_reflection.hpp
 )

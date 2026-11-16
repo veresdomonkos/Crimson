@@ -16,47 +16,39 @@
 #include <glslang/Public/ShaderLang.h>
 
 #include "crimson/core/engine_resources.hpp"
-#include "crimson/core/hash.hpp"
 #include "crimson/core/log.hpp"
-#include "crimson/renderer/shader_cache.hpp"
 
 namespace crimson
 {
     namespace
     {
-        // An include's text, and whether it is the engine's. Includes resolve relative to the shader's folder, then to the
-        // engine's shaders. A shader without a folder only sees the engine's.
-        std::optional<std::pair<std::string, bool>> ResolveInclude(const std::filesystem::path& directory, std::string_view headerName)
+        // Includes resolve relative to the shader's folder, then to the engine's shaders. A shader without a folder only
+        // sees the engine's.
+        std::optional<ShaderInclude> ResolveInclude(const std::filesystem::path& directory, std::string_view headerName)
         {
             if (!directory.empty())
             {
-                if (std::ifstream stream(directory / headerName, std::ios::binary); stream)
+                const std::filesystem::path file = directory / headerName;
+                if (std::ifstream stream(file, std::ios::binary); stream)
                 {
                     std::stringstream contents;
                     contents << stream.rdbuf();
-                    return std::pair{ std::move(contents).str(), false };
+                    return ShaderInclude{ std::string(headerName), file, {}, std::move(contents).str() };
                 }
             }
 
-            const std::string enginePath = std::string("shaders/") + std::string(headerName);
+            std::string enginePath = std::string("shaders/") + std::string(headerName);
             if (const EmbeddedFile* file = FindEmbeddedFile(GetEngineResources(), enginePath))
-                return std::pair{ std::string(file->Text()), true };
+                return ShaderInclude{ std::string(headerName), {}, std::move(enginePath), std::string(file->Text()) };
 
             return std::nullopt;
         }
 
-        // What a compile read of its includes: the files from the shader's folder, and every include with its hash
-        struct IncludeLog
-        {
-            std::vector<std::filesystem::path> Files;
-            std::vector<ShaderInclude> Includes;
-        };
-
-        // The files read from the folder are added to the log's Files, each include once to its Includes.
+        // Each include is added to the log once
         class ShaderIncluder final : public glslang::TShader::Includer
         {
         public:
-            ShaderIncluder(std::filesystem::path directory, IncludeLog& log)
+            ShaderIncluder(std::filesystem::path directory, std::vector<ShaderInclude>& log)
                 : m_directory(std::move(directory)), m_log(log) {}
 
             IncludeResult* includeLocal(const char* headerName, const char*, size_t) override
@@ -65,20 +57,12 @@ namespace crimson
                 if (!resolved)
                     return nullptr;
 
-                auto& [contents, fromEngine] = *resolved;
+                IncludeResult* result = MakeResult(headerName, resolved->Text);
 
-                if (!fromEngine)
-                {
-                    const std::filesystem::path file = m_directory / headerName;
-                    if (std::ranges::find(m_log.Files, file) == m_log.Files.end())
-                        m_log.Files.push_back(file);
-                }
+                if (std::ranges::find(m_log, headerName, &ShaderInclude::Name) == m_log.end())
+                    m_log.push_back(std::move(*resolved));
 
-                const auto known = std::ranges::find(m_log.Includes, headerName, &ShaderInclude::Name);
-                if (known == m_log.Includes.end())
-                    m_log.Includes.push_back({ headerName, fromEngine, Fnv1a(contents) });
-
-                return MakeResult(headerName, std::move(contents));
+                return result;
             }
 
             IncludeResult* includeSystem(const char* headerName, const char* includerName, size_t depth) override
@@ -103,7 +87,7 @@ namespace crimson
             }
 
             std::filesystem::path m_directory;
-            IncludeLog& m_log;
+            std::vector<ShaderInclude>& m_log;
         };
 
         // What the compile is set to, which is also in ShaderCompilerVersion, as a different one makes different SPIR-V
@@ -188,7 +172,7 @@ namespace crimson
             return legalized;
         }
 
-        std::optional<CompiledStage> CompileStage(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, IncludeLog& includes, EShLanguage stage, const char* entryPoint)
+        std::optional<CompiledStage> CompileStage(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<ShaderInclude>& includes, EShLanguage stage, const char* entryPoint)
         {
             const char* sourceData = source.data();
             const int sourceLength = static_cast<int>(source.size());
@@ -261,49 +245,11 @@ namespace crimson
         return version;
     }
 
-    namespace
+    std::optional<ShaderBinary> CompileHlslShader(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<ShaderInclude>* includes)
     {
-        // Whether every include still resolves to what the entry was compiled with
-        bool IncludesUnchanged(const std::vector<ShaderInclude>& includes, const std::filesystem::path& directory)
-        {
-            return std::ranges::all_of(includes, [&directory](const ShaderInclude& include)
-            {
-                const auto resolved = ResolveInclude(directory, include.Name);
-                return resolved && resolved->second == include.FromEngine && Fnv1a(resolved->first) == include.Hash;
-            });
-        }
-    }
-
-    std::optional<ShaderBinary> CompileHlslShader(const std::string& name, const std::string& source, const std::filesystem::path& includeDirectory, std::vector<std::filesystem::path>* includedFiles, ShaderCache* cache)
-    {
-        uint64_t key = 0;
-
-        if (cache)
-        {
-            key = ShaderCacheKey(name, source, ShaderCompilerVersion());
-
-            auto entry = cache->Find(key);
-            if (entry && IncludesUnchanged(entry->Includes, includeDirectory))
-            {
-                if (includedFiles)
-                {
-                    includedFiles->clear();
-                    for (const ShaderInclude& include : entry->Includes)
-                    {
-                        if (!include.FromEngine)
-                            includedFiles->push_back(includeDirectory / include.Name);
-                    }
-                }
-
-                entry->Binary.Annotations = ParseShaderAnnotations(source);
-                ShaderCache::CountReused();
-                return std::move(entry->Binary);
-            }
-        }
-
         InitializeGlslang();
 
-        IncludeLog included;
+        std::vector<ShaderInclude> included;
         auto vertex = CompileStage(name, source, includeDirectory, included, EShLangVertex, "VSMain");
         auto pixel = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSMain");
 
@@ -313,23 +259,15 @@ namespace crimson
         if (std::regex_search(source, kDepthEntryPoint))
             pixelDepth = CompileStage(name, source, includeDirectory, included, EShLangFragment, "PSDepth");
 
-        if (includedFiles)
-            *includedFiles = std::move(included.Files);
+        if (includes)
+            *includes = std::move(included);
 
         if (!vertex || !pixel || !pixelDepth)
             return std::nullopt;
 
-        ShaderBinary binary{
+        return ShaderBinary{
             std::move(vertex->Code), std::move(pixel->Code), ParseShaderAnnotations(source), std::move(pixelDepth->Code),
             std::move(vertex->Interface), std::move(pixel->Interface), std::move(pixelDepth->Interface)
         };
-
-        if (cache)
-        {
-            cache->Store(key, { std::move(included.Includes), binary });
-            ShaderCache::CountCompiled();
-        }
-
-        return binary;
     }
 }

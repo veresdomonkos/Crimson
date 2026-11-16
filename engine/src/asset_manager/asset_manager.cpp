@@ -58,13 +58,13 @@ namespace crimson
         return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
     }
 
-    AssetManager::AssetManager(GpuResourceManager& gpuResources, fs::path root, fs::path shaderCacheFolder)
-        : m_gpuResources(gpuResources), m_root(fs::absolute(std::move(root)).lexically_normal())
+    AssetManager::AssetManager(GpuResourceManager& gpuResources, fs::path root, fs::path cacheFolder)
+        : m_gpuResources(gpuResources), m_root(fs::absolute(std::move(root)).lexically_normal()), m_cache(std::move(cacheFolder), m_root)
     {
         RegisterNativeComponents(m_components);
 
         AddImporter(std::make_unique<TextureImporter>());
-        AddImporter(std::make_unique<ShaderImporter>(std::move(shaderCacheFolder)));
+        AddImporter(std::make_unique<ShaderImporter>());
         AddImporter(std::make_unique<MaterialImporter>());
         AddImporter(std::make_unique<MeshImporter>());
         AddImporter(std::make_unique<SceneImporter>());
@@ -370,7 +370,7 @@ namespace crimson
 
         if (slot && !slot->Tried())
         {
-            ImportContext ctx{ m_gpuResources, *this };
+            ImportContext ctx{ m_gpuResources, *this, CacheFor(m_assets.at(id)) };
 
             slot->Loaded = slot->Import(SourceOf(m_assets.at(id)), ctx);
             slot->Failed = !slot->Loaded;
@@ -411,7 +411,7 @@ namespace crimson
         const AssetData<T>* current = GetData(id);
 
         auto& slot = *SlotFor<T>(id);
-        ImportContext ctx{ m_gpuResources, *this };
+        ImportContext ctx{ m_gpuResources, *this, CacheFor(m_assets.at(id)) };
 
         if (slot.Loaded && current && slot.Importer->Update(*slot.Loaded, *current, data, ctx))
         {
@@ -567,7 +567,7 @@ namespace crimson
                 if (it == m_assets.end())
                     continue;
 
-                ImportContext ctx{ m_gpuResources, *this };
+                ImportContext ctx{ m_gpuResources, *this, CacheFor(it->second) };
 
                 if (store->UpdateUser(user, used, removed, SourceOf(it->second), ctx) && replaced)
                     replaced->push_back(user);
@@ -784,7 +784,7 @@ namespace crimson
     std::vector<AssetID> AssetManager::Reload(AssetID id)
     {
         const Record& record = m_assets.at(id);
-        ImportContext ctx{ m_gpuResources, *this };
+        ImportContext ctx{ m_gpuResources, *this, CacheFor(record) };
 
         std::vector<AssetID> replaced = { id };
 

@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -283,25 +284,43 @@ TEST_CASE("Shader includes look in the shader's folder, then in the engine's", "
     }
 }
 
-TEST_CASE("A compile lists the files it included from the shader's folder", "[shaders]")
+TEST_CASE("A compile lists the includes it read", "[shaders]")
 {
     const TempFolder temp;
     const std::filesystem::path helper = temp.Write("helper.hlsli", "#include \"crimson/lighting.hlsli\"\n");
 
-    std::vector<std::filesystem::path> included;
+    std::vector<ShaderInclude> included;
 
-    SECTION("Not the engine's")
+    // The helper is the shader's own, and the engine header it includes is the engine's
+    const auto checkIncludes = [&]
+    {
+        const auto own = std::ranges::find(included, "helper.hlsli", &ShaderInclude::Name);
+        REQUIRE(own != included.end());
+        CHECK(own->File == helper);
+        CHECK(own->EnginePath.empty());
+        CHECK(own->Text == "#include \"crimson/lighting.hlsli\"\n");
+
+        const auto engine = std::ranges::find(included, "crimson/lighting.hlsli", &ShaderInclude::Name);
+        REQUIRE(engine != included.end());
+        CHECK(engine->File.empty());
+        CHECK(engine->EnginePath == "shaders/crimson/lighting.hlsli");
+        CHECK_FALSE(engine->Text.empty());
+
+        CHECK(std::ranges::count(included, "helper.hlsli", &ShaderInclude::Name) == 1);
+    };
+
+    SECTION("When it compiles")
     {
         const std::string source = "#include \"helper.hlsli\"\n" + std::string(kMinimalShader);
         REQUIRE(CompileHlslShader("project.hlsl", source, temp.Path(), &included));
-        CHECK(included == std::vector{ helper });
+        checkIncludes();
     }
 
     SECTION("Even when it fails, as fixing an included file can fix it")
     {
         const std::string source = "#include \"helper.hlsli\"\nthis does not compile";
         REQUIRE_FALSE(CompileHlslShader("project.hlsl", source, temp.Path(), &included));
-        CHECK(included == std::vector{ helper });
+        checkIncludes();
     }
 }
 

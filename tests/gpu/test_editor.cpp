@@ -11,7 +11,7 @@
 
 #include <crimson/core/log.hpp>
 #include <crimson/project/project.hpp>
-#include <crimson/renderer/shader_cache.hpp>
+#include <crimson/asset_manager/import_cache.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 #include <crimson_editor/editor_application.hpp>
 #include <crimson_editor/editor_settings.hpp>
@@ -157,14 +157,14 @@ TEST_CASE("Projects can be opened and closed again and again", "[editor]")
         REQUIRE(IsShowing<ProjectManagerMode>(app));
 
         if (i == 0)
-            CHECK_FALSE(std::filesystem::is_empty(ShaderCache::Engine().Folder()));
+            CHECK_FALSE(std::filesystem::is_empty(ImportCache::Engine().Folder() / "shaders"));
 
         if (i == 1)
-            compiledAfterBoth = ShaderCache::Stats().Compiled;
+            compiledAfterBoth = ImportCache::Stats().Stores;
     }
 
     // Opening a project again compiles nothing that didn't change
-    CHECK(ShaderCache::Stats().Compiled == compiledAfterBoth);
+    CHECK(ImportCache::Stats().Stores == compiledAfterBoth);
 
     // The console was destroyed with the project, so this would call through a dangling pointer
     LOG_INFO("Still logging after closing the project");

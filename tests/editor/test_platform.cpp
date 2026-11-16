@@ -32,7 +32,8 @@ TEST_CASE("The user config folder is Crimson's own", "[platform]")
 TEST_CASE("The user cache folder is Crimson's own", "[platform]")
 {
 #ifdef _WIN32
-    CHECK(platform::UserCacheFolder().filename() == "Crimson");
+    CHECK(platform::UserCacheFolder().filename() == "Cache");
+    CHECK(platform::UserCacheFolder().parent_path().filename() == "Crimson");
 #else
     CHECK(platform::UserCacheFolder().filename() == "crimson");
 #endif

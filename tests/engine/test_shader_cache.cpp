@@ -1,25 +1,26 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include <crimson/core/hash.hpp>
+#include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/import_cache.hpp>
 #include <crimson/core/log.hpp>
-#include <crimson/renderer/shader_cache.hpp>
 #include <crimson/renderer/shader_compiler.hpp>
 
+#include "asset_manager/importers/shader_cache_format.hpp"
+
+#include "support/fake_gpu.hpp"
 #include "support/log_counter.hpp"
 #include "support/temp_folder.hpp"
 
 using namespace crimson;
+using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::LogCounter;
 using crimson::tests::TempFolder;
 
@@ -57,16 +58,10 @@ float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position
 float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 )";
 
-    ShaderCacheStats Since(const ShaderCacheStats& before)
+    ImportCacheStats Since(const ImportCacheStats& before)
     {
-        const ShaderCacheStats now = ShaderCache::Stats();
-        return { now.Compiled - before.Compiled, now.Reused - before.Reused };
-    }
-
-    std::optional<ShaderBinary> Compile(ShaderCache& cache, std::string_view source, const fs::path& directory = {},
-                                        std::vector<fs::path>* includedFiles = nullptr)
-    {
-        return CompileHlslShader("cached", std::string(source), directory, includedFiles, &cache);
+        const ImportCacheStats now = ImportCache::Stats();
+        return { now.Hits - before.Hits, now.Stores - before.Stores };
     }
 
     void CheckSame(const ShaderBinary& a, const ShaderBinary& b)
@@ -77,184 +72,27 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
         CHECK(a.VertexInterface == b.VertexInterface);
         CHECK(a.PixelInterface == b.PixelInterface);
         CHECK(a.PixelDepthInterface == b.PixelDepthInterface);
-        CHECK(a.Annotations.size() == b.Annotations.size());
+    }
 
-        for (const auto& [name, annotation] : a.Annotations)
+    // A project with one shader, loaded through a manager of its own each time, as every run of the editor does
+    class ShaderProject
+    {
+    public:
+        fs::path Assets() const { return m_temp.Path() / "assets"; }
+        fs::path Cache() const { return m_temp.Path() / ".crimson" / "cache"; }
+
+        void Write(const fs::path& relative, std::string_view contents) const { m_temp.Write(Assets() / relative, contents); }
+
+        bool Load() const
         {
-            const auto found = b.Annotations.find(name);
-            REQUIRE(found != b.Annotations.end());
-            CHECK(annotation.Default == found->second.Default);
-            CHECK(annotation.Range == found->second.Range);
-            CHECK(annotation.Texture == found->second.Texture);
+            FakeGpuResourceManager gpu;
+            AssetManager assets(gpu, Assets(), Cache());
+            return static_cast<bool>(assets.Load<AssetType::Shader>("mine.hlsl"));
         }
-    }
 
-    // The one entry a cache folder holds
-    fs::path OnlyEntry(const fs::path& folder)
-    {
-        std::vector<fs::path> files;
-        for (const fs::directory_entry& entry : fs::directory_iterator(folder))
-            files.push_back(entry.path());
-
-        REQUIRE(files.size() == 1);
-        CHECK(files[0].extension() == ".bin");
-        return files[0];
-    }
-
-    std::string ReadAll(const fs::path& file)
-    {
-        std::ifstream stream(file, std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
-    }
-
-    void WriteAll(const fs::path& file, const std::string& bytes)
-    {
-        std::ofstream stream(file, std::ios::binary | std::ios::trunc);
-        stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    }
-
-    // Puts a huge count in the payload, and makes the checksum match it
-    void SetPayloadCount(std::string& bytes, std::size_t offsetInPayload)
-    {
-        constexpr std::size_t kChecksumOffset = sizeof(uint32_t) * 2 + sizeof(uint64_t) * 2;
-        constexpr std::size_t kPayloadOffset = kChecksumOffset + sizeof(uint64_t);
-
-        const uint64_t huge = ~uint64_t(0) / 2;
-        std::memcpy(bytes.data() + kPayloadOffset + offsetInPayload, &huge, sizeof(huge));
-
-        const uint64_t checksum = Fnv1a(std::string_view(bytes).substr(kPayloadOffset));
-        std::memcpy(bytes.data() + kChecksumOffset, &checksum, sizeof(checksum));
-    }
-}
-
-TEST_CASE("A second compile of the same shader is reused", "[shader cache]")
-{
-    ShaderCache::ForgetMemory();
-    const TempFolder temp;
-    ShaderCache cache(temp.Path());
-
-    const ShaderCacheStats before = ShaderCache::Stats();
-    const auto first = Compile(cache, kFullShader);
-    REQUIRE(first);
-    REQUIRE_FALSE(first->PixelDepth.empty());
-    REQUIRE(first->Annotations.contains("Cutoff"));
-
-    const auto second = Compile(cache, kFullShader);
-    REQUIRE(second);
-
-    const ShaderCacheStats change = Since(before);
-    CHECK(change.Compiled == 1);
-    CHECK(change.Reused == 1);
-    CheckSame(*first, *second);
-}
-
-TEST_CASE("The memory layer needs no disk", "[shader cache]")
-{
-    ShaderCache::ForgetMemory();
-    const TempFolder temp;
-    ShaderCache cache(temp.Path() / "cache");
-
-    REQUIRE(Compile(cache, kMinimalShader));
-    fs::remove_all(temp.Path() / "cache");
-
-    const ShaderCacheStats before = ShaderCache::Stats();
-    CHECK(Compile(cache, kMinimalShader));
-    CHECK(Since(before).Reused == 1);
-    CHECK(Since(before).Compiled == 0);
-}
-
-TEST_CASE("A new process reads the disk cache", "[shader cache]")
-{
-    ShaderCache::ForgetMemory();
-    const TempFolder temp;
-
-    {
-        ShaderCache cache(temp.Path());
-        REQUIRE(Compile(cache, kFullShader));
-    }
-
-    ShaderCache::ForgetMemory();
-    ShaderCache fresh(temp.Path());
-
-    const ShaderCacheStats before = ShaderCache::Stats();
-    const auto binary = Compile(fresh, kFullShader);
-    REQUIRE(binary);
-    CHECK(Since(before).Reused == 1);
-    CHECK(Since(before).Compiled == 0);
-    CHECK_FALSE(binary->Vertex.empty());
-    CHECK(binary->Annotations.contains("Cutoff"));
-}
-
-TEST_CASE("Changing the source compiles again", "[shader cache]")
-{
-    ShaderCache::ForgetMemory();
-    const TempFolder temp;
-    ShaderCache cache(temp.Path());
-
-    REQUIRE(Compile(cache, kMinimalShader));
-
-    const ShaderCacheStats before = ShaderCache::Stats();
-    CHECK(Compile(cache, std::string(kMinimalShader) + " "));
-    CHECK(Since(before).Compiled == 1);
-    CHECK(Since(before).Reused == 0);
-}
-
-TEST_CASE("Changing an include in the shader's folder compiles again", "[shader cache]")
-{
-    ShaderCache::ForgetMemory();
-    const TempFolder temp;
-    temp.Write("shaders/helper.hlsli", "#define HELPER_VALUE 1.0\n");
-    ShaderCache cache(temp.Path() / "cache");
-
-    std::vector<fs::path> compiledFiles;
-    REQUIRE(Compile(cache, kHelperShader, temp.Path() / "shaders", &compiledFiles));
-    REQUIRE(compiledFiles.size() == 1);
-
-    std::vector<fs::path> reusedFiles;
-    const ShaderCacheStats before = ShaderCache::Stats();
-    REQUIRE(Compile(cache, kHelperShader, temp.Path() / "shaders", &reusedFiles));
-    CHECK(Since(before).Reused == 1);
-    CHECK(reusedFiles == compiledFiles);
-
-    temp.Write("shaders/helper.hlsli", "#define HELPER_VALUE 2.0\n");
-    ShaderCache::ForgetMemory();
-
-    const ShaderCacheStats beforeChange = ShaderCache::Stats();
-    CHECK(Compile(cache, kHelperShader, temp.Path() / "shaders"));
-    CHECK(Since(beforeChange).Compiled == 1);
-    CHECK(Since(beforeChange).Reused == 0);
-}
-
-TEST_CASE("A project file shadowing an engine header compiles again", "[shader cache]")
-{
-    ShaderCache::ForgetMemory();
-    const TempFolder temp;
-    ShaderCache cache(temp.Path() / "cache");
-
-    REQUIRE(Compile(cache, kEngineIncludeShader, temp.Path() / "shaders"));
-
-    temp.Write("shaders/crimson/math.hlsli", "static const float PI = 3.0;\n");
-
-    const ShaderCacheStats before = ShaderCache::Stats();
-    CHECK(Compile(cache, kEngineIncludeShader, temp.Path() / "shaders"));
-    CHECK(Since(before).Compiled == 1);
-    CHECK(Since(before).Reused == 0);
-}
-
-TEST_CASE("A changed engine header compiles again", "[shader cache]")
-{
-    ShaderCache::ForgetMemory();
-    const TempFolder temp;
-    ShaderCache cache(temp.Path());
-
-    // What an entry looks like that was made with another version of the header
-    const uint64_t key = ShaderCacheKey("cached", std::string(kEngineIncludeShader), ShaderCompilerVersion());
-    cache.Store(key, { { { "crimson/math.hlsli", true, 12345 } }, {} });
-
-    const ShaderCacheStats before = ShaderCache::Stats();
-    CHECK(Compile(cache, kEngineIncludeShader));
-    CHECK(Since(before).Compiled == 1);
-    CHECK(Since(before).Reused == 0);
+    private:
+        TempFolder m_temp;
+    };
 }
 
 TEST_CASE("The compiler version and the format are part of the key", "[shader cache]")
@@ -269,97 +107,179 @@ TEST_CASE("The compiler version and the format are part of the key", "[shader ca
     CHECK(ShaderCacheKey("ab", "c", "v") != ShaderCacheKey("a", "bc", "v"));
 }
 
-TEST_CASE("A broken cache file is ignored and replaced", "[shader cache]")
+TEST_CASE("A shader binary is read back as it was written", "[shader cache]")
 {
-    ShaderCache::ForgetMemory();
-    const TempFolder temp;
-    ShaderCache cache(temp.Path());
+    const auto binary = CompileHlslShader("full", std::string(kFullShader), {});
+    REQUIRE(binary);
+    REQUIRE_FALSE(binary->PixelDepth.empty());
+    REQUIRE(binary->Annotations.contains("Cutoff"));
 
-    const LogCounter errors(LogLevel::Error, "");
+    const auto read = ReadShaderBinary(WriteShaderBinary(*binary));
+    REQUIRE(read);
+    CheckSame(*binary, *read);
+    CHECK(read->Annotations.empty());
+}
 
-    REQUIRE(Compile(cache, kFullShader));
-    const fs::path file = OnlyEntry(temp.Path());
+TEST_CASE("A broken shader payload is refused", "[shader cache]")
+{
+    const auto binary = CompileHlslShader("full", std::string(kFullShader), {});
+    REQUIRE(binary);
 
-    const auto truncate = [](std::string& bytes) { bytes.resize(bytes.size() / 2); };
-    const auto garbage = [](std::string& bytes) { bytes.assign(bytes.size(), 'x'); };
-    const auto oldFormat = [](std::string& bytes)
+    const std::string bytes = WriteShaderBinary(*binary);
+    REQUIRE(ReadShaderBinary(bytes));
+
+    CHECK_FALSE(ReadShaderBinary(bytes.substr(0, bytes.size() / 2)));
+    CHECK_FALSE(ReadShaderBinary(bytes.substr(0, bytes.size() - 1)));
+    CHECK_FALSE(ReadShaderBinary(bytes + "x"));
+    CHECK_FALSE(ReadShaderBinary(""));
+
+    // The first stage's size is more than there is
+    std::string hugeSize = bytes;
+    const uint64_t huge = ~uint64_t(0) / 2;
+    std::memcpy(hugeSize.data(), &huge, sizeof(huge));
+    CHECK_FALSE(ReadShaderBinary(hugeSize));
+}
+
+TEST_CASE("A second load of the same shader is reused", "[shader cache]")
+{
+    ImportCache::ForgetMemory();
+    const ShaderProject project;
+    project.Write("mine.hlsl", kFullShader);
+
+    const ImportCacheStats before = ImportCache::Stats();
+    REQUIRE(project.Load());
+    CHECK(Since(before).Stores == 1);
+    CHECK(Since(before).Hits == 0);
+
+    const ImportCacheStats beforeSecond = ImportCache::Stats();
+    REQUIRE(project.Load());
+    CHECK(Since(beforeSecond).Hits == 1);
+    CHECK(Since(beforeSecond).Stores == 0);
+
+    // As the next run of the editor would find it
+    ImportCache::ForgetMemory();
+
+    const ImportCacheStats beforeNewProcess = ImportCache::Stats();
+    REQUIRE(project.Load());
+    CHECK(Since(beforeNewProcess).Hits == 1);
+    CHECK(Since(beforeNewProcess).Stores == 0);
+}
+
+TEST_CASE("Changing the source compiles again", "[shader cache]")
+{
+    ImportCache::ForgetMemory();
+    const ShaderProject project;
+    project.Write("mine.hlsl", kMinimalShader);
+    REQUIRE(project.Load());
+
+    project.Write("mine.hlsl", std::string(kMinimalShader) + " ");
+
+    const ImportCacheStats before = ImportCache::Stats();
+    CHECK(project.Load());
+    CHECK(Since(before).Stores == 1);
+    CHECK(Since(before).Hits == 0);
+}
+
+TEST_CASE("Changing an include in the shader's folder compiles again", "[shader cache]")
+{
+    ImportCache::ForgetMemory();
+    const ShaderProject project;
+    project.Write("helper.hlsli", "#define HELPER_VALUE 1.0\n");
+    project.Write("mine.hlsl", kHelperShader);
+    REQUIRE(project.Load());
+
+    SECTION("With the memory layer warm")
     {
-        const uint32_t old = kShaderCacheFormat - 1;
-        std::memcpy(bytes.data() + sizeof(uint32_t), &old, sizeof(old));
-    };
-
-    // The header and checksum are right, so it is the payload's own counts that have to be refused. This shader has no
-    // includes, so the payload is their count and then the first stage's word count.
-    const auto hugeIncludeCount = [](std::string& bytes) { SetPayloadCount(bytes, 0); };
-    const auto hugeWordCount = [](std::string& bytes) { SetPayloadCount(bytes, sizeof(uint64_t)); };
-
-    for (const auto& damage : { +truncate, +garbage, +oldFormat, +hugeIncludeCount, +hugeWordCount })
-    {
-        std::string bytes = ReadAll(file);
-        damage(bytes);
-
-        ShaderCache::ForgetMemory();
-        WriteAll(file, bytes);
-
-        const ShaderCacheStats before = ShaderCache::Stats();
-        CHECK(Compile(cache, kFullShader));
-        CHECK(Since(before).Compiled == 1);
-        CHECK(Since(before).Reused == 0);
-
-        ShaderCache::ForgetMemory();
-
-        const ShaderCacheStats beforeReuse = ShaderCache::Stats();
-        CHECK(Compile(cache, kFullShader));
-        CHECK(Since(beforeReuse).Compiled == 0);
-        CHECK(Since(beforeReuse).Reused == 1);
+        project.Write("helper.hlsli", "#define HELPER_VALUE 2.0\n");
     }
 
-    CHECK(errors.Count() == 0);
+    SECTION("With the memory layer forgotten")
+    {
+        project.Write("helper.hlsli", "#define HELPER_VALUE 2.0\n");
+        ImportCache::ForgetMemory();
+    }
+
+    const ImportCacheStats before = ImportCache::Stats();
+    CHECK(project.Load());
+    CHECK(Since(before).Stores == 1);
+    CHECK(Since(before).Hits == 0);
+}
+
+TEST_CASE("A project file shadowing an engine header compiles again", "[shader cache]")
+{
+    ImportCache::ForgetMemory();
+    const ShaderProject project;
+    project.Write("mine.hlsl", kEngineIncludeShader);
+    REQUIRE(project.Load());
+
+    project.Write("crimson/math.hlsli", "static const float PI = 3.0;\n");
+
+    const ImportCacheStats before = ImportCache::Stats();
+    CHECK(project.Load());
+    CHECK(Since(before).Stores == 1);
+    CHECK(Since(before).Hits == 0);
+}
+
+TEST_CASE("A changed engine header compiles again", "[shader cache]")
+{
+    ImportCache::ForgetMemory();
+    const ShaderProject project;
+    project.Write("mine.hlsl", kEngineIncludeShader);
+
+    // What an entry looks like that was made with another version of the header
+    ImportCache cache(project.Cache(), project.Assets());
+    const ImportDependency dependency{ ImportDependency::Origin::Engine, "shaders/crimson/math.hlsli", 12345 };
+    cache.Store(kShaderCacheKind, ShaderCacheKey("mine.hlsl", kEngineIncludeShader), { &dependency, 1 }, WriteShaderBinary({}));
+
+    const ImportCacheStats before = ImportCache::Stats();
+    CHECK(project.Load());
+    CHECK(Since(before).Stores == 1);
+    CHECK(Since(before).Hits == 0);
 }
 
 TEST_CASE("An unknown annotation warns on a cache hit too", "[shader cache]")
 {
-    ShaderCache::ForgetMemory();
-    const TempFolder temp;
-    ShaderCache cache(temp.Path());
+    ImportCache::ForgetMemory();
+    const ShaderProject project;
 
-    constexpr std::string_view source = R"(
+    project.Write("mine.hlsl", R"(
 cbuffer MaterialBlock : register(b0, space1)
 {
     float Amount; // @bogus 1
 };
 float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
 float4 PSMain() : SV_Target { return float4(Amount, 1.0, 1.0, 1.0); }
-)";
+)");
 
     const LogCounter warnings(LogLevel::Warn, "can't be understood");
-    const ShaderCacheStats before = ShaderCache::Stats();
+    const ImportCacheStats before = ImportCache::Stats();
 
-    REQUIRE(Compile(cache, source));
-    CHECK(warnings.Count() == 1);
+    REQUIRE(project.Load());
+    const int afterFirst = warnings.Count();
+    CHECK(afterFirst > 0);
 
-    REQUIRE(Compile(cache, source));
-    CHECK(warnings.Count() == 2);
-    CHECK(Since(before).Reused == 1);
+    REQUIRE(project.Load());
+    CHECK(warnings.Count() == afterFirst * 2);
+    CHECK(Since(before).Hits == 1);
 }
 
 TEST_CASE("A failed compile isn't cached", "[shader cache]")
 {
-    ShaderCache::ForgetMemory();
-    const TempFolder temp;
-    ShaderCache cache(temp.Path());
+    ImportCache::ForgetMemory();
+    const ShaderProject project;
+    project.Write("mine.hlsl", "this does not compile");
 
     const LogCounter errors(LogLevel::Error, "[Shader]");
-    const ShaderCacheStats before = ShaderCache::Stats();
+    const ImportCacheStats before = ImportCache::Stats();
 
-    CHECK_FALSE(Compile(cache, "this does not compile"));
+    CHECK_FALSE(project.Load());
     const int afterFirst = errors.Count();
     CHECK(afterFirst > 0);
 
-    CHECK_FALSE(Compile(cache, "this does not compile"));
+    CHECK_FALSE(project.Load());
     CHECK(errors.Count() > afterFirst);
 
-    CHECK(Since(before).Compiled == 0);
-    CHECK(Since(before).Reused == 0);
-    CHECK(fs::is_empty(temp.Path()));
+    CHECK(Since(before).Stores == 0);
+    CHECK(Since(before).Hits == 0);
+    CHECK((!fs::exists(project.Cache()) || fs::is_empty(project.Cache())));
 }
