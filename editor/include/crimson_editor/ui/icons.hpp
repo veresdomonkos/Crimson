@@ -21,6 +21,7 @@ namespace crimson::editor::ui
     inline constexpr const char* kIconDirectionalLight = "\xEE\x85\xB8"; // sun, U+E178
     inline constexpr const char* kIconPointLight = "\xEE\x87\x82"; // lightbulb, U+E1C2
     inline constexpr const char* kIconSpotLight = "\xEE\x94\xA3"; // cone, U+E523
+    inline constexpr const char* kIconCamera = "\xEE\x86\xA5"; // video, U+E1A5
     inline constexpr const char* kIconSceneInstance = "\xEE\x84\xA9"; // package, U+E129
     inline constexpr const char* kIconMove = "\xEE\x84\xA1"; // move, U+E121
     inline constexpr const char* kIconRotate = "\xEE\x8B\xAA"; // rotate-3d, U+E2EA
@@ -61,7 +62,7 @@ namespace crimson::editor::ui
             { "folder", kIconFolder }, { "folder-open", kIconFolderOpen }, { "box", kIconMesh }, { "palette", kIconMaterial },
             { "file-code", kIconShader }, { "image", kIconTexture }, { "clapperboard", kIconScene }, { "file", kIconFile },
             { "circle-dashed", kIconEntity }, { "sun", kIconDirectionalLight }, { "lightbulb", kIconPointLight },
-            { "cone", kIconSpotLight }, { "package", kIconSceneInstance }, { "move", kIconMove }, { "rotate-3d", kIconRotate },
+            { "cone", kIconSpotLight }, { "video", kIconCamera }, { "package", kIconSceneInstance }, { "move", kIconMove }, { "rotate-3d", kIconRotate },
             { "scaling", kIconScale }, { "axis-3d", kIconLocalSpace }, { "globe", kIconWorldSpace }, { "move-3d", kIconTransform },
             { "search", kIconSearch }, { "circle-alert", kIconError }, { "triangle-alert", kIconWarning },
             { "circle-check", kIconSuccess }, { "info", kIconInfo }, { "circle-dot", kIconPicker },

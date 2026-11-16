@@ -13,6 +13,7 @@ add_executable(CrimsonTests
     engine/test_mesh_tangents.cpp
     engine/test_project.cpp
     engine/test_scene.cpp
+    engine/test_scene_camera.cpp
     engine/test_scene_data.cpp
     engine/test_scene_renderer.cpp
     engine/test_shaders.cpp

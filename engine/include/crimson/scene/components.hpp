@@ -58,6 +58,20 @@ namespace crimson
         bool operator==(const LightComponent&) const = default;
     };
 
+    enum class CameraProjection { Perspective, Orthographic };
+
+    // Position and orientation come from the transform, it looks along its -Z axis like a light
+    struct CameraComponent
+    {
+        CameraProjection Projection = CameraProjection::Perspective;
+        float FieldOfViewDegrees = 60.0f; // vertical, for a perspective one
+        float OrthographicSize = 5.0f;    // half the view's height in world units, for an orthographic one, like Unity's
+        float NearClip = 0.1f;
+        float FarClip = 1000.0f;
+
+        bool operator==(const CameraComponent&) const = default;
+    };
+
     // One component for what Unity splits into a mesh filter and a mesh renderer.
     // Call ResolveComponentAssets (or ResolveSceneAssets) after changing the assets.
     struct MeshRendererComponent
