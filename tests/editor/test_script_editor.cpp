@@ -15,13 +15,10 @@ using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
 
-namespace
+// As the platform writes the path, which is what the editor is given
+static std::string Native(const fs::path& path)
 {
-    // As the platform writes the path, which is what the editor is given
-    std::string Native(const fs::path& path)
-    {
-        return PathToUtf8(path.lexically_normal().make_preferred());
-    }
+    return PathToUtf8(path.lexically_normal().make_preferred());
 }
 
 TEST_CASE("Script editor arguments are split like a shell would, then filled in", "[script editor]")

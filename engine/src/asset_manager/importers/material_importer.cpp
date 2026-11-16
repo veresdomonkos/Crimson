@@ -9,7 +9,7 @@
 
 namespace crimson
 {
-    static constexpr std::string_view kDefaultShaderPath = "engine/shaders/S_Lit.hlsl";
+    constexpr std::string_view kDefaultShaderPath = "engine/shaders/S_Lit.hlsl";
 
     void ApplyMaterialProperty(GpuResourceManager& gpu, MaterialHandle material, const std::string& name, const std::vector<float>& v)
     {

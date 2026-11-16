@@ -6,13 +6,10 @@
 
 namespace crimson::vulkan
 {
-    namespace
+    static void SetViewportAndScissor(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
     {
-        void SetViewportAndScissor(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
-        {
-            cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
-            cmdBuffer.setScissor(0, vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } });
-        }
+        cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
+        cmdBuffer.setScissor(0, vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } });
     }
 
     VulkanRenderer::VulkanRenderer(VulkanDevice& device, VulkanResourceManager& resourceManager)

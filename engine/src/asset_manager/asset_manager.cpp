@@ -25,10 +25,10 @@ namespace fs = std::filesystem;
 
 namespace crimson
 {
-    static constexpr std::string_view kEnginePathPrefix = "engine/";
+    constexpr std::string_view kEnginePathPrefix = "engine/";
 
     // Each can use the ones after it
-    static constexpr std::array kUnloadOrder = { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader };
+    constexpr std::array kUnloadOrder = { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader };
 
     // An engine resource has no meta to store an id in, and scenes must find it again in any project.
     static AssetID EngineResourceId(std::string_view path)

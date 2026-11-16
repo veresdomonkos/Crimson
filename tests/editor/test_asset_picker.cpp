@@ -17,30 +17,27 @@ using crimson::tests::TempFolder;
 
 namespace asset_picker = crimson::editor::ui::asset_picker;
 
-namespace
+static std::vector<const AssetInfo*> Pointers(const std::vector<AssetInfo>& assets)
 {
-    std::vector<const AssetInfo*> Pointers(const std::vector<AssetInfo>& assets)
-    {
-        std::vector<const AssetInfo*> pointers;
-        for (const AssetInfo& info : assets)
-            pointers.push_back(&info);
+    std::vector<const AssetInfo*> pointers;
+    for (const AssetInfo& info : assets)
+        pointers.push_back(&info);
 
-        return pointers;
-    }
+    return pointers;
+}
 
-    std::vector<std::string> NamesOf(const std::vector<PickerEntry>& entries)
-    {
-        std::vector<std::string> names;
-        for (const PickerEntry& entry : entries)
-            names.push_back(entry.Name);
+static std::vector<std::string> NamesOf(const std::vector<PickerEntry>& entries)
+{
+    std::vector<std::string> names;
+    for (const PickerEntry& entry : entries)
+        names.push_back(entry.Name);
 
-        return names;
-    }
+    return names;
+}
 
-    AssetInfo Material(const char* path, bool engine = false)
-    {
-        return AssetInfo{ .Id = AssetID::Generate(), .Type = AssetType::Material, .Path = path, .ReadOnly = engine };
-    }
+static AssetInfo Material(const char* path, bool engine = false)
+{
+    return AssetInfo{ .Id = AssetID::Generate(), .Type = AssetType::Material, .Path = path, .ReadOnly = engine };
 }
 
 TEST_CASE("The picker lists None first, then the project's assets, then the engine's", "[asset picker]")

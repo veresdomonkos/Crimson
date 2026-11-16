@@ -250,23 +250,26 @@ TEST_CASE_METHOD(Fixture, "The scene is tone mapped from linear HDR values", "[l
     }
 }
 
-// Light comes from the upper left, so the small roof's shadow falls to its right on the floor. The camera looks straight down.
-struct ShadowFixture : Fixture
+namespace
 {
-    static constexpr glm::vec3 kInShadow{ 1.0f, 0.0f, 0.0f };
-    static constexpr glm::vec3 kInLight{ -3.0f, 0.0f, 0.0f };
-
-    Entity Roof;
-
-    ShadowFixture()
+    // Light comes from the upper left, so the small roof's shadow falls to its right on the floor. The camera looks straight down.
+    struct ShadowFixture : Fixture
     {
-        Camera.SetPosition(glm::vec3(0.0f, 8.0f, 0.0f));
-        Camera.SetRotation(-90.0f, -89.9f);
+        static constexpr glm::vec3 kInShadow{ 1.0f, 0.0f, 0.0f };
+        static constexpr glm::vec3 kInLight{ -3.0f, 0.0f, 0.0f };
 
-        AddMesh("floor.obj", glm::vec3(0.0f), glm::vec3(6.0f, 1.0f, 6.0f));
-        Roof = AddMesh("floor.obj", glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.5f, 1.0f, 0.5f));
-    }
-};
+        Entity Roof;
+
+        ShadowFixture()
+        {
+            Camera.SetPosition(glm::vec3(0.0f, 8.0f, 0.0f));
+            Camera.SetRotation(-90.0f, -89.9f);
+
+            AddMesh("floor.obj", glm::vec3(0.0f), glm::vec3(6.0f, 1.0f, 6.0f));
+            Roof = AddMesh("floor.obj", glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.5f, 1.0f, 0.5f));
+        }
+    };
+}
 
 TEST_CASE_METHOD(ShadowFixture, "A mesh casts a shadow from a directional light", "[lighting]")
 {
@@ -677,31 +680,28 @@ TEST_CASE_METHOD(Fixture, "A selected mesh gets an outline", "[lighting]")
     }
 }
 
-namespace
+// Every shader that has a cutout, and the ones that light a surface
+constexpr std::array kCutoutShaders = {
+    "S_Lit", "S_LitMask", "S_LitMaskParallax", "S_LitMaskTriplanar", "S_LitMaskBiplanar", "S_Unlit"
+};
+constexpr size_t kLitShaders = 5;
+
+// Cutout materials whose alpha is all under the cutoff, and all over it
+static std::string CutAway(std::string_view shader)
 {
-    // Every shader that has a cutout, and the ones that light a surface
-    constexpr std::array kCutoutShaders = {
-        "S_Lit", "S_LitMask", "S_LitMaskParallax", "S_LitMaskTriplanar", "S_LitMaskBiplanar", "S_Unlit"
-    };
-    constexpr size_t kLitShaders = 5;
+    return fmt::format(R"({{ "shader": "engine/shaders/{}.hlsl", "renderMode": "cutout", "properties": {{ "Color": [1, 1, 1, 0] }} }})", shader);
+}
 
-    // Cutout materials whose alpha is all under the cutoff, and all over it
-    std::string CutAway(std::string_view shader)
-    {
-        return fmt::format(R"({{ "shader": "engine/shaders/{}.hlsl", "renderMode": "cutout", "properties": {{ "Color": [1, 1, 1, 0] }} }})", shader);
-    }
+static std::string CutNothing(std::string_view shader)
+{
+    return fmt::format(R"({{ "shader": "engine/shaders/{}.hlsl", "renderMode": "cutout", "properties": {{ "Color": [1, 1, 1, 1] }} }})", shader);
+}
 
-    std::string CutNothing(std::string_view shader)
-    {
-        return fmt::format(R"({{ "shader": "engine/shaders/{}.hlsl", "renderMode": "cutout", "properties": {{ "Color": [1, 1, 1, 1] }} }})", shader);
-    }
-
-    void UseMaterial(Entity entity, AssetManager& assets, std::string_view path)
-    {
-        auto& renderer = entity.GetComponent<MeshRendererComponent>();
-        renderer.MaterialAssets = { assets.Find<AssetType::Material>(path) };
-        ResolveAssets(assets, renderer);
-    }
+static void UseMaterial(Entity entity, AssetManager& assets, std::string_view path)
+{
+    auto& renderer = entity.GetComponent<MeshRendererComponent>();
+    renderer.MaterialAssets = { assets.Find<AssetType::Material>(path) };
+    ResolveAssets(assets, renderer);
 }
 
 TEST_CASE_METHOD(Fixture, "What a cutout material cuts away isn't drawn", "[lighting]")

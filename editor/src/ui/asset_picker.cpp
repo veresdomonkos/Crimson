@@ -11,27 +11,24 @@
 
 namespace crimson::editor::ui
 {
-    namespace
+    constexpr const char* kPopupId = "##AssetPicker";
+    constexpr int kGridColumns = 4;
+
+    // The window is sized in ems, so the popup keeps its size while the entries change
+    constexpr float kBodyWidthEms = 22.0f;
+    constexpr float kBodyHeightEms = 24.0f;
+
+    static std::string Lowered(std::string_view text)
     {
-        constexpr const char* kPopupId = "##AssetPicker";
-        constexpr int kGridColumns = 4;
+        std::string lowered(text);
+        std::ranges::transform(lowered, lowered.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return lowered;
+    }
 
-        // The window is sized in ems, so the popup keeps its size while the entries change
-        constexpr float kBodyWidthEms = 22.0f;
-        constexpr float kBodyHeightEms = 24.0f;
-
-        std::string Lowered(std::string_view text)
-        {
-            std::string lowered(text);
-            std::ranges::transform(lowered, lowered.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            return lowered;
-        }
-
-        int IndexOf(const std::vector<PickerEntry>& entries, AssetID id)
-        {
-            const auto it = std::ranges::find(entries, id, &PickerEntry::Id);
-            return it == entries.end() ? -1 : static_cast<int>(it - entries.begin());
-        }
+    static int IndexOf(const std::vector<PickerEntry>& entries, AssetID id)
+    {
+        const auto it = std::ranges::find(entries, id, &PickerEntry::Id);
+        return it == entries.end() ? -1 : static_cast<int>(it - entries.begin());
     }
 
     namespace asset_picker

@@ -13,28 +13,25 @@
 
 namespace crimson::editor::ui::props
 {
-    namespace
+    constexpr const char* kResetPopup = "##Reset";
+
+    // Rows don't nest, so the one being drawn can keep its state here
+    static bool s_resetClicked = false;
+
+    static bool RightClickedLastItem()
     {
-        constexpr const char* kResetPopup = "##Reset";
+        return ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && ImGui::IsMouseReleased(ImGuiMouseButton_Right);
+    }
 
-        // Rows don't nest, so the one being drawn can keep its state here
-        bool s_resetClicked = false;
+    // Picking the reset only does something if the value isn't at its default already
+    template <typename T>
+    static bool ApplyReset(bool picked, T& value, const T* reset)
+    {
+        if (!picked || !reset || value == *reset)
+            return false;
 
-        bool RightClickedLastItem()
-        {
-            return ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled) && ImGui::IsMouseReleased(ImGuiMouseButton_Right);
-        }
-
-        // Picking the reset only does something if the value isn't at its default already
-        template <typename T>
-        bool ApplyReset(bool picked, T& value, const T* reset)
-        {
-            if (!picked || !reset || value == *reset)
-                return false;
-
-            value = *reset;
-            return true;
-        }
+        value = *reset;
+        return true;
     }
 
     bool BeginTable(const char* id)

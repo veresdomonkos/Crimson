@@ -17,8 +17,8 @@ namespace fs = std::filesystem;
 
 namespace crimson::editor
 {
-    static constexpr const char* kNewProjectPopup = "New Project";
-    static constexpr const char* kLogoIcon = "icons/crimson.png";
+    constexpr const char* kNewProjectPopup = "New Project";
+    constexpr const char* kLogoIcon = "icons/crimson.png";
 
     ProjectManagerMode::ProjectManagerMode(EditorServices& services, std::string error)
         : m_services(services), m_error(std::move(error))

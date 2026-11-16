@@ -13,50 +13,47 @@ namespace fs = std::filesystem;
 
 namespace crimson::editor
 {
-    namespace
+    // Runs a program. Waiting gives whether it succeeded. Without waiting it is started through a second fork,
+    // so it runs on its own, and its ending leaves nothing behind for the editor to collect.
+    static bool Run(const std::vector<std::string>& command, bool wait)
     {
-        // Runs a program. Waiting gives whether it succeeded. Without waiting it is started through a second fork,
-        // so it runs on its own, and its ending leaves nothing behind for the editor to collect.
-        bool Run(const std::vector<std::string>& command, bool wait)
+        std::vector<char*> argv;
+        for (const std::string& argument : command)
+            argv.push_back(const_cast<char*>(argument.c_str()));
+        argv.push_back(nullptr);
+
+        const pid_t child = fork();
+        if (child < 0)
+            return false;
+
+        if (child == 0)
         {
-            std::vector<char*> argv;
-            for (const std::string& argument : command)
-                argv.push_back(const_cast<char*>(argument.c_str()));
-            argv.push_back(nullptr);
-
-            const pid_t child = fork();
-            if (child < 0)
-                return false;
-
-            if (child == 0)
+            if (!wait)
             {
-                if (!wait)
-                {
-                    const pid_t grandchild = fork();
-                    if (grandchild != 0)
-                        _exit(grandchild < 0 ? 1 : 0);
+                const pid_t grandchild = fork();
+                if (grandchild != 0)
+                    _exit(grandchild < 0 ? 1 : 0);
 
-                    setsid();
-                }
-
-                // What it prints isn't for the editor's output
-                const int null = open("/dev/null", O_RDWR);
-                if (null >= 0)
-                {
-                    dup2(null, STDOUT_FILENO);
-                    dup2(null, STDERR_FILENO);
-                }
-
-                execvp(argv[0], argv.data());
-                _exit(127);
+                setsid();
             }
 
-            int status = 0;
-            if (waitpid(child, &status, 0) < 0)
-                return false;
+            // What it prints isn't for the editor's output
+            const int null = open("/dev/null", O_RDWR);
+            if (null >= 0)
+            {
+                dup2(null, STDOUT_FILENO);
+                dup2(null, STDERR_FILENO);
+            }
 
-            return WIFEXITED(status) && WEXITSTATUS(status) == 0;
+            execvp(argv[0], argv.data());
+            _exit(127);
         }
+
+        int status = 0;
+        if (waitpid(child, &status, 0) < 0)
+            return false;
+
+        return WIFEXITED(status) && WEXITSTATUS(status) == 0;
     }
 
     namespace shell

@@ -11,25 +11,22 @@
 
 namespace crimson::tests
 {
-    namespace
+    static GraphicsApi s_backend = GraphicsApi::OpenGL;
+
+    // In this order, as the backend needs the window while it is destroyed
+    static std::unique_ptr<Window> s_window;
+    static std::unique_ptr<GraphicsBackend> s_graphics;
+
+    static uint64_t s_errorSubscription = 0;
+    static std::vector<std::string> s_errors;
+
+    static void EnsureGpu()
     {
-        GraphicsApi s_backend = GraphicsApi::OpenGL;
+        if (s_graphics)
+            return;
 
-        // In this order, as the backend needs the window while it is destroyed
-        std::unique_ptr<Window> s_window;
-        std::unique_ptr<GraphicsBackend> s_graphics;
-
-        uint64_t s_errorSubscription = 0;
-        std::vector<std::string> s_errors;
-
-        void EnsureGpu()
-        {
-            if (s_graphics)
-                return;
-
-            s_window = Window::Create(s_backend, WindowData{ "Crimson GPU tests", 320, 240, [](Event&) {} });
-            s_graphics = GraphicsBackend::Create(s_backend, *s_window);
-        }
+        s_window = Window::Create(s_backend, WindowData{ "Crimson GPU tests", 320, 240, [](Event&) {} });
+        s_graphics = GraphicsBackend::Create(s_backend, *s_window);
     }
 
     GraphicsApi SelectedBackend() { return s_backend; }

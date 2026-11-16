@@ -18,10 +18,10 @@
 
 namespace crimson::editor
 {
-    static constexpr uint32_t kProjectManagerWidth = 1000;
-    static constexpr uint32_t kProjectManagerHeight = 620;
-    static constexpr uint32_t kEditorWidth = 1280;
-    static constexpr uint32_t kEditorHeight = 720;
+    constexpr uint32_t kProjectManagerWidth = 1000;
+    constexpr uint32_t kProjectManagerHeight = 620;
+    constexpr uint32_t kEditorWidth = 1280;
+    constexpr uint32_t kEditorHeight = 720;
 
 	EditorApplication::EditorApplication(GraphicsApi rendererType, const std::filesystem::path& projectPath)
         : m_running(true), m_lastTime(0.0)

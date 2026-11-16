@@ -13,41 +13,38 @@ namespace fs = std::filesystem;
 
 namespace crimson::editor
 {
-    namespace
+    constexpr std::string_view kVSCodeArguments = R"ARGS("$(ProjectPath)" -g "$(File)":$(Line))ARGS";
+    constexpr std::string_view kVisualStudioArguments = R"ARGS(/edit "$(File)")ARGS";
+    constexpr std::string_view kJetBrainsArguments = R"ARGS(--line $(Line) "$(File)")ARGS";
+    constexpr std::string_view kPlainArguments = R"ARGS("$(File)")ARGS";
+
+    static std::string Lowercase(std::string text)
     {
-        constexpr std::string_view kVSCodeArguments = R"ARGS("$(ProjectPath)" -g "$(File)":$(Line))ARGS";
-        constexpr std::string_view kVisualStudioArguments = R"ARGS(/edit "$(File)")ARGS";
-        constexpr std::string_view kJetBrainsArguments = R"ARGS(--line $(Line) "$(File)")ARGS";
-        constexpr std::string_view kPlainArguments = R"ARGS("$(File)")ARGS";
+        std::ranges::transform(text, text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return text;
+    }
 
-        std::string Lowercase(std::string text)
-        {
-            std::ranges::transform(text, text.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-            return text;
-        }
+    static bool IsFile(const fs::path& path)
+    {
+        std::error_code error;
+        return fs::is_regular_file(path, error);
+    }
 
-        bool IsFile(const fs::path& path)
-        {
-            std::error_code error;
-            return fs::is_regular_file(path, error);
-        }
+    static void ReplaceAll(std::string& text, std::string_view from, const std::string& to)
+    {
+        for (size_t at = text.find(from); at != std::string::npos; at = text.find(from, at + to.size()))
+            text.replace(at, from.size(), to);
+    }
 
-        void ReplaceAll(std::string& text, std::string_view from, const std::string& to)
-        {
-            for (size_t at = text.find(from); at != std::string::npos; at = text.find(from, at + to.size()))
-                text.replace(at, from.size(), to);
-        }
+    static void AddIfFound(std::vector<CodeEditor>& editors, std::string name, const fs::path& program)
+    {
+        if (!IsFile(program))
+            return;
 
-        void AddIfFound(std::vector<CodeEditor>& editors, std::string name, const fs::path& program)
-        {
-            if (!IsFile(program))
-                return;
+        if (std::ranges::any_of(editors, [&](const CodeEditor& editor) { return editor.Program == program; }))
+            return;
 
-            if (std::ranges::any_of(editors, [&](const CodeEditor& editor) { return editor.Program == program; }))
-                return;
-
-            editors.push_back({ std::move(name), program, script_editor::DefaultArguments(program) });
-        }
+        editors.push_back({ std::move(name), program, script_editor::DefaultArguments(program) });
     }
 
     namespace script_editor

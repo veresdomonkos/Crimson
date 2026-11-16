@@ -7,14 +7,14 @@
 
 namespace crimson::editor
 {
-    static constexpr float kLookSensitivity = 0.1f;
-    static constexpr float kFastMultiplier = 3.0f;
-    static constexpr float kMinFlySpeed = 0.1f;
-    static constexpr float kMaxFlySpeed = 200.0f;
-    static constexpr float kFlySpeedStep = 1.2f;
-    static constexpr float kDollyStep = 0.1f;
-    static constexpr float kZoomSensitivity = 0.005f;
-    static constexpr float kMinPivotDistance = 0.1f;
+    constexpr float kLookSensitivity = 0.1f;
+    constexpr float kFastMultiplier = 3.0f;
+    constexpr float kMinFlySpeed = 0.1f;
+    constexpr float kMaxFlySpeed = 200.0f;
+    constexpr float kFlySpeedStep = 1.2f;
+    constexpr float kDollyStep = 0.1f;
+    constexpr float kZoomSensitivity = 0.005f;
+    constexpr float kMinPivotDistance = 0.1f;
 
     SceneCameraController::SceneCameraController(PerspectiveCamera& camera, Input& input, const ui::ViewportPanel& viewport)
         : m_camera(camera), m_input(input), m_viewport(viewport)

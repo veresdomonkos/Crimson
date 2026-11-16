@@ -13,7 +13,7 @@
 
 namespace crimson::editor::ui
 {
-    static constexpr const char* kEntityPayload = "CRIMSON_ENTITY";
+    constexpr const char* kEntityPayload = "CRIMSON_ENTITY";
 
     // What kind of entity it is, at a glance
     static const char* EntityIcon(Entity entity, const ComponentRegistry& components)

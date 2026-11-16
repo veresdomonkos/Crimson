@@ -925,9 +925,7 @@ float4 PSMain() : SV_Target { return Amount * Other * Bumps.Sample(LinearWrap, f
     CHECK(gpu.NothingAlive());
 }
 
-namespace
-{
-    constexpr std::string_view kShaderHeader = R"(
+constexpr std::string_view kShaderHeader = R"(
 #include "crimson/bindings.hlsli"
 #include "helper.hlsli"
 
@@ -936,19 +934,18 @@ cbuffer MaterialBlock : register(b0, space1)
     float Amount; // @default 0.25
 )";
 
-    constexpr std::string_view kShaderFooter = R"(
+constexpr std::string_view kShaderFooter = R"(
 };
 
 float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
 float4 PSMain() : SV_Target { return Amount * HELPER_VALUE; }
 )";
 
-    // The file times can be too coarse to tell two quick saves apart, so the change is made to look later.
-    // Saves in a row have to be pushed different amounts, or they end up at the same time again.
-    void Touch(const fs::path& file, std::chrono::seconds ahead = std::chrono::seconds(2))
-    {
-        fs::last_write_time(file, fs::last_write_time(file) + ahead);
-    }
+// The file times can be too coarse to tell two quick saves apart, so the change is made to look later.
+// Saves in a row have to be pushed different amounts, or they end up at the same time again.
+static void Touch(const fs::path& file, std::chrono::seconds ahead = std::chrono::seconds(2))
+{
+    fs::last_write_time(file, fs::last_write_time(file) + ahead);
 }
 
 TEST_CASE_METHOD(Fixture, "Changed shaders are reloaded along with their materials", "[asset editing]")
@@ -1225,17 +1222,14 @@ TEST_CASE_METHOD(Fixture, "A reference to an asset of the wrong type is dropped"
     CHECK(data->Textures.empty());
 }
 
-namespace
+static float FloatProperty(const FakeGpuResourceManager& gpu, MaterialHandle material, const std::string& name)
 {
-    float FloatProperty(const FakeGpuResourceManager& gpu, MaterialHandle material, const std::string& name)
-    {
-        const std::vector<std::byte>& bytes = gpu.Materials.at(material.GetRaw()).Properties.at(name);
-        REQUIRE(bytes.size() == sizeof(float));
+    const std::vector<std::byte>& bytes = gpu.Materials.at(material.GetRaw()).Properties.at(name);
+    REQUIRE(bytes.size() == sizeof(float));
 
-        float value = 0.0f;
-        std::memcpy(&value, bytes.data(), sizeof(float));
-        return value;
-    }
+    float value = 0.0f;
+    std::memcpy(&value, bytes.data(), sizeof(float));
+    return value;
 }
 
 TEST_CASE_METHOD(Fixture, "A cutout material cuts by its AlphaCutoff, and only a cutout one", "[asset editing]")

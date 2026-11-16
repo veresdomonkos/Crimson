@@ -13,19 +13,16 @@ using crimson::editor::CreateTexturePreview;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::TempFolder;
 
-namespace
+// A 1x1 uncompressed BMP, as PNGs are hard to write out by hand
+static std::string MakeImage()
 {
-    // A 1x1 uncompressed BMP, as PNGs are hard to write out by hand
-    std::string MakeImage()
-    {
-        constexpr std::array<unsigned char, 58> kBytes = {
-            'B', 'M', 58, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0,
-            40, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 4, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            255, 0, 0, 0
-        };
-        return std::string(reinterpret_cast<const char*>(kBytes.data()), kBytes.size());
-    }
+    constexpr std::array<unsigned char, 58> kBytes = {
+        'B', 'M', 58, 0, 0, 0, 0, 0, 0, 0, 54, 0, 0, 0,
+        40, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 24, 0, 0, 0, 0, 0, 4, 0, 0, 0,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        255, 0, 0, 0
+    };
+    return std::string(reinterpret_cast<const char*>(kBytes.data()), kBytes.size());
 }
 
 TEST_CASE("A texture preview shows what is stored, and belongs to the caller", "[editor][assets]")

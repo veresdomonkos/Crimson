@@ -17,10 +17,10 @@ namespace fs = std::filesystem;
 
 namespace crimson
 {
-    static constexpr std::string_view kShaderFolder = "shaders/";
-    static constexpr std::string_view kIncludesFolder = "shader_includes";
-    static constexpr std::string_view kConfigFileName = "shadertoolsconfig.json";
-    static constexpr std::string_view kIncludeDirectoriesKey = "hlsl.additionalIncludeDirectories";
+    constexpr std::string_view kShaderFolder = "shaders/";
+    constexpr std::string_view kIncludesFolder = "shader_includes";
+    constexpr std::string_view kConfigFileName = "shadertoolsconfig.json";
+    constexpr std::string_view kIncludeDirectoriesKey = "hlsl.additionalIncludeDirectories";
 
     static std::optional<std::string> ReadText(const fs::path& file)
     {

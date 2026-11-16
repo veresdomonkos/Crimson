@@ -9,70 +9,67 @@
 
 namespace crimson
 {
-    namespace
+    static MaterialSettings ParseSettings(const nlohmann::json& j, std::string_view file)
     {
-        MaterialSettings ParseSettings(const nlohmann::json& j, std::string_view file)
+        MaterialSettings settings;
+
+        if (const auto it = j.find("renderMode"); it != j.end())
         {
-            MaterialSettings settings;
+            const std::string value = it->is_string() ? it->get<std::string>() : std::string{};
 
-            if (const auto it = j.find("renderMode"); it != j.end())
-            {
-                const std::string value = it->is_string() ? it->get<std::string>() : std::string{};
-
-                if (value == "opaque")
-                    settings.RenderMode = MaterialRenderMode::Opaque;
-                else if (value == "transparent")
-                    settings.RenderMode = MaterialRenderMode::Transparent;
-                else if (value == "cutout")
-                    settings.RenderMode = MaterialRenderMode::Cutout;
-                else
-                    LOG_WARN("[MaterialImporter] '{}': unknown renderMode, using opaque", file);
-            }
-
-            if (const auto it = j.find("cull"); it != j.end())
-            {
-                const std::string value = it->is_string() ? it->get<std::string>() : std::string{};
-
-                if (value == "back")
-                    settings.Cull = CullMode::Back;
-                else if (value == "front")
-                    settings.Cull = CullMode::Front;
-                else if (value == "none")
-                    settings.Cull = CullMode::None;
-                else
-                    LOG_WARN("[MaterialImporter] '{}': unknown cull mode, using back", file);
-            }
-
-            return settings;
+            if (value == "opaque")
+                settings.RenderMode = MaterialRenderMode::Opaque;
+            else if (value == "transparent")
+                settings.RenderMode = MaterialRenderMode::Transparent;
+            else if (value == "cutout")
+                settings.RenderMode = MaterialRenderMode::Cutout;
+            else
+                LOG_WARN("[MaterialImporter] '{}': unknown renderMode, using opaque", file);
         }
 
-        std::vector<float> ParseProperty(const std::string& name, const nlohmann::json& value)
+        if (const auto it = j.find("cull"); it != j.end())
         {
-            try
-            {
-                if (value.is_number())
-                    return { value.get<float>() };
+            const std::string value = it->is_string() ? it->get<std::string>() : std::string{};
 
-                if (value.is_array())
-                {
-                    std::vector<float> values = value.get<std::vector<float>>();
-
-                    if (!values.empty() && values.size() <= 4)
-                        return values;
-
-                    LOG_WARN("[MaterialImporter] Property '{}': unsupported array size {}", name, values.size());
-                    return {};
-                }
-
-                LOG_WARN("[MaterialImporter] Property '{}': unsupported value type", name);
-            }
-            catch (const nlohmann::json::exception& e)
-            {
-                LOG_WARN("[MaterialImporter] Property '{}': {}", name, e.what());
-            }
-
-            return {};
+            if (value == "back")
+                settings.Cull = CullMode::Back;
+            else if (value == "front")
+                settings.Cull = CullMode::Front;
+            else if (value == "none")
+                settings.Cull = CullMode::None;
+            else
+                LOG_WARN("[MaterialImporter] '{}': unknown cull mode, using back", file);
         }
+
+        return settings;
+    }
+
+    static std::vector<float> ParseProperty(const std::string& name, const nlohmann::json& value)
+    {
+        try
+        {
+            if (value.is_number())
+                return { value.get<float>() };
+
+            if (value.is_array())
+            {
+                std::vector<float> values = value.get<std::vector<float>>();
+
+                if (!values.empty() && values.size() <= 4)
+                    return values;
+
+                LOG_WARN("[MaterialImporter] Property '{}': unsupported array size {}", name, values.size());
+                return {};
+            }
+
+            LOG_WARN("[MaterialImporter] Property '{}': unsupported value type", name);
+        }
+        catch (const nlohmann::json::exception& e)
+        {
+            LOG_WARN("[MaterialImporter] Property '{}': {}", name, e.what());
+        }
+
+        return {};
     }
 
     namespace material_data

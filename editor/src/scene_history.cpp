@@ -9,14 +9,11 @@
 
 namespace crimson::editor
 {
-    namespace
+    static void CollectIds(const SceneNode& node, std::vector<AssetID>& ids)
     {
-        void CollectIds(const SceneNode& node, std::vector<AssetID>& ids)
-        {
-            ids.push_back(node.Id);
-            for (const SceneNode& child : node.Children)
-                CollectIds(child, ids);
-        }
+        ids.push_back(node.Id);
+        for (const SceneNode& child : node.Children)
+            CollectIds(child, ids);
     }
 
     SceneHistory::SceneHistory(Scene& scene, AssetManager& assets, SceneSettings& settings, std::function<void()> onSettingsChanged)

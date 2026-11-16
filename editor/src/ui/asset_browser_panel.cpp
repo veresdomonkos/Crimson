@@ -21,8 +21,8 @@ namespace fs = std::filesystem;
 
 namespace crimson::editor::ui
 {
-    static constexpr std::string_view kEngineFolder = "engine";
-    static constexpr float kPingSeconds = 1.5f;
+    constexpr std::string_view kEngineFolder = "engine";
+    constexpr float kPingSeconds = 1.5f;
 
     static std::string ParentOf(const std::string& path)
     {

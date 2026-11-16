@@ -13,29 +13,26 @@
 
 namespace crimson::vulkan
 {
-    namespace
+    const std::vector<const char*> DeviceExtensions =
     {
-        const std::vector<const char*> DeviceExtensions =
-        {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME
-        };
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
 
 #ifndef NDEBUG
-        constexpr bool EnableValidation = true;
+    constexpr bool EnableValidation = true;
 #else
-        constexpr bool EnableValidation = false;
+    constexpr bool EnableValidation = false;
 #endif
 
-        bool CheckValidationLayerSupport(const vk::raii::Context& context)
+    static bool CheckValidationLayerSupport(const vk::raii::Context& context)
+    {
+        for (const auto& layer : context.enumerateInstanceLayerProperties())
         {
-            for (const auto& layer : context.enumerateInstanceLayerProperties())
-            {
-                if (std::strcmp(layer.layerName.data(), VulkanDevice::s_validationLayer) == 0)
-                    return true;
-            }
-
-            return false;
+            if (std::strcmp(layer.layerName.data(), VulkanDevice::s_validationLayer) == 0)
+                return true;
         }
+
+        return false;
     }
 
     VulkanDevice::VulkanDevice(const Window& window)

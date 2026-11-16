@@ -9,14 +9,11 @@
 using namespace crimson;
 using namespace crimson::tests;
 
-namespace
+static glm::dvec2 CursorPosition(GLFWwindow* window)
 {
-    glm::dvec2 CursorPosition(GLFWwindow* window)
-    {
-        glm::dvec2 position;
-        glfwGetCursorPos(window, &position.x, &position.y);
-        return position;
-    }
+    glm::dvec2 position;
+    glfwGetCursorPos(window, &position.x, &position.y);
+    return position;
 }
 
 // A hidden cursor that wandered off would hover and click the panels it ended up over

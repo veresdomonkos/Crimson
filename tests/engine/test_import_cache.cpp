@@ -27,71 +27,68 @@ using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
 
-namespace
+constexpr std::string_view kKind = "things";
+constexpr uint64_t kKey = 0x1234abcd5678ef90ull;
+
+constexpr std::string_view kEngineHeader = "shaders/crimson/math.hlsli";
+
+static ImportCacheStats Since(const ImportCacheStats& before)
 {
-    constexpr std::string_view kKind = "things";
-    constexpr uint64_t kKey = 0x1234abcd5678ef90ull;
+    const ImportCacheStats now = ImportCache::Stats();
+    return { now.Hits - before.Hits, now.Stores - before.Stores };
+}
 
-    constexpr std::string_view kEngineHeader = "shaders/crimson/math.hlsli";
+static ImportDependency FileDependency(const fs::path& file, std::string_view contents)
+{
+    return { ImportDependency::Origin::File, file.generic_string(), Fnv1a(contents) };
+}
 
-    ImportCacheStats Since(const ImportCacheStats& before)
-    {
-        const ImportCacheStats now = ImportCache::Stats();
-        return { now.Hits - before.Hits, now.Stores - before.Stores };
-    }
+static ImportDependency MissingFile(const fs::path& file)
+{
+    return { ImportDependency::Origin::File, file.generic_string(), std::nullopt };
+}
 
-    ImportDependency FileDependency(const fs::path& file, std::string_view contents)
-    {
-        return { ImportDependency::Origin::File, file.generic_string(), Fnv1a(contents) };
-    }
+static ImportDependency EngineDependency(std::string_view path, uint64_t hash)
+{
+    return { ImportDependency::Origin::Engine, std::string(path), hash };
+}
 
-    ImportDependency MissingFile(const fs::path& file)
-    {
-        return { ImportDependency::Origin::File, file.generic_string(), std::nullopt };
-    }
+static std::string ReadAll(const fs::path& file)
+{
+    std::ifstream stream(file, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
+}
 
-    ImportDependency EngineDependency(std::string_view path, uint64_t hash)
-    {
-        return { ImportDependency::Origin::Engine, std::string(path), hash };
-    }
+static void WriteAll(const fs::path& file, const std::string& bytes)
+{
+    std::ofstream stream(file, std::ios::binary | std::ios::trunc);
+    stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+}
 
-    std::string ReadAll(const fs::path& file)
-    {
-        std::ifstream stream(file, std::ios::binary);
-        return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
-    }
+// The one entry a kind's folder holds
+static fs::path OnlyEntry(const fs::path& folder)
+{
+    std::vector<fs::path> files;
+    for (const fs::directory_entry& entry : fs::directory_iterator(folder))
+        files.push_back(entry.path());
 
-    void WriteAll(const fs::path& file, const std::string& bytes)
-    {
-        std::ofstream stream(file, std::ios::binary | std::ios::trunc);
-        stream.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
-    }
+    REQUIRE(files.size() == 1);
+    CHECK(files[0].extension() == ".bin");
+    return files[0];
+}
 
-    // The one entry a kind's folder holds
-    fs::path OnlyEntry(const fs::path& folder)
-    {
-        std::vector<fs::path> files;
-        for (const fs::directory_entry& entry : fs::directory_iterator(folder))
-            files.push_back(entry.path());
+constexpr std::size_t kKeyOffset = sizeof(uint32_t) * 2;
+constexpr std::size_t kChecksumOffset = kKeyOffset + sizeof(uint64_t) * 2;
+constexpr std::size_t kPayloadOffset = kChecksumOffset + sizeof(uint64_t);
 
-        REQUIRE(files.size() == 1);
-        CHECK(files[0].extension() == ".bin");
-        return files[0];
-    }
+// Puts a huge count in the payload, and makes the checksum match it
+static void SetPayloadCount(std::string& bytes, std::size_t offsetInPayload)
+{
+    const uint64_t huge = ~uint64_t(0) / 2;
+    std::memcpy(bytes.data() + kPayloadOffset + offsetInPayload, &huge, sizeof(huge));
 
-    constexpr std::size_t kKeyOffset = sizeof(uint32_t) * 2;
-    constexpr std::size_t kChecksumOffset = kKeyOffset + sizeof(uint64_t) * 2;
-    constexpr std::size_t kPayloadOffset = kChecksumOffset + sizeof(uint64_t);
-
-    // Puts a huge count in the payload, and makes the checksum match it
-    void SetPayloadCount(std::string& bytes, std::size_t offsetInPayload)
-    {
-        const uint64_t huge = ~uint64_t(0) / 2;
-        std::memcpy(bytes.data() + kPayloadOffset + offsetInPayload, &huge, sizeof(huge));
-
-        const uint64_t checksum = Fnv1a(std::string_view(bytes).substr(kPayloadOffset));
-        std::memcpy(bytes.data() + kChecksumOffset, &checksum, sizeof(checksum));
-    }
+    const uint64_t checksum = Fnv1a(std::string_view(bytes).substr(kPayloadOffset));
+    std::memcpy(bytes.data() + kChecksumOffset, &checksum, sizeof(checksum));
 }
 
 TEST_CASE("A stored entry is found with its bytes", "[import cache]")

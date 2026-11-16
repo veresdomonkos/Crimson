@@ -8,14 +8,11 @@
 
 namespace crimson::opengl
 {
-    namespace
+    // The scissor is only left off when the rect is the whole target
+    static void SetViewportAndScissor(OpenGLStateCache& state, const RenderRect& rect, bool scissor)
     {
-        // The scissor is only left off when the rect is the whole target
-        void SetViewportAndScissor(OpenGLStateCache& state, const RenderRect& rect, bool scissor)
-        {
-            glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
-            state.SetScissor(scissor ? &rect : nullptr);
-        }
+        glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
+        state.SetScissor(scissor ? &rect : nullptr);
     }
 
     OpenGLRenderer::OpenGLRenderer(OpenGLDevice &device, OpenGLResourceManager &resourceManager)

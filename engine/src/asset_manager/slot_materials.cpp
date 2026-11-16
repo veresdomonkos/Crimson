@@ -13,7 +13,7 @@ namespace fs = std::filesystem;
 
 namespace crimson
 {
-    static constexpr std::string_view kDefaultMaterialPath = "engine/materials/M_Default.mat";
+    constexpr std::string_view kDefaultMaterialPath = "engine/materials/M_Default.mat";
 
     // The folder an asset is in, with a slash at the end, or empty at the top
     static std::string FolderOf(const std::string& path)

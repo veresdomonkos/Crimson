@@ -33,8 +33,8 @@
 
 namespace crimson::editor
 {
-    static constexpr uint32_t kMainTargetWidth = 1920;
-    static constexpr uint32_t kMainTargetHeight = 1080;
+    constexpr uint32_t kMainTargetWidth = 1920;
+    constexpr uint32_t kMainTargetHeight = 1080;
 
     // The only part of the recovery files that knows they are scenes
     static std::string RecoveryName(SceneID id)

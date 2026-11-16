@@ -18,12 +18,12 @@
 using namespace crimson;
 using crimson::tests::TempFolder;
 
-static constexpr std::string_view kMinimalShader = R"(
+constexpr std::string_view kMinimalShader = R"(
 float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, 1.0); }
 float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 )";
 
-static constexpr uint32_t kSpirvMagic = 0x07230203;
+constexpr uint32_t kSpirvMagic = 0x07230203;
 
 // Everything a backend does with a shader that doesn't need a GPU, so a shader that only breaks on one backend is caught too
 TEST_CASE("Every engine shader compiles, reflects and translates to GLSL", "[shaders]")
@@ -103,7 +103,7 @@ void PSDepth(float4 position : SV_Position) { clip(Mask.Load(int3(0, 0, 0)).a - 
     }
 }
 
-static constexpr std::string_view kTextureArgumentShader = R"(
+constexpr std::string_view kTextureArgumentShader = R"(
 Texture2D HeightMap : register(t0, space1);
 SamplerState LinearWrap : register(s0, space0);
 

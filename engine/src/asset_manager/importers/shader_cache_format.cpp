@@ -10,24 +10,21 @@ namespace fs = std::filesystem;
 
 namespace crimson
 {
-    namespace
+    static void AppendWords(std::string& bytes, const std::vector<uint32_t>& words)
     {
-        void AppendWords(std::string& bytes, const std::vector<uint32_t>& words)
-        {
-            AppendString(bytes, std::string_view(reinterpret_cast<const char*>(words.data()), words.size() * sizeof(uint32_t)));
-        }
+        AppendString(bytes, std::string_view(reinterpret_cast<const char*>(words.data()), words.size() * sizeof(uint32_t)));
+    }
 
-        // The size is checked against what is left before anything is allocated, as it can be anything
-        bool ReadWords(Reader& reader, std::vector<uint32_t>& words)
-        {
-            std::string bytes;
-            if (!reader.ReadString(bytes) || bytes.size() % sizeof(uint32_t) != 0)
-                return false;
+    // The size is checked against what is left before anything is allocated, as it can be anything
+    static bool ReadWords(Reader& reader, std::vector<uint32_t>& words)
+    {
+        std::string bytes;
+        if (!reader.ReadString(bytes) || bytes.size() % sizeof(uint32_t) != 0)
+            return false;
 
-            words.resize(bytes.size() / sizeof(uint32_t));
-            std::memcpy(words.data(), bytes.data(), bytes.size());
-            return true;
-        }
+        words.resize(bytes.size() / sizeof(uint32_t));
+        std::memcpy(words.data(), bytes.data(), bytes.size());
+        return true;
     }
 
     uint64_t ShaderCacheKey(std::string_view name, std::string_view source, std::string_view compilerVersion, uint32_t format)

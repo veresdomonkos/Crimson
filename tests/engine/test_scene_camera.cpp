@@ -10,43 +10,40 @@
 using namespace crimson;
 using Catch::Matchers::WithinAbs;
 
-namespace
+constexpr float kAspect = 16.0f / 9.0f;
+
+static bool Near(const glm::vec3& a, const glm::vec3& b, float epsilon = 1e-4f)
 {
-    constexpr float kAspect = 16.0f / 9.0f;
+    return glm::all(glm::epsilonEqual(a, b, epsilon));
+}
 
-    bool Near(const glm::vec3& a, const glm::vec3& b, float epsilon = 1e-4f)
+static bool Near(const glm::mat4& a, const glm::mat4& b, float epsilon = 1e-4f)
+{
+    for (int column = 0; column < 4; ++column)
     {
-        return glm::all(glm::epsilonEqual(a, b, epsilon));
+        if (!glm::all(glm::epsilonEqual(a[column], b[column], epsilon)))
+            return false;
     }
 
-    bool Near(const glm::mat4& a, const glm::mat4& b, float epsilon = 1e-4f)
-    {
-        for (int column = 0; column < 4; ++column)
-        {
-            if (!glm::all(glm::epsilonEqual(a[column], b[column], epsilon)))
-                return false;
-        }
+    return true;
+}
 
-        return true;
-    }
+static glm::vec3 ToNdc(const glm::mat4& projection, const glm::vec3& viewSpace)
+{
+    const glm::vec4 clip = projection * glm::vec4(viewSpace, 1.0f);
+    return glm::vec3(clip) / clip.w;
+}
 
-    glm::vec3 ToNdc(const glm::mat4& projection, const glm::vec3& viewSpace)
-    {
-        const glm::vec4 clip = projection * glm::vec4(viewSpace, 1.0f);
-        return glm::vec3(clip) / clip.w;
-    }
+static Entity AddCamera(Scene& scene, const char* name, Entity parent = {})
+{
+    const Entity entity = scene.CreateEntity(name, parent);
+    entity.AddComponent<CameraComponent>();
+    return entity;
+}
 
-    Entity AddCamera(Scene& scene, const char* name, Entity parent = {})
-    {
-        const Entity entity = scene.CreateEntity(name, parent);
-        entity.AddComponent<CameraComponent>();
-        return entity;
-    }
-
-    AssetID IdOf(Entity entity)
-    {
-        return entity.GetComponent<NameComponent>().Id;
-    }
+static AssetID IdOf(Entity entity)
+{
+    return entity.GetComponent<NameComponent>().Id;
 }
 
 TEST_CASE("A camera looks along its -Z axis from its position", "[scene camera]")

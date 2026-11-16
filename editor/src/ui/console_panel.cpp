@@ -80,50 +80,47 @@ namespace crimson::editor::ui
         m_SelectedIndex = -1;
     }
 
-    namespace
+    static const char* LevelIcon(LogLevel level)
     {
-        const char* LevelIcon(LogLevel level)
+        switch (level)
         {
-            switch (level)
-            {
-                case LogLevel::Warn:  return icons::kWarning;
-                case LogLevel::Error: return icons::kError;
-                default:              return icons::kInfo;
-            }
+            case LogLevel::Warn:  return icons::kWarning;
+            case LogLevel::Error: return icons::kError;
+            default:              return icons::kInfo;
         }
+    }
 
-        ImVec4 LevelColor(LogLevel level)
+    static ImVec4 LevelColor(LogLevel level)
+    {
+        switch (level)
         {
-            switch (level)
-            {
-                case LogLevel::Warn:  return theme::Warning;
-                case LogLevel::Error: return theme::Error;
-                default:              return theme::TextMuted;
-            }
+            case LogLevel::Warn:  return theme::Warning;
+            case LogLevel::Error: return theme::Error;
+            default:              return theme::TextMuted;
         }
+    }
 
-        float ButtonWidth(const char* label)
+    static float ButtonWidth(const char* label)
+    {
+        return ImGui::CalcTextSize(label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+    }
+
+    // A button that shows or hides a level's messages, tinted with the level's color while they are shown
+    static bool LevelToggle(const char* label, LogLevel level, bool shown)
+    {
+        const ImVec4 color = LevelColor(level);
+
+        // A hidden level keeps the normal button, so only the shown ones carry a tint
+        if (shown)
         {
-            return ImGui::CalcTextSize(label, nullptr, true).x + ImGui::GetStyle().FramePadding.x * 2.0f;
+            ImGui::PushStyleColor(ImGuiCol_Button, theme::WithAlpha(color, theme::TintAlpha));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::WithAlpha(color, theme::TintHoverAlpha));
         }
+        ImGui::PushStyleColor(ImGuiCol_Text, shown ? theme::Text : theme::TextMuted);
+        const bool clicked = ImGui::Button(label);
+        ImGui::PopStyleColor(shown ? 3 : 1);
 
-        // A button that shows or hides a level's messages, tinted with the level's color while they are shown
-        bool LevelToggle(const char* label, LogLevel level, bool shown)
-        {
-            const ImVec4 color = LevelColor(level);
-
-            // A hidden level keeps the normal button, so only the shown ones carry a tint
-            if (shown)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, theme::WithAlpha(color, theme::TintAlpha));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, theme::WithAlpha(color, theme::TintHoverAlpha));
-            }
-            ImGui::PushStyleColor(ImGuiCol_Text, shown ? theme::Text : theme::TextMuted);
-            const bool clicked = ImGui::Button(label);
-            ImGui::PopStyleColor(shown ? 3 : 1);
-
-            return clicked;
-        }
+        return clicked;
     }
 
     void ConsolePanel::OnImGui()

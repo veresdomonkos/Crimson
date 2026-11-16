@@ -18,7 +18,7 @@ namespace fs = std::filesystem;
 
 namespace crimson::editor::ui
 {
-    static constexpr const char* kSystemDefault = "System default";
+    constexpr const char* kSystemDefault = "System default";
 
     void PreferencesPanel::OnMainMenuBar()
     {

@@ -11,152 +11,149 @@
 
 namespace crimson::editor::ui
 {
-    namespace
+    static ImFont* s_regular = nullptr;
+    static ImFont* s_bold = nullptr;
+
+    // The bytes are static, so the atlas must not try to free them
+    static ImFont* AddEmbeddedFont(const char* path, const ImFontConfig& base)
     {
-        ImFont* s_regular = nullptr;
-        ImFont* s_bold = nullptr;
-
-        // The bytes are static, so the atlas must not try to free them
-        ImFont* AddEmbeddedFont(const char* path, const ImFontConfig& base)
+        const EmbeddedFile* file = FindEmbeddedFile(GetEditorResources(), path);
+        if (!file)
         {
-            const EmbeddedFile* file = FindEmbeddedFile(GetEditorResources(), path);
-            if (!file)
-            {
-                LOG_ERROR("[Editor] The embedded font {} is missing", path);
-                return nullptr;
-            }
-
-            ImFontConfig config = base;
-            config.FontDataOwnedByAtlas = false;
-            return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(const_cast<std::byte*>(file->Data.data()), static_cast<int>(file->Data.size()), theme::FontBody, &config);
+            LOG_ERROR("[Editor] The embedded font {} is missing", path);
+            return nullptr;
         }
 
-        // Unicode's private use area. Inter has glyphs of its own there, which would cover the icons at the same codepoints.
-        constexpr ImWchar kPrivateUseArea[] = { 0xE000, 0xF8FF, 0 };
+        ImFontConfig config = base;
+        config.FontDataOwnedByAtlas = false;
+        return ImGui::GetIO().Fonts->AddFontFromMemoryTTF(const_cast<std::byte*>(file->Data.data()), static_cast<int>(file->Data.size()), theme::FontBody, &config);
+    }
 
-        // Text, with the icons merged in, so text and icons mix in one string
-        ImFont* AddTextFont(const char* path)
-        {
-            ImFontConfig text;
-            text.GlyphExcludeRanges = kPrivateUseArea;
+    // Unicode's private use area. Inter has glyphs of its own there, which would cover the icons at the same codepoints.
+    constexpr ImWchar kPrivateUseArea[] = { 0xE000, 0xF8FF, 0 };
 
-            ImFont* font = AddEmbeddedFont(path, text);
-            if (!font)
-                return nullptr;
+    // Text, with the icons merged in, so text and icons mix in one string
+    static ImFont* AddTextFont(const char* path)
+    {
+        ImFontConfig text;
+        text.GlyphExcludeRanges = kPrivateUseArea;
 
-            // Icons take the same width as each other, so labels after them line up. They are nearly as tall as the
-            // whole font and stand on the baseline, so they go down a little to be centered on the text.
-            ImFontConfig icons;
-            icons.MergeMode = true;
-            icons.GlyphMinAdvanceX = theme::IconSize;
-            icons.GlyphOffset = ImVec2(0.0f, theme::IconSize * 0.11f);
-            AddEmbeddedFont("fonts/lucide.ttf", icons);
+        ImFont* font = AddEmbeddedFont(path, text);
+        if (!font)
+            return nullptr;
 
-            return font;
-        }
+        // Icons take the same width as each other, so labels after them line up. They are nearly as tall as the
+        // whole font and stand on the baseline, so they go down a little to be centered on the text.
+        ImFontConfig icons;
+        icons.MergeMode = true;
+        icons.GlyphMinAdvanceX = theme::IconSize;
+        icons.GlyphOffset = ImVec2(0.0f, theme::IconSize * 0.11f);
+        AddEmbeddedFont("fonts/lucide.ttf", icons);
 
-        void LoadFonts()
-        {
-            s_regular = AddTextFont("fonts/Inter_18pt-Regular.ttf");
-            s_bold = AddTextFont("fonts/Inter_18pt-Bold.ttf");
+        return font;
+    }
 
-            // Without its files the editor still runs, on ImGui's own font
-            if (!s_regular)
-                s_regular = ImGui::GetIO().Fonts->AddFontDefault();
-            if (!s_bold)
-                s_bold = s_regular;
+    static void LoadFonts()
+    {
+        s_regular = AddTextFont("fonts/Inter_18pt-Regular.ttf");
+        s_bold = AddTextFont("fonts/Inter_18pt-Bold.ttf");
 
-            ImGui::GetIO().FontDefault = s_regular;
-        }
+        // Without its files the editor still runs, on ImGui's own font
+        if (!s_regular)
+            s_regular = ImGui::GetIO().Fonts->AddFontDefault();
+        if (!s_bold)
+            s_bold = s_regular;
 
-        void ApplyColors(ImGuiStyle& style)
-        {
-            using namespace theme;
+        ImGui::GetIO().FontDefault = s_regular;
+    }
 
-            ImVec4* colors = style.Colors;
+    static void ApplyColors(ImGuiStyle& style)
+    {
+        using namespace theme;
 
-            colors[ImGuiCol_Text]                  = Text;
-            colors[ImGuiCol_TextDisabled]          = TextMuted;
-            colors[ImGuiCol_TextLink]              = Text;
-            colors[ImGuiCol_TextSelectedBg]        = TextSelection;
-            colors[ImGuiCol_InputTextCursor]       = Text;
+        ImVec4* colors = style.Colors;
 
-            colors[ImGuiCol_WindowBg]              = PanelBackground;
-            colors[ImGuiCol_ChildBg]               = PanelBackground;
-            colors[ImGuiCol_PopupBg]               = PopupBackground;
-            colors[ImGuiCol_Border]                = Border;
-            colors[ImGuiCol_BorderShadow]          = WithAlpha(Border, 0.0f);
+        colors[ImGuiCol_Text]                  = Text;
+        colors[ImGuiCol_TextDisabled]          = TextMuted;
+        colors[ImGuiCol_TextLink]              = Text;
+        colors[ImGuiCol_TextSelectedBg]        = TextSelection;
+        colors[ImGuiCol_InputTextCursor]       = Text;
 
-            colors[ImGuiCol_FrameBg]               = FrameBackground;
-            colors[ImGuiCol_FrameBgHovered]        = Hover;
-            colors[ImGuiCol_FrameBgActive]         = Pressed;
+        colors[ImGuiCol_WindowBg]              = PanelBackground;
+        colors[ImGuiCol_ChildBg]               = PanelBackground;
+        colors[ImGuiCol_PopupBg]               = PopupBackground;
+        colors[ImGuiCol_Border]                = Border;
+        colors[ImGuiCol_BorderShadow]          = WithAlpha(Border, 0.0f);
 
-            colors[ImGuiCol_TitleBg]               = AppBackground;
-            colors[ImGuiCol_TitleBgActive]         = AppBackground;
-            colors[ImGuiCol_TitleBgCollapsed]      = AppBackground;
-            colors[ImGuiCol_MenuBarBg]             = AppBackground;
+        colors[ImGuiCol_FrameBg]               = FrameBackground;
+        colors[ImGuiCol_FrameBgHovered]        = Hover;
+        colors[ImGuiCol_FrameBgActive]         = Pressed;
 
-            colors[ImGuiCol_ScrollbarBg]           = PanelBackground;
-            colors[ImGuiCol_ScrollbarGrab]         = FrameBackground;
-            colors[ImGuiCol_ScrollbarGrabHovered]  = Hover;
-            colors[ImGuiCol_ScrollbarGrabActive]   = Pressed;
+        colors[ImGuiCol_TitleBg]               = AppBackground;
+        colors[ImGuiCol_TitleBgActive]         = AppBackground;
+        colors[ImGuiCol_TitleBgCollapsed]      = AppBackground;
+        colors[ImGuiCol_MenuBarBg]             = AppBackground;
 
-            colors[ImGuiCol_CheckMark]             = Text;
-            colors[ImGuiCol_CheckboxSelectedBg]    = FrameBackground;
-            colors[ImGuiCol_SliderGrab]            = TextMuted;
-            colors[ImGuiCol_SliderGrabActive]      = Text;
+        colors[ImGuiCol_ScrollbarBg]           = PanelBackground;
+        colors[ImGuiCol_ScrollbarGrab]         = FrameBackground;
+        colors[ImGuiCol_ScrollbarGrabHovered]  = Hover;
+        colors[ImGuiCol_ScrollbarGrabActive]   = Pressed;
 
-            colors[ImGuiCol_Button]                = FrameBackground;
-            colors[ImGuiCol_ButtonHovered]         = Hover;
-            colors[ImGuiCol_ButtonActive]          = Pressed;
+        colors[ImGuiCol_CheckMark]             = Text;
+        colors[ImGuiCol_CheckboxSelectedBg]    = FrameBackground;
+        colors[ImGuiCol_SliderGrab]            = TextMuted;
+        colors[ImGuiCol_SliderGrabActive]      = Text;
 
-            // Selected rows, tiles and menu items
-            colors[ImGuiCol_Header]                = Selection;
-            colors[ImGuiCol_HeaderHovered]         = Hover;
-            colors[ImGuiCol_HeaderActive]          = Pressed;
+        colors[ImGuiCol_Button]                = FrameBackground;
+        colors[ImGuiCol_ButtonHovered]         = Hover;
+        colors[ImGuiCol_ButtonActive]          = Pressed;
 
-            colors[ImGuiCol_Separator]             = Border;
-            colors[ImGuiCol_SeparatorHovered]      = Hover;
-            colors[ImGuiCol_SeparatorActive]       = Pressed;
+        // Selected rows, tiles and menu items
+        colors[ImGuiCol_Header]                = Selection;
+        colors[ImGuiCol_HeaderHovered]         = Hover;
+        colors[ImGuiCol_HeaderActive]          = Pressed;
 
-            colors[ImGuiCol_ResizeGrip]            = WithAlpha(Hover, 0.0f);
-            colors[ImGuiCol_ResizeGripHovered]     = Hover;
-            colors[ImGuiCol_ResizeGripActive]      = Pressed;
+        colors[ImGuiCol_Separator]             = Border;
+        colors[ImGuiCol_SeparatorHovered]      = Hover;
+        colors[ImGuiCol_SeparatorActive]       = Pressed;
 
-            // The selected tab is the panel's own color, so it joins the panel, under a thin accent line
-            colors[ImGuiCol_Tab]                       = AppBackground;
-            colors[ImGuiCol_TabHovered]                = Hover;
-            colors[ImGuiCol_TabSelected]               = PanelBackground;
-            colors[ImGuiCol_TabSelectedOverline]       = Accent;
-            colors[ImGuiCol_TabDimmed]                 = AppBackground;
-            colors[ImGuiCol_TabDimmedSelected]         = PanelBackground;
-            colors[ImGuiCol_TabDimmedSelectedOverline] = Border;
-            colors[ImGuiCol_UnsavedMarker]             = Text;
+        colors[ImGuiCol_ResizeGrip]            = WithAlpha(Hover, 0.0f);
+        colors[ImGuiCol_ResizeGripHovered]     = Hover;
+        colors[ImGuiCol_ResizeGripActive]      = Pressed;
 
-            colors[ImGuiCol_DockingPreview]        = WithAlpha(Accent, 0.50f);
-            colors[ImGuiCol_DockingEmptyBg]        = AppBackground;
+        // The selected tab is the panel's own color, so it joins the panel, under a thin accent line
+        colors[ImGuiCol_Tab]                       = AppBackground;
+        colors[ImGuiCol_TabHovered]                = Hover;
+        colors[ImGuiCol_TabSelected]               = PanelBackground;
+        colors[ImGuiCol_TabSelectedOverline]       = Accent;
+        colors[ImGuiCol_TabDimmed]                 = AppBackground;
+        colors[ImGuiCol_TabDimmedSelected]         = PanelBackground;
+        colors[ImGuiCol_TabDimmedSelectedOverline] = Border;
+        colors[ImGuiCol_UnsavedMarker]             = Text;
 
-            colors[ImGuiCol_PlotLines]             = TextMuted;
-            colors[ImGuiCol_PlotLinesHovered]      = Text;
-            colors[ImGuiCol_PlotHistogram]         = TextMuted;
-            colors[ImGuiCol_PlotHistogramHovered]  = Warning;
+        colors[ImGuiCol_DockingPreview]        = WithAlpha(Accent, 0.50f);
+        colors[ImGuiCol_DockingEmptyBg]        = AppBackground;
 
-            colors[ImGuiCol_TableHeaderBg]         = FrameBackground;
-            colors[ImGuiCol_TableBorderStrong]     = Border;
-            colors[ImGuiCol_TableBorderLight]      = Border;
-            colors[ImGuiCol_TableRowBg]            = WithAlpha(Text, 0.0f);
-            colors[ImGuiCol_TableRowBgAlt]         = WithAlpha(Text, 0.03f);
-            colors[ImGuiCol_TreeLines]             = Border;
+        colors[ImGuiCol_PlotLines]             = TextMuted;
+        colors[ImGuiCol_PlotLinesHovered]      = Text;
+        colors[ImGuiCol_PlotHistogram]         = TextMuted;
+        colors[ImGuiCol_PlotHistogramHovered]  = Warning;
 
-            // A drop target is where the pointer is about to act, so it is drawn like focus
-            colors[ImGuiCol_DragDropTarget]        = Accent;
-            colors[ImGuiCol_DragDropTargetBg]      = WithAlpha(Accent, 0.15f);
+        colors[ImGuiCol_TableHeaderBg]         = FrameBackground;
+        colors[ImGuiCol_TableBorderStrong]     = Border;
+        colors[ImGuiCol_TableBorderLight]      = Border;
+        colors[ImGuiCol_TableRowBg]            = WithAlpha(Text, 0.0f);
+        colors[ImGuiCol_TableRowBgAlt]         = WithAlpha(Text, 0.03f);
+        colors[ImGuiCol_TreeLines]             = Border;
 
-            colors[ImGuiCol_NavCursor]             = Accent;
-            colors[ImGuiCol_NavWindowingHighlight] = WithAlpha(Text, 0.70f);
-            colors[ImGuiCol_NavWindowingDimBg]     = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
-            colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.0f, 0.0f, 0.0f, 0.50f);
-        }
+        // A drop target is where the pointer is about to act, so it is drawn like focus
+        colors[ImGuiCol_DragDropTarget]        = Accent;
+        colors[ImGuiCol_DragDropTargetBg]      = WithAlpha(Accent, 0.15f);
+
+        colors[ImGuiCol_NavCursor]             = Accent;
+        colors[ImGuiCol_NavWindowingHighlight] = WithAlpha(Text, 0.70f);
+        colors[ImGuiCol_NavWindowingDimBg]     = ImVec4(0.0f, 0.0f, 0.0f, 0.30f);
+        colors[ImGuiCol_ModalWindowDimBg]      = ImVec4(0.0f, 0.0f, 0.0f, 0.50f);
     }
 
     namespace theme

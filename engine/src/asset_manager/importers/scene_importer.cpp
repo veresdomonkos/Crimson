@@ -5,7 +5,7 @@
 
 namespace crimson
 {
-    static constexpr std::string_view kNewSceneTemplate = "engine/scenes/internal/SC_NewScene.scene";
+    constexpr std::string_view kNewSceneTemplate = "engine/scenes/internal/SC_NewScene.scene";
 
     std::span<const std::string_view> SceneImporter::Extensions() const
     {
