@@ -7,7 +7,7 @@ namespace crimson
     class AssetManager;
 
     // What the scene would save as. Instances only keep what can differ between them.
-    [[nodiscard]] SceneData CaptureScene(Scene& scene, const SceneEnvironment& environment, const AssetManager& assets);
+    [[nodiscard]] SceneData CaptureScene(Scene& scene, const SceneSettings& settings, const AssetManager& assets);
 
     // One entity as the scene would save it, with what is under it or not
     [[nodiscard]] SceneNode CaptureNode(Entity entity, Scene& scene, const AssetManager& assets, bool withChildren);

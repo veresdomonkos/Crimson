@@ -64,6 +64,12 @@ namespace crimson::editor
         }
     }
 
+    void SceneCameraController::CancelGesture()
+    {
+        if (m_gesture != Gesture::None)
+            EndGesture();
+    }
+
     void SceneCameraController::BeginGesture()
     {
         if (!m_viewport.IsHovered())

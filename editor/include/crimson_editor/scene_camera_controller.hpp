@@ -20,6 +20,9 @@ namespace crimson::editor
         void Frame(Entity entity);
 
         void Update(float deltaTime);
+
+        // For when something else shows the scene: ends a running gesture, which gives the cursor back
+        void CancelGesture();
     private:
         // A mouse gesture, which lasts as long as its button is held
         enum class Gesture { None, Fly, Pan, Orbit, Zoom };

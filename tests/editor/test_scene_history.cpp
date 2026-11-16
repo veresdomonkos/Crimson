@@ -4,6 +4,7 @@
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/scene/scene_camera.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 #include <crimson_editor/scene_history.hpp>
 
@@ -35,11 +36,11 @@ namespace
         FakeGpuResourceManager Gpu;
         AssetManager Assets{ Gpu, Temp.Path() };
         Scene World;
-        SceneEnvironment Environment;
-        int EnvironmentChanges = 0;
-        SceneHistory History{ World, Assets, Environment, [this] { ++EnvironmentChanges; } };
+        SceneSettings Settings;
+        int SettingsChanges = 0;
+        SceneHistory History{ World, Assets, Settings, [this] { ++SettingsChanges; } };
 
-        SceneData Capture() { return CaptureScene(World, Environment, Assets); }
+        SceneData Capture() { return CaptureScene(World, Settings, Assets); }
 
         Entity Child(Entity parent, size_t index) { return World.GetEntity(parent.GetComponent<RelationshipComponent>().Children.at(index)); }
 
@@ -79,7 +80,7 @@ TEST_CASE_METHOD(Fixture, "Nothing changed is no step", "[scene history]")
     const Entity entity = World.CreateEntity("Thing");
 
     History.Record(entity);
-    History.RecordEnvironment();
+    History.RecordSettings();
     CHECK_FALSE(History.Commit());
     CHECK_FALSE(History.CanUndo());
 }
@@ -223,19 +224,19 @@ TEST_CASE_METHOD(Fixture, "Entities inside an instance aren't recorded", "[scene
     CHECK_FALSE(History.Commit());
 }
 
-TEST_CASE_METHOD(Fixture, "The environment is part of a step", "[scene history]")
+TEST_CASE_METHOD(Fixture, "The scene's settings are part of a step", "[scene history]")
 {
-    History.RecordEnvironment();
-    Environment.Exposure = 2.0f;
+    History.RecordSettings();
+    Settings.PostProcessing.Exposure = 2.0f;
     REQUIRE(History.Commit());
 
     REQUIRE(History.Undo());
-    CHECK(Environment.Exposure == 1.0f);
-    CHECK(EnvironmentChanges == 1);
+    CHECK(Settings.PostProcessing.Exposure == 1.0f);
+    CHECK(SettingsChanges == 1);
 
     REQUIRE(History.Redo());
-    CHECK(Environment.Exposure == 2.0f);
-    CHECK(EnvironmentChanges == 2);
+    CHECK(Settings.PostProcessing.Exposure == 2.0f);
+    CHECK(SettingsChanges == 2);
 }
 
 TEST_CASE_METHOD(Fixture, "Steps are kept in order, up to a limit", "[scene history]")
@@ -319,4 +320,44 @@ TEST_CASE_METHOD(Fixture, "An assigned asset is undone and resolved again", "[sc
     REQUIRE_FALSE(component.Resolved.SubMeshes.empty());
     CHECK(component.Resolved.Materials.size() == component.Resolved.SubMeshes.size());
     CHECK(component.Resolved.Materials[0] != Assets.Load(material));
+}
+
+TEST_CASE_METHOD(Fixture, "Changing the main camera is a step", "[scene history]")
+{
+    const Entity camera = World.CreateEntity("Camera");
+    camera.AddComponent<CameraComponent>();
+
+    History.RecordSettings();
+    Settings.MainCamera = IdOf(camera);
+    REQUIRE(History.Commit());
+
+    REQUIRE(History.Undo());
+    CHECK_FALSE(Settings.MainCamera);
+    CHECK(SettingsChanges == 1);
+
+    REQUIRE(History.Redo());
+    CHECK(Settings.MainCamera == IdOf(camera));
+    CHECK(SettingsChanges == 2);
+}
+
+TEST_CASE_METHOD(Fixture, "A deleted main camera comes back as the main camera", "[scene history]")
+{
+    const Entity camera = World.CreateEntity("Camera");
+    camera.AddComponent<CameraComponent>();
+    Settings.MainCamera = IdOf(camera);
+
+    History.RecordDestroy(camera);
+    World.DestroyEntity(camera);
+    REQUIRE(History.Commit());
+
+    // The reference stays, and the scene falls back meanwhile
+    CHECK(Settings.MainCamera);
+    CHECK_FALSE(FindMainCamera(World, Settings.MainCamera));
+
+    REQUIRE(History.Undo());
+
+    const Entity restored = FindMainCamera(World, Settings.MainCamera);
+    REQUIRE(restored);
+    CHECK(IdOf(restored) == Settings.MainCamera);
+    CHECK(restored.HasComponent<CameraComponent>());
 }

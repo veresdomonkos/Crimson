@@ -12,6 +12,7 @@
 #include "crimson_editor/frame_stats.hpp"
 #include "crimson_editor/scene_camera_controller.hpp"
 #include "crimson_editor/scene_history.hpp"
+#include "crimson_editor/scene_view.hpp"
 #include "crimson_editor/ui/editor_ui.hpp"
 #include "crimson_editor/ui/viewport_panel.hpp"
 
@@ -31,6 +32,9 @@ namespace crimson::editor
 
         [[nodiscard]] EditorContext& GetContext() { return m_context; }
         [[nodiscard]] bool IsAskingAboutUnsavedChanges() const { return static_cast<bool>(m_closeAction); }
+
+        [[nodiscard]] SceneView& GetSceneView() { return m_sceneView; }
+        [[nodiscard]] SceneSettings& GetSettings() { return m_settings; }
 
         [[nodiscard]] bool IsSceneChanged();
 
@@ -69,7 +73,7 @@ namespace crimson::editor
         // A field, the gizmo, the asset picker or anything else in the middle of being changed, which is one step once it is done
         [[nodiscard]] bool IsEditing() const;
 
-        // Records what the Inspector, the gizmo and Render Settings may change, while nothing is
+        // Records what the Inspector, the gizmo and Scene Settings may change, while nothing is
         void RecordWatched();
 
         // After a step was undone or redone
@@ -88,7 +92,11 @@ namespace crimson::editor
 
         PerspectiveCamera m_camera;
         Scene m_scene;
-        SceneEnvironment m_environment;
+
+        // What the Scene view is seen from, the editor camera or a scene camera. Part of the editor, never saved.
+        SceneView m_sceneView;
+
+        SceneSettings m_settings;
         SceneHistory m_history;
         EditorContext m_context;
         std::unique_ptr<SceneRenderer> m_sceneRenderer;

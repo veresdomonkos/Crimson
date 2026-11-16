@@ -59,12 +59,13 @@ namespace crimson::editor::ui
         if (ImGui::IsAnyItemHovered() || (m_context.Selected && ImGuizmo::IsOver()))
             return;
 
+        glm::vec3 origin;
         glm::vec3 direction;
-        if (!GetRayUnderMouse(position, size, direction))
+        if (!GetRayUnderMouse(position, size, origin, direction))
             return;
 
         Scene& scene = m_context.ActiveScene;
-        Entity entity = scene.Raycast(m_camera.GetPosition(), direction);
+        Entity entity = scene.Raycast(origin, direction);
 
         // What is inside an instance can't be changed here, so a click means the instance
         while (entity && entity.HasComponent<InstancedComponent>())
@@ -73,7 +74,7 @@ namespace crimson::editor::ui
         m_context.SelectEntity(entity);
     }
 
-    bool SceneViewportPanel::GetRayUnderMouse(const ImVec2& position, const ImVec2& size, glm::vec3& direction) const
+    bool SceneViewportPanel::GetRayUnderMouse(const ImVec2& position, const ImVec2& size, glm::vec3& origin, glm::vec3& direction) const
     {
         const ImGuiIO& io = ImGui::GetIO();
         const glm::vec2 uv((io.MousePos.x - position.x) / size.x, (io.MousePos.y - position.y) / size.y);
@@ -82,12 +83,16 @@ namespace crimson::editor::ui
         if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f)
             return false;
 
-        const glm::mat4 clipToWorld = glm::inverse(m_camera.GetViewProj());
+        const CameraView view = m_view.GetView();
+        const glm::mat4 clipToWorld = glm::inverse(view.GetViewProj());
 
         // The panel shows the image flipped, so the top of it is the top of clip space
-        const glm::vec4 farPoint = clipToWorld * glm::vec4(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f, 1.0f, 1.0f);
+        const glm::vec2 ndc(uv.x * 2.0f - 1.0f, 1.0f - uv.y * 2.0f);
+        const glm::vec4 nearPoint = clipToWorld * glm::vec4(ndc, 0.0f, 1.0f);
+        const glm::vec4 farPoint = clipToWorld * glm::vec4(ndc, 1.0f, 1.0f);
 
-        direction = glm::normalize(glm::vec3(farPoint) / farPoint.w - m_camera.GetPosition());
+        origin = glm::vec3(nearPoint) / nearPoint.w;
+        direction = glm::normalize(glm::vec3(farPoint) / farPoint.w - origin);
         return true;
     }
 
@@ -114,11 +119,10 @@ namespace crimson::editor::ui
         if (!dropped)
             return;
 
+        glm::vec3 origin;
         glm::vec3 direction;
-        if (!GetRayUnderMouse(position, size, direction))
+        if (!GetRayUnderMouse(position, size, origin, direction))
             return;
-
-        const glm::vec3 origin = m_camera.GetPosition();
 
         m_context.Deferred.emplace_back([this, dropped, droppedType, origin, direction]
         {
@@ -228,12 +232,41 @@ namespace crimson::editor::ui
             m_mode = local ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
 
         ImGui::SetItemTooltip(local ? "Local axes, click for world axes" : "World axes, click for local axes");
+
+        ImGui::SameLine();
+
+        const Entity selected = m_context.Selected;
+        const Entity looked = m_view.GetLookThrough();
+        const bool looking = m_view.IsLookingThrough();
+
+        ImGui::BeginDisabled(!looking && !(selected && selected.HasComponent<CameraComponent>()));
+
+        ImGui::PushID("LookThrough");
+        if (theme::ToggleButton(kIconCamera, looking))
+        {
+            if (looking)
+                m_view.StopLookingThrough();
+            else
+                m_view.LookThrough(selected);
+        }
+        ImGui::PopID();
+
+        ImGui::EndDisabled();
+
+        if (looking)
+            ImGui::SetItemTooltip("Stop looking through %s", looked.GetComponent<NameComponent>().Name.c_str());
+        else
+            ImGui::SetItemTooltip("Look through the selected camera");
     }
 
     void SceneViewportPanel::DrawGizmo(const ImVec2& position, const ImVec2& size)
     {
         const Entity entity = m_context.Selected;
         if (!entity || entity.HasComponent<InstancedComponent>())
+            return;
+
+        // The gizmo would be at the eye, and dragging it would move the view under the drag
+        if (entity == m_view.GetLookThrough())
             return;
 
         // Holding alt is for moving the camera
@@ -254,11 +287,13 @@ namespace crimson::editor::ui
 
         Scene& scene = m_context.ActiveScene;
 
-        const glm::mat4 view = m_camera.GetView();
-        const glm::mat4 projection = m_camera.GetProjection();
+        const CameraView view = m_view.GetView();
         glm::mat4 world = scene.ComputeWorldMatrix(entity);
 
-        ImGuizmo::Manipulate(glm::value_ptr(view), glm::value_ptr(projection), m_operation, m_mode,
+        // Only an orthographic projection has a 1 there
+        ImGuizmo::SetOrthographic(view.Projection[3][3] == 1.0f);
+
+        ImGuizmo::Manipulate(glm::value_ptr(view.View), glm::value_ptr(view.Projection), m_operation, m_mode,
             glm::value_ptr(world), nullptr, snapping ? glm::value_ptr(snap) : nullptr);
 
         m_context.GizmoInUse = ImGuizmo::IsUsing();

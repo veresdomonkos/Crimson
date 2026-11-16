@@ -87,8 +87,11 @@ TEST_CASE_METHOD(Fixture, "A scene survives being saved and loaded", "[scene dat
     renderer.CastsShadows = false;
     ResolveAssets(assets, renderer);
 
-    const SceneEnvironment environment{ .Ambient = glm::vec3(0.2f), .Exposure = 2.5f, .Mapper = ToneMapper::None };
-    const SceneData saved = CaptureScene(scene, environment, assets);
+    const Entity camera = scene.CreateEntity("Camera");
+    camera.AddComponent<CameraComponent>(CameraComponent{ .FieldOfViewDegrees = 45.0f, .NearClip = 0.3f, .FarClip = 250.0f });
+
+    const SceneSettings settings{ .Ambient = glm::vec3(0.2f), .MainCamera = camera.GetComponent<NameComponent>().Id, .PostProcessing = { .Exposure = 2.5f, .Mapper = ToneMapper::None } };
+    const SceneData saved = CaptureScene(scene, settings, assets);
 
     const auto parsed = ParseSceneData(WriteSceneData(saved, assets), assets, "test");
     REQUIRE(parsed);
@@ -96,9 +99,9 @@ TEST_CASE_METHOD(Fixture, "A scene survives being saved and loaded", "[scene dat
 
     Scene loaded;
     InstantiateScene(*parsed, loaded, {}, assets, {});
-    CHECK(CaptureScene(loaded, environment, assets) == saved);
+    CHECK(CaptureScene(loaded, settings, assets) == saved);
 
-    REQUIRE(loaded.GetRoots().size() == 2);
+    REQUIRE(loaded.GetRoots().size() == 3);
     const Entity loadedMesh = loaded.GetEntity(loaded.GetRoots()[1]);
     CHECK(loadedMesh.GetComponent<NameComponent>().Id == mesh.GetComponent<NameComponent>().Id);
     CHECK_FALSE(loadedMesh.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
@@ -109,7 +112,7 @@ TEST_CASE_METHOD(Fixture, "Numbers are written the short way", "[scene data]")
     AssetManager assets(Gpu, Temp.Path());
 
     SceneData data;
-    data.Environment.Exposure = 0.1f;
+    data.Settings.PostProcessing.Exposure = 0.1f;
 
     const std::string text = WriteSceneData(data, assets);
     CHECK(text.find("\"exposure\": 0.1,") != std::string::npos);
@@ -471,10 +474,10 @@ TEST_CASE_METHOD(Fixture, "Scenes are assets", "[scene data]")
     SECTION("Saving replaces the file")
     {
         SceneData data;
-        data.Environment.Exposure = 3.0f;
+        data.Settings.PostProcessing.Exposure = 3.0f;
         REQUIRE(assets.Save(id, data));
 
-        CHECK(assets.Read(id)->Environment.Exposure == 3.0f);
+        CHECK(assets.Read(id)->Settings.PostProcessing.Exposure == 3.0f);
         CHECK_FALSE(fs::exists(Temp.Path() / "scenes/new.scene.saving"));
         CHECK(AssetManager(Gpu, Temp.Path()).Find<AssetType::Scene>("scenes/new.scene") == id);
     }
@@ -808,4 +811,54 @@ TEST_CASE_METHOD(Fixture, "One entity can be captured and set from its node", "[
         const Entity lid = scene.GetEntity(crate.GetComponent<RelationshipComponent>().Children.at(0));
         CHECK_FALSE(FindEntity(scene, lid.GetComponent<NameComponent>().Id));
     }
+}
+
+TEST_CASE_METHOD(Fixture, "An orthographic camera survives being saved and loaded", "[scene data]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+
+    const CameraComponent camera{ .Projection = CameraProjection::Orthographic, .OrthographicSize = 7.5f, .NearClip = 0.5f, .FarClip = 90.0f };
+
+    Scene scene;
+    scene.CreateEntity("Camera").AddComponent<CameraComponent>(camera);
+
+    const std::string text = WriteSceneData(CaptureScene(scene, {}, assets), assets);
+    CHECK(text.find("\"projection\": \"orthographic\"") != std::string::npos);
+
+    const auto parsed = ParseSceneData(text, assets, "test");
+    REQUIRE(parsed);
+
+    Scene loaded;
+    InstantiateScene(*parsed, loaded, {}, assets, {});
+
+    REQUIRE(loaded.GetRoots().size() == 1);
+    CHECK(loaded.GetEntity(loaded.GetRoots()[0]).GetComponent<CameraComponent>() == camera);
+}
+
+TEST_CASE_METHOD(Fixture, "A scene file without a main camera loads it as unset", "[scene data]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+
+    const auto data = ParseSceneData(R"({ "version": 1, "environment": { "exposure": 2.0 }, "entities": [ { "name": "A" } ] })", assets, "test");
+
+    REQUIRE(data);
+    CHECK(data->Settings.MainCamera == AssetID{});
+    CHECK(data->Settings.PostProcessing.Exposure == 2.0f);
+    CHECK(WriteSceneData(*data, assets).find("mainCamera") == std::string::npos);
+}
+
+TEST_CASE_METHOD(Fixture, "A main camera that isn't there keeps its reference", "[scene data]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+
+    SceneData data;
+    data.Settings.MainCamera = AssetID{ 0x1234abcd };
+
+    const std::string text = WriteSceneData(data, assets);
+    CHECK(text.find("\"mainCamera\"") != std::string::npos);
+
+    const auto parsed = ParseSceneData(text, assets, "test");
+    REQUIRE(parsed);
+    CHECK(parsed->Settings.MainCamera == data.Settings.MainCamera);
+    CHECK(WriteSceneData(*parsed, assets) == text);
 }

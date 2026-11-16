@@ -1,8 +1,11 @@
 #include "crimson_editor/ui/editor_ui.hpp"
+
 #include <imgui.h>
 #include <imgui_internal.h>
 #include <ImGuizmo.h>
 #include <utility>
+
+#include "crimson_editor/ui/scene_settings_panel.hpp"
 
 namespace crimson::editor::ui
 {
@@ -92,7 +95,7 @@ namespace crimson::editor::ui
 
         ImGui::DockBuilderDockWindow("Inspector", right);
         ImGui::DockBuilderDockWindow("Shadow Map", rightBottom);
-        ImGui::DockBuilderDockWindow("Render Settings", rightBottom);
+        ImGui::DockBuilderDockWindow(kSceneSettingsWindow, rightBottom);
         ImGui::DockBuilderDockWindow("Stats", rightBottom);
 
         ImGui::DockBuilderFinish(dockSpace);

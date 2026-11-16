@@ -37,7 +37,7 @@ namespace crimson::editor
     struct SceneStep
     {
         std::vector<EntityChange> Entities; // in the order they were recorded
-        std::optional<std::pair<SceneEnvironment, SceneEnvironment>> Environment;
+        std::optional<std::pair<SceneSettings, SceneSettings>> Settings;
         AssetID Selected; // the entity that was selected before the edit, for undo to select again
     };
 
@@ -50,8 +50,8 @@ namespace crimson::editor
     public:
         static constexpr size_t kMaxSteps = 100;
 
-        // The environment is the scene's, which a step puts back and then calls back about
-        SceneHistory(Scene& scene, AssetManager& assets, SceneEnvironment& environment, std::function<void()> onEnvironmentChanged);
+        // The settings are the scene's, which a step puts back and then calls back about
+        SceneHistory(Scene& scene, AssetManager& assets, SceneSettings& settings, std::function<void()> onSettingsChanged);
 
         // Before changing an entity. Only its first state in a step counts, so recording it again is cheap.
         // Entities inside instances are left out, as they can't be changed.
@@ -63,8 +63,8 @@ namespace crimson::editor
         // Before destroying an entity, which comes back with what is under it
         void RecordDestroy(Entity entity);
 
-        // Before changing the environment
-        void RecordEnvironment();
+        // Before changing the settings
+        void RecordSettings();
 
         // Ends the step that was being recorded, which is kept if anything in it changed. Returns whether it was.
         // The selected entity is the one that was selected before the edit.
@@ -96,11 +96,11 @@ namespace crimson::editor
 
         Scene& m_scene;
         AssetManager& m_assets;
-        SceneEnvironment& m_environment;
-        std::function<void()> m_onEnvironmentChanged;
+        SceneSettings& m_settings;
+        std::function<void()> m_onSettingsChanged;
 
         std::vector<Pending> m_pending;
-        std::optional<SceneEnvironment> m_environmentBefore;
+        std::optional<SceneSettings> m_settingsBefore;
 
         std::deque<SceneStep> m_steps;
         AssetID m_restoredSelection;
