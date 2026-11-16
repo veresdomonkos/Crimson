@@ -10,7 +10,6 @@
 #include "crimson_editor/ui/component_fields.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
-#include "crimson_editor/ui/scene_settings_panel.hpp"
 
 namespace crimson::editor::ui
 {
@@ -48,15 +47,11 @@ namespace crimson::editor::ui
         {
             const std::string name = std::filesystem::path(info->Path).stem().string();
             ImGui::TextDisabled("%s%s", m_context.SceneChanged ? "* " : "", name.c_str());
-            ImGui::SetItemTooltip("%s\nClick for its Scene Settings", info->Path.c_str());
-            if (ImGui::IsItemClicked())
-                ImGui::SetWindowFocus(kSceneSettingsWindow);
+            ImGui::SetItemTooltip("%s", info->Path.c_str());
         }
         else
         {
             ImGui::TextDisabled("No scene is open, this won't be saved");
-            if (ImGui::IsItemClicked())
-                ImGui::SetWindowFocus(kSceneSettingsWindow);
         }
 
         DrawSearch();
