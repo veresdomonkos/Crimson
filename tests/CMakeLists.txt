@@ -27,6 +27,7 @@ add_executable(CrimsonTests
     editor/test_asset_picker.cpp
     editor/test_asset_thumbnails.cpp
     editor/test_component_fields.cpp
+    editor/test_edit_history.cpp
     editor/test_editor_theme.cpp
     editor/test_linear_color.cpp
     editor/test_platform.cpp

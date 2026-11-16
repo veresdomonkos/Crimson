@@ -2,6 +2,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/app_mode.hpp
     include/crimson_editor/asset_edits.hpp
     include/crimson_editor/asset_thumbnails.hpp
+    include/crimson_editor/edit_history.hpp
     include/crimson_editor/editor_application.hpp
     include/crimson_editor/editor_context.hpp
     include/crimson_editor/editor_icons.hpp
@@ -48,6 +49,7 @@ set(EDITOR_HEADERS
 set(EDITOR_SOURCES
     src/asset_edits.cpp
     src/asset_thumbnails.cpp
+    src/edit_history.cpp
     src/editor_application.cpp
     src/editor_icons.cpp
     src/editor_paths.cpp
