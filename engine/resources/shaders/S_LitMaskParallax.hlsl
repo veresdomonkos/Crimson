@@ -80,7 +80,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     surface.Roughness = Roughness * mask.a;
     surface.Occlusion = lerp(1.0, mask.g, OcclusionStrength);
 
-    const float3 color = ComputeLighting(surface) + emissive;
+    const float3 color = ComputeLightingBurley(surface) + emissive;
 
     // Last, as a discarded pixel stops at once, and the derivatives need the pixels around it.
     // PSDepth cuts at the flat UV, so the holes in the shadows and the outline can be slightly off from these.

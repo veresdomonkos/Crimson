@@ -72,7 +72,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     surface.Roughness = Roughness * metallicRoughness.g;
     surface.Occlusion = lerp(1.0, occlusion, OcclusionStrength);
 
-    const float3 color = ComputeLighting(surface) + emissive;
+    const float3 color = ComputeLightingBurley(surface) + emissive;
 
     // Last, as a discarded pixel stops at once, and the normal map's derivatives need the pixels around it.
     // Only a cutout material is given a cutoff above 0, which nothing is under.

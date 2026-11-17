@@ -70,7 +70,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     surface.Occlusion = lerp(1.0, mask.g, OcclusionStrength);
     surface.Roughness = Roughness * mask.a;
 
-    const float3 color = ComputeLighting(surface) + emissive;
+    const float3 color = ComputeLightingBurley(surface) + emissive;
 
     // Last, as a discarded pixel stops at once, and the derivatives need the pixels around it.
     // Must match the clip in PSDepth, so the shadows and the selection outline get the same holes.

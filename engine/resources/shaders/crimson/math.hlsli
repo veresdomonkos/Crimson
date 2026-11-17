@@ -11,4 +11,16 @@ static const float EPSILON = 0.000001;        // Small enough to only keep a div
 static const float FLT_MIN = 1.175494351e-38; // The smallest float, for keeping a value away from 0 without changing any real one
 static const float FLT_MAX = 3.402823466e+38; // The largest float, as a starting value when searching for a minimum
 
+float Pow5(float x)
+{
+    const float x2 = x * x;
+    return x2 * x2 * x;
+}
+
+// pow, kept from 0^0, which is NaN on the GPU, for exponents that can reach 0
+float SafePow(float x, float y)
+{
+    return pow(max(x, FLT_MIN), y);
+}
+
 #endif
