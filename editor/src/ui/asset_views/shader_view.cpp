@@ -6,6 +6,7 @@
 
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/system_shell.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
 namespace crimson::editor::ui
@@ -59,7 +60,7 @@ namespace crimson::editor::ui
             .Type = AssetType::Shader,
             .Name = "Shader",
             .Icon = icons::kShader,
-            .Color = ImVec4(0.52f, 0.46f, 0.70f, 1.00f),
+            .Color = theme::CategoryViolet,
             .MakeView = [](EditorContext& context) { return std::make_unique<ShaderView>(context); },
             .Creation = AssetCreation{
                 .Label = "New Shader",

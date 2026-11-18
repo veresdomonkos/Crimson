@@ -13,6 +13,7 @@
 
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/system_shell.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
 
@@ -87,7 +88,7 @@ namespace crimson::editor::ui
             .Type = AssetType::Mesh,
             .Name = "Mesh",
             .Icon = icons::kMesh,
-            .Color = ImVec4(0.38f, 0.54f, 0.68f, 1.00f),
+            .Color = theme::CategorySteel,
             .MakeView = [](EditorContext& context) { return std::make_unique<MeshView>(context); },
             .OpenFile = [](EditorContext&, const std::filesystem::path& file) { shell::OpenInDefaultApp(file); },
             .Actions = {

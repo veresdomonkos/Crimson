@@ -5,6 +5,7 @@
 #include <crimson/scene/scene_serializer.hpp>
 
 #include "crimson_editor/editor_context.hpp"
+#include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
 namespace crimson::editor::ui
@@ -45,7 +46,7 @@ namespace crimson::editor::ui
             .Type = AssetType::Scene,
             .Name = "Scene",
             .Icon = icons::kScene,
-            .Color = ImVec4(0.70f, 0.50f, 0.36f, 1.00f),
+            .Color = theme::CategoryAmber,
             .MakeView = [](EditorContext& context) { return std::make_unique<SceneAssetView>(context); },
             .Creation = AssetCreation{
                 .Label = "New Scene",

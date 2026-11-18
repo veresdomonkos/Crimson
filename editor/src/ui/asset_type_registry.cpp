@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
 namespace crimson::editor::ui
@@ -20,7 +21,7 @@ namespace crimson::editor::ui
 
     const EditorAssetType& AssetTypeRegistry::Get(AssetType type) const
     {
-        static const EditorAssetType kFile = { .Name = "File", .Icon = icons::kFile, .Color = ImVec4(0.42f, 0.43f, 0.46f, 1.00f) };
+        static const EditorAssetType kFile = { .Name = "File", .Icon = icons::kFile, .Color = theme::CategoryNeutral };
 
         const EditorAssetType* found = Find(type);
         return found ? *found : kFile;

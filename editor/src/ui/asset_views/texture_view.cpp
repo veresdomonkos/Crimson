@@ -168,7 +168,7 @@ namespace crimson::editor::ui
             .Type = AssetType::Texture,
             .Name = "Texture",
             .Icon = icons::kTexture,
-            .Color = ImVec4(0.40f, 0.62f, 0.48f, 1.00f),
+            .Color = theme::CategorySage,
             .Thumbnail = [](const AssetManager& assets, AssetThumbnails& thumbnails, AssetID id)
             {
                 return thumbnails.Get(assets.As<AssetType::Texture>(id));

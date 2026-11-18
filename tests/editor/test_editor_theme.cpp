@@ -155,7 +155,8 @@ TEST_CASE("Panels write out no colors, radii or font sizes", "[editor][theme]")
         R"(ImVec4\s*\(\s*-?[0-9.]|IM_COL32|ImColor\s*\(|PushStyleVar\s*\(\s*ImGuiStyleVar_\w*Rounding|Rounding\s*\*|PushFont\s*\([^,)]*,\s*-?[0-9.])");
 
     int checked = 0;
-    for (const auto& entry : std::filesystem::directory_iterator(folder))
+    // With its subfolders, like asset_views, which register colors of their own
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(folder))
     {
         if (entry.path().extension() != ".cpp" || entry.path().filename() == "editor_theme.cpp")
             continue;

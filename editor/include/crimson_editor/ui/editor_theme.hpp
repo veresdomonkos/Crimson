@@ -46,9 +46,16 @@ namespace crimson::editor::ui
             return ImVec4(color.x, color.y, color.z, alpha);
         }
 
-        // Muted and of similar lightness, so no kind of asset shouts over the others
-        inline constexpr ImVec4 Folder    = ImVec4(0.68f, 0.60f, 0.40f, 1.00f);
-        inline constexpr ImVec4 FolderTab = ImVec4(0.58f, 0.50f, 0.33f, 1.00f);
+        // Muted and of similar lightness, so no kind of asset shouts over the others. Each asset type picks one when it is
+        // registered, and folders have their own.
+        inline constexpr ImVec4 Folder          = ImVec4(0.68f, 0.60f, 0.40f, 1.00f);
+        inline constexpr ImVec4 FolderTab       = ImVec4(0.58f, 0.50f, 0.33f, 1.00f);
+        inline constexpr ImVec4 CategoryRose    = ImVec4(0.66f, 0.42f, 0.52f, 1.00f);
+        inline constexpr ImVec4 CategorySteel   = ImVec4(0.38f, 0.54f, 0.68f, 1.00f);
+        inline constexpr ImVec4 CategoryViolet  = ImVec4(0.52f, 0.46f, 0.70f, 1.00f);
+        inline constexpr ImVec4 CategorySage    = ImVec4(0.40f, 0.62f, 0.48f, 1.00f);
+        inline constexpr ImVec4 CategoryAmber   = ImVec4(0.70f, 0.50f, 0.36f, 1.00f);
+        inline constexpr ImVec4 CategoryNeutral = ImVec4(0.42f, 0.43f, 0.46f, 1.00f);
 
         // The stripes on X, Y, Z and W fields, in the gizmo's colors
         inline constexpr ImVec4 AxisX = ImVec4(0.80f, 0.27f, 0.27f, 1.00f);
