@@ -1,9 +1,11 @@
 #pragma once
+#include <concepts>
 #include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 #include "crimson/asset_manager/asset_types.hpp"
@@ -102,4 +104,26 @@ namespace crimson
         // Points the asset at one it uses that was loaded again or removed. False means it has to be made again.
         virtual bool UpdateUse(LoadedAsset<T>&, const AssetInfo&, AssetID /*used*/, ImportContext&) { return false; }
     };
+
+    // Whether a type of asset loads as something. Scenes don't: they are read as data instead.
+    template <typename T>
+    concept LoadableAsset = requires { typename T::Loaded; };
+
+    // What the struct of an asset type has to say for AssetManager::RegisterType to take it: what it is called,
+    // what its file holds, how to parse and write that if it holds any, and the types it is made from
+    template <typename T>
+    concept CompleteAssetType =
+        requires
+        {
+            { T::Tag } -> std::convertible_to<AssetType>;
+            typename T::Data;
+            { T::Uses } -> std::convertible_to<std::span<const AssetType>>;
+        }
+        && (!LoadableAsset<T> || requires { typename T::Result; })
+        && (std::is_same_v<typename T::Data, NoAssetData> || requires { T::Parse; T::Write; });
+
+    // Whether an importer can make the assets of a type: it is made without arguments, and loads what the type says it loads
+    template <typename Importer, typename T>
+    concept ImporterFor = std::derived_from<Importer, AssetImporterBase> && std::default_initializable<Importer>
+        && (!LoadableAsset<T> || std::derived_from<Importer, AssetImporter<T>>);
 }

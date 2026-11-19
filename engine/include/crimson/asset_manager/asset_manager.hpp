@@ -1,5 +1,4 @@
 #pragma once
-#include <array>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -50,6 +49,17 @@ namespace crimson
 
         AssetManager(const AssetManager&) = delete;
         AssetManager& operator=(const AssetManager&) = delete;
+
+        // Makes the assets of a type known, made by the importer, with a store for a type that loads. A type is registered after
+        // the types it uses, so Types() lists each after what it uses, and unloading goes the other way round. It is refused,
+        // with an error in the log, when it is registered already, uses a type that isn't yet, its importer is for another
+        // type or one of its extensions has an importer. The files of a type registered after the manager was made are found
+        // by the next Refresh.
+        template <CompleteAssetType T, ImporterFor<T> Importer>
+        bool RegisterType();
+
+        // The registered types, in the order they were registered
+        [[nodiscard]] std::vector<AssetType> Types() const;
 
         // What exists. None of these load anything.
         [[nodiscard]] const AssetInfo* GetInfo(AssetID id) const;
@@ -160,7 +170,14 @@ namespace crimson
             const EmbeddedFile* Embedded = nullptr;
         };
 
-        void AddImporter(std::unique_ptr<AssetImporterBase> importer);
+        // What a registered type is made of
+        struct TypeRecord
+        {
+            AssetType Type;
+            std::unique_ptr<AssetImporterBase> Importer;
+            std::unique_ptr<AssetStoreBase> Store; // null for a type that doesn't load
+        };
+
         void RegisterEngineResources();
         void Scan(std::unordered_set<AssetID>& seen);
         void RegisterFile(const std::filesystem::path& file, std::unordered_set<AssetID>& seen);
@@ -181,7 +198,9 @@ namespace crimson
         template <typename T>
         AssetStore<T>& Store();
 
-        [[nodiscard]] AssetStoreBase* StoreOf(AssetType type);
+        // Null for a type that is not registered, and for one that doesn't load
+        [[nodiscard]] AssetStoreBase* StoreOf(AssetType type) const;
+        [[nodiscard]] const TypeRecord* RecordOf(AssetType type) const;
 
         // Where an asset of a type keeps what it loaded. Null if there is no such asset of that type.
         template <typename T>
@@ -208,7 +227,6 @@ namespace crimson
         std::filesystem::path m_root;
         ImportCache m_cache;
 
-        std::vector<std::unique_ptr<AssetImporterBase>> m_importers;
         std::unordered_map<std::string, AssetImporterBase*> m_importersByExtension;
 
         std::unordered_map<AssetID, Record> m_assets;
@@ -217,15 +235,14 @@ namespace crimson
         std::unordered_map<AssetID, AssetID> m_renamedIds; // the id made from an engine asset's old path to its id
         mutable std::unordered_map<AssetID, MissingAssetRef> m_missing;
 
-        // One per type that loads, by AssetType. Scenes have none.
-        std::array<std::unique_ptr<AssetStoreBase>, kAssetTypeCount> m_stores;
+        std::vector<TypeRecord> m_types; // in the order they were registered, each after the types it uses
     };
 
     template <typename T>
     AssetStore<T>& AssetManager::Store()
     {
-        // Each one is made for its own place, in the constructor
-        return static_cast<AssetStore<T>&>(*m_stores[static_cast<size_t>(T::Tag)]);
+        // Made when the type was registered
+        return static_cast<AssetStore<T>&>(*StoreOf(T::Tag));
     }
 
     template <typename T>
@@ -308,4 +325,57 @@ namespace crimson
         slot.Uses = std::move(ctx.Uses);
         return AssetUpdate::Replaced;
     }
+
+    template <CompleteAssetType T, ImporterFor<T> Importer>
+    bool AssetManager::RegisterType()
+    {
+        const AssetType type = T::Tag;
+
+        if (RecordOf(type))
+        {
+            LOG_ERROR("[Assets] {} is registered already", ToString(type));
+            return false;
+        }
+
+        for (const AssetType used : T::Uses)
+        {
+            if (!RecordOf(used))
+            {
+                LOG_ERROR("[Assets] Can't register {}: the {} it uses isn't registered yet", ToString(type), ToString(used));
+                return false;
+            }
+        }
+
+        auto importer = std::make_unique<Importer>();
+
+        if (importer->Type() != type)
+        {
+            LOG_ERROR("[Assets] Can't register {}: its importer is for {}", ToString(type), ToString(importer->Type()));
+            return false;
+        }
+
+        for (const std::string_view extension : importer->Extensions())
+        {
+            if (m_importersByExtension.contains(std::string(extension)))
+            {
+                LOG_ERROR("[Assets] Can't register {}: {} files have an importer already", ToString(type), extension);
+                return false;
+            }
+        }
+
+        for (const std::string_view extension : importer->Extensions())
+            m_importersByExtension[std::string(extension)] = importer.get();
+
+        TypeRecord record{ .Type = type, .Importer = std::move(importer) };
+
+        if constexpr (LoadableAsset<T>)
+            record.Store = std::make_unique<AssetStore<T>>();
+
+        m_types.push_back(std::move(record));
+        return true;
+    }
+
+    // Registers the engine's own types of asset, each after the types it uses. This is the one place that names them all,
+    // as RegisterNativeComponents is for components.
+    void RegisterBuiltinAssetTypes(AssetManager& assets);
 }

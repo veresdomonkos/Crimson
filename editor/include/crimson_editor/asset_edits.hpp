@@ -1,6 +1,5 @@
 #pragma once
 #include <algorithm>
-#include <array>
 #include <memory>
 #include <ranges>
 #include <unordered_map>
@@ -268,7 +267,7 @@ namespace crimson::editor
         template <typename T>
         Table<T>& TableFor()
         {
-            std::unique_ptr<TableBase>& table = m_tables[static_cast<size_t>(T::Tag)];
+            std::unique_ptr<TableBase>& table = m_tables[T::Tag];
             if (!table)
                 table = std::make_unique<Table<T>>(m_assets);
 
@@ -279,6 +278,6 @@ namespace crimson::editor
         [[nodiscard]] TableBase* TableOf(AssetID id) const;
 
         AssetManager& m_assets;
-        std::array<std::unique_ptr<TableBase>, kAssetTypeCount> m_tables;
+        std::unordered_map<AssetType, std::unique_ptr<TableBase>> m_tables;
     };
 }

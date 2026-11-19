@@ -1,4 +1,6 @@
 #pragma once
+#include <array>
+
 #include "crimson/asset_manager/asset_id.hpp"
 #include "crimson/asset_manager/material_data.hpp"
 #include "crimson/renderer/resource_handles.hpp"
@@ -13,6 +15,7 @@ namespace crimson
         using Data = MaterialData;
 
         static constexpr AssetType Tag = AssetType::Material;
+        static constexpr std::array<AssetType, 2> Uses = { AssetType::Shader, AssetType::Texture }; // the types it is made from, unloaded after it
 
         static constexpr auto Parse = &material_data::Parse;
         static constexpr auto Write = &material_data::Write;

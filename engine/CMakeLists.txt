@@ -85,6 +85,7 @@ set(ENGINE_SOURCES
     src/asset_manager/asset_ref.cpp
     src/asset_manager/asset_ref.hpp
     src/asset_manager/binary_io.hpp
+    src/asset_manager/builtin_asset_types.cpp
     src/asset_manager/engine_renames.hpp
     src/asset_manager/import_cache.cpp
     src/asset_manager/importers/material_importer.cpp

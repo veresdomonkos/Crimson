@@ -103,9 +103,8 @@ namespace crimson::editor::ui
         AssetID dropped;
         AssetType droppedType = AssetType::None;
 
-        for (size_t index = 1; index < kAssetTypeCount; ++index)
+        for (const AssetType type : m_context.Assets.Types())
         {
-            const auto type = static_cast<AssetType>(index);
             if (!CanDrop(components, type))
                 continue;
 

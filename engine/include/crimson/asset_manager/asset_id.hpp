@@ -35,7 +35,6 @@ namespace crimson
     };
 
     enum class AssetType : uint8_t { None, Texture, Mesh, Shader, Material, Scene };
-    inline constexpr size_t kAssetTypeCount = static_cast<size_t>(AssetType::Scene) + 1;
 
     // What an asset's file says, for the types whose files hold nothing to edit
     struct NoAssetData {};

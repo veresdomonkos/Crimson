@@ -4,13 +4,9 @@
 #include <cctype>
 #include <fstream>
 #include <iterator>
+#include <ranges>
 #include <system_error>
 #include <utility>
-#include "crimson/asset_manager/importers/material_importer.hpp"
-#include "crimson/asset_manager/importers/mesh_importer.hpp"
-#include "crimson/asset_manager/importers/scene_importer.hpp"
-#include "crimson/asset_manager/importers/shader_importer.hpp"
-#include "crimson/asset_manager/importers/texture_importer.hpp"
 #include "crimson/asset_manager/meta_file.hpp"
 #include "crimson/core/engine_resources.hpp"
 #include "crimson/core/hash.hpp"
@@ -24,9 +20,6 @@ namespace fs = std::filesystem;
 namespace crimson
 {
     constexpr std::string_view kEnginePathPrefix = "engine/";
-
-    // Each can use the ones after it
-    constexpr std::array kUnloadOrder = { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader };
 
     // An engine resource has no meta to store an id in, and scenes must find it again in any project.
     static AssetID EngineResourceId(std::string_view path)
@@ -60,17 +53,7 @@ namespace crimson
         : m_gpuResources(gpuResources), m_root(fs::absolute(std::move(root)).lexically_normal()), m_cache(std::move(cacheFolder), m_root)
     {
         RegisterNativeComponents(m_components);
-
-        AddImporter(std::make_unique<TextureImporter>());
-        AddImporter(std::make_unique<ShaderImporter>());
-        AddImporter(std::make_unique<MaterialImporter>());
-        AddImporter(std::make_unique<MeshImporter>());
-        AddImporter(std::make_unique<SceneImporter>());
-
-        m_stores[static_cast<size_t>(AssetType::Texture)] = std::make_unique<AssetStore<TextureAsset>>();
-        m_stores[static_cast<size_t>(AssetType::Shader)] = std::make_unique<AssetStore<ShaderAsset>>();
-        m_stores[static_cast<size_t>(AssetType::Material)] = std::make_unique<AssetStore<MaterialAsset>>();
-        m_stores[static_cast<size_t>(AssetType::Mesh)] = std::make_unique<AssetStore<MeshAsset>>();
+        RegisterBuiltinAssetTypes(*this);
 
         RegisterEngineResources();
 
@@ -83,19 +66,15 @@ namespace crimson
 
     AssetManager::~AssetManager()
     {
-        for (const AssetType type : kUnloadOrder)
-            StoreOf(type)->UnloadAll(m_gpuResources);
+        // Each type was registered after the ones it uses, so those go last
+        for (const TypeRecord& record : std::views::reverse(m_types))
+        {
+            if (record.Store)
+                record.Store->UnloadAll(m_gpuResources);
+        }
 
-        for (const auto& importer : m_importers)
-            importer->ReleaseShared(m_gpuResources);
-    }
-
-    void AssetManager::AddImporter(std::unique_ptr<AssetImporterBase> importer)
-    {
-        for (std::string_view ext : importer->Extensions())
-            m_importersByExtension[std::string(ext)] = importer.get();
-
-        m_importers.push_back(std::move(importer));
+        for (const TypeRecord& record : m_types)
+            record.Importer->ReleaseShared(m_gpuResources);
     }
 
     void AssetManager::RegisterEngineResources()
@@ -330,13 +309,31 @@ namespace crimson
     bool AssetManager::IsLoaded(AssetID id) const
     {
         const AssetInfo* info = GetInfo(id);
-        const AssetStoreBase* store = info ? m_stores[static_cast<size_t>(info->Type)].get() : nullptr;
+        const AssetStoreBase* store = info ? StoreOf(info->Type) : nullptr;
         return store && store->IsLoaded(id);
     }
 
-    AssetStoreBase* AssetManager::StoreOf(AssetType type)
+    const AssetManager::TypeRecord* AssetManager::RecordOf(AssetType type) const
     {
-        return m_stores[static_cast<size_t>(type)].get();
+        const auto it = std::ranges::find(m_types, type, &TypeRecord::Type);
+        return it != m_types.end() ? &*it : nullptr;
+    }
+
+    AssetStoreBase* AssetManager::StoreOf(AssetType type) const
+    {
+        const TypeRecord* record = RecordOf(type);
+        return record ? record->Store.get() : nullptr;
+    }
+
+    std::vector<AssetType> AssetManager::Types() const
+    {
+        std::vector<AssetType> types;
+        types.reserve(m_types.size());
+
+        for (const TypeRecord& record : m_types)
+            types.push_back(record.Type);
+
+        return types;
     }
 
     AssetSource AssetManager::SourceOf(const Record& record) const
@@ -415,15 +412,15 @@ namespace crimson
         // What the users say names the removed ones as their files do, which is lost once those are gone
         for (const AssetID id : ids)
         {
-            for (const auto& store : m_stores)
+            for (const TypeRecord& record : m_types)
             {
-                if (!store)
+                if (!record.Store)
                     continue;
 
-                for (const AssetID user : store->UsersOf(id))
+                for (const AssetID user : record.Store->UsersOf(id))
                 {
                     if (const auto it = m_assets.find(user); it != m_assets.end())
-                        store->ReadData(user, SourceOf(it->second), *this);
+                        record.Store->ReadData(user, SourceOf(it->second), *this);
                 }
             }
         }
@@ -445,25 +442,28 @@ namespace crimson
         for (const auto& [id, type] : removed)
             UpdateUsersOf(id, true, nullptr);
 
-        for (const AssetType type : kUnloadOrder)
+        for (const TypeRecord& record : std::views::reverse(m_types))
         {
+            if (!record.Store)
+                continue;
+
             for (const auto& [id, removedType] : removed)
             {
-                if (removedType == type)
-                    StoreOf(type)->Forget(id, m_gpuResources);
+                if (removedType == record.Type)
+                    record.Store->Forget(id, m_gpuResources);
             }
         }
     }
 
     void AssetManager::UpdateUsersOf(AssetID used, bool removed, std::vector<AssetID>* replaced)
     {
-        for (const auto& store : m_stores)
+        for (const TypeRecord& record : m_types)
         {
-            if (!store)
+            if (!record.Store)
                 continue;
 
             // Collected first, as updating one can load others
-            for (const AssetID user : store->UsersOf(used))
+            for (const AssetID user : record.Store->UsersOf(used))
             {
                 const auto it = m_assets.find(user);
                 if (it == m_assets.end())
@@ -471,7 +471,7 @@ namespace crimson
 
                 ImportContext ctx{ m_gpuResources, *this, CacheFor(it->second) };
 
-                if (store->UpdateUser(user, used, removed, SourceOf(it->second), ctx) && replaced)
+                if (record.Store->UpdateUser(user, used, removed, SourceOf(it->second), ctx) && replaced)
                     replaced->push_back(user);
             }
         }
