@@ -50,7 +50,7 @@ namespace crimson::editor::ui
     void AssetBrowserPanel::Rebuild()
     {
         m_builtOnce = true;
-        m_builtVersion = m_context.AssetsVersion;
+        m_builtVersion = m_context.Assets.Version();
         m_builtShowingEngine = m_settings.GetShowEngineContent();
         m_reservedFolderFound = false;
 
@@ -109,7 +109,6 @@ namespace crimson::editor::ui
         {
             const std::vector<AssetID> removed = m_context.Assets.Refresh();
             m_context.OnAssetsRemoved(removed);
-            ++m_context.AssetsVersion;
         });
     }
 
@@ -162,7 +161,7 @@ namespace crimson::editor::ui
 
         RefreshWhenRefocused();
 
-        if (!m_builtOnce || m_builtVersion != m_context.AssetsVersion || m_builtShowingEngine != m_settings.GetShowEngineContent())
+        if (!m_builtOnce || m_builtVersion != m_context.Assets.Version() || m_builtShowingEngine != m_settings.GetShowEngineContent())
             Rebuild();
 
         DrawToolbar();
@@ -534,7 +533,6 @@ namespace crimson::editor::ui
                         if (slot_materials::Create(m_context.Assets, m_context.Assets.As<MeshAsset>(id)).Created.empty())
                             return;
 
-                        ++m_context.AssetsVersion;
                         ResolveSceneAssets(m_context.ActiveScene, m_context.Assets);
                     });
                 }
@@ -734,7 +732,6 @@ namespace crimson::editor::ui
 
                 const std::vector<AssetID> removed = m_context.Assets.Refresh();
                 m_context.OnAssetsRemoved(removed);
-                ++m_context.AssetsVersion;
             });
         };
 
@@ -818,7 +815,6 @@ namespace crimson::editor::ui
                     {
                         const std::array removed = { id };
                         m_context.OnAssetsRemoved(removed);
-                        ++m_context.AssetsVersion;
                     }
                 });
                 break;
@@ -847,8 +843,7 @@ namespace crimson::editor::ui
             if (!info || info->ReadOnly || ParentOf(info->Path) == folder)
                 return;
 
-            if (m_context.Assets.Rename(asset, folder.empty() ? AssetFileName(info->Path) : folder + "/" + AssetFileName(info->Path)))
-                ++m_context.AssetsVersion;
+            m_context.Assets.Rename(asset, folder.empty() ? AssetFileName(info->Path) : folder + "/" + AssetFileName(info->Path));
         });
     }
 }

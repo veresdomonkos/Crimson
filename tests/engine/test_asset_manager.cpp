@@ -1121,3 +1121,62 @@ TEST_CASE("A meta file naming another type is warned about, and its importer's t
     CHECK(info->Path == "tri.obj");
     CHECK(info->Type.Is<MeshAsset>());
 }
+
+TEST_CASE("The version changes when assets come, go, move or load again", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("a.mat", kValidMaterial);
+    temp.Write("image.bmp", MakeImage());
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    uint64_t version = assets.Version();
+    const auto changed = [&]
+    {
+        const bool different = assets.Version() != version;
+        version = assets.Version();
+        return different;
+    };
+
+    const MaterialID material = assets.Find<MaterialAsset>("a.mat");
+    const TextureID texture = assets.Find<TextureAsset>("image.bmp");
+
+    SECTION("Not by looking things up, or by changing them in place")
+    {
+        REQUIRE(assets.Get(material));
+        CHECK_FALSE(changed());
+
+        MaterialData data = *assets.GetData(material);
+        data.Properties["Color"] = { 1.0f, 0.0f, 0.0f, 1.0f };
+        CHECK(assets.Apply(material, data) == AssetUpdate::Updated);
+        CHECK_FALSE(changed());
+    }
+
+    SECTION("By what comes, moves and goes")
+    {
+        const MaterialID created = assets.Create<MaterialAsset>("b.mat");
+        REQUIRE(created);
+        CHECK(changed());
+
+        REQUIRE(assets.Rename(created, "folder/b.mat"));
+        CHECK(changed());
+
+        REQUIRE(assets.Delete(created));
+        CHECK(changed());
+
+        temp.Write("c.mat", kValidMaterial);
+        CHECK(assets.Refresh().empty());
+        CHECK(changed());
+    }
+
+    SECTION("By loading one again")
+    {
+        REQUIRE(assets.Get(texture));
+        CHECK_FALSE(changed());
+
+        nlohmann::json settings = assets.GetInfo(texture)->Settings;
+        settings["flipY"] = true;
+        REQUIRE(assets.Reimport(texture, settings));
+        CHECK(changed());
+    }
+}

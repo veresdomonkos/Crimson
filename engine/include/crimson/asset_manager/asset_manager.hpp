@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -72,6 +73,10 @@ namespace crimson
         [[nodiscard]] const std::filesystem::path& GetRoot() const { return m_root; }
         [[nodiscard]] std::filesystem::path GetFilePath(AssetID id) const; // empty for an engine asset
         [[nodiscard]] bool IsLoaded(AssetID id) const;
+
+        // Changes when assets are added, removed, renamed or loaded again (Refresh, Create, Rename, Delete, Reimport,
+        // ReloadChanged). First loads and Apply leave it. For whatever keeps something worked out from the assets.
+        [[nodiscard]] uint64_t Version() const { return m_version; }
 
         // A reference that was read while its asset wasn't there keeps its id, for it to be saved and work again once the
         // file is back. Reading a reference is only a read of the project, so remembering one counts as const.
@@ -237,6 +242,7 @@ namespace crimson
         mutable std::unordered_map<AssetID, MissingAssetRef> m_missing;
 
         std::vector<TypeRecord> m_types; // in the order they were registered, each after the types it uses
+        uint64_t m_version = 0;
     };
 
     template <typename T>

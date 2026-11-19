@@ -252,7 +252,6 @@ TEST_CASE_METHOD(AssetFixture, "The Assets panel draws with and without the engi
     Context().Deferred.emplace_back([&]
     {
         Assets().Refresh();
-        ++Context().AssetsVersion;
     });
     RunFrames(App);
 
@@ -463,7 +462,6 @@ TEST_CASE_METHOD(AssetFixture, "Creating from the Hierarchy's presets and resolv
     Context().Deferred.emplace_back([&]
     {
         Assets().Refresh();
-        ++Context().AssetsVersion;
     });
     RunFrames(App);
 

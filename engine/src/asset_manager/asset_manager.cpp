@@ -379,6 +379,7 @@ namespace crimson
         });
 
         UpdateReferencesTo(moved);
+        ++m_version;
         return removed;
     }
 
@@ -525,6 +526,7 @@ namespace crimson
 
         std::unordered_set<AssetID> seen;
         RegisterFile(file, seen);
+        ++m_version;
         return FindId(path);
     }
 
@@ -577,6 +579,7 @@ namespace crimson
 
         UpdateReferencesTo({ { oldPath, id } });
 
+        ++m_version;
         return true;
     }
 
@@ -605,6 +608,7 @@ namespace crimson
 
         const std::array removed = { id };
         RemoveAssets(removed);
+        ++m_version;
         return true;
     }
 
@@ -696,6 +700,7 @@ namespace crimson
             return {};
         }
 
+        ++m_version;
         LOG_INFO("[Assets] Reloaded {}", record.Info.Path);
         return replaced;
     }
