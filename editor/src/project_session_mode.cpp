@@ -123,8 +123,8 @@ namespace crimson::editor
 
     void ProjectSessionMode::SetupRenderer()
     {
-        m_sceneRenderer->SetToneMapMaterial(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_ToneMap.mat"), kMainTargetWidth, kMainTargetHeight);
-        m_sceneRenderer->SetOutlineMaterial(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetToneMapMaterial(m_assetManager->Load<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetOutlineMaterial(m_assetManager->Load<MaterialAsset>("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
     }
 
     void ProjectSessionMode::SetupUI()
@@ -202,14 +202,14 @@ namespace crimson::editor
 
     SceneID ProjectSessionMode::ChooseScene(AssetID preferred)
     {
-        if (const SceneID scene = m_assetManager->As<AssetType::Scene>(preferred))
+        if (const SceneID scene = m_assetManager->As<SceneAsset>(preferred))
             return scene;
 
         // Not the engine's template, which is listed too
         const std::vector<const AssetInfo*> scenes = m_assetManager->List(AssetType::Scene);
         const auto first = std::ranges::find_if(scenes, [](const AssetInfo* scene) { return !scene->ReadOnly; });
 
-        return first == scenes.end() ? m_assetManager->Create<AssetType::Scene>("scenes/main.scene") : m_assetManager->As<AssetType::Scene>((*first)->Id);
+        return first == scenes.end() ? m_assetManager->Create<SceneAsset>("scenes/main.scene") : m_assetManager->As<SceneAsset>((*first)->Id);
     }
 
     void ProjectSessionMode::OpenScene(SceneID id)

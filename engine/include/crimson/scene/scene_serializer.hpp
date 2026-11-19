@@ -1,4 +1,5 @@
 #pragma once
+#include "crimson/asset_manager/importers/scene_asset.hpp"
 #include "crimson/asset_manager/scene_data.hpp"
 #include "crimson/scene/entity.hpp"
 

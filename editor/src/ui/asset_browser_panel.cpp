@@ -457,7 +457,7 @@ namespace crimson::editor::ui
 
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         {
-            if (const SceneID scene = m_context.Assets.As<AssetType::Scene>(item.Id))
+            if (const SceneID scene = m_context.Assets.As<SceneAsset>(item.Id))
                 m_context.OpenScene(scene);
             else if (editedOutside && !file.empty())
                 openOutside();
@@ -474,7 +474,7 @@ namespace crimson::editor::ui
         // Only pictures that are on screen get loaded
         ImTextureID picture = 0;
         if (item.Type == AssetType::Texture && ImGui::IsItemVisible())
-            picture = m_context.Thumbnails.Get(m_context.Assets.As<AssetType::Texture>(item.Id));
+            picture = m_context.Thumbnails.Get(m_context.Assets.As<TextureAsset>(item.Id));
 
         if (picture)
         {
@@ -531,7 +531,7 @@ namespace crimson::editor::ui
                 {
                     m_context.Deferred.emplace_back([this, id = item.Id]
                     {
-                        if (slot_materials::Create(m_context.Assets, m_context.Assets.As<AssetType::Mesh>(id)).Created.empty())
+                        if (slot_materials::Create(m_context.Assets, m_context.Assets.As<MeshAsset>(id)).Created.empty())
                             return;
 
                         ++m_context.AssetsVersion;
@@ -754,7 +754,7 @@ namespace crimson::editor::ui
             case Dialog::NewMaterial:
                 refreshAfter([this, path = JoinToCurrent(name + ".mat")]
                 {
-                    if (const AssetID id = m_context.Assets.Create<AssetType::Material>(path))
+                    if (const AssetID id = m_context.Assets.Create<MaterialAsset>(path))
                         m_context.SelectAsset(id);
                 });
                 break;
@@ -762,7 +762,7 @@ namespace crimson::editor::ui
             case Dialog::NewScene:
                 refreshAfter([this, path = JoinToCurrent(name + ".scene")]
                 {
-                    if (const AssetID id = m_context.Assets.Create<AssetType::Scene>(path))
+                    if (const AssetID id = m_context.Assets.Create<SceneAsset>(path))
                         m_context.SelectAsset(id);
                 });
                 break;
@@ -770,7 +770,7 @@ namespace crimson::editor::ui
             case Dialog::NewShader:
                 refreshAfter([this, path = JoinToCurrent(name + ".hlsl")]
                 {
-                    if (const AssetID id = m_context.Assets.Create<AssetType::Shader>(path))
+                    if (const AssetID id = m_context.Assets.Create<ShaderAsset>(path))
                         m_context.SelectAsset(id);
                 });
                 break;

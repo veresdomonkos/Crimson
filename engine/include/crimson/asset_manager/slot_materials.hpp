@@ -3,6 +3,8 @@
 #include <vector>
 
 #include "crimson/asset_manager/asset_manager.hpp"
+#include "crimson/asset_manager/importers/material_asset.hpp"
+#include "crimson/asset_manager/importers/mesh_asset.hpp"
 
 namespace crimson
 {

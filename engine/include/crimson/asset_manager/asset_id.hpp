@@ -4,6 +4,7 @@
 #include <functional>
 #include <random>
 #include <string>
+#include <type_traits>
 #include <cstdio>
 
 namespace crimson
@@ -36,15 +37,16 @@ namespace crimson
     enum class AssetType : uint8_t { None, Texture, Mesh, Shader, Material, Scene };
     inline constexpr size_t kAssetTypeCount = static_cast<size_t>(AssetType::Scene) + 1;
 
+    // What an asset's file says, for the types whose files hold nothing to edit
+    struct NoAssetData {};
+
     // An AssetID known to be of one type, so code wanting a shader can't be given a texture by mistake.
     // Only AssetManager makes one from an AssetID, after checking the type. Forgetting the type is always fine.
     // Being of the right type doesn't make it loadable: its file can still be broken.
-    template <AssetType T>
+    template <typename T>
     class TypedAssetID
     {
     public:
-        static constexpr AssetType Type = T;
-
         TypedAssetID() = default;
 
         operator AssetID() const { return m_id; }
@@ -52,7 +54,7 @@ namespace crimson
         bool operator==(const TypedAssetID&) const = default;
 
         // Both would turn into AssetIDs and compare, though a texture is never a mesh
-        template <AssetType U> requires (U != T)
+        template <typename U> requires (!std::is_same_v<U, T>)
         bool operator==(const TypedAssetID<U>&) const = delete;
 
         [[nodiscard]] std::string ToString() const { return m_id.ToString(); }
@@ -62,12 +64,6 @@ namespace crimson
 
         AssetID m_id;
     };
-
-    using TextureID  = TypedAssetID<AssetType::Texture>;
-    using MeshID     = TypedAssetID<AssetType::Mesh>;
-    using ShaderID   = TypedAssetID<AssetType::Shader>;
-    using MaterialID = TypedAssetID<AssetType::Material>;
-    using SceneID    = TypedAssetID<AssetType::Scene>;
 }
 
 template<>
@@ -79,7 +75,7 @@ struct std::hash<crimson::AssetID>
     }
 };
 
-template <crimson::AssetType T>
+template <typename T>
 struct std::hash<crimson::TypedAssetID<T>>
 {
     size_t operator()(const crimson::TypedAssetID<T>& id) const noexcept

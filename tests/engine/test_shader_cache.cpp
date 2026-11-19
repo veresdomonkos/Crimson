@@ -10,6 +10,8 @@
 
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/asset_manager/import_cache.hpp>
+#include <crimson/asset_manager/importers/shader_asset.hpp>
+
 #include <crimson/core/log.hpp>
 #include <crimson/renderer/shader_compiler.hpp>
 
@@ -87,7 +89,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
         {
             FakeGpuResourceManager gpu;
             AssetManager assets(gpu, Assets(), Cache());
-            return static_cast<bool>(assets.Load<AssetType::Shader>("mine.hlsl"));
+            return static_cast<bool>(assets.Load<ShaderAsset>("mine.hlsl"));
         }
 
     private:

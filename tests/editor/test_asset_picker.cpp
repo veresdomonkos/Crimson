@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include <crimson/asset_manager/importers/material_asset.hpp>
 #include <crimson_editor/ui/asset_field.hpp>
 #include <crimson_editor/ui/asset_picker.hpp>
 
@@ -224,7 +225,7 @@ TEST_CASE("A field names its asset, None by type, or what is missing", "[asset p
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
 
-    const MaterialID floor = assets.Find<AssetType::Material>("floor.mat");
+    const MaterialID floor = assets.Find<MaterialAsset>("floor.mat");
     REQUIRE(floor);
 
     CHECK(AssetFieldText(assets, floor, AssetType::Material) == "floor.mat");

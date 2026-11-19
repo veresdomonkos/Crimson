@@ -132,7 +132,7 @@ namespace crimson
         {
             meshRenderer.Preset("3D Object", mesh.Name, [path = mesh.Path](MeshRendererComponent& renderer, const AssetManager& assets)
             {
-                renderer.MeshAsset = assets.Find<AssetType::Mesh>(path);
+                renderer.MeshAsset = assets.Find<MeshAsset>(path);
             });
         }
     }

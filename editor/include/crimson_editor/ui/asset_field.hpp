@@ -16,11 +16,11 @@ namespace crimson::editor::ui
     bool AssetField(const char* id, EditorContext& context, AssetType type, AssetID& current);
 
     // The same, for when the type is known when compiling
-    template <AssetType T>
+    template <typename T>
     bool AssetField(const char* id, EditorContext& context, TypedAssetID<T>& current)
     {
         AssetID picked = current;
-        if (!AssetField(id, context, T, picked))
+        if (!AssetField(id, context, T::Tag, picked))
             return false;
 
         current = context.Assets.As<T>(picked);

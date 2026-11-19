@@ -71,7 +71,7 @@ namespace crimson
         MtlMaterial result;
         MaterialData& data = result.Data;
 
-        data.Shader = assets.Find<AssetType::Shader>(kLitShaderPath);
+        data.Shader = assets.Find<ShaderAsset>(kLitShaderPath);
 
         // A value at the shader's own default isn't written, as the Inspector does
         const ShaderHandle shader = assets.Load(data.Shader);
@@ -95,7 +95,7 @@ namespace crimson
             std::ranges::replace(name, '\\', '/');
             const std::string path = fs::path(std::string(meshFolder) + name).lexically_normal().generic_string();
 
-            const TextureID id = assets.Find<AssetType::Texture>(path);
+            const TextureID id = assets.Find<TextureAsset>(path);
             if (!id)
                 LOG_WARN("[Assets] '{}': texture '{}' not found", mtl.name, path);
 

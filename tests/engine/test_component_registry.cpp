@@ -5,6 +5,9 @@
 
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/asset_manager/slot_materials.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+
 #include <crimson/scene/component_builder.hpp>
 #include <crimson/scene/component_registry.hpp>
 
@@ -167,8 +170,8 @@ TEST_CASE_METHOD(Fixture, "A native component's fields go through its members", 
 TEST_CASE_METHOD(Fixture, "Asset fields keep their asset's type", "[components]")
 {
     const ComponentType& renderer = Type("meshRenderer");
-    const MeshID mesh = Assets.Find<AssetType::Mesh>("thing.obj");
-    const MaterialID material = Assets.Find<AssetType::Material>("thing.mat");
+    const MeshID mesh = Assets.Find<MeshAsset>("thing.obj");
+    const MaterialID material = Assets.Find<MaterialAsset>("thing.mat");
     REQUIRE(mesh);
     REQUIRE(material);
 
@@ -324,13 +327,13 @@ TEST_CASE_METHOD(Fixture, "A builder's field takes its type and default from the
         std::vector<FieldValue> values = ReadFields(probe, &defaults);
         values[*probe.FindField("count")] = int32_t{ 9 };
         values[*probe.FindField("kind")] = static_cast<int32_t>(LightType::Point);
-        values[*probe.FindField("mesh")] = AssetID(Assets.Find<AssetType::Mesh>("thing.obj"));
+        values[*probe.FindField("mesh")] = AssetID(Assets.Find<MeshAsset>("thing.obj"));
         WriteComponent(probe, Thing, values);
 
         const Probe& written = *static_cast<const Probe*>(probe.Get(Thing));
         CHECK(written.Count == 9);
         CHECK(written.Kind == LightType::Point);
-        CHECK(written.Mesh == Assets.Find<AssetType::Mesh>("thing.obj"));
+        CHECK(written.Mesh == Assets.Find<MeshAsset>("thing.obj"));
     }
 }
 
@@ -396,7 +399,7 @@ TEST_CASE_METHOD(Fixture, "Presets set up a component and resolve its assets", "
         ApplyPreset(renderer, preset(renderer, "Cube"), Thing, Assets);
 
         const auto& component = Thing.GetComponent<MeshRendererComponent>();
-        CHECK(component.MeshAsset == Assets.Find<AssetType::Mesh>("engine/meshes/SM_Cube.obj"));
+        CHECK(component.MeshAsset == Assets.Find<MeshAsset>("engine/meshes/SM_Cube.obj"));
         CHECK_FALSE(component.Resolved.SubMeshes.empty());
     }
 }
@@ -408,7 +411,7 @@ TEST_CASE_METHOD(Fixture, "A slot's label comes from the mesh", "[components]")
     REQUIRE(materials.ItemLabel);
 
     CreateComponent(renderer, Thing, Assets);
-    AssignAsset(renderer, *renderer.FindField("mesh"), Thing, Assets.Find<AssetType::Mesh>("two.obj"), Assets);
+    AssignAsset(renderer, *renderer.FindField("mesh"), Thing, Assets.Find<MeshAsset>("two.obj"), Assets);
 
     const void* component = renderer.Get(Thing);
     CHECK(materials.ItemLabel(component, 0) == "stone");
@@ -419,11 +422,11 @@ TEST_CASE_METHOD(Fixture, "A slot's label comes from the mesh", "[components]")
 TEST_CASE_METHOD(Fixture, "An asset fallback is saved as empty", "[components]")
 {
     const ComponentType& renderer = Type("meshRenderer");
-    const MaterialID chosen = Assets.Find<AssetType::Material>("thing.mat");
+    const MaterialID chosen = Assets.Find<MaterialAsset>("thing.mat");
     const size_t materials = *renderer.FindField("materials");
 
     CreateComponent(renderer, Thing, Assets);
-    AssignAsset(renderer, *renderer.FindField("mesh"), Thing, Assets.Find<AssetType::Mesh>("two.obj"), Assets);
+    AssignAsset(renderer, *renderer.FindField("mesh"), Thing, Assets.Find<MeshAsset>("two.obj"), Assets);
     AssignAsset(renderer, materials, Thing, chosen, Assets);
 
     const auto& component = Thing.GetComponent<MeshRendererComponent>();
@@ -470,14 +473,14 @@ TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")
     SECTION("Assigning sets the first slot and resolves")
     {
         CreateComponent(renderer, Thing, Assets);
-        AssignAsset(renderer, spawn.Field, Thing, Assets.Find<AssetType::Mesh>("two.obj"), Assets);
+        AssignAsset(renderer, spawn.Field, Thing, Assets.Find<MeshAsset>("two.obj"), Assets);
 
         const auto& component = Thing.GetComponent<MeshRendererComponent>();
-        CHECK(component.MeshAsset == Assets.Find<AssetType::Mesh>("two.obj"));
+        CHECK(component.MeshAsset == Assets.Find<MeshAsset>("two.obj"));
         REQUIRE(component.MaterialAssets.size() == 2);
 
         const FieldRef drop = FindDropField(Registry, Thing, AssetType::Material);
-        const MaterialID material = Assets.Find<AssetType::Material>("thing.mat");
+        const MaterialID material = Assets.Find<MaterialAsset>("thing.mat");
         AssignAsset(*drop.Type, drop.Field, Thing, material, Assets);
 
         CHECK(component.MaterialAssets[0] == material);
@@ -489,7 +492,7 @@ TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")
         CreateComponent(renderer, Thing, Assets);
 
         const FieldRef drop = FindDropField(Registry, Thing, AssetType::Material);
-        AssignAsset(*drop.Type, drop.Field, Thing, Assets.Find<AssetType::Material>("thing.mat"), Assets);
+        AssignAsset(*drop.Type, drop.Field, Thing, Assets.Find<MaterialAsset>("thing.mat"), Assets);
 
         CHECK(Thing.GetComponent<MeshRendererComponent>().MaterialAssets.empty());
     }
@@ -540,7 +543,7 @@ TEST_CASE_METHOD(Fixture, "An id that clashes with a node key is refused", "[com
 
 TEST_CASE_METHOD(Fixture, "Every component with assets resolves with the scene", "[components]")
 {
-    const MeshID mesh = Assets.Find<AssetType::Mesh>("thing.obj");
+    const MeshID mesh = Assets.Find<MeshAsset>("thing.obj");
 
     const Entity other = World.CreateEntity("Other");
     for (const Entity entity : { Thing, other })

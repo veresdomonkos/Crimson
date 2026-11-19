@@ -27,10 +27,10 @@ namespace crimson::editor
         explicit AssetEdits(AssetManager& assets) : m_assets(assets) {}
 
         // The asset as it is being edited. Null if it can't be read.
-        template <AssetType T>
+        template <typename T>
         [[nodiscard]] const AssetData<T>* Get(TypedAssetID<T> id) { return TableFor<T>().Get(id); }
 
-        template <AssetType T>
+        template <typename T>
         void Set(TypedAssetID<T> id, const AssetData<T>& data) { TableFor<T>().Set(id, data); }
 
         [[nodiscard]] bool IsDirty(AssetID id) const;
@@ -65,7 +65,7 @@ namespace crimson::editor
         };
 
         // The edits to the assets of one type
-        template <AssetType T>
+        template <typename T>
         class Table final : public TableBase
         {
         public:
@@ -265,10 +265,10 @@ namespace crimson::editor
             std::unordered_map<TypedAssetID<T>, AssetData<T>> m_before; // as it was when the step's first Set came
         };
 
-        template <AssetType T>
+        template <typename T>
         Table<T>& TableFor()
         {
-            std::unique_ptr<TableBase>& table = m_tables[static_cast<size_t>(T)];
+            std::unique_ptr<TableBase>& table = m_tables[static_cast<size_t>(T::Tag)];
             if (!table)
                 table = std::make_unique<Table<T>>(m_assets);
 

@@ -7,10 +7,7 @@
 #include <unordered_map>
 #include <vector>
 #include "crimson/asset_manager/asset_types.hpp"
-#include "crimson/asset_manager/material_data.hpp"
-#include "crimson/asset_manager/scene_data.hpp"
 #include "crimson/core/embedded_resource.hpp"
-#include "crimson/renderer/mesh.hpp"
 #include "crimson/renderer/resource_manager.hpp"
 
 namespace crimson
@@ -18,42 +15,15 @@ namespace crimson
     class AssetManager;
     class ImportCache;
 
-    // What an asset's file says, for the types whose files hold nothing to edit
-    struct NoAssetData {};
+    // What loading a type of asset gives, and what its file says, as the type's struct names them
+    template <typename T>
+    using LoadedAsset = typename T::Loaded;
 
-    // What loading each type of asset gives, and what its file says. Scenes load as nothing: they are read as data instead.
-    // A type whose files hold data also says how to parse and write it.
-    template <AssetType T> struct AssetTraits;
-    template <> struct AssetTraits<AssetType::Texture>  { using Loaded = TextureHandle;  using Result = TextureHandle; using Data = NoAssetData; };
-    template <> struct AssetTraits<AssetType::Shader>   { using Loaded = ShaderHandle;   using Result = ShaderHandle;  using Data = NoAssetData; };
-    template <> struct AssetTraits<AssetType::Mesh>     { using Loaded = Mesh;           using Result = const Mesh*; using Data = NoAssetData; }; // valid as long as the manager
+    template <typename T>
+    using LoadResult = typename T::Result;
 
-    template <> struct AssetTraits<AssetType::Material>
-    {
-        using Loaded = MaterialHandle;
-        using Result = MaterialHandle;
-        using Data = MaterialData;
-
-        static constexpr auto Parse = &material_data::Parse;
-        static constexpr auto Write = &material_data::Write;
-    };
-
-    template <> struct AssetTraits<AssetType::Scene>
-    {
-        using Data = SceneData;
-
-        static constexpr auto Parse = &scene_data::Parse;
-        static constexpr auto Write = &scene_data::Write;
-    };
-
-    template <AssetType T>
-    using LoadedAsset = typename AssetTraits<T>::Loaded;
-
-    template <AssetType T>
-    using LoadResult = typename AssetTraits<T>::Result;
-
-    template <AssetType T>
-    using AssetData = typename AssetTraits<T>::Data;
+    template <typename T>
+    using AssetData = typename T::Data;
 
     enum class AssetUpdate
     {
@@ -114,11 +84,11 @@ namespace crimson
     };
 
     // One that also loads them. Errors go to the log and give nothing.
-    template <AssetType T>
+    template <typename T>
     class AssetImporter : public AssetImporterBase
     {
     public:
-        [[nodiscard]] AssetType Type() const final { return T; }
+        [[nodiscard]] AssetType Type() const final { return T::Tag; }
 
         virtual std::optional<LoadedAsset<T>> Load(const AssetSource& source, ImportContext& ctx) = 0;
         virtual void Unload(LoadedAsset<T>& asset, GpuResourceManager& gpu) = 0;

@@ -127,7 +127,7 @@ namespace crimson::editor::ui
         m_context.Deferred.emplace_back([this, dropped, droppedType, origin, direction]
         {
             if (droppedType == AssetType::Scene)
-                CreateInstanceOfScene(m_context.Assets.As<AssetType::Scene>(dropped), origin, direction);
+                CreateInstanceOfScene(m_context.Assets.As<SceneAsset>(dropped), origin, direction);
             else if (const FieldRef spawn = FindSpawnField(m_context.Assets.Components(), droppedType))
                 CreateEntityFromAsset(spawn, dropped, origin, direction);
             else

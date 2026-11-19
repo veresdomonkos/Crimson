@@ -51,10 +51,15 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/asset_manager/meta_file.hpp
     include/crimson/asset_manager/scene_data.hpp
     include/crimson/asset_manager/slot_materials.hpp
+    include/crimson/asset_manager/importers/material_asset.hpp
     include/crimson/asset_manager/importers/material_importer.hpp
+    include/crimson/asset_manager/importers/mesh_asset.hpp
     include/crimson/asset_manager/importers/mesh_importer.hpp
+    include/crimson/asset_manager/importers/scene_asset.hpp
     include/crimson/asset_manager/importers/scene_importer.hpp
+    include/crimson/asset_manager/importers/shader_asset.hpp
     include/crimson/asset_manager/importers/shader_importer.hpp
+    include/crimson/asset_manager/importers/texture_asset.hpp
     include/crimson/asset_manager/importers/texture_importer.hpp
 
     include/crimson/scene/component_builder.hpp

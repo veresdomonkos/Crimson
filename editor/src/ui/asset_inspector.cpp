@@ -104,7 +104,7 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawScene(const AssetInfo& info)
     {
-        const SceneID scene = m_context.Assets.As<AssetType::Scene>(info.Id);
+        const SceneID scene = m_context.Assets.As<SceneAsset>(info.Id);
         const bool open = scene == m_context.ActiveSceneAsset;
 
         Section("Scene", false, [&]
@@ -147,7 +147,7 @@ namespace crimson::editor::ui
     void AssetInspector::DrawMaterial(const AssetInfo& info)
     {
         AssetEdits& edits = m_context.Edits;
-        const MaterialID id = m_context.Assets.As<AssetType::Material>(info.Id);
+        const MaterialID id = m_context.Assets.As<MaterialAsset>(info.Id);
 
         const MaterialData* current = edits.Get(id);
         if (!current)
@@ -221,7 +221,7 @@ namespace crimson::editor::ui
         ShaderID picked = data.Shader;
         m_shaderField = ImGui::GetID("##Shader");
 
-        if (AssetField<AssetType::Shader>("##Shader", m_context, picked))
+        if (AssetField<ShaderAsset>("##Shader", m_context, picked))
         {
             data.Shader = picked;
             changed = true;
@@ -334,7 +334,7 @@ namespace crimson::editor::ui
             TextureID picked = current;
 
             ImGui::SetNextItemWidth(-FLT_MIN);
-            AssetField<AssetType::Texture>("##Texture", m_context, picked);
+            AssetField<TextureAsset>("##Texture", m_context, picked);
 
             props::ResetTarget();
 
@@ -388,7 +388,7 @@ namespace crimson::editor::ui
             ? static_cast<float>(m_textureSize->first) / static_cast<float>(m_textureSize->second)
             : 1.0f;
 
-        if (const ImTextureID preview = m_context.Thumbnails.Get(m_context.Assets.As<AssetType::Texture>(info.Id)))
+        if (const ImTextureID preview = m_context.Thumbnails.Get(m_context.Assets.As<TextureAsset>(info.Id)))
             ImGui::Image(preview, ImVec2(available, available / aspect));
         else
             ImGui::TextDisabled("This image can't be read, see the console");
@@ -450,7 +450,7 @@ namespace crimson::editor::ui
 
         if (theme::PrimaryButton("Apply"))
         {
-            m_context.Deferred.emplace_back([this, id = m_context.Assets.As<AssetType::Texture>(info.Id), settings = m_textureSettings]
+            m_context.Deferred.emplace_back([this, id = m_context.Assets.As<TextureAsset>(info.Id), settings = m_textureSettings]
             {
                 // Its id is about to stop working, and the next draw gets a new one
                 m_context.Thumbnails.Release(id);
@@ -467,7 +467,7 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawMesh(const AssetInfo& info)
     {
-        const MeshID id = m_context.Assets.As<AssetType::Mesh>(info.Id);
+        const MeshID id = m_context.Assets.As<MeshAsset>(info.Id);
 
         if (!m_context.Assets.IsLoaded(id))
         {
@@ -517,7 +517,7 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawShader(const AssetInfo& info)
     {
-        const ShaderHandle shader = m_context.Assets.Load(m_context.Assets.As<AssetType::Shader>(info.Id));
+        const ShaderHandle shader = m_context.Assets.Load(m_context.Assets.As<ShaderAsset>(info.Id));
         if (!shader)
         {
             ImGui::TextDisabled("This shader doesn't compile, see the console");

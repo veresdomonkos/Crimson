@@ -1,6 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/scene_asset.hpp>
+
 #include <crimson/scene/scene_camera.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 #include <crimson_editor/edit_history.hpp>
@@ -200,7 +204,7 @@ TEST_CASE_METHOD(Fixture, "Adding and removing a component is undone", "[scene e
 
 TEST_CASE_METHOD(Fixture, "A deleted instance comes back with its scene's entities", "[scene edits]")
 {
-    const Entity instance = CreateSceneInstance(Assets.Find<AssetType::Scene>("crate.scene"), World, {}, Assets, {});
+    const Entity instance = CreateSceneInstance(Assets.Find<SceneAsset>("crate.scene"), World, {}, Assets, {});
     REQUIRE(instance);
 
     Edits.RecordDestroy(instance);
@@ -218,7 +222,7 @@ TEST_CASE_METHOD(Fixture, "A deleted instance comes back with its scene's entiti
 
 TEST_CASE_METHOD(Fixture, "Entities inside an instance aren't recorded", "[scene edits]")
 {
-    const Entity instance = CreateSceneInstance(Assets.Find<AssetType::Scene>("crate.scene"), World, {}, Assets, {});
+    const Entity instance = CreateSceneInstance(Assets.Find<SceneAsset>("crate.scene"), World, {}, Assets, {});
     const Entity lid = Child(instance, 0);
 
     Edits.Record(lid);
@@ -266,9 +270,9 @@ TEST_CASE_METHOD(Fixture, "An assigned asset is undone and resolved again", "[sc
 
     const FieldRef spawn = FindSpawnField(Assets.Components(), AssetType::Mesh);
     REQUIRE(spawn);
-    AssignAsset(*spawn.Type, spawn.Field, thing, Assets.Find<AssetType::Mesh>("triangle.obj"), Assets);
+    AssignAsset(*spawn.Type, spawn.Field, thing, Assets.Find<MeshAsset>("triangle.obj"), Assets);
 
-    const MaterialID material = Assets.Find<AssetType::Material>("thing.mat");
+    const MaterialID material = Assets.Find<MaterialAsset>("thing.mat");
     const FieldRef drop = FindDropField(Assets.Components(), thing, AssetType::Material);
     REQUIRE(drop);
 

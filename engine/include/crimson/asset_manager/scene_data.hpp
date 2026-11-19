@@ -14,6 +14,7 @@
 namespace crimson
 {
     class AssetManager;
+    struct SceneAsset; // scenes contain scene instances, and a SceneID needs only this declaration
 
     // Post-processing of what the scene's cameras see
     struct PostProcessSettings
@@ -44,7 +45,7 @@ namespace crimson
         // Each under its type's id: the components that are part of the node, like the transform, first, then the others
         // in the order the file has them. One whose type isn't registered is kept as it was.
         std::vector<SceneComponent> Components;
-        SceneID Instance;
+        TypedAssetID<SceneAsset> Instance; // a SceneID
         std::vector<SceneNode> Children;
 
         [[nodiscard]] const SceneComponent* FindComponent(std::string_view type) const;

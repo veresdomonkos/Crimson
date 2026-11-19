@@ -1,9 +1,10 @@
 #pragma once
 #include "crimson/asset_manager/asset_importer.hpp"
+#include "crimson/asset_manager/importers/mesh_asset.hpp"
 
 namespace crimson
 {
-    class MeshImporter final : public AssetImporter<AssetType::Mesh>
+    class MeshImporter final : public AssetImporter<MeshAsset>
     {
     public:
         std::span<const std::string_view> Extensions() const override;

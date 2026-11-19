@@ -5,6 +5,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <crimson/asset_manager/importers/material_asset.hpp>
+
 #include "crimson_editor/editor_context.hpp"
 
 namespace crimson::editor::ui

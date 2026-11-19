@@ -6,6 +6,11 @@
 #include <utility>
 
 #include "crimson/asset_manager/asset_manager.hpp"
+#include "crimson/asset_manager/importers/material_asset.hpp"
+#include "crimson/asset_manager/importers/mesh_asset.hpp"
+#include "crimson/asset_manager/importers/scene_asset.hpp"
+#include "crimson/asset_manager/importers/shader_asset.hpp"
+#include "crimson/asset_manager/importers/texture_asset.hpp"
 #include "crimson/core/hash.hpp"
 #include "crimson/core/log.hpp"
 
@@ -86,17 +91,17 @@ namespace crimson
         return guid || !path.empty() ? RememberMissing(assets, guid, std::move(path), expected, context) : AssetID{};
     }
 
-    template <AssetType T>
+    template <typename T>
     TypedAssetID<T> ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
     {
-        const AssetID id = ResolveAnyAssetRef(assets, ref, T, context);
+        const AssetID id = ResolveAnyAssetRef(assets, ref, T::Tag, context);
         const TypedAssetID<T> typed = assets.As<T>(id);
 
         // A broken file rather than one that is away for a while, so it isn't kept
         if (id && !typed)
         {
             const AssetInfo* info = assets.GetInfo(id);
-            LOG_WARN("[Assets] {}: {} isn't a {}", context, info ? info->Path : id.ToString(), ToString(T));
+            LOG_WARN("[Assets] {}: {} isn't a {}", context, info ? info->Path : id.ToString(), ToString(T::Tag));
         }
 
         return typed;

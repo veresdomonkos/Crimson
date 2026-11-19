@@ -39,7 +39,7 @@ namespace crimson
     {
         MaterialID DefaultMaterial(const AssetManager& assets)
         {
-            return assets.Find<AssetType::Material>(kDefaultMaterialPath);
+            return assets.Find<MaterialAsset>(kDefaultMaterialPath);
         }
 
         MaterialID Find(const AssetManager& assets, MeshID mesh, std::string_view slot)
@@ -48,7 +48,7 @@ namespace crimson
             if (!info || info->Type != AssetType::Mesh)
                 return {};
 
-            return assets.Find<AssetType::Material>(SlotMaterialPath(info->Path, slot));
+            return assets.Find<MaterialAsset>(SlotMaterialPath(info->Path, slot));
         }
 
         SlotMaterials Create(AssetManager& assets, MeshID mesh)
@@ -79,7 +79,7 @@ namespace crimson
 
                 MtlMaterial material = MaterialFromMtl(mtl, FolderOf(meshPath), assets);
 
-                if (const MaterialID created = assets.Create<AssetType::Material>(path, material.Data))
+                if (const MaterialID created = assets.Create<MaterialAsset>(path, material.Data))
                 {
                     result.Created.push_back(created);
                     std::ranges::move(material.DataTextures, std::back_inserter(dataTextures));

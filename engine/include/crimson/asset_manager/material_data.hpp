@@ -7,6 +7,8 @@
 #include <vector>
 
 #include "crimson/asset_manager/asset_id.hpp"
+#include "crimson/asset_manager/importers/shader_asset.hpp"
+#include "crimson/asset_manager/importers/texture_asset.hpp"
 #include "crimson/renderer/material_settings.hpp"
 
 namespace crimson

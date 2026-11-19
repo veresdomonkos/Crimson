@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/importers/scene_asset.hpp>
 #include <crimson/scene/entity.hpp>
 
 #include "crimson_editor/asset_edits.hpp"

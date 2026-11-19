@@ -6,11 +6,15 @@
 #include <glm/glm.hpp>
 
 #include "crimson/asset_manager/asset_id.hpp"
+#include "crimson/asset_manager/importers/material_asset.hpp"
+#include "crimson/asset_manager/importers/mesh_asset.hpp"
 #include "crimson/renderer/light.hpp"
 #include "crimson/renderer/mesh.hpp"
 
 namespace crimson
 {
+    struct SceneAsset; // a scene instance refers back to a scene, and a SceneID needs only this declaration
+
     // Every entity has a name, a transform and a relationship, they can't be removed
 
     struct NameComponent
@@ -87,7 +91,7 @@ namespace crimson
     // Everything below this entity comes from a scene's file, and is created when this is loaded
     struct SceneInstanceComponent
     {
-        SceneID Scene;
+        TypedAssetID<SceneAsset> Scene; // a SceneID
     };
 
     // This entity came from an instance's scene, so it can't be changed here and isn't saved here

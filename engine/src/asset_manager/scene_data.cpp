@@ -10,6 +10,11 @@
 #include <nlohmann/json.hpp>
 
 #include "crimson/asset_manager/asset_manager.hpp"
+#include "crimson/asset_manager/importers/material_asset.hpp"
+#include "crimson/asset_manager/importers/mesh_asset.hpp"
+#include "crimson/asset_manager/importers/scene_asset.hpp"
+#include "crimson/asset_manager/importers/shader_asset.hpp"
+#include "crimson/asset_manager/importers/texture_asset.hpp"
 #include "crimson/core/log.hpp"
 
 #include "asset_ref.hpp"
@@ -92,7 +97,7 @@ namespace crimson
     }
 
     // A missing asset is worth a warning only if the file named one
-    template <AssetType T>
+    template <typename T>
     static AssetID ReadRef(const AssetManager& assets, const nlohmann::ordered_json& ref, std::string_view file)
     {
         const TypedAssetID<T> id = ResolveAssetRef<T>(assets, ref, file);
@@ -106,11 +111,11 @@ namespace crimson
     {
         switch (type)
         {
-            case AssetType::Texture:  return ReadRef<AssetType::Texture>(assets, ref, file);
-            case AssetType::Mesh:     return ReadRef<AssetType::Mesh>(assets, ref, file);
-            case AssetType::Shader:   return ReadRef<AssetType::Shader>(assets, ref, file);
-            case AssetType::Material: return ReadRef<AssetType::Material>(assets, ref, file);
-            case AssetType::Scene:    return ReadRef<AssetType::Scene>(assets, ref, file);
+            case AssetType::Texture:  return ReadRef<TextureAsset>(assets, ref, file);
+            case AssetType::Mesh:     return ReadRef<MeshAsset>(assets, ref, file);
+            case AssetType::Shader:   return ReadRef<ShaderAsset>(assets, ref, file);
+            case AssetType::Material: return ReadRef<MaterialAsset>(assets, ref, file);
+            case AssetType::Scene:    return ReadRef<SceneAsset>(assets, ref, file);
             case AssetType::None:     break;
         }
 
@@ -266,7 +271,7 @@ namespace crimson
         }
 
         if (const auto instance = j.find("instance"); instance != j.end())
-            node.Instance = assets.As<AssetType::Scene>(ReadRef<AssetType::Scene>(assets, *instance, file));
+            node.Instance = assets.As<SceneAsset>(ReadRef<SceneAsset>(assets, *instance, file));
 
         if (const auto children = j.find("children"); children != j.end())
         {

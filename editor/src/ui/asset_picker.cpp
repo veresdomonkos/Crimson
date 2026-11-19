@@ -282,7 +282,7 @@ namespace crimson::editor::ui
                 // Only pictures that are on screen get loaded
                 ImTextureID picture = 0;
                 if (m_type == AssetType::Texture && entry.Id && ImGui::IsItemVisible())
-                    picture = thumbnails.Get(assets.As<AssetType::Texture>(entry.Id));
+                    picture = thumbnails.Get(assets.As<TextureAsset>(entry.Id));
 
                 if (picture)
                 {

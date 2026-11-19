@@ -8,6 +8,10 @@
 #include <fmt/format.h>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/shader_asset.hpp>
+
 
 #include "gpu/gpu_test.hpp"
 #include "support/temp_folder.hpp"
@@ -154,8 +158,8 @@ float4 PSMain(VertexOutput input) : SV_Target { return Fetch(Albedo, input.UV); 
 
         Image RenderMesh(AssetManager& assets, const char* mesh, const char* material)
         {
-            const Mesh* loaded = assets.Load<AssetType::Mesh>(mesh);
-            const MaterialHandle loadedMaterial = assets.Load<AssetType::Material>(material);
+            const Mesh* loaded = assets.Load<MeshAsset>(mesh);
+            const MaterialHandle loadedMaterial = assets.Load<MaterialAsset>(material);
             REQUIRE(loaded);
             REQUIRE(loadedMaterial);
 
@@ -210,13 +214,13 @@ TEST_CASE_METHOD(Fixture, "The nearer of two meshes wins, whichever is drawn fir
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
-    const Mesh* near = assets.Load<AssetType::Mesh>("near.obj");
-    const Mesh* far = assets.Load<AssetType::Mesh>("far.obj");
+    const Mesh* near = assets.Load<MeshAsset>("near.obj");
+    const Mesh* far = assets.Load<MeshAsset>("far.obj");
     REQUIRE(near);
     REQUIRE(far);
 
-    const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
-    const MaterialHandle green = assets.Load<AssetType::Material>("green.mat");
+    const MaterialHandle red = assets.Load<MaterialAsset>("red.mat");
+    const MaterialHandle green = assets.Load<MaterialAsset>("green.mat");
 
     SECTION("Near one sorts first")
     {
@@ -248,9 +252,9 @@ TEST_CASE_METHOD(Fixture, "An object's transform moves it", "[rendering]")
     Project.Write("small.obj", MakeQuad(-0.25f, -0.25f, 0.25f, 0.25f));
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
-    const Mesh* mesh = assets.Load<AssetType::Mesh>("small.obj");
+    const Mesh* mesh = assets.Load<MeshAsset>("small.obj");
     REQUIRE(mesh);
-    const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
+    const MaterialHandle red = assets.Load<MaterialAsset>("red.mat");
 
     RenderOneFrame([&](FrameRecorder& frame)
     {
@@ -270,13 +274,13 @@ TEST_CASE_METHOD(Fixture, "Materials keep their own properties", "[rendering]")
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
-    const Mesh* left = assets.Load<AssetType::Mesh>("left.obj");
-    const Mesh* right = assets.Load<AssetType::Mesh>("right.obj");
+    const Mesh* left = assets.Load<MeshAsset>("left.obj");
+    const Mesh* right = assets.Load<MeshAsset>("right.obj");
     REQUIRE(left);
     REQUIRE(right);
 
-    const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
-    const MaterialHandle green = assets.Load<AssetType::Material>("green.mat");
+    const MaterialHandle red = assets.Load<MaterialAsset>("red.mat");
+    const MaterialHandle green = assets.Load<MaterialAsset>("green.mat");
 
     const auto render = [&]
     {
@@ -313,8 +317,8 @@ TEST_CASE_METHOD(Fixture, "There can be more materials than one descriptor pool 
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
-    const Mesh* mesh = assets.Load<AssetType::Mesh>("all.obj");
-    const ShaderHandle shader = assets.Load<AssetType::Shader>("flat.hlsl");
+    const Mesh* mesh = assets.Load<MeshAsset>("all.obj");
+    const ShaderHandle shader = assets.Load<ShaderAsset>("flat.hlsl");
     REQUIRE(mesh);
     REQUIRE(shader);
 
@@ -370,13 +374,13 @@ TEST_CASE_METHOD(Fixture, "A transparent material blends over what is behind it"
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
-    const Mesh* back = assets.Load<AssetType::Mesh>("back.obj");
-    const Mesh* front = assets.Load<AssetType::Mesh>("front.obj");
+    const Mesh* back = assets.Load<MeshAsset>("back.obj");
+    const Mesh* front = assets.Load<MeshAsset>("front.obj");
     REQUIRE(back);
     REQUIRE(front);
 
-    const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
-    const MaterialHandle half = assets.Load<AssetType::Material>("half.mat");
+    const MaterialHandle red = assets.Load<MaterialAsset>("red.mat");
+    const MaterialHandle half = assets.Load<MaterialAsset>("half.mat");
 
     RenderOneFrame([&](FrameRecorder& frame)
     {
@@ -402,13 +406,13 @@ TEST_CASE_METHOD(Fixture, "Overlapping transparent draws blend back to front, wh
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
-    const Mesh* back = assets.Load<AssetType::Mesh>("back.obj");
-    const Mesh* front = assets.Load<AssetType::Mesh>("front.obj");
+    const Mesh* back = assets.Load<MeshAsset>("back.obj");
+    const Mesh* front = assets.Load<MeshAsset>("front.obj");
     REQUIRE(back);
     REQUIRE(front);
 
-    const MaterialHandle halfRed = assets.Load<AssetType::Material>("half_red.mat");
-    const MaterialHandle halfGreen = assets.Load<AssetType::Material>("half_green.mat");
+    const MaterialHandle halfRed = assets.Load<MaterialAsset>("half_red.mat");
+    const MaterialHandle halfGreen = assets.Load<MaterialAsset>("half_green.mat");
 
     const auto render = [&](bool frontFirst)
     {
@@ -443,12 +447,12 @@ TEST_CASE_METHOD(Fixture, "Passes can read what an earlier pass of the frame ren
     Project.Write("all.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
-    const Mesh* mesh = assets.Load<AssetType::Mesh>("all.obj");
+    const Mesh* mesh = assets.Load<MeshAsset>("all.obj");
     REQUIRE(mesh);
 
     const OffscreenTarget source(kSize, kSize);
 
-    const MaterialHandle textured = assets.Load<AssetType::Material>("textured.mat");
+    const MaterialHandle textured = assets.Load<MaterialAsset>("textured.mat");
     REQUIRE(textured);
     Gpu().GPUResources->SetMaterialTexture(textured, "Albedo", Gpu().GPUResources->GetColorAttachment(source.Handle(), 0));
 
@@ -544,8 +548,8 @@ float4 PSMain(VertexOutput input) : SV_Target { return float4(input.Correct, 0.0
     Project.Write("full.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
-    const Mesh* mesh = assets.Load<AssetType::Mesh>("full.obj");
-    const MaterialHandle material = assets.Load<AssetType::Material>("round_trip.mat");
+    const Mesh* mesh = assets.Load<MeshAsset>("full.obj");
+    const MaterialHandle material = assets.Load<MaterialAsset>("round_trip.mat");
     REQUIRE(mesh);
     REQUIRE(material);
 
@@ -598,10 +602,10 @@ TEST_CASE_METHOD(Fixture, "S_Unlit draws its color and texture, ignoring lights"
 
     SECTION("Transparent blends with its alpha")
     {
-        const Mesh* back = assets.Load<AssetType::Mesh>("back.obj");
-        const Mesh* front = assets.Load<AssetType::Mesh>("front.obj");
-        const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
-        const MaterialHandle half = assets.Load<AssetType::Material>("half.mat");
+        const Mesh* back = assets.Load<MeshAsset>("back.obj");
+        const Mesh* front = assets.Load<MeshAsset>("front.obj");
+        const MaterialHandle red = assets.Load<MaterialAsset>("red.mat");
+        const MaterialHandle half = assets.Load<MaterialAsset>("half.mat");
         REQUIRE(back);
         REQUIRE(front);
 

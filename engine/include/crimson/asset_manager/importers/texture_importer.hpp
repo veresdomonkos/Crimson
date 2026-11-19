@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "crimson/asset_manager/asset_importer.hpp"
+#include "crimson/asset_manager/importers/texture_asset.hpp"
 
 namespace crimson
 {
@@ -24,7 +25,7 @@ namespace crimson
     // Width and height, without decoding the image
     [[nodiscard]] std::optional<std::pair<int, int>> ReadImageSize(std::span<const std::byte> file);
 
-    class TextureImporter final : public AssetImporter<AssetType::Texture>
+    class TextureImporter final : public AssetImporter<TextureAsset>
     {
     public:
         std::span<const std::string_view> Extensions() const override;

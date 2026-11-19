@@ -13,6 +13,8 @@
 #include <crimson/asset_manager/asset_importer.hpp>
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/asset_manager/import_cache.hpp>
+#include <crimson/asset_manager/importers/texture_asset.hpp>
+
 #include <crimson/core/engine_resources.hpp>
 #include <crimson/core/hash.hpp>
 #include <crimson/core/log.hpp>
@@ -316,7 +318,7 @@ namespace
 {
     // An importer with nothing shared with the engine's, to show that caching needs no change to anything else. Its source
     // names a file next to it, which it reads and keeps the length of.
-    class CountingImporter final : public AssetImporter<AssetType::Texture>
+    class CountingImporter final : public AssetImporter<TextureAsset>
     {
     public:
         std::span<const std::string_view> Extensions() const override

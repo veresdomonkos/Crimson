@@ -69,10 +69,10 @@ namespace crimson
         AddImporter(std::make_unique<MeshImporter>());
         AddImporter(std::make_unique<SceneImporter>());
 
-        m_stores[static_cast<size_t>(AssetType::Texture)] = std::make_unique<AssetStore<AssetType::Texture>>();
-        m_stores[static_cast<size_t>(AssetType::Shader)] = std::make_unique<AssetStore<AssetType::Shader>>();
-        m_stores[static_cast<size_t>(AssetType::Material)] = std::make_unique<AssetStore<AssetType::Material>>();
-        m_stores[static_cast<size_t>(AssetType::Mesh)] = std::make_unique<AssetStore<AssetType::Mesh>>();
+        m_stores[static_cast<size_t>(AssetType::Texture)] = std::make_unique<AssetStore<TextureAsset>>();
+        m_stores[static_cast<size_t>(AssetType::Shader)] = std::make_unique<AssetStore<ShaderAsset>>();
+        m_stores[static_cast<size_t>(AssetType::Material)] = std::make_unique<AssetStore<MaterialAsset>>();
+        m_stores[static_cast<size_t>(AssetType::Mesh)] = std::make_unique<AssetStore<MeshAsset>>();
 
         RegisterEngineResources();
 
@@ -336,11 +336,11 @@ namespace crimson
         return store && store->IsLoaded(id);
     }
 
-    template <AssetType T>
+    template <typename T>
     AssetStore<T>& AssetManager::Store()
     {
         // Each one is made for its own place, in the constructor
-        return static_cast<AssetStore<T>&>(*m_stores[static_cast<size_t>(T)]);
+        return static_cast<AssetStore<T>&>(*m_stores[static_cast<size_t>(T::Tag)]);
     }
 
     AssetStoreBase* AssetManager::StoreOf(AssetType type)
@@ -348,11 +348,11 @@ namespace crimson
         return m_stores[static_cast<size_t>(type)].get();
     }
 
-    template <AssetType T>
+    template <typename T>
     typename AssetStore<T>::Slot* AssetManager::SlotFor(AssetID id)
     {
         const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.Type != T)
+        if (it == m_assets.end() || it->second.Info.Type != T::Tag)
             return nullptr;
 
         return &Store<T>().GetOrCreate(id, static_cast<AssetImporter<T>&>(*it->second.Importer));
@@ -363,7 +363,7 @@ namespace crimson
         return AssetSource{ record.Info, record.Embedded ? fs::path() : m_root / fs::path(record.Info.Path), record.Embedded };
     }
 
-    template <AssetType T>
+    template <typename T>
     LoadResult<T> AssetManager::Load(TypedAssetID<T> id)
     {
         auto* slot = SlotFor<T>(id);
@@ -387,7 +387,7 @@ namespace crimson
             return loaded ? *loaded : LoadedAsset<T>::Invalid();
     }
 
-    template <AssetType T>
+    template <typename T>
     const AssetData<T>* AssetManager::GetData(TypedAssetID<T> id)
     {
         auto* slot = SlotFor<T>(id);
@@ -400,7 +400,7 @@ namespace crimson
         return slot->Data ? &*slot->Data : nullptr;
     }
 
-    template <AssetType T>
+    template <typename T>
     AssetUpdate AssetManager::Apply(TypedAssetID<T> id, const AssetData<T>& data)
     {
         const AssetInfo* info = GetInfo(id);

@@ -13,6 +13,12 @@
 #include <crimson/core/log.hpp>
 #include <crimson/project/project.hpp>
 #include <crimson/asset_manager/import_cache.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/scene_asset.hpp>
+#include <crimson/asset_manager/importers/shader_asset.hpp>
+#include <crimson/asset_manager/importers/texture_asset.hpp>
+
 #include <crimson/scene/scene_serializer.hpp>
 #include <crimson_editor/editor_application.hpp>
 #include <crimson_editor/editor_settings.hpp>
@@ -269,7 +275,7 @@ TEST_CASE_METHOD(AssetFixture, "Selecting an entity and an asset replace each ot
     const Entity entity = Context().ActiveScene.CreateEntity("Thing");
 
     Context().SelectEntity(entity);
-    Context().SelectAsset(Assets().Find<AssetType::Material>("materials/floor.mat"));
+    Context().SelectAsset(Assets().Find<MaterialAsset>("materials/floor.mat"));
     CHECK_FALSE(Context().Selected);
 
     Context().SelectEntity(entity);
@@ -299,7 +305,7 @@ TEST_CASE_METHOD(AssetFixture, "The asset picker opens, draws both views and clo
     RunFrames(App);
     CHECK(picker.IsOpen());
 
-    const MaterialID floor = Assets().Find<AssetType::Material>("materials/floor.mat");
+    const MaterialID floor = Assets().Find<MaterialAsset>("materials/floor.mat");
     Context().SelectAsset(floor);
     RunFrames(App);
     CHECK_FALSE(picker.IsOpen());
@@ -311,7 +317,7 @@ TEST_CASE_METHOD(AssetFixture, "The asset picker opens, draws both views and clo
 
 TEST_CASE_METHOD(AssetFixture, "A pinged asset is shown in the Assets panel", "[editor]")
 {
-    const AssetID selected = Assets().Find<AssetType::Material>("materials/floor.mat");
+    const AssetID selected = Assets().Find<MaterialAsset>("materials/floor.mat");
     Context().SelectAsset(selected);
 
     Context().PingedAsset = Assets().FindId("textures/picture.bmp");
@@ -467,7 +473,7 @@ TEST_CASE_METHOD(AssetFixture, "Creating from the Hierarchy's presets and resolv
 
 TEST_CASE_METHOD(AssetFixture, "A material's edits show, undo, redo and save", "[editor]")
 {
-    const MaterialID id = Assets().Find<AssetType::Material>("materials/floor.mat");
+    const MaterialID id = Assets().Find<MaterialAsset>("materials/floor.mat");
     const MaterialHandle handle = Assets().Load(id);
 
     Context().SelectAsset(id);
@@ -475,7 +481,7 @@ TEST_CASE_METHOD(AssetFixture, "A material's edits show, undo, redo and save", "
 
     MaterialData data = *Context().Edits.Get(id);
     data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
-    data.Textures["ColorMap"] = Assets().Find<AssetType::Texture>("textures/picture.bmp");
+    data.Textures["ColorMap"] = Assets().Find<TextureAsset>("textures/picture.bmp");
     Context().Edits.Set(id, data);
     RunFrames(App);
 
@@ -524,11 +530,11 @@ TEST_CASE_METHOD(AssetFixture, "A material's edits show, undo, redo and save", "
 
 TEST_CASE_METHOD(AssetFixture, "Changing a material's shader keeps the scene drawing", "[editor]")
 {
-    const MaterialID id = Assets().Find<AssetType::Material>("materials/floor.mat");
+    const MaterialID id = Assets().Find<MaterialAsset>("materials/floor.mat");
     const MaterialHandle before = Assets().Load(id);
 
     MaterialData data = *Context().Edits.Get(id);
-    data.Shader = Assets().Find<AssetType::Shader>("shaders/own.hlsl");
+    data.Shader = Assets().Find<ShaderAsset>("shaders/own.hlsl");
     Context().Edits.Set(id, data);
     RunFrames(App);
 
@@ -540,7 +546,7 @@ TEST_CASE_METHOD(AssetFixture, "Changing a material's shader keeps the scene dra
 
 TEST_CASE_METHOD(AssetFixture, "Reimporting a texture a panel is showing", "[editor]")
 {
-    const TextureID id = Assets().Find<AssetType::Texture>("textures/picture.bmp");
+    const TextureID id = Assets().Find<TextureAsset>("textures/picture.bmp");
 
     Context().SelectAsset(id);
     RunFrames(App);
@@ -558,7 +564,7 @@ TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
 {
     SECTION("A material: the entity falls back to the default one")
     {
-        const MaterialID id = Assets().Find<AssetType::Material>("materials/floor.mat");
+        const MaterialID id = Assets().Find<MaterialAsset>("materials/floor.mat");
         Context().SelectAsset(id);
         RunFrames(App);
 
@@ -576,7 +582,7 @@ TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
 
     SECTION("A mesh: the entity stops drawing it")
     {
-        const MeshID id = Assets().Find<AssetType::Mesh>("meshes/floor.obj");
+        const MeshID id = Assets().Find<MeshAsset>("meshes/floor.obj");
 
         Context().Deferred.emplace_back([&]
         {
@@ -591,17 +597,17 @@ TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
 
     SECTION("A texture a material is showing, and a shader")
     {
-        const MaterialID material = Assets().Find<AssetType::Material>("materials/floor.mat");
+        const MaterialID material = Assets().Find<MaterialAsset>("materials/floor.mat");
 
         MaterialData data = *Context().Edits.Get(material);
-        data.Textures["ColorMap"] = Assets().Find<AssetType::Texture>("textures/picture.bmp");
+        data.Textures["ColorMap"] = Assets().Find<TextureAsset>("textures/picture.bmp");
         Context().Edits.Set(material, data);
         Context().SelectAsset(material);
         RunFrames(App);
 
         Context().Deferred.emplace_back([&]
         {
-            const TextureID texture = Assets().Find<AssetType::Texture>("textures/picture.bmp");
+            const TextureID texture = Assets().Find<TextureAsset>("textures/picture.bmp");
             REQUIRE(Assets().Delete(texture));
             const std::array<AssetID, 1> removed = { texture };
             Context().OnAssetsRemoved(removed);
@@ -624,13 +630,13 @@ TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
         });
         RunFrames(App);
 
-        CHECK_FALSE(Assets().Find<AssetType::Material>("materials/floor.mat"));
+        CHECK_FALSE(Assets().Find<MaterialAsset>("materials/floor.mat"));
     }
 }
 
 TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[editor]")
 {
-    const MaterialID id = Assets().Find<AssetType::Material>("materials/floor.mat");
+    const MaterialID id = Assets().Find<MaterialAsset>("materials/floor.mat");
 
     MaterialData data = *Context().Edits.Get(id);
     data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
@@ -672,7 +678,7 @@ TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[edit
 
 TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[editor]")
 {
-    const SceneID id = Assets().Find<AssetType::Scene>("scenes/main.scene");
+    const SceneID id = Assets().Find<SceneAsset>("scenes/main.scene");
     REQUIRE(Context().ActiveSceneAsset == id);
     CHECK_FALSE(Session().IsSceneChanged());
 
@@ -720,7 +726,7 @@ TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[edit
     SECTION("Opening another scene asks first, and discarding leaves the file")
     {
         SceneID other;
-        Context().Deferred.emplace_back([&] { other = Assets().Create<AssetType::Scene>("scenes/other.scene"); });
+        Context().Deferred.emplace_back([&] { other = Assets().Create<SceneAsset>("scenes/other.scene"); });
         RunFrames(App);
         REQUIRE(other);
 
@@ -860,7 +866,7 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
         REQUIRE(Session().SaveAll());
 
         SceneID other;
-        Context().Deferred.emplace_back([&] { other = Assets().Create<AssetType::Scene>("scenes/other.scene"); });
+        Context().Deferred.emplace_back([&] { other = Assets().Create<SceneAsset>("scenes/other.scene"); });
         RunFrames(App);
 
         Context().OpenScene(other);
@@ -878,7 +884,7 @@ TEST_CASE_METHOD(AssetFixture, "Opening a scene replaces the one showing", "[edi
     Context().SelectEntity(old);
 
     SceneID other;
-    Context().Deferred.emplace_back([&] { other = Assets().Create<AssetType::Scene>("scenes/other.scene"); });
+    Context().Deferred.emplace_back([&] { other = Assets().Create<SceneAsset>("scenes/other.scene"); });
     RunFrames(App);
 
     Context().OpenScene(other);
@@ -911,14 +917,14 @@ TEST_CASE_METHOD(AssetFixture, "Opening a scene replaces the one showing", "[edi
         });
         RunFrames(App);
 
-        CHECK(Context().ActiveSceneAsset == Assets().Find<AssetType::Scene>("scenes/main.scene"));
+        CHECK(Context().ActiveSceneAsset == Assets().Find<SceneAsset>("scenes/main.scene"));
         CHECK_FALSE(Session().IsAskingAboutUnsavedChanges());
     }
 }
 
 TEST_CASE_METHOD(AssetFixture, "Deleting the only scene makes a new one", "[editor]")
 {
-    const SceneID id = Assets().Find<AssetType::Scene>("scenes/main.scene");
+    const SceneID id = Assets().Find<SceneAsset>("scenes/main.scene");
 
     Context().Deferred.emplace_back([&]
     {
@@ -943,7 +949,7 @@ TEST_CASE_METHOD(AssetFixture, "A scene's instances draw, and go empty without t
     Context().Deferred.emplace_back([&]
     {
         Assets().Refresh();
-        source = Assets().Find<AssetType::Scene>("scenes/crate.scene");
+        source = Assets().Find<SceneAsset>("scenes/crate.scene");
         instance = CreateSceneInstance(source, Context().ActiveScene, {}, Assets(), Context().ActiveSceneAsset);
     });
     RunFrames(App);
@@ -985,7 +991,7 @@ TEST_CASE("A project with no scene gets one", "[editor]")
 
     auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
 
-    CHECK(session.GetContext().ActiveSceneAsset == session.GetContext().Assets.Find<AssetType::Scene>("scenes/main.scene"));
+    CHECK(session.GetContext().ActiveSceneAsset == session.GetContext().Assets.Find<SceneAsset>("scenes/main.scene"));
     CHECK(std::filesystem::exists(temp.Path() / "Empty/assets/scenes/main.scene"));
     CHECK_FALSE(session.IsSceneChanged());
 }
@@ -1130,7 +1136,7 @@ TEST_CASE("Discarding a recovery copy keeps the file, and a stale one goes witho
     REQUIRE(main);
 
     SceneID other;
-    context.Deferred.emplace_back([&] { other = context.Assets.Create<AssetType::Scene>("scenes/other.scene"); });
+    context.Deferred.emplace_back([&] { other = context.Assets.Create<SceneAsset>("scenes/other.scene"); });
     RunFrames(app);
     REQUIRE(other);
 

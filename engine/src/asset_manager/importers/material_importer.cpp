@@ -135,7 +135,7 @@ namespace crimson
     std::optional<std::string> MaterialImporter::NewFile(const AssetManager& assets) const
     {
         MaterialData data;
-        data.Shader = assets.Find<AssetType::Shader>(kDefaultShaderPath);
+        data.Shader = assets.Find<ShaderAsset>(kDefaultShaderPath);
         data.Properties["Color"] = { 1.0f, 1.0f, 1.0f, 1.0f };
 
         return material_data::Write(data, assets);
@@ -229,7 +229,7 @@ namespace crimson
 
     bool MaterialImporter::UpdateUse(MaterialHandle& material, const AssetInfo& info, AssetID used, ImportContext& ctx)
     {
-        const MaterialData* data = ctx.Assets.GetData(ctx.Assets.As<AssetType::Material>(info.Id));
+        const MaterialData* data = ctx.Assets.GetData(ctx.Assets.As<MaterialAsset>(info.Id));
         if (!data || used == data->Shader)
             return false;
 
