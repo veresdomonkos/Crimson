@@ -924,3 +924,198 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     CHECK_FALSE(assets.ReloadChanged().empty());
     CHECK(ImportCache::Stats().Stores - beforeChange.Stores == 1);
 }
+
+namespace
+{
+    // The file that makes an asset of the type: asset_Texture.png, empty
+    template <typename T, typename Importer>
+    fs::path TypeFileName()
+    {
+        const Importer importer;
+        return "asset_" + std::string(T::Name) + std::string(importer.Extensions().front());
+    }
+
+    template <typename T, typename Importer>
+    void CheckRegistered(AssetManager& assets, const TempFolder& temp)
+    {
+        const std::vector<AssetType> types = assets.Types();
+        const auto position = [&types](AssetType type) { return std::ranges::find(types, type) - types.begin(); };
+        const std::ptrdiff_t at = position(AssetType::Of<T>());
+        CHECK(at < std::ssize(types));
+
+        // Every entry of Uses comes before it, which is the order they are unloaded in, reversed
+        for (const AssetType used : T::Uses)
+            CHECK(position(used) < at);
+
+        // The importer is registered, as it made this one's info
+        const Importer importer;
+        CHECK(importer.Type() == AssetType::Of<T>());
+
+        const AssetID id = assets.FindId(TypeFileName<T, Importer>().generic_string());
+        REQUIRE(assets.GetInfo(id));
+        CHECK(assets.GetInfo(id)->Type.Is<T>());
+
+        // The name goes into files and comes out as itself
+        std::ifstream meta(meta::PathFor(temp.Path() / TypeFileName<T, Importer>()));
+        CHECK(nlohmann::json::parse(meta)["type"].get<std::string>() == T::Name);
+
+        // Its store loads it or fails to, and says which
+        if constexpr (LoadableAsset<T>)
+        {
+            const auto loaded = assets.Load(assets.As<T>(id));
+            CHECK(assets.IsLoaded(id) == static_cast<bool>(loaded));
+        }
+    }
+}
+
+TEST_CASE("The built-in asset types register completely, each after what it uses", "[assets]")
+{
+    static_assert(CompleteAssetType<TextureAsset> && CompleteAssetType<MeshAsset> && CompleteAssetType<ShaderAsset>
+        && CompleteAssetType<MaterialAsset> && CompleteAssetType<SceneAsset>);
+    static_assert(ImporterFor<TextureImporter, TextureAsset> && ImporterFor<MeshImporter, MeshAsset> && ImporterFor<ShaderImporter, ShaderAsset>
+        && ImporterFor<MaterialImporter, MaterialAsset> && ImporterFor<SceneImporter, SceneAsset>);
+
+    const TempFolder temp;
+    temp.Write(TypeFileName<TextureAsset, TextureImporter>(), "");
+    temp.Write(TypeFileName<MeshAsset, MeshImporter>(), "");
+    temp.Write(TypeFileName<ShaderAsset, ShaderImporter>(), "");
+    temp.Write(TypeFileName<MaterialAsset, MaterialImporter>(), "");
+    temp.Write(TypeFileName<SceneAsset, SceneImporter>(), "");
+
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    CheckRegistered<TextureAsset, TextureImporter>(assets, temp);
+    CheckRegistered<MeshAsset, MeshImporter>(assets, temp);
+    CheckRegistered<ShaderAsset, ShaderImporter>(assets, temp);
+    CheckRegistered<MaterialAsset, MaterialImporter>(assets, temp);
+    CheckRegistered<SceneAsset, SceneImporter>(assets, temp);
+}
+
+namespace
+{
+    // Two types made only for the test: a whole is made of parts
+    struct PartAsset
+    {
+        using Data = NoAssetData;
+
+        static constexpr std::string_view Name = "Part";
+        static constexpr std::array<AssetType, 0> Uses{};
+    };
+
+    struct WholeAsset
+    {
+        using Data = NoAssetData;
+
+        static constexpr std::string_view Name = "Whole";
+        static constexpr std::array<AssetType, 1> Uses = { AssetType::Of<PartAsset>() };
+    };
+
+    class PartImporter final : public AssetImporterBase
+    {
+    public:
+        AssetType Type() const override { return AssetType::Of<PartAsset>(); }
+        nlohmann::json DefaultSettings() const override { return nlohmann::json::object(); }
+
+        std::span<const std::string_view> Extensions() const override
+        {
+            static constexpr std::string_view exts[] = { ".testpart" };
+            return exts;
+        }
+    };
+
+    class WholeImporter final : public AssetImporterBase
+    {
+    public:
+        AssetType Type() const override { return AssetType::Of<WholeAsset>(); }
+        nlohmann::json DefaultSettings() const override { return nlohmann::json::object(); }
+
+        std::span<const std::string_view> Extensions() const override
+        {
+            static constexpr std::string_view exts[] = { ".testwhole" };
+            return exts;
+        }
+    };
+
+    // Has no name, which would make it the same as no type
+    struct NamelessAsset
+    {
+        using Data = NoAssetData;
+
+        static constexpr std::string_view Name = "";
+        static constexpr std::array<AssetType, 0> Uses{};
+    };
+}
+
+TEST_CASE("An asset type is refused until what it uses is registered", "[assets]")
+{
+    static_assert(CompleteAssetType<PartAsset> && CompleteAssetType<WholeAsset> && CompleteAssetType<NamelessAsset>);
+
+    const TempFolder temp;
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    {
+        const LogCounter errors(LogLevel::Error, "the Part it uses isn't registered yet");
+        CHECK_FALSE(assets.RegisterType<WholeAsset, WholeImporter>());
+        CHECK(errors.Count() == 1);
+    }
+
+    std::vector<AssetType> types = assets.Types();
+    CHECK(std::ranges::find(types, AssetType::Of<WholeAsset>()) == types.end());
+
+    CHECK(assets.RegisterType<PartAsset, PartImporter>());
+    CHECK(assets.RegisterType<WholeAsset, WholeImporter>());
+
+    types = assets.Types();
+    const auto part = std::ranges::find(types, AssetType::Of<PartAsset>());
+    const auto whole = std::ranges::find(types, AssetType::Of<WholeAsset>());
+    REQUIRE(part != types.end());
+    REQUIRE(whole != types.end());
+    CHECK(part < whole);
+
+    {
+        const LogCounter errors(LogLevel::Error, "is registered already");
+        CHECK_FALSE(assets.RegisterType<TextureAsset, TextureImporter>());
+        CHECK(errors.Count() == 1);
+    }
+
+    {
+        const LogCounter errors(LogLevel::Error, "with no name");
+        CHECK_FALSE(assets.RegisterType<NamelessAsset, PartImporter>());
+        CHECK(errors.Count() == 1);
+    }
+}
+
+TEST_CASE("Asset types keep the names their files have", "[assets]")
+{
+    CHECK(TextureAsset::Name == "Texture");
+    CHECK(MeshAsset::Name == "Mesh");
+    CHECK(ShaderAsset::Name == "Shader");
+    CHECK(MaterialAsset::Name == "Material");
+    CHECK(SceneAsset::Name == "Scene");
+
+    CHECK(AssetType::Of<MaterialAsset>().Name() == "Material");
+    CHECK(AssetType::Of<MaterialAsset>() != AssetType::Of<SceneAsset>());
+
+    CHECK_FALSE(AssetType{});
+    CHECK(AssetType{}.Name().empty());
+}
+
+TEST_CASE("A meta file naming another type is warned about, and its importer's type wins", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("tri.obj", kTriangleObj);
+    temp.Write("tri.obj.meta", R"({ "guid": "00000000000000ab", "type": "Texture", "importerVersion": 1, "settings": {} })");
+    FakeGpuResourceManager gpu;
+
+    const LogCounter warnings(LogLevel::Warn, "says it is a Texture, but its importer makes Mesh");
+    AssetManager assets(gpu, temp.Path());
+
+    CHECK(warnings.Count() == 1);
+
+    const AssetInfo* info = assets.GetInfo(AssetID{ 0xab });
+    REQUIRE(info);
+    CHECK(info->Path == "tri.obj");
+    CHECK(info->Type.Is<MeshAsset>());
+}
