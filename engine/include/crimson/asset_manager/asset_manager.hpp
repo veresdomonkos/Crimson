@@ -32,13 +32,13 @@ namespace crimson
     // Knows every asset under one folder and loads them on first use. Destroying it frees what it loaded.
     // The engine's own shaders, materials and scenes are always available too, read-only, under "engine/".
     //
-    // Asset paths are relative to the folder, with forward slashes. A load that fails returns an invalid
-    // handle or null, logs once and isn't tried again. An invalid id does the same without logging, so a
+    // Asset paths are relative to the folder, with forward slashes. A lookup that can't give the asset returns null, logs
+    // once and isn't tried again. An invalid id does the same without logging, so a
     // component's empty asset slot needs no check.
     //
     // What changes or removes GPU resources has to run between frames: Refresh, Delete, Apply, Reimport, ReloadChanged
     // and slot_materials::Create, which reimports.
-    // Handles that were copied elsewhere stop working when these remove what they refer to.
+    // Handles and pointers that were kept elsewhere stop working when these remove what they refer to.
     class AssetManager
     {
     public:
@@ -93,13 +93,14 @@ namespace crimson
         template <typename T>
         [[nodiscard]] TypedAssetID<T> Find(std::string_view path) const { return As<T>(FindId(path)); }
 
-        // An invalid handle or null if it can't be loaded
-        template <typename T>
-        LoadResult<T> Load(TypedAssetID<T> id);
+        // What it loaded as, loading it first if it isn't yet. Null if it can't be had: invalid, missing, of another type,
+        // or failed to load. Valid until assets change between frames, so keep the id, not this.
+        template <LoadableAsset T>
+        [[nodiscard]] const LoadedAsset<T>* Get(TypedAssetID<T> id);
 
         // A shortcut for code that knows its asset's path, which warns if nothing of that type is there
-        template <typename T>
-        LoadResult<T> Load(std::string_view path) { return Load(FindOrWarn<T>(path)); }
+        template <LoadableAsset T>
+        [[nodiscard]] const LoadedAsset<T>* Get(std::string_view path) { return Get(FindOrWarn<T>(path)); }
 
         // The kinds of components the project's scenes can have, the engine's own and any registered since
         [[nodiscard]] ComponentRegistry& Components() { return m_components; }
@@ -159,7 +160,7 @@ namespace crimson
 
         // Loads the project's assets again whose file or included files changed since they were loaded, if their type
         // does that, and updates what uses them. One that no longer loads keeps the old version. Returns the ids of
-        // what was replaced, whose handles have to be gotten again.
+        // what was loaded or made again.
         std::vector<AssetID> ReloadChanged();
     private:
         // What is known about every asset, loaded or not. What it loads as is in its type's store.
@@ -255,9 +256,17 @@ namespace crimson
         return &Store<T>().GetOrCreate(id, static_cast<AssetImporter<T>&>(*it->second.Importer));
     }
 
-    template <typename T>
-    LoadResult<T> AssetManager::Load(TypedAssetID<T> id)
+    template <LoadableAsset T>
+    const LoadedAsset<T>* AssetManager::Get(TypedAssetID<T> id)
     {
+        // Without a hash of anything but the id, nor any file access, as drawing looks up every frame
+        const AssetStoreBase* base = StoreOf(AssetType::Of<T>());
+        if (!base)
+            return nullptr;
+
+        if (const auto* found = static_cast<const AssetStore<T>&>(*base).Find(id); found && found->Loaded)
+            return &*found->Loaded;
+
         auto* slot = SlotFor<T>(id);
 
         if (slot && !slot->Tried())
@@ -271,12 +280,7 @@ namespace crimson
                 LOG_ERROR("[Assets] Failed to load {}", GetInfo(id)->Path);
         }
 
-        const LoadedAsset<T>* loaded = slot && slot->Loaded ? &*slot->Loaded : nullptr;
-
-        if constexpr (std::is_pointer_v<LoadResult<T>>)
-            return loaded;
-        else
-            return loaded ? *loaded : LoadedAsset<T>::Invalid();
+        return slot && slot->Loaded ? &*slot->Loaded : nullptr;
     }
 
     template <typename T>
@@ -299,7 +303,7 @@ namespace crimson
         if (!info || info->ReadOnly)
             return AssetUpdate::Failed;
 
-        Load(id);
+        (void)Get(id);
         const AssetData<T>* current = GetData(id);
 
         auto& slot = *SlotFor<T>(id);

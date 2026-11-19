@@ -474,7 +474,7 @@ TEST_CASE_METHOD(AssetFixture, "Creating from the Hierarchy's presets and resolv
 TEST_CASE_METHOD(AssetFixture, "A material's edits show, undo, redo and save", "[editor]")
 {
     const MaterialID id = Assets().Find<MaterialAsset>("materials/floor.mat");
-    const MaterialHandle handle = Assets().Load(id);
+    const MaterialHandle handle = *Assets().Get(id);
 
     Context().SelectAsset(id);
     RunFrames(App);
@@ -485,7 +485,7 @@ TEST_CASE_METHOD(AssetFixture, "A material's edits show, undo, redo and save", "
     Context().Edits.Set(id, data);
     RunFrames(App);
 
-    CHECK(Assets().Load(id) == handle);
+    CHECK(*Assets().Get(id) == handle);
     CHECK(*Assets().GetData(id) == data);
     CHECK(Context().Edits.IsDirty(id));
 
@@ -531,14 +531,14 @@ TEST_CASE_METHOD(AssetFixture, "A material's edits show, undo, redo and save", "
 TEST_CASE_METHOD(AssetFixture, "Changing a material's shader keeps the scene drawing", "[editor]")
 {
     const MaterialID id = Assets().Find<MaterialAsset>("materials/floor.mat");
-    const MaterialHandle before = Assets().Load(id);
+    const MaterialHandle before = *Assets().Get(id);
 
     MaterialData data = *Context().Edits.Get(id);
     data.Shader = Assets().Find<ShaderAsset>("shaders/own.hlsl");
     Context().Edits.Set(id, data);
     RunFrames(App);
 
-    CHECK(Assets().Load(id) != before);
+    CHECK(*Assets().Get(id) != before);
 
     // The floor uses this material, and it still has a valid handle or a draw would have failed
     CHECK(App.Services().Graphics.Renderer->GetStats().DrawCalls > 0);

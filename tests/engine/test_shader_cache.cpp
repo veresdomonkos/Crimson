@@ -89,7 +89,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
         {
             FakeGpuResourceManager gpu;
             AssetManager assets(gpu, Assets(), Cache());
-            return static_cast<bool>(assets.Load<ShaderAsset>("mine.hlsl"));
+            return static_cast<bool>(assets.Get<ShaderAsset>("mine.hlsl"));
         }
 
     private:

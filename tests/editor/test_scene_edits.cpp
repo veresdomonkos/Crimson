@@ -293,7 +293,7 @@ TEST_CASE_METHOD(Fixture, "An assigned asset is undone and resolved again", "[sc
     CHECK(component.MaterialAssets[0] != material);
     REQUIRE_FALSE(component.Resolved.SubMeshes.empty());
     CHECK(component.Resolved.Materials.size() == component.Resolved.SubMeshes.size());
-    CHECK(component.Resolved.Materials[0] != Assets.Load(material));
+    CHECK(component.Resolved.Materials[0] != *Assets.Get(material));
 }
 
 TEST_CASE_METHOD(Fixture, "Changing the main camera is a step", "[scene edits]")

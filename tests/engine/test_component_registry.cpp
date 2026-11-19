@@ -484,7 +484,7 @@ TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")
         AssignAsset(*drop.Type, drop.Field, Thing, material, Assets);
 
         CHECK(component.MaterialAssets[0] == material);
-        CHECK(component.Resolved.Materials[0] == Assets.Load(material));
+        CHECK(component.Resolved.Materials[0] == *Assets.Get(material));
     }
 
     SECTION("A list without slots has nowhere to put it")

@@ -22,16 +22,13 @@ namespace crimson
     using LoadedAsset = typename T::Loaded;
 
     template <typename T>
-    using LoadResult = typename T::Result;
-
-    template <typename T>
     using AssetData = typename T::Data;
 
     enum class AssetUpdate
     {
         Failed,
         Updated,  // the asset's handle is the same
-        Replaced  // the asset has a new handle, so anything holding on to the old one has to get it again
+        Replaced  // the asset was made again, with a new handle, which lookups give from now on
     };
 
     struct ImportContext
@@ -119,7 +116,6 @@ namespace crimson
             { T::Uses } -> std::convertible_to<std::span<const AssetType>>;
         }
         && std::same_as<decltype(T::Name), const std::string_view> // a constant, as it is the type's identity
-        && (!LoadableAsset<T> || requires { typename T::Result; })
         && (std::is_same_v<typename T::Data, NoAssetData> || requires { T::Parse; T::Write; });
 
     // Whether an importer can make the assets of a type: it is made without arguments, and loads what the type says it loads

@@ -11,6 +11,14 @@ namespace crimson
 {
     constexpr std::string_view kDefaultShaderPath = "engine/shaders/S_Lit.hlsl";
 
+    // What a material uses, or an invalid handle if it can't be had
+    template <LoadableAsset T>
+    static LoadedAsset<T> HandleOf(ImportContext& ctx, TypedAssetID<T> id)
+    {
+        const LoadedAsset<T>* loaded = ctx.Assets.Get(id);
+        return loaded ? *loaded : LoadedAsset<T>::Invalid();
+    }
+
     void ApplyMaterialProperty(GpuResourceManager& gpu, MaterialHandle material, const std::string& name, const std::vector<float>& v)
     {
         switch (v.size())
@@ -33,7 +41,7 @@ namespace crimson
 
         for (const auto& [slot, id] : data.Textures)
         {
-            const TextureHandle texture = ctx.Assets.Load(id);
+            const TextureHandle texture = HandleOf(ctx, id);
 
             // A missing one has been warned about when it was read
             if (!texture)
@@ -50,7 +58,7 @@ namespace crimson
         // Only a cutout material cuts, so the shader's AlphaCutoff is 0 for any other, which nothing is under
         if (data.Settings.RenderMode != MaterialRenderMode::Cutout)
         {
-            const ShaderHandle shader = ctx.Assets.Load(data.Shader);
+            const ShaderHandle shader = HandleOf(ctx, data.Shader);
             if (shader && ctx.Gpu.GetShaderInterface(shader).Properties.contains("AlphaCutoff"))
                 ctx.Gpu.SetMaterialPropertyByName(material, "AlphaCutoff", 0.0f);
         }
@@ -95,7 +103,7 @@ namespace crimson
 
     MaterialHandle MaterialImporter::CreateMaterialFromData(const MaterialData& data, ImportContext& ctx, std::string_view name)
     {
-        const ShaderHandle shader = ctx.Assets.Load(data.Shader);
+        const ShaderHandle shader = HandleOf(ctx, data.Shader);
         if (!shader)
         {
             LOG_ERROR("[MaterialImporter] '{}': shader not found or failed to load", name);
@@ -200,7 +208,7 @@ namespace crimson
 
         // Only what changed: replacing a texture has to wait for the GPU, and a dragged color slider gets here every frame
         // The defaults first, for a property that is no longer in the data to go back to its default
-        const ShaderHandle shader = ctx.Assets.Load(to.Shader);
+        const ShaderHandle shader = HandleOf(ctx, to.Shader);
         ApplyShaderPropertyDefaults(shader, material, ctx);
 
         MaterialData values = to;
@@ -213,7 +221,7 @@ namespace crimson
             if (previous != from.Textures.end() && previous->second == texture)
                 continue;
 
-            if (const TextureHandle handle = ctx.Assets.Load(texture))
+            if (const TextureHandle handle = HandleOf(ctx, texture))
                 ctx.Gpu.SetMaterialTexture(material, name, handle);
         }
 
@@ -233,7 +241,7 @@ namespace crimson
         if (!data || used == data->Shader)
             return false;
 
-        const ShaderHandle shader = ctx.Assets.Load(data->Shader);
+        const ShaderHandle shader = HandleOf(ctx, data->Shader);
 
         for (const auto& [slot, texture] : data->Textures)
         {
@@ -242,7 +250,7 @@ namespace crimson
 
             // Invalid when the texture was removed, which leaves it as a missing one in the data, for it to work again
             // if the file comes back
-            TextureHandle handle = ctx.Assets.Load(texture);
+            TextureHandle handle = HandleOf(ctx, texture);
             if (!handle)
                 handle = EmptySlotTexture(ctx, shader, slot);
 

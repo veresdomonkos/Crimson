@@ -76,8 +76,8 @@ namespace crimson::editor::ui
     // Prunes for the material's shader, if it loads
     static bool PruneToShader(AssetManager& assets, MaterialData& data)
     {
-        const ShaderHandle handle = assets.Load(data.Shader);
-        return handle && PruneToShader(data, assets.GetShaderInterface(handle));
+        const ShaderHandle* handle = assets.Get(data.Shader);
+        return handle && PruneToShader(data, assets.GetShaderInterface(*handle));
     }
 
     void AssetInspector::Draw(AssetID id)
@@ -157,11 +157,11 @@ namespace crimson::editor::ui
 
         DrawMaterialSettings(id, info.ReadOnly, data, changed);
 
-        const ShaderHandle shader = m_context.Assets.Load(data.Shader);
+        const ShaderHandle* shader = m_context.Assets.Get(data.Shader);
 
         if (shader)
         {
-            const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(shader);
+            const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(*shader);
 
             if (!shaderInterface.Properties.empty())
                 Section("Properties", info.ReadOnly, [&] { DrawMaterialProperties(shaderInterface, data, changed); });
@@ -469,12 +469,12 @@ namespace crimson::editor::ui
         {
             // It can take seconds, so only when asked
             if (ImGui::Button("Load to see details"))
-                m_context.Deferred.emplace_back([this, id] { m_context.Assets.Load(id); });
+                m_context.Deferred.emplace_back([this, id] { (void)m_context.Assets.Get(id); });
 
             return;
         }
 
-        const Mesh* mesh = m_context.Assets.Load(id);
+        const Mesh* mesh = m_context.Assets.Get(id);
         if (!mesh)
         {
             ImGui::TextDisabled("This mesh can't be read, see the console");
@@ -513,14 +513,14 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawShader(const AssetInfo& info)
     {
-        const ShaderHandle shader = m_context.Assets.Load(m_context.Assets.As<ShaderAsset>(info.Id));
+        const ShaderHandle* shader = m_context.Assets.Get(m_context.Assets.As<ShaderAsset>(info.Id));
         if (!shader)
         {
             ImGui::TextDisabled("This shader doesn't compile, see the console");
             return;
         }
 
-        const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(shader);
+        const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(*shader);
 
         if (!shaderInterface.Properties.empty())
         {

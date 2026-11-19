@@ -18,7 +18,7 @@ namespace crimson
         {
             renderer.Resolved = {};
 
-            const Mesh* mesh = assets.Load(renderer.MeshAsset);
+            const Mesh* mesh = assets.Get(renderer.MeshAsset);
             if (!mesh)
                 return;
 
@@ -39,7 +39,8 @@ namespace crimson
                     asset = slot_materials::DefaultMaterial(assets);
 
                 // A missing one stays in the slot, to be saved, and the default stands in for it
-                renderer.Resolved.Materials[slot] = assets.Load(assets.IsMissing(asset) ? slot_materials::DefaultMaterial(assets) : asset);
+                const MaterialHandle* material = assets.Get(assets.IsMissing(asset) ? slot_materials::DefaultMaterial(assets) : asset);
+                renderer.Resolved.Materials[slot] = material ? *material : MaterialHandle::Invalid();
             }
         }
 

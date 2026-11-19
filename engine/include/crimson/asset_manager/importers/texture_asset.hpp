@@ -11,7 +11,6 @@ namespace crimson
     struct TextureAsset
     {
         using Loaded = TextureHandle;
-        using Result = TextureHandle;
         using Data = NoAssetData;
 
         static constexpr std::string_view Name = "Texture"; // as files have it

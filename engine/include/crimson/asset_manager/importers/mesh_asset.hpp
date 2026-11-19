@@ -11,7 +11,6 @@ namespace crimson
     struct MeshAsset
     {
         using Loaded = Mesh;
-        using Result = const Mesh*; // valid as long as the manager
         using Data = NoAssetData;
 
         static constexpr std::string_view Name = "Mesh"; // as files have it

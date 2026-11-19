@@ -74,7 +74,8 @@ namespace crimson
         data.Shader = assets.Find<ShaderAsset>(kLitShaderPath);
 
         // A value at the shader's own default isn't written, as the Inspector does
-        const ShaderHandle shader = assets.Load(data.Shader);
+        const ShaderHandle* loadedShader = assets.Get(data.Shader);
+        const ShaderHandle shader = loadedShader ? *loadedShader : ShaderHandle::Invalid();
         const auto set = [&](const std::string& name, std::vector<float> values)
         {
             if (shader)

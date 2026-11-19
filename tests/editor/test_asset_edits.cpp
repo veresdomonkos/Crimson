@@ -150,7 +150,7 @@ TEST_CASE_METHOD(Fixture, "An edit is unsaved until it is saved", "[asset edits]
 
 TEST_CASE_METHOD(Fixture, "Edits reach the GPU when they are applied", "[asset edits]")
 {
-    const MaterialHandle handle = Assets.Load(Id);
+    const MaterialHandle handle = *Assets.Get(Id);
     REQUIRE(handle);
 
     MaterialData changed = MakeChanged();
@@ -223,7 +223,7 @@ TEST_CASE_METHOD(Fixture, "Engine materials can't be edited", "[asset edits]")
 
 TEST_CASE_METHOD(Fixture, "A material property change is undone and redone", "[asset edits]")
 {
-    const MaterialHandle handle = Assets.Load(Id);
+    const MaterialHandle handle = *Assets.Get(Id);
     const MaterialData original = *Edits.Get(Id);
 
     MaterialData changed = MakeChanged();

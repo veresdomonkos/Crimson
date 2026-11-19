@@ -14,7 +14,6 @@ namespace crimson
     struct MaterialAsset
     {
         using Loaded = MaterialHandle;
-        using Result = MaterialHandle;
         using Data = MaterialData;
 
         static constexpr std::string_view Name = "Material"; // as files have it

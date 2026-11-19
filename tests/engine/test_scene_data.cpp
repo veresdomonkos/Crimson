@@ -443,7 +443,7 @@ TEST_CASE_METHOD(Fixture, "A missing material stays in its slot, with the defaul
 
     const auto& renderer = scene.GetEntity(scene.GetRoots()[0]).GetComponent<MeshRendererComponent>();
     CHECK(assets.IsMissing(renderer.MaterialAssets.at(0)));
-    CHECK(renderer.Resolved.Materials.at(0) == assets.Load(slot_materials::DefaultMaterial(assets)));
+    CHECK(renderer.Resolved.Materials.at(0) == *assets.Get(slot_materials::DefaultMaterial(assets)));
     CHECK(CaptureScene(scene, {}, assets) == *data);
 }
 

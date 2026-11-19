@@ -11,7 +11,6 @@ namespace crimson
     struct ShaderAsset
     {
         using Loaded = ShaderHandle;
-        using Result = ShaderHandle;
         using Data = NoAssetData;
 
         static constexpr std::string_view Name = "Shader"; // as files have it

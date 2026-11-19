@@ -66,9 +66,9 @@ namespace
             Assets = std::make_unique<AssetManager>(*Gpu().GPUResources, Project.Path());
             Subject = std::make_unique<SceneRenderer>(*Gpu().GPUResources, *Gpu().Renderer, ShadowAtlasSettings{ .AtlasSize = 1024, .TileSize = 256 });
 
-            Subject->SetToneMapMaterial(Assets->Load<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
+            Subject->SetToneMapMaterial(*Assets->Get<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
             Subject->SetToneMapping(1.0f, ToneMapper::None); // so that expected colors only need the sRGB encoding
-            Subject->SetOutlineMaterial(Assets->Load<MaterialAsset>("engine/materials/internal/M_Outline.mat"), kSize, kSize);
+            Subject->SetOutlineMaterial(*Assets->Get<MaterialAsset>("engine/materials/internal/M_Outline.mat"), kSize, kSize);
 
             Lighting.AmbientColor = glm::vec3(0.0f);
         }
@@ -357,7 +357,7 @@ TEST_CASE_METHOD(ShadowFixture, "The last of 64 shadowed point lights still cast
     Gpu().Device->WaitIdle();
     Subject.reset();
     Subject = std::make_unique<SceneRenderer>(*Gpu().GPUResources, *Gpu().Renderer, ShadowAtlasSettings{ .AtlasSize = 4096, .TileSize = 128 });
-    Subject->SetToneMapMaterial(Assets->Load<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
+    Subject->SetToneMapMaterial(*Assets->Get<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
 
     Lighting.AmbientColor = glm::vec3(0.1f);
 

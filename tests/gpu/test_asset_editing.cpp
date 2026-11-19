@@ -101,8 +101,8 @@ float4 PSMain(VertexOutput input) : SV_Target
 
         Image Draw(AssetManager& assets, const OffscreenTarget& target, const char* material = "mine.mat")
         {
-            const Mesh* mesh = assets.Load<MeshAsset>("quad.obj");
-            const MaterialHandle handle = assets.Load<MaterialAsset>(material);
+            const Mesh* mesh = assets.Get<MeshAsset>("quad.obj");
+            const MaterialHandle handle = *assets.Get<MaterialAsset>(material);
             REQUIRE(mesh);
             REQUIRE(handle);
 
@@ -140,10 +140,10 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
 
         const auto drawAway = [&]
         {
-            const Mesh* mesh = assets.Load<MeshAsset>("away.obj");
+            const Mesh* mesh = assets.Get<MeshAsset>("away.obj");
             REQUIRE(mesh);
 
-            const MaterialHandle handle = assets.Load(id);
+            const MaterialHandle handle = *assets.Get(id);
             const PassInfo pass{ .Target = Target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth }, .View = { .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) } };
 
             RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).DrawMesh(*mesh, 0, { .MaterialOverride = handle }); }, Lighting);
@@ -246,8 +246,8 @@ TEST_CASE("Mipmaps keep a shrunken texture from flickering", "[asset editing]")
 
     const auto spread = [&]
     {
-        const Mesh* mesh = assets.Load<MeshAsset>("quad.obj");
-        const MaterialHandle material = assets.Load<MaterialAsset>("mine.mat");
+        const Mesh* mesh = assets.Get<MeshAsset>("quad.obj");
+        const MaterialHandle material = *assets.Get<MaterialAsset>("mine.mat");
         REQUIRE(mesh);
         REQUIRE(material);
 
