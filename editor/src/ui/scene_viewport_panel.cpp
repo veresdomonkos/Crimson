@@ -25,7 +25,7 @@ namespace crimson::editor::ui
     // entity from them or takes them
     static bool CanDrop(const ComponentRegistry& components, AssetType type)
     {
-        if (type == AssetType::Scene || FindSpawnField(components, type))
+        if (type.Is<SceneAsset>() || FindSpawnField(components, type))
             return true;
 
         return std::ranges::any_of(components.Types(), [type](const ComponentType& component)
@@ -101,7 +101,7 @@ namespace crimson::editor::ui
         const ComponentRegistry& components = m_context.Assets.Components();
 
         AssetID dropped;
-        AssetType droppedType = AssetType::None;
+        AssetType droppedType;
 
         for (const AssetType type : m_context.Assets.Types())
         {
@@ -125,7 +125,7 @@ namespace crimson::editor::ui
 
         m_context.Deferred.emplace_back([this, dropped, droppedType, origin, direction]
         {
-            if (droppedType == AssetType::Scene)
+            if (droppedType.Is<SceneAsset>())
                 CreateInstanceOfScene(m_context.Assets.As<SceneAsset>(dropped), origin, direction);
             else if (const FieldRef spawn = FindSpawnField(m_context.Assets.Components(), droppedType))
                 CreateEntityFromAsset(spawn, dropped, origin, direction);

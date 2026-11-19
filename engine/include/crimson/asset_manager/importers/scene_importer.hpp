@@ -8,7 +8,7 @@ namespace crimson
     class SceneImporter final : public AssetImporterBase
     {
     public:
-        AssetType Type() const override { return SceneAsset::Tag; }
+        AssetType Type() const override { return AssetType::Of<SceneAsset>(); }
         std::span<const std::string_view> Extensions() const override;
         nlohmann::json DefaultSettings() const override { return nlohmann::json::object(); }
 

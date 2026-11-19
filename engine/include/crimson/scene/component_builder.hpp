@@ -102,7 +102,7 @@ namespace crimson
         ComponentBuilder& Asset(std::string key, std::string label, TypedAssetID<A> T::* member, Options options = {})
         {
             FieldInfo info = Describe(FieldType::Asset, std::move(key), std::move(label), std::move(options));
-            info.Asset = A::Tag;
+            info.Asset = AssetType::Of<A>();
             info.Get = [member](const void* component) -> FieldValue { return AssetID(static_cast<const T*>(component)->*member); };
             info.Set = [member, assets = &m_assets](void* component, const FieldValue& value)
             {
@@ -115,7 +115,7 @@ namespace crimson
         ComponentBuilder& AssetList(std::string key, std::string label, std::vector<TypedAssetID<A>> T::* member, Options options = {})
         {
             FieldInfo info = Describe(FieldType::AssetList, std::move(key), std::move(label), std::move(options));
-            info.Asset = A::Tag;
+            info.Asset = AssetType::Of<A>();
             info.Get = [member](const void* component) -> FieldValue
             {
                 const auto& ids = static_cast<const T*>(component)->*member;

@@ -20,7 +20,7 @@ namespace crimson::editor::ui
         if (const MissingAssetRef* missing = assets.GetMissing(id))
             return "Missing: " + (missing->Path.empty() ? id.ToString() : missing->Path);
 
-        return id ? "Missing" : "None (" + std::string(ToString(type)) + ")";
+        return id ? "Missing" : "None (" + std::string(type.Name()) + ")";
     }
 
     bool AssetField(const char* id, EditorContext& context, AssetType type, AssetID& current)
@@ -91,7 +91,7 @@ namespace crimson::editor::ui
         drawIcon(nameRight, icons::kPicker, style.Colors[ImGuiCol_Text]);
 
         // Not for a missing one, as the empty thumbnail would be kept after the file is back
-        const ImTextureID picture = type == AssetType::Texture && info ? context.Thumbnails.Get(assets.As<TextureAsset>(current)) : ImTextureID{ 0 };
+        const ImTextureID picture = type.Is<TextureAsset>() && info ? context.Thumbnails.Get(assets.As<TextureAsset>(current)) : ImTextureID{ 0 };
 
         if (picture)
         {

@@ -26,7 +26,7 @@ namespace crimson
     {
         std::string Path;
         bool PathOnly = false; // written by hand without a guid, so its id was made up from the path
-        AssetType Type = AssetType::None; // what it was read as, so it keeps a typed id while its asset is away
+        AssetType Type; // what it was read as, so it keeps a typed id while its asset is away
     };
 
     // Knows every asset under one folder and loads them on first use. Destroying it frees what it loaded.
@@ -84,10 +84,10 @@ namespace crimson
         [[nodiscard]] TypedAssetID<T> As(AssetID id) const
         {
             if (const AssetInfo* info = GetInfo(id))
-                return info->Type == T::Tag ? TypedAssetID<T>(id) : TypedAssetID<T>();
+                return info->Type.Is<T>() ? TypedAssetID<T>(id) : TypedAssetID<T>();
 
             const MissingAssetRef* missing = GetMissing(id);
-            return missing && missing->Type == T::Tag ? TypedAssetID<T>(id) : TypedAssetID<T>();
+            return missing && missing->Type.Is<T>() ? TypedAssetID<T>(id) : TypedAssetID<T>();
         }
 
         template <typename T>
@@ -123,7 +123,7 @@ namespace crimson
         [[nodiscard]] std::optional<AssetData<T>> Read(TypedAssetID<T> id) const
         {
             const AssetInfo* info = GetInfo(id);
-            if (!info || info->Type != T::Tag)
+            if (!info || !info->Type.Is<T>())
                 return std::nullopt;
 
             const std::optional<std::string> text = ReadSource(id);
@@ -140,10 +140,10 @@ namespace crimson
         // Makes a file at the path, a new one of the type or one with the data, and the asset for it. These report failures
         // in the log. Engine assets can't be changed, and project assets can't go under "engine/".
         template <typename T>
-        TypedAssetID<T> Create(std::string_view path) { return As<T>(CreateFile(path, T::Tag, std::nullopt)); }
+        TypedAssetID<T> Create(std::string_view path) { return As<T>(CreateFile(path, AssetType::Of<T>(), std::nullopt)); }
 
         template <typename T>
-        TypedAssetID<T> Create(std::string_view path, const AssetData<T>& data) { return As<T>(CreateFile(path, T::Tag, T::Write(data, *this))); }
+        TypedAssetID<T> Create(std::string_view path, const AssetData<T>& data) { return As<T>(CreateFile(path, AssetType::Of<T>(), T::Write(data, *this))); }
 
         // What the asset is using right now, which edits may have made different from its file
         template <typename T>
@@ -216,7 +216,7 @@ namespace crimson
             const AssetID id = FindIdOrWarn(path);
             const TypedAssetID<T> typed = As<T>(id);
             if (id && !typed)
-                WarnWrongType(path, T::Tag);
+                WarnWrongType(path, AssetType::Of<T>());
             return typed;
         }
 
@@ -242,14 +242,14 @@ namespace crimson
     AssetStore<T>& AssetManager::Store()
     {
         // Made when the type was registered
-        return static_cast<AssetStore<T>&>(*StoreOf(T::Tag));
+        return static_cast<AssetStore<T>&>(*StoreOf(AssetType::Of<T>()));
     }
 
     template <typename T>
     typename AssetStore<T>::Slot* AssetManager::SlotFor(AssetID id)
     {
         const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.Type != T::Tag)
+        if (it == m_assets.end() || !it->second.Info.Type.Is<T>())
             return nullptr;
 
         return &Store<T>().GetOrCreate(id, static_cast<AssetImporter<T>&>(*it->second.Importer));
@@ -329,11 +329,17 @@ namespace crimson
     template <CompleteAssetType T, ImporterFor<T> Importer>
     bool AssetManager::RegisterType()
     {
-        const AssetType type = T::Tag;
+        const AssetType type = AssetType::Of<T>();
+
+        if (!type)
+        {
+            LOG_ERROR("[Assets] Can't register a type with no name");
+            return false;
+        }
 
         if (RecordOf(type))
         {
-            LOG_ERROR("[Assets] {} is registered already", ToString(type));
+            LOG_ERROR("[Assets] {} is registered already", type.Name());
             return false;
         }
 
@@ -341,7 +347,7 @@ namespace crimson
         {
             if (!RecordOf(used))
             {
-                LOG_ERROR("[Assets] Can't register {}: the {} it uses isn't registered yet", ToString(type), ToString(used));
+                LOG_ERROR("[Assets] Can't register {}: the {} it uses isn't registered yet", type.Name(), used.Name());
                 return false;
             }
         }
@@ -350,7 +356,7 @@ namespace crimson
 
         if (importer->Type() != type)
         {
-            LOG_ERROR("[Assets] Can't register {}: its importer is for {}", ToString(type), ToString(importer->Type()));
+            LOG_ERROR("[Assets] Can't register {}: its importer is for {}", type.Name(), importer->Type().Name());
             return false;
         }
 
@@ -358,7 +364,7 @@ namespace crimson
         {
             if (m_importersByExtension.contains(std::string(extension)))
             {
-                LOG_ERROR("[Assets] Can't register {}: {} files have an importer already", ToString(type), extension);
+                LOG_ERROR("[Assets] Can't register {}: {} files have an importer already", type.Name(), extension);
                 return false;
             }
         }

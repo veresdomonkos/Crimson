@@ -4,6 +4,7 @@
 #include <functional>
 #include <random>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <cstdio>
 
@@ -34,7 +35,30 @@ namespace crimson
         static AssetID FromString(const std::string& s) { return AssetID{ std::stoull(s, nullptr, 16) }; }
     };
 
-    enum class AssetType : uint8_t { None, Texture, Mesh, Shader, Material, Scene };
+    // A type of asset, known by the name its files have. Only AssetType::Of makes one, from a type's struct, so the name
+    // is always the type's own and lives as long as the program. A default one is no type.
+    class AssetType
+    {
+    public:
+        constexpr AssetType() = default;
+
+        template <typename T>
+        [[nodiscard]] static constexpr AssetType Of() { return AssetType(T::Name); }
+
+        template <typename T>
+        [[nodiscard]] constexpr bool Is() const { return *this == Of<T>(); }
+
+        // Empty for none
+        [[nodiscard]] constexpr std::string_view Name() const { return m_name; }
+
+        constexpr explicit operator bool() const { return !m_name.empty(); }
+        bool operator==(const AssetType&) const = default; // by the name's contents
+
+    private:
+        constexpr explicit AssetType(std::string_view name) : m_name(name) {}
+
+        std::string_view m_name;
+    };
 
     // What an asset's file says, for the types whose files hold nothing to edit
     struct NoAssetData {};
@@ -80,5 +104,14 @@ struct std::hash<crimson::TypedAssetID<T>>
     size_t operator()(const crimson::TypedAssetID<T>& id) const noexcept
     {
         return std::hash<crimson::AssetID>{}(id);
+    }
+};
+
+template<>
+struct std::hash<crimson::AssetType>
+{
+    size_t operator()(const crimson::AssetType& type) const noexcept
+    {
+        return std::hash<std::string_view>{}(type.Name());
     }
 };

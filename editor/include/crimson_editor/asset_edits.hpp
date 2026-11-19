@@ -267,7 +267,7 @@ namespace crimson::editor
         template <typename T>
         Table<T>& TableFor()
         {
-            std::unique_ptr<TableBase>& table = m_tables[T::Tag];
+            std::unique_ptr<TableBase>& table = m_tables[AssetType::Of<T>()];
             if (!table)
                 table = std::make_unique<Table<T>>(m_assets);
 

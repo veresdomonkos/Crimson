@@ -79,7 +79,7 @@ namespace crimson::editor::ui
         void DrawEntries(const AssetManager& assets, AssetThumbnails& thumbnails, const std::vector<PickerEntry>& entries, int selectedIndex);
 
         ImGuiID m_owner = 0;
-        AssetType m_type = AssetType::None;
+        AssetType m_type;
         AssetID m_selected;
         AssetID m_original; // what the field had when the picker opened
         std::optional<AssetID> m_pending;

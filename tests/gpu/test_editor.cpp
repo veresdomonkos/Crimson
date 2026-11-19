@@ -292,7 +292,7 @@ TEST_CASE_METHOD(AssetFixture, "The asset picker opens, draws both views and clo
     RunFrames(App);
 
     AssetPicker& picker = Context().Picker;
-    picker.Open(1, AssetType::Texture, {}, {});
+    picker.Open(1, AssetType::Of<TextureAsset>(), {}, {});
     RunFrames(App);
     CHECK(picker.IsOpen());
 
@@ -301,7 +301,7 @@ TEST_CASE_METHOD(AssetFixture, "The asset picker opens, draws both views and clo
     RunFrames(App);
     CHECK(picker.IsOpen());
 
-    picker.Open(1, AssetType::Material, {}, {});
+    picker.Open(1, AssetType::Of<MaterialAsset>(), {}, {});
     RunFrames(App);
     CHECK(picker.IsOpen());
 
@@ -348,8 +348,8 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[
         FieldInfo{ .Key = "max", .Label = "Max", .Type = FieldType::Int, .Default = int32_t{ 3 } },
         FieldInfo{ .Key = "title", .Label = "Title", .Type = FieldType::String, .Default = std::string("Guard") },
         FieldInfo{ .Key = "tint", .Label = "Tint", .Type = FieldType::Color, .Default = glm::vec3(1.0f) },
-        FieldInfo{ .Key = "weapon", .Label = "Weapon", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh },
-        FieldInfo{ .Key = "drops", .Label = "Drops", .Type = FieldType::AssetList, .Default = std::vector<AssetID>{ AssetID{} }, .Asset = AssetType::Material,
+        FieldInfo{ .Key = "weapon", .Label = "Weapon", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Of<MeshAsset>() },
+        FieldInfo{ .Key = "drops", .Label = "Drops", .Type = FieldType::AssetList, .Default = std::vector<AssetID>{ AssetID{} }, .Asset = AssetType::Of<MaterialAsset>(),
                    .ItemLabel = [](const void*, size_t index) { return "Drop " + std::to_string(index); } },
         FieldInfo{ .Key = "size", .Label = "Size", .Type = FieldType::Vec3, .Default = glm::vec3(1.0f), .UniformToggle = true }
     });
@@ -844,7 +844,7 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
         Context().Deferred.emplace_back([&] { Context().SceneUndo.RecordCreated(scene.CreateEntity("First")); });
         RunFrames(App, 1);
 
-        Context().Picker.Open(1, AssetType::Texture, {}, {});
+        Context().Picker.Open(1, AssetType::Of<TextureAsset>(), {}, {});
         RunFrames(App, 1);
         REQUIRE(Context().Picker.IsOpen());
 
@@ -1102,8 +1102,8 @@ TEST_CASE("A scene that wasn't closed normally is offered again", "[editor]")
 
     REQUIRE(session.IsAskingAboutRecovery());
     CHECK(context.ActiveSceneAsset == id);
-    CHECK(context.Assets.List(AssetType::Scene).size() == 2); // this one and the engine's
-    CHECK(std::ranges::count_if(context.Assets.List(AssetType::Scene), [](const AssetInfo* scene) { return !scene->ReadOnly; }) == 1);
+    CHECK(context.Assets.List(AssetType::Of<SceneAsset>()).size() == 2); // this one and the engine's
+    CHECK(std::ranges::count_if(context.Assets.List(AssetType::Of<SceneAsset>()), [](const AssetInfo* scene) { return !scene->ReadOnly; }) == 1);
     CHECK_FALSE(session.IsSceneChanged());
 
     session.RestoreRecovery();

@@ -45,7 +45,7 @@ namespace crimson
         MaterialID Find(const AssetManager& assets, MeshID mesh, std::string_view slot)
         {
             const AssetInfo* info = assets.GetInfo(mesh);
-            if (!info || info->Type != AssetType::Mesh)
+            if (!info || !info->Type.Is<MeshAsset>())
                 return {};
 
             return assets.Find<MaterialAsset>(SlotMaterialPath(info->Path, slot));
@@ -56,7 +56,7 @@ namespace crimson
             SlotMaterials result;
 
             const AssetInfo* info = assets.GetInfo(mesh);
-            if (!info || info->Type != AssetType::Mesh || info->ReadOnly || !IsObj(info->Path))
+            if (!info || !info->Type.Is<MeshAsset>() || info->ReadOnly || !IsObj(info->Path))
             {
                 LOG_ERROR("[Assets] Only a project's .obj meshes can get materials from their .mtl");
                 return result;

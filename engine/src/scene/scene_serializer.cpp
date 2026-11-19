@@ -180,7 +180,7 @@ namespace crimson
     Entity CreateSceneInstance(SceneID source, Scene& scene, Entity parent, AssetManager& assets, SceneID owner)
     {
         const AssetInfo* info = assets.GetInfo(source);
-        if (!info || info->Type != AssetType::Scene)
+        if (!info || !info->Type.Is<SceneAsset>())
             return {};
 
         if (owner && SceneUses(source, owner, assets))

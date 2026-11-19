@@ -503,7 +503,7 @@ TEST_CASE_METHOD(Fixture, "New materials", "[asset editing]")
         REQUIRE(id);
         CHECK(fs::exists(Temp.Path() / "folder/new.mat"));
         CHECK(fs::exists(Temp.Path() / "folder/new.mat.meta"));
-        CHECK(assets.GetInfo(id)->Type == AssetType::Material);
+        CHECK(assets.GetInfo(id)->Type.Is<MaterialAsset>());
         CHECK(assets.Load(id));
         CHECK(assets.GetData(id)->Shader == assets.Find<ShaderAsset>("engine/shaders/S_Lit.hlsl"));
     }
@@ -533,7 +533,7 @@ TEST_CASE_METHOD(Fixture, "New shaders", "[asset editing]")
 
         REQUIRE(id);
         CHECK(fs::exists(Temp.Path() / "folder/new.hlsl.meta"));
-        CHECK(assets.GetInfo(id)->Type == AssetType::Shader);
+        CHECK(assets.GetInfo(id)->Type.Is<ShaderAsset>());
 
         const ShaderHandle shader = assets.Load(id);
         REQUIRE(shader);

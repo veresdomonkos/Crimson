@@ -18,7 +18,7 @@ namespace crimson
     template <typename T>
     [[nodiscard]] TypedAssetID<T> ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
     {
-        return assets.As<T>(ResolveAssetRef(assets, ref, T::Tag, context));
+        return assets.As<T>(ResolveAssetRef(assets, ref, AssetType::Of<T>(), context));
     }
 
     [[nodiscard]] nlohmann::ordered_json WriteAssetRef(const AssetManager& assets, AssetID id);

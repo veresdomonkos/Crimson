@@ -90,7 +90,7 @@ namespace crimson
     class AssetImporter : public AssetImporterBase
     {
     public:
-        [[nodiscard]] AssetType Type() const final { return T::Tag; }
+        [[nodiscard]] AssetType Type() const final { return AssetType::Of<T>(); }
 
         virtual std::optional<LoadedAsset<T>> Load(const AssetSource& source, ImportContext& ctx) = 0;
         virtual void Unload(LoadedAsset<T>& asset, GpuResourceManager& gpu) = 0;
@@ -115,10 +115,10 @@ namespace crimson
     concept CompleteAssetType =
         requires
         {
-            { T::Tag } -> std::convertible_to<AssetType>;
             typename T::Data;
             { T::Uses } -> std::convertible_to<std::span<const AssetType>>;
         }
+        && std::same_as<decltype(T::Name), const std::string_view> // a constant, as it is the type's identity
         && (!LoadableAsset<T> || requires { typename T::Result; })
         && (std::is_same_v<typename T::Data, NoAssetData> || requires { T::Parse; T::Write; });
 

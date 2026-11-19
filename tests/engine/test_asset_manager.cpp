@@ -8,15 +8,23 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/asset_manager/import_cache.hpp>
+#include <crimson/asset_manager/meta_file.hpp>
 #include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/asset_manager/importers/texture_importer.hpp>
+#include <crimson/asset_manager/importers/material_importer.hpp>
 #include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_importer.hpp>
 #include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/scene_asset.hpp>
+#include <crimson/asset_manager/importers/scene_importer.hpp>
+#include <crimson/asset_manager/importers/shader_importer.hpp>
 #include <crimson/asset_manager/importers/shader_asset.hpp>
 #include <crimson/asset_manager/importers/texture_asset.hpp>
 
@@ -69,7 +77,7 @@ TEST_CASE("Scanning finds a folder's assets and skips the rest", "[assets]")
     const MeshID mesh = assets.Find<MeshAsset>("meshes/nested/tri.obj");
     REQUIRE(mesh);
     REQUIRE(assets.GetInfo(mesh));
-    CHECK(assets.GetInfo(mesh)->Type == AssetType::Mesh);
+    CHECK(assets.GetInfo(mesh)->Type.Is<MeshAsset>());
     CHECK(assets.GetInfo(mesh)->Path == "meshes/nested/tri.obj");
 
     // The extension's case doesn't matter
@@ -89,7 +97,7 @@ TEST_CASE("A folder that doesn't exist gives just the engine's assets", "[assets
     AssetManager assets(gpu, temp.Path() / "nothing");
 
     CHECK(assets.Find<MaterialAsset>("engine/materials/M_Default.mat"));
-    CHECK(std::ranges::all_of(assets.List(AssetType::Mesh), [](const AssetInfo* info) { return info->ReadOnly && info->Path.starts_with("engine/"); }));
+    CHECK(std::ranges::all_of(assets.List(AssetType::Of<MeshAsset>()), [](const AssetInfo* info) { return info->ReadOnly && info->Path.starts_with("engine/"); }));
 }
 
 TEST_CASE("The engine's built-in meshes load, at the size they are meant to be", "[assets]")
@@ -132,7 +140,7 @@ TEST_CASE("The engine's built-in meshes load, at the size they are meant to be",
         CHECK(near(mesh->Bounds.Max, expected.Max));
     }
 
-    CHECK(assets.List(AssetType::Mesh).size() == kMeshes.size());
+    CHECK(assets.List(AssetType::Of<MeshAsset>()).size() == kMeshes.size());
 }
 
 TEST_CASE("An asset keeps its id through its meta file", "[assets]")
@@ -223,7 +231,7 @@ TEST_CASE("Listing is sorted by path and filtered by type", "[assets]")
 
     // The engine's own meshes are listed too, but only the project's are under test here
     std::vector<std::string> paths;
-    for (const AssetInfo* info : assets.List(AssetType::Mesh))
+    for (const AssetInfo* info : assets.List(AssetType::Of<MeshAsset>()))
     {
         if (!info->ReadOnly)
             paths.push_back(info->Path);
@@ -262,7 +270,7 @@ TEST_CASE("Every engine material loads, without any project files", "[assets]")
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
 
-    const auto materials = assets.List(AssetType::Material);
+    const auto materials = assets.List(AssetType::Of<MaterialAsset>());
     REQUIRE_FALSE(materials.empty());
 
     for (const AssetInfo* info : materials)

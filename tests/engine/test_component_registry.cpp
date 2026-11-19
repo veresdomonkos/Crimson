@@ -175,8 +175,8 @@ TEST_CASE_METHOD(Fixture, "Asset fields keep their asset's type", "[components]"
     REQUIRE(mesh);
     REQUIRE(material);
 
-    CHECK(Field(renderer, "mesh").Asset == AssetType::Mesh);
-    CHECK(Field(renderer, "materials").Asset == AssetType::Material);
+    CHECK(Field(renderer, "mesh").Asset.Is<MeshAsset>());
+    CHECK(Field(renderer, "materials").Asset.Is<MaterialAsset>());
 
     const MeshRendererComponent defaults;
     std::vector<FieldValue> values = ReadFields(renderer, &defaults);
@@ -315,10 +315,10 @@ TEST_CASE_METHOD(Fixture, "A builder's field takes its type and default from the
     CHECK(Field(probe, "kind").EnumOptions.size() == 3);
 
     CHECK(Field(probe, "mesh").Type == FieldType::Asset);
-    CHECK(Field(probe, "mesh").Asset == AssetType::Mesh);
+    CHECK(Field(probe, "mesh").Asset.Is<MeshAsset>());
     CHECK(std::get<AssetID>(Field(probe, "mesh").Default) == AssetID{});
     CHECK(Field(probe, "materials").Type == FieldType::AssetList);
-    CHECK(Field(probe, "materials").Asset == AssetType::Material);
+    CHECK(Field(probe, "materials").Asset.Is<MaterialAsset>());
     CHECK(std::get<std::vector<AssetID>>(Field(probe, "materials").Default).empty());
 
     SECTION("Writing sets the member, and an asset keeps its type")
@@ -448,26 +448,26 @@ TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")
 {
     const ComponentType& renderer = Type("meshRenderer");
 
-    const FieldRef spawn = FindSpawnField(Registry, AssetType::Mesh);
+    const FieldRef spawn = FindSpawnField(Registry, AssetType::Of<MeshAsset>());
     REQUIRE(spawn);
     CHECK(spawn.Type == &renderer);
     CHECK(renderer.Fields[spawn.Field].Key == "mesh");
-    CHECK_FALSE(FindSpawnField(Registry, AssetType::Material));
-    CHECK_FALSE(FindSpawnField(Registry, AssetType::Texture));
+    CHECK_FALSE(FindSpawnField(Registry, AssetType::Of<MaterialAsset>()));
+    CHECK_FALSE(FindSpawnField(Registry, AssetType::Of<TextureAsset>()));
 
     SECTION("An entity takes what it has a field for")
     {
-        CHECK_FALSE(FindDropField(Registry, Thing, AssetType::Material));
+        CHECK_FALSE(FindDropField(Registry, Thing, AssetType::Of<MaterialAsset>()));
 
         CreateComponent(renderer, Thing, Assets);
 
-        const FieldRef drop = FindDropField(Registry, Thing, AssetType::Material);
+        const FieldRef drop = FindDropField(Registry, Thing, AssetType::Of<MaterialAsset>());
         REQUIRE(drop);
         CHECK(drop.Type == &renderer);
         CHECK(renderer.Fields[drop.Field].Key == "materials");
 
         // The mesh makes entities, it isn't set on one
-        CHECK_FALSE(FindDropField(Registry, Thing, AssetType::Mesh));
+        CHECK_FALSE(FindDropField(Registry, Thing, AssetType::Of<MeshAsset>()));
     }
 
     SECTION("Assigning sets the first slot and resolves")
@@ -479,7 +479,7 @@ TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")
         CHECK(component.MeshAsset == Assets.Find<MeshAsset>("two.obj"));
         REQUIRE(component.MaterialAssets.size() == 2);
 
-        const FieldRef drop = FindDropField(Registry, Thing, AssetType::Material);
+        const FieldRef drop = FindDropField(Registry, Thing, AssetType::Of<MaterialAsset>());
         const MaterialID material = Assets.Find<MaterialAsset>("thing.mat");
         AssignAsset(*drop.Type, drop.Field, Thing, material, Assets);
 
@@ -491,7 +491,7 @@ TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")
     {
         CreateComponent(renderer, Thing, Assets);
 
-        const FieldRef drop = FindDropField(Registry, Thing, AssetType::Material);
+        const FieldRef drop = FindDropField(Registry, Thing, AssetType::Of<MaterialAsset>());
         AssignAsset(*drop.Type, drop.Field, Thing, Assets.Find<MaterialAsset>("thing.mat"), Assets);
 
         CHECK(Thing.GetComponent<MeshRendererComponent>().MaterialAssets.empty());

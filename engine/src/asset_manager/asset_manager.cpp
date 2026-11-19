@@ -167,7 +167,7 @@ namespace crimson
         }
 
         const fs::path metaPath = meta::PathFor(file);
-        std::optional<AssetInfo> existing = meta::Read(metaPath);
+        std::optional<AssetInfo> existing = meta::Read(metaPath, importer->second->Type());
 
         // Already known from an earlier scan. If only its meta is gone, it keeps the id it has.
         if (const AssetID known = FindId(path); known && (!existing || existing->Id == known))
@@ -228,7 +228,7 @@ namespace crimson
                 LOG_ERROR("[Assets] Failed to write {}", metaPath.string());
         }
 
-        LOG_INFO("[Assets] {} [{}] id={}", info.Path, ToString(info.Type), info.Id.ToString());
+        LOG_INFO("[Assets] {} [{}] id={}", info.Path, info.Type.Name(), info.Id.ToString());
 
         m_idsByPath[info.Path] = info.Id;
         const AssetID id = info.Id;
@@ -343,7 +343,7 @@ namespace crimson
 
     void AssetManager::WarnWrongType(std::string_view path, AssetType wanted) const
     {
-        LOG_WARN("[Assets] '{}' isn't a {}", path, ToString(wanted));
+        LOG_WARN("[Assets] '{}' isn't a {}", path, wanted.Name());
     }
 
     fs::path AssetManager::GetFilePath(AssetID id) const
@@ -493,7 +493,7 @@ namespace crimson
 
         if (!IsUsableAssetPath(path) || importer == m_importersByExtension.end() || importer->second->Type() != type)
         {
-            LOG_ERROR("[Assets] Can't create a {} file at '{}'", ToString(type), path);
+            LOG_ERROR("[Assets] Can't create a {} file at '{}'", type.Name(), path);
             return {};
         }
 
@@ -511,7 +511,7 @@ namespace crimson
 
         if (!contents)
         {
-            LOG_ERROR("[Assets] A {} can't be made without contents", ToString(type));
+            LOG_ERROR("[Assets] A {} can't be made without contents", type.Name());
             return {};
         }
 

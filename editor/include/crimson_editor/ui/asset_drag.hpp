@@ -81,7 +81,7 @@ namespace crimson::editor::ui
         template <typename T>
         TypedAssetID<T> AcceptOnLastItem(const AssetManager& assets)
         {
-            return assets.As<T>(AcceptOnLastItem(assets, T::Tag));
+            return assets.As<T>(AcceptOnLastItem(assets, AssetType::Of<T>()));
         }
     }
 }

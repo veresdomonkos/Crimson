@@ -251,7 +251,7 @@ namespace crimson
         }
 
         if (const auto instance = j.find("instance"); instance != j.end())
-            node.Instance = assets.As<SceneAsset>(ReadRef(assets, *instance, SceneAsset::Tag, file));
+            node.Instance = assets.As<SceneAsset>(ReadRef(assets, *instance, AssetType::Of<SceneAsset>(), file));
 
         if (const auto children = j.find("children"); children != j.end())
         {

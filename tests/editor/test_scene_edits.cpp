@@ -268,12 +268,12 @@ TEST_CASE_METHOD(Fixture, "An assigned asset is undone and resolved again", "[sc
     const Entity thing = World.CreateEntity("Thing");
     CreateComponent(*renderer, thing, Assets);
 
-    const FieldRef spawn = FindSpawnField(Assets.Components(), AssetType::Mesh);
+    const FieldRef spawn = FindSpawnField(Assets.Components(), AssetType::Of<MeshAsset>());
     REQUIRE(spawn);
     AssignAsset(*spawn.Type, spawn.Field, thing, Assets.Find<MeshAsset>("triangle.obj"), Assets);
 
     const MaterialID material = Assets.Find<MaterialAsset>("thing.mat");
-    const FieldRef drop = FindDropField(Assets.Components(), thing, AssetType::Material);
+    const FieldRef drop = FindDropField(Assets.Components(), thing, AssetType::Of<MaterialAsset>());
     REQUIRE(drop);
 
     const SceneData before = Capture();

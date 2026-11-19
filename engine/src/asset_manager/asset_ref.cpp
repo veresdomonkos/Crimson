@@ -88,7 +88,7 @@ namespace crimson
 
     AssetID ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
     {
-        if (expected == AssetType::None)
+        if (!expected)
             return {};
 
         const AssetID id = ResolveAnyAssetRef(assets, ref, expected, context);
@@ -98,13 +98,13 @@ namespace crimson
         // What AssetManager::As checks
         const AssetInfo* info = assets.GetInfo(id);
         const MissingAssetRef* missing = info ? nullptr : assets.GetMissing(id);
-        const AssetType actual = info ? info->Type : missing ? missing->Type : AssetType::None;
+        const AssetType actual = info ? info->Type : missing ? missing->Type : AssetType{};
 
         if (actual == expected)
             return id;
 
         // A broken file rather than one that is away for a while, so it isn't kept
-        LOG_WARN("[Assets] {}: {} isn't a {}", context, info ? info->Path : id.ToString(), ToString(expected));
+        LOG_WARN("[Assets] {}: {} isn't a {}", context, info ? info->Path : id.ToString(), expected.Name());
         return {};
     }
 

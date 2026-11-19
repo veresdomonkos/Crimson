@@ -20,7 +20,7 @@ namespace crimson::editor::ui
     bool AssetField(const char* id, EditorContext& context, TypedAssetID<T>& current)
     {
         AssetID picked = current;
-        if (!AssetField(id, context, T::Tag, picked))
+        if (!AssetField(id, context, AssetType::Of<T>(), picked))
             return false;
 
         current = context.Assets.As<T>(picked);

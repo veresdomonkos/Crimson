@@ -42,7 +42,7 @@ namespace crimson
         FieldType Type = FieldType::Float;
         FieldValue Default;
 
-        AssetType Asset = AssetType::None;  // what an Asset or AssetList field points to
+        AssetType Asset;  // what an Asset or AssetList field points to
         std::vector<EnumOption> EnumOptions;
 
         // For the Inspector: what a number can be, and how fast it changes when dragged

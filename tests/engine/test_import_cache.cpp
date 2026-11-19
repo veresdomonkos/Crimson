@@ -386,7 +386,7 @@ TEST_CASE("A fake importer caches through the import context", "[import cache]")
     CountingImporter importer;
 
     AssetInfo info;
-    info.Type = AssetType::Texture;
+    info.Type = AssetType::Of<TextureAsset>();
     info.Path = "thing.fake";
     const AssetSource asset{ info, source, nullptr };
 

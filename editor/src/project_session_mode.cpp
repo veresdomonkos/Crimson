@@ -206,7 +206,7 @@ namespace crimson::editor
             return scene;
 
         // Not the engine's template, which is listed too
-        const std::vector<const AssetInfo*> scenes = m_assetManager->List(AssetType::Scene);
+        const std::vector<const AssetInfo*> scenes = m_assetManager->List(AssetType::Of<SceneAsset>());
         const auto first = std::ranges::find_if(scenes, [](const AssetInfo* scene) { return !scene->ReadOnly; });
 
         return first == scenes.end() ? m_assetManager->Create<SceneAsset>("scenes/main.scene") : m_assetManager->As<SceneAsset>((*first)->Id);

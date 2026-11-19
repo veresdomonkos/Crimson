@@ -91,15 +91,11 @@ namespace crimson::editor::ui
 
         DrawHeader(*info);
 
-        switch (info->Type)
-        {
-            case AssetType::Material: DrawMaterial(*info); break;
-            case AssetType::Texture:  DrawTexture(*info); break;
-            case AssetType::Mesh:     DrawMesh(*info); break;
-            case AssetType::Shader:   DrawShader(*info); break;
-            case AssetType::Scene:    DrawScene(*info); break;
-            default: break;
-        }
+        if (info->Type.Is<MaterialAsset>())     DrawMaterial(*info);
+        else if (info->Type.Is<TextureAsset>()) DrawTexture(*info);
+        else if (info->Type.Is<MeshAsset>())    DrawMesh(*info);
+        else if (info->Type.Is<ShaderAsset>())  DrawShader(*info);
+        else if (info->Type.Is<SceneAsset>())   DrawScene(*info);
     }
 
     void AssetInspector::DrawScene(const AssetInfo& info)
@@ -133,7 +129,7 @@ namespace crimson::editor::ui
         // What it is and where, in a smaller muted line
         {
             const theme::ScopedFont small(nullptr, theme::FontSmall);
-            const std::string_view type = ToString(info.Type);
+            const std::string_view type = info.Type.Name();
             const std::string where = info.ReadOnly ? "engine, read-only" : info.Path;
 
             ImGui::PushStyleColor(ImGuiCol_Text, theme::TextMuted);

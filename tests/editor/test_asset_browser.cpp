@@ -8,9 +8,9 @@ using crimson::editor::ui::ListsAsset;
 
 TEST_CASE("The Assets panel lists the engine's assets only when asked to", "[asset browser]")
 {
-    const AssetInfo project{ .Type = AssetType::Material, .Path = "materials/wood.mat" };
-    const AssetInfo engine{ .Type = AssetType::Shader, .Path = "engine/shaders/S_Lit.hlsl", .ReadOnly = true };
-    const AssetInfo internal{ .Type = AssetType::Shader, .Path = "engine/shaders/internal/S_ToneMap.hlsl", .ReadOnly = true };
+    const AssetInfo project{ .Type = AssetType::Of<MaterialAsset>(), .Path = "materials/wood.mat" };
+    const AssetInfo engine{ .Type = AssetType::Of<ShaderAsset>(), .Path = "engine/shaders/S_Lit.hlsl", .ReadOnly = true };
+    const AssetInfo internal{ .Type = AssetType::Of<ShaderAsset>(), .Path = "engine/shaders/internal/S_ToneMap.hlsl", .ReadOnly = true };
 
     CHECK(ListsAsset(project, false));
     CHECK(ListsAsset(project, true));

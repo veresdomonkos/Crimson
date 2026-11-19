@@ -452,11 +452,11 @@ TEST_CASE_METHOD(Fixture, "Scenes are assets", "[scene data]")
     AssetManager assets(Gpu, Temp.Path());
 
     // The engine's template for new scenes is listed too
-    const auto projectScenes = [&assets] { return std::ranges::count_if(assets.List(AssetType::Scene), [](const AssetInfo* scene) { return !scene->ReadOnly; }); };
+    const auto projectScenes = [&assets] { return std::ranges::count_if(assets.List(AssetType::Of<SceneAsset>()), [](const AssetInfo* scene) { return !scene->ReadOnly; }); };
 
     const SceneID id = assets.Create<SceneAsset>("scenes/new.scene");
     REQUIRE(id);
-    CHECK(assets.GetInfo(id)->Type == AssetType::Scene);
+    CHECK(assets.GetInfo(id)->Type.Is<SceneAsset>());
     CHECK(projectScenes() == 1);
     CHECK(fs::exists(Temp.Path() / "scenes/new.scene.meta"));
     CHECK_FALSE(assets.Create<SceneAsset>("scenes/new.scene"));
@@ -593,7 +593,7 @@ TEST_CASE_METHOD(Fixture, "A component registered at runtime is saved and loaded
 
     const ComponentType* health = assets.Components().RegisterRuntime("health", "Health", {
         FieldInfo{ .Key = "max", .Label = "Max", .Type = FieldType::Int, .Default = int32_t{ 3 } },
-        FieldInfo{ .Key = "weapon", .Label = "Weapon", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh }
+        FieldInfo{ .Key = "weapon", .Label = "Weapon", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Of<MeshAsset>() }
     });
     REQUIRE(health);
 
@@ -685,8 +685,8 @@ TEST_CASE_METHOD(Fixture, "Every kind of field survives saving and loading", "[s
         FieldInfo{ .Key = "tint", .Label = "Tint", .Type = FieldType::Color, .Default = glm::vec3(1.0f) },
         FieldInfo{ .Key = "title", .Label = "Title", .Type = FieldType::String, .Default = std::string() },
         FieldInfo{ .Key = "kind", .Label = "Kind", .Type = FieldType::Enum, .Default = int32_t{ 0 }, .EnumOptions = { { "first", "First" }, { "second", "Second" } } },
-        FieldInfo{ .Key = "mesh", .Label = "Mesh", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh },
-        FieldInfo{ .Key = "materials", .Label = "Materials", .Type = FieldType::AssetList, .Default = std::vector<AssetID>(), .Asset = AssetType::Material }
+        FieldInfo{ .Key = "mesh", .Label = "Mesh", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Of<MeshAsset>() },
+        FieldInfo{ .Key = "materials", .Label = "Materials", .Type = FieldType::AssetList, .Default = std::vector<AssetID>(), .Asset = AssetType::Of<MaterialAsset>() }
     });
     REQUIRE(everything);
 
@@ -739,7 +739,7 @@ TEST_CASE_METHOD(Fixture, "Moving a file updates a runtime component's asset fie
     AssetManager assets(Gpu, Temp.Path());
 
     REQUIRE(assets.Components().RegisterRuntime("holder", "Holder", {
-        FieldInfo{ .Key = "mesh", .Label = "Mesh", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh },
+        FieldInfo{ .Key = "mesh", .Label = "Mesh", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Of<MeshAsset>() },
         FieldInfo{ .Key = "title", .Label = "Title", .Type = FieldType::String, .Default = std::string() }
     }));
 
