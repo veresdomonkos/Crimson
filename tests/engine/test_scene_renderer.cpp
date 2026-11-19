@@ -665,3 +665,22 @@ TEST_CASE("The tone map and outline materials follow a new handle", "[scene rend
     CHECK(outline != outlineBefore);
     CHECK(fixture.Gpu.Materials.at(outline.GetRaw()).Textures.contains("OutlineMask"));
 }
+
+TEST_CASE("A reimported mesh draws from its new buffers", "[scene renderer]")
+{
+    Fixture fixture;
+    AddMesh(fixture, "Mesh");
+
+    const auto drawnBuffer = [&] { return fixture.Record().back()->GetDraws().front().VertexBuffer; };
+
+    const VertexBufferHandle before = drawnBuffer();
+    CHECK(before == fixture.Assets.Get(fixture.Triangle)->VertexBuffer);
+
+    nlohmann::json settings = fixture.Assets.GetInfo(fixture.Triangle)->Settings;
+    settings["flipV"] = !settings.value("flipV", true);
+    REQUIRE(fixture.Assets.Reimport(fixture.Triangle, settings));
+
+    const VertexBufferHandle after = drawnBuffer();
+    CHECK(after == fixture.Assets.Get(fixture.Triangle)->VertexBuffer);
+    CHECK(after != before);
+}

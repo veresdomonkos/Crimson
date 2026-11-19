@@ -25,7 +25,6 @@
 using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::FieldOf;
-using crimson::tests::ResolveAssets;
 using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
@@ -89,7 +88,7 @@ TEST_CASE_METHOD(Fixture, "A scene survives being saved and loaded", "[scene dat
     renderer.MeshAsset = assets.Find<MeshAsset>("meshes/thing.obj");
     renderer.MaterialAssets = { assets.Find<MaterialAsset>("materials/thing.mat") };
     renderer.CastsShadows = false;
-    ResolveAssets(assets, renderer);
+    REQUIRE(assets.Get(renderer.MeshAsset));
 
     const Entity camera = scene.CreateEntity("Camera");
     camera.AddComponent<CameraComponent>(CameraComponent{ .FieldOfViewDegrees = 45.0f, .NearClip = 0.3f, .FarClip = 250.0f });
@@ -108,7 +107,7 @@ TEST_CASE_METHOD(Fixture, "A scene survives being saved and loaded", "[scene dat
     REQUIRE(loaded.GetRoots().size() == 3);
     const Entity loadedMesh = loaded.GetEntity(loaded.GetRoots()[1]);
     CHECK(loadedMesh.GetComponent<NameComponent>().Id == mesh.GetComponent<NameComponent>().Id);
-    CHECK_FALSE(loadedMesh.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
+    CHECK(assets.Get(loadedMesh.GetComponent<MeshRendererComponent>().MeshAsset));
 }
 
 TEST_CASE_METHOD(Fixture, "Numbers are written the short way", "[scene data]")
@@ -160,12 +159,11 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
 
     Scene scene;
     auto& renderer = scene.CreateEntity("Mesh").AddComponent<MeshRendererComponent>();
-    renderer.MeshAsset = assets.Find<MeshAsset>("thing.obj");
-    ResolveAssets(assets, renderer);
-    REQUIRE(renderer.MaterialAssets[0] == slot_materials::DefaultMaterial(assets));
+    const MeshID mesh = assets.Find<MeshAsset>("thing.obj");
+    renderer.MeshAsset = mesh;
 
     const SceneData data = CaptureScene(scene, {}, assets);
-    CHECK_FALSE(FieldOf<std::vector<AssetID>>(assets, data.Roots[0], "meshRenderer", "materials")[0]);
+    CHECK(FieldOf<std::vector<AssetID>>(assets, data.Roots[0], "meshRenderer", "materials").empty());
 
     // So a material made for the slot afterwards gets used
     Temp.Write("materials/Paint.mat", kMaterial);
@@ -175,36 +173,37 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
     InstantiateScene(*scene_data::Parse(scene_data::Write(data, assets), assets, "test"), loaded, {}, assets, {});
 
     const Entity entity = loaded.GetEntity(loaded.GetRoots()[0]);
-    CHECK(entity.GetComponent<MeshRendererComponent>().MaterialAssets[0] == assets.Find<MaterialAsset>("materials/Paint.mat"));
+    CHECK(entity.GetComponent<MeshRendererComponent>().MaterialAssets.empty());
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == assets.Find<MaterialAsset>("materials/Paint.mat"));
 }
 
-TEST_CASE_METHOD(Fixture, "A slot on the default material finds one made for it, and a chosen one stays", "[scene data]")
+TEST_CASE_METHOD(Fixture, "An empty slot finds a material made for it later, and a chosen one stays", "[scene data]")
 {
     Temp.Write("thing.obj", "mtllib thing.mtl\nusemtl Paint\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n");
     Temp.Write("thing.mtl", "newmtl Paint\n");
     Temp.Write("other.mat", kMaterial);
     AssetManager assets(Gpu, Temp.Path());
 
+    const MeshID mesh = assets.Find<MeshAsset>("thing.obj");
+    const MaterialID other = assets.Find<MaterialAsset>("other.mat");
+
     Scene scene;
-    auto& onDefault = scene.CreateEntity("Default").AddComponent<MeshRendererComponent>();
-    onDefault.MeshAsset = assets.Find<MeshAsset>("thing.obj");
-    ResolveAssets(assets, onDefault);
-    REQUIRE(onDefault.MaterialAssets[0] == slot_materials::DefaultMaterial(assets));
+    auto& empty = scene.CreateEntity("Empty").AddComponent<MeshRendererComponent>();
+    empty.MeshAsset = mesh;
 
     auto& chosen = scene.CreateEntity("Chosen").AddComponent<MeshRendererComponent>();
-    chosen.MeshAsset = assets.Find<MeshAsset>("thing.obj");
-    chosen.MaterialAssets = { assets.Find<MaterialAsset>("other.mat") };
-    ResolveAssets(assets, chosen);
+    chosen.MeshAsset = mesh;
+    chosen.MaterialAssets = { other };
+
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == slot_materials::DefaultMaterial(assets));
 
     // As the editor's Create Materials from .mtl does
     Temp.Write("materials/Paint.mat", kMaterial);
     assets.Refresh();
 
-    ResolveAssets(assets, onDefault);
-    ResolveAssets(assets, chosen);
-
-    CHECK(onDefault.MaterialAssets[0] == assets.FindId("materials/Paint.mat"));
-    CHECK(chosen.MaterialAssets[0] == assets.FindId("other.mat"));
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == assets.Find<MaterialAsset>("materials/Paint.mat"));
+    CHECK(empty.MaterialAssets.empty());
+    CHECK(chosen.MaterialAssets == std::vector{ other });
 }
 
 TEST_CASE_METHOD(Fixture, "An instance's entities come from its scene", "[scene data]")
@@ -424,13 +423,13 @@ TEST_CASE_METHOD(Fixture, "A scene keeps its references to missing files", "[sce
 
         const Entity mesh = scene.GetEntity(scene.GetRoots()[0]);
         const auto& renderer = mesh.GetComponent<MeshRendererComponent>();
-        CHECK_FALSE(renderer.Resolved.SubMeshes.empty());
+        CHECK(assets.Get(renderer.MeshAsset));
         CHECK(renderer.MaterialAssets.at(0) == assets.FindId("thing.mat"));
         CHECK(CaptureScene(scene, {}, assets).Roots[1].Instance == assets.FindId("crate.scene"));
     }
 }
 
-TEST_CASE_METHOD(Fixture, "A missing material stays in its slot, with the default drawn instead", "[scene data]")
+TEST_CASE_METHOD(Fixture, "A missing material stays in its slot", "[scene data]")
 {
     Temp.Write("thing.obj", kTriangleObj);
     AssetManager assets(Gpu, Temp.Path());
@@ -443,7 +442,6 @@ TEST_CASE_METHOD(Fixture, "A missing material stays in its slot, with the defaul
 
     const auto& renderer = scene.GetEntity(scene.GetRoots()[0]).GetComponent<MeshRendererComponent>();
     CHECK(assets.IsMissing(renderer.MaterialAssets.at(0)));
-    CHECK(renderer.Resolved.Materials.at(0) == *assets.Get(slot_materials::DefaultMaterial(assets)));
     CHECK(CaptureScene(scene, {}, assets) == *data);
 }
 

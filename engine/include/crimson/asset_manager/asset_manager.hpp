@@ -159,8 +159,7 @@ namespace crimson
         template <typename T>
         AssetUpdate Apply(TypedAssetID<T> id, const AssetData<T>& data);
 
-        // Stores the settings in the asset's meta file, and if it is loaded, loads it again for what uses it. Not for a type whose importer
-        // says it can't be: what uses it holds a pointer that nothing would resolve again.
+        // Stores the settings in the asset's meta file, and if it is loaded, loads it again for what uses it.
         bool Reimport(AssetID id, nlohmann::json settings);
 
         // Loads the project's assets again whose file or included files changed since they were loaded, if their type

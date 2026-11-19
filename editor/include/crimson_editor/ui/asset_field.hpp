@@ -12,8 +12,9 @@ namespace crimson::editor::ui
 
     // An object field: the asset's icon or thumbnail, its name, and a button that opens the picker. Assets of the type can
     // be dropped on it, and clicking the name shows the asset in the Assets panel. Returns true when another was picked
-    // or dropped. The picker's choice arrives on the frame after it was made, when the field takes it.
-    bool AssetField(const char* id, EditorContext& context, AssetType type, AssetID& current);
+    // or dropped, even the one that an empty field shows. The picker's choice arrives on the frame after it was made, when the
+    // field takes it. whenEmpty is what an empty field uses, which it shows in muted text, as it isn't chosen.
+    bool AssetField(const char* id, EditorContext& context, AssetType type, AssetID& current, AssetID whenEmpty = {});
 
     // The same, for when the type is known when compiling
     template <typename T>

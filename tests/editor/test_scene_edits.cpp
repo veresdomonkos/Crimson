@@ -260,13 +260,13 @@ TEST_CASE_METHOD(Fixture, "The selection before a step comes back with its undo,
     CHECK_FALSE(Edits.TakeRestoredSelection());
 }
 
-TEST_CASE_METHOD(Fixture, "An assigned asset is undone and resolved again", "[scene edits]")
+TEST_CASE_METHOD(Fixture, "An assigned asset is undone", "[scene edits]")
 {
     const ComponentType* renderer = Assets.Components().Find<MeshRendererComponent>();
     REQUIRE(renderer);
 
     const Entity thing = World.CreateEntity("Thing");
-    CreateComponent(*renderer, thing, Assets);
+    renderer->Add(thing);
 
     const FieldRef spawn = FindSpawnField(Assets.Components(), AssetType::Of<MeshAsset>());
     REQUIRE(spawn);
@@ -289,11 +289,8 @@ TEST_CASE_METHOD(Fixture, "An assigned asset is undone and resolved again", "[sc
     REQUIRE(History.Undo());
     CHECK(Capture() == before);
 
-    // What the field no longer names is the default material again
-    CHECK(component.MaterialAssets[0] != material);
-    REQUIRE_FALSE(component.Resolved.SubMeshes.empty());
-    CHECK(component.Resolved.Materials.size() == component.Resolved.SubMeshes.size());
-    CHECK(component.Resolved.Materials[0] != *Assets.Get(material));
+    // What the field named is empty again
+    CHECK(component.MaterialAssets.empty());
 }
 
 TEST_CASE_METHOD(Fixture, "Changing the main camera is a step", "[scene edits]")

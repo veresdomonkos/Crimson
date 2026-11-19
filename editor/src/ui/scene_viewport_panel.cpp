@@ -143,7 +143,7 @@ namespace crimson::editor::ui
         const Entity entity = m_context.ActiveScene.CreateEntity(std::filesystem::path(info->Path).stem().string());
         entity.GetComponent<TransformComponent>().Position = GetDropPosition(origin, direction);
 
-        CreateComponent(*spawn.Type, entity, m_context.Assets);
+        spawn.Type->Add(entity);
         AssignAsset(*spawn.Type, spawn.Field, entity, asset, m_context.Assets);
 
         m_context.SceneUndo.RecordCreated(entity);

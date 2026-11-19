@@ -62,8 +62,6 @@ namespace crimson
         if (mesh.MaterialSlots.empty())
             mesh.MaterialSlots.push_back("default");
 
-        mesh.Materials.resize(std::max<size_t>(1, materials.size()));
-
         // Every triangle's corners first, as the tangents depend on the triangles around a vertex. They are welded after.
         std::vector<MeshVertex> corners;
         std::vector<size_t> triangleSlots;
@@ -75,7 +73,7 @@ namespace crimson
             for (size_t face = 0; face < idx.size() / 3; ++face)
             {
                 const int matId = shape.mesh.material_ids[face];
-                const size_t slot = (matId >= 0 && static_cast<size_t>(matId) < mesh.Materials.size())
+                const size_t slot = (matId >= 0 && static_cast<size_t>(matId) < mesh.MaterialSlots.size())
                                   ? static_cast<size_t>(matId) : 0;
                 triangleSlots.push_back(slot);
 
@@ -129,7 +127,7 @@ namespace crimson
         // Corners that came out the same are one vertex. Ones that only differ in their tangent, at a seam where the UVs
         // are mirrored, stay apart.
         std::vector<MeshVertex> vertices;
-        std::vector<std::vector<uint32_t>> indicesBySlot(mesh.Materials.size());
+        std::vector<std::vector<uint32_t>> indicesBySlot(mesh.MaterialSlots.size());
         std::unordered_map<std::string_view, uint32_t> welded;
         welded.reserve(corners.size());
 

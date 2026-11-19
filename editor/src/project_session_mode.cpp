@@ -155,8 +155,7 @@ namespace crimson::editor
 
         m_context.Deferred.clear();
 
-        if (m_assetEdits->Apply())
-            ResolveSceneAssets(m_scene, *m_assetManager);
+        m_assetEdits->Apply();
     }
 
     void ProjectSessionMode::ForgetAssets(std::span<const AssetID> removed)
@@ -169,10 +168,6 @@ namespace crimson::editor
             if (m_context.SelectedAsset == id)
                 m_context.SelectAsset({});
         }
-
-        // The scene's references to what went keep its id, to be saved and to work again when it comes back, which a
-        // refresh with nothing removed can be. Also for materials that went away because a shader they used is gone.
-        ResolveSceneAssets(m_scene, *m_assetManager);
 
         const auto isRemoved = [removed](AssetID id) { return std::ranges::find(removed, id) != removed.end(); };
 
@@ -693,8 +688,7 @@ namespace crimson::editor
         {
             m_sinceShaderCheck = 0.0f;
 
-            if (!m_assetManager->ReloadChanged().empty())
-                ResolveSceneAssets(m_scene, *m_assetManager);
+            m_assetManager->ReloadChanged();
         }
 
         // The editor camera stays where it is while a scene camera is looked through

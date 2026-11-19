@@ -89,8 +89,7 @@ namespace
             auto& renderer = entity.AddComponent<MeshRendererComponent>();
             renderer.MeshAsset = Assets->Find<MeshAsset>(mesh);
             renderer.MaterialAssets = { Assets->Find<MaterialAsset>("white.mat") };
-            ResolveAssets(*Assets, renderer);
-            REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
+            REQUIRE(Assets->Get(renderer.MeshAsset));
 
             return entity;
         }
@@ -411,8 +410,7 @@ namespace
             auto& renderer = entity.AddComponent<MeshRendererComponent>();
             renderer.MeshAsset = Assets->Find<MeshAsset>(mesh);
             renderer.MaterialAssets = { Assets->Find<MaterialAsset>(name) };
-            ResolveAssets(*Assets, renderer);
-            REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
+            REQUIRE(Assets->Get(renderer.MeshAsset));
 
             return entity;
         }
@@ -571,7 +569,6 @@ TEST_CASE_METHOD(MaterialFixture, "A normal map bends the light the same way on 
 
         auto& renderer = AddMesh("wall.obj").GetComponent<MeshRendererComponent>();
         renderer.MaterialAssets = { Assets->Find<MaterialAsset>("nouv.mat") };
-        ResolveAssets(*Assets, renderer);
 
         const float right = render(kFromRight);
         const float left = render(kFromLeft);
@@ -705,7 +702,6 @@ static void UseMaterial(Entity entity, AssetManager& assets, std::string_view pa
 {
     auto& renderer = entity.GetComponent<MeshRendererComponent>();
     renderer.MaterialAssets = { assets.Find<MaterialAsset>(path) };
-    ResolveAssets(assets, renderer);
 }
 
 TEST_CASE_METHOD(Fixture, "What a cutout material cuts away isn't drawn", "[lighting]")

@@ -25,7 +25,6 @@ namespace crimson
                 }
 
                 WriteComponent(*type, entity, component.Values);
-                ResolveComponentAssets(*type, type->Get(entity), assets);
             }
         }
 
@@ -107,7 +106,7 @@ namespace crimson
         for (const ComponentType& type : assets.Components().Types())
         {
             if (type.Has(entity) && (!instance || type.InlineInFile))
-                node.Components.push_back(CaptureComponent(type, entity, assets));
+                node.Components.push_back(CaptureComponent(type, entity));
         }
 
         if (instance)

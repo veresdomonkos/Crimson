@@ -51,14 +51,10 @@ namespace crimson::editor
             table->Forget(id);
     }
 
-    bool AssetEdits::Apply()
+    void AssetEdits::Apply()
     {
-        bool replaced = false;
-
         for (const auto& [type, table] : m_tables)
-            replaced = table->Apply() || replaced;
-
-        return replaced;
+            table->Apply();
     }
 
     void AssetEdits::Collect(std::vector<std::unique_ptr<EditChange>>& changes)

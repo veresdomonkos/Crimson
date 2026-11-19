@@ -160,18 +160,18 @@ TEST_CASE_METHOD(Fixture, "Edits reach the GPU when they are applied", "[asset e
     // Panels make the edit in the middle of a frame, when the GPU's copy has to stay as it is
     CHECK(GpuCull(handle) == CullMode::Back);
 
-    CHECK_FALSE(Edits.Apply());
+    Edits.Apply();
     CHECK(GpuCull(handle) == CullMode::None);
 
     SECTION("Discarding everything shows the file's version again")
     {
         Edits.DiscardAll();
-        CHECK_FALSE(Edits.Apply());
+        Edits.Apply();
         CHECK(GpuCull(handle) == CullMode::Back);
     }
 }
 
-TEST_CASE_METHOD(Fixture, "Another shader asks for handles to be got again", "[asset edits]")
+TEST_CASE_METHOD(Fixture, "Another shader gives the material a new handle", "[asset edits]")
 {
     Temp.Write("own.hlsl", R"(
 #include "crimson/bindings.hlsli"
@@ -184,10 +184,14 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     changed.Shader = Assets.Find<ShaderAsset>("own.hlsl");
     Edits.Set(Id, changed);
 
-    CHECK(Edits.Apply());
+    const MaterialHandle before = *Assets.Get(Id);
+    Edits.Apply();
+    CHECK(*Assets.Get(Id) != before);
 
-    // It only happens once, not on every call
-    CHECK_FALSE(Edits.Apply());
+    // Not again on the next call
+    const MaterialHandle after = *Assets.Get(Id);
+    Edits.Apply();
+    CHECK(*Assets.Get(Id) == after);
 }
 
 TEST_CASE_METHOD(Fixture, "An edit that can't be shown is undone", "[asset edits]")
@@ -199,7 +203,7 @@ TEST_CASE_METHOD(Fixture, "An edit that can't be shown is undone", "[asset edits
     changed.Shader = Assets.Find<ShaderAsset>("broken.hlsl");
     Edits.Set(Id, changed);
 
-    CHECK_FALSE(Edits.Apply());
+    Edits.Apply();
 
     CHECK(Edits.Get(Id)->Shader == Assets.Find<ShaderAsset>("engine/shaders/S_Lit.hlsl"));
     CHECK_FALSE(Edits.IsDirty(Id));
@@ -323,10 +327,10 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     changed.Shader = Assets.Find<ShaderAsset>("own.hlsl");
     Edits.Set(Id, changed);
     REQUIRE(History.Commit());
-    REQUIRE(Edits.Apply());
+    Edits.Apply();
 
     REQUIRE(History.Undo());
-    CHECK(Edits.Apply());
+    Edits.Apply();
     CHECK(Assets.GetData(Id)->Shader == Assets.Find<ShaderAsset>("engine/shaders/S_Lit.hlsl"));
 }
 

@@ -615,17 +615,22 @@ TEST_CASE_METHOD(Fixture, "Saving leaves no temporary file", "[asset editing]")
     CHECK(assets.Read(id)->Properties.at("Color") == data.Properties.at("Color"));
 }
 
-TEST_CASE_METHOD(Fixture, "A mesh can't be reimported, as nothing would resolve its pointers again", "[asset editing]")
+TEST_CASE_METHOD(Fixture, "A reimported mesh is looked up in place with its new buffers", "[asset editing]")
 {
     Temp.Write("a.obj", kTriangleObj);
     AssetManager assets(Gpu, Temp.Path());
     const MeshID mesh = assets.Find<MeshAsset>("a.obj");
-    REQUIRE(assets.Get(mesh));
 
-    const LogCounter errors(LogLevel::Error, "can't be reimported");
-    CHECK_FALSE(assets.Reimport(mesh, nlohmann::json::object()));
-    CHECK(errors.Count() == 1);
-    CHECK(assets.IsLoaded(mesh));
+    const Mesh* before = assets.Get(mesh);
+    REQUIRE(before);
+    const VertexBufferHandle oldBuffer = before->VertexBuffer;
+
+    nlohmann::json settings = assets.GetInfo(mesh)->Settings;
+    settings["flipV"] = !settings.value("flipV", true);
+    CHECK(assets.Reimport(mesh, settings));
+
+    CHECK(assets.Get(mesh) == before);
+    CHECK(assets.Get(mesh)->VertexBuffer != oldBuffer);
 }
 
 TEST_CASE_METHOD(Fixture, "Renaming moves the file and its meta", "[asset editing]")

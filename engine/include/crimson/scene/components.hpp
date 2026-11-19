@@ -9,7 +9,6 @@
 #include "crimson/asset_manager/importers/material_asset.hpp"
 #include "crimson/asset_manager/importers/mesh_asset.hpp"
 #include "crimson/renderer/light.hpp"
-#include "crimson/renderer/mesh.hpp"
 
 namespace crimson
 {
@@ -77,15 +76,12 @@ namespace crimson
     };
 
     // One component for what Unity splits into a mesh filter and a mesh renderer.
-    // Call ResolveComponentAssets (or ResolveSceneAssets) after changing the assets.
     struct MeshRendererComponent
     {
         MeshID MeshAsset;
-        std::vector<MaterialID> MaterialAssets; // one per material slot of the mesh
+        // The material chosen for each of the mesh's slots, by index. An empty or absent entry uses slot_materials::ForEmptySlot.
+        std::vector<MaterialID> MaterialAssets;
         bool CastsShadows = true;
-
-        // The loaded assets, set when its assets are resolved
-        Mesh Resolved;
     };
 
     // Everything below this entity comes from a scene's file, and is created when this is loaded

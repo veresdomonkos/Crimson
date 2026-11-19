@@ -12,47 +12,24 @@ namespace crimson
         // The smallest distance the far clip keeps beyond the near one
         constexpr float kMinClipGap = 0.01f;
 
-        // Loads the renderer's mesh and materials into Resolved and sizes MaterialAssets to the mesh's slots.
-        // Empty slots get the material made for them (slot_materials::Find), or else the default one.
-        void ResolveMeshRenderer(MeshRendererComponent& renderer, AssetManager& assets)
+        // One item per slot of the renderer's mesh, named after the slot, whose empty entry uses the material made for the
+        // slot or else the default one. Without a mesh, one per entry it holds.
+        std::vector<AssetListItem> MaterialSlots(const MeshRendererComponent& renderer, AssetManager& assets)
         {
-            renderer.Resolved = {};
+            std::vector<AssetListItem> items;
 
-            const Mesh* mesh = assets.Get(renderer.MeshAsset);
-            if (!mesh)
-                return;
-
-            renderer.Resolved = *mesh;
-            renderer.MaterialAssets.resize(renderer.Resolved.Materials.size());
-
-            for (size_t slot = 0; slot < renderer.MaterialAssets.size(); ++slot)
+            if (const Mesh* mesh = assets.Get(renderer.MeshAsset))
             {
-                // The default counts as empty, as that's how it's saved, so a slot material made since is found
-                MaterialID& asset = renderer.MaterialAssets[slot];
-                if ((!asset || asset == slot_materials::DefaultMaterial(assets)) && slot < renderer.Resolved.MaterialSlots.size())
-                {
-                    if (const MaterialID found = slot_materials::Find(assets, renderer.MeshAsset, renderer.Resolved.MaterialSlots[slot]))
-                        asset = found;
-                }
-
-                if (!asset)
-                    asset = slot_materials::DefaultMaterial(assets);
-
-                // A missing one stays in the slot, to be saved, and the default stands in for it
-                const MaterialHandle* material = assets.Get(assets.IsMissing(asset) ? slot_materials::DefaultMaterial(assets) : asset);
-                renderer.Resolved.Materials[slot] = material ? *material : MaterialHandle::Invalid();
+                for (const std::string& slot : mesh->MaterialSlots)
+                    items.push_back({ slot, slot_materials::ForEmptySlot(assets, renderer.MeshAsset, slot) });
             }
-        }
+            else
+            {
+                for (size_t index = 0; index < renderer.MaterialAssets.size(); ++index)
+                    items.push_back({ "Material " + std::to_string(index), slot_materials::DefaultMaterial(assets) });
+            }
 
-        std::string SlotName(const MeshRendererComponent& renderer, size_t slot)
-        {
-            return slot < renderer.Resolved.MaterialSlots.size() ? renderer.Resolved.MaterialSlots[slot] : "Material " + std::to_string(slot);
-        }
-
-        // The default is what an empty slot ends up with
-        AssetID DefaultMaterialOf(const AssetManager& assets)
-        {
-            return slot_materials::DefaultMaterial(assets);
+            return items;
         }
 
         // The engine's built-in meshes, in engine/resources/meshes
@@ -124,11 +101,9 @@ namespace crimson
         auto meshRenderer = registry.Register<MeshRendererComponent>("meshRenderer", "Mesh Renderer");
         meshRenderer.Icon("box")
             .Asset("mesh", "Mesh", &MeshRendererComponent::MeshAsset, { .SpawnsFrom = true })
-            .AssetList("materials", "Materials", &MeshRendererComponent::MaterialAssets, { .ItemLabel = SlotName, .Fallback = DefaultMaterialOf, .DropTarget = true })
-            .Field("castsShadows", "Casts Shadows", &MeshRendererComponent::CastsShadows)
-            .ResolveAssets(ResolveMeshRenderer);
+            .AssetList("materials", "Materials", &MeshRendererComponent::MaterialAssets, { .Items = MaterialSlots, .DropTarget = true })
+            .Field("castsShadows", "Casts Shadows", &MeshRendererComponent::CastsShadows);
 
-        // The default material fills the mesh's one slot when it is resolved
         for (const BuiltInMesh& mesh : kBuiltInMeshes)
         {
             meshRenderer.Preset("3D Object", mesh.Name, [path = mesh.Path](MeshRendererComponent& renderer, const AssetManager& assets)

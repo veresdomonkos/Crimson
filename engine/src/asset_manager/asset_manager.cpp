@@ -640,7 +640,7 @@ namespace crimson
     bool AssetManager::Reimport(AssetID id, nlohmann::json settings)
     {
         const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.ReadOnly || !it->second.Importer->CanReimport())
+        if (it == m_assets.end() || it->second.Info.ReadOnly)
         {
             LOG_ERROR("[Assets] This asset can't be reimported");
             return false;

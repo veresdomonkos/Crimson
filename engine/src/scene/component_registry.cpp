@@ -191,67 +191,15 @@ namespace crimson
             WriteComponent(type, to, ReadComponent(type, from));
     }
 
-    void CreateComponent(const ComponentType& type, Entity entity, AssetManager& assets)
+    SceneComponent CaptureComponent(const ComponentType& type, Entity entity)
+    {
+        return SceneComponent{ .Type = type.Id, .Values = ReadComponent(type, entity) };
+    }
+
+    void ApplyPreset(const ComponentType& type, const ComponentPreset& preset, Entity entity, const AssetManager& assets)
     {
         type.Add(entity);
-        ResolveComponentAssets(type, type.Get(entity), assets);
-    }
-
-    void ResolveComponentAssets(const ComponentType& type, void* component, AssetManager& assets)
-    {
-        if (type.ResolveAssets)
-            type.ResolveAssets(component, assets);
-    }
-
-    void ResolveSceneAssets(Scene& scene, AssetManager& assets)
-    {
-        for (const ComponentType& type : assets.Components().Types())
-        {
-            if (!type.ResolveAssets)
-                continue;
-
-            for (const entt::entity handle : scene.GetRegistry().view<NameComponent>())
-            {
-                if (void* component = type.Get(scene.GetEntity(handle)))
-                    type.ResolveAssets(component, assets);
-            }
-        }
-    }
-
-    SceneComponent CaptureComponent(const ComponentType& type, Entity entity, const AssetManager& assets)
-    {
-        SceneComponent component{ .Type = type.Id, .Values = ReadComponent(type, entity) };
-
-        for (size_t index = 0; index < type.Fields.size(); ++index)
-        {
-            const FieldInfo& field = type.Fields[index];
-            if (!field.Fallback)
-                continue;
-
-            // Left empty, the reference can still find what fits it better when it is loaded
-            const AssetID fallback = field.Fallback(assets);
-
-            if (AssetID* id = std::get_if<AssetID>(&component.Values[index]))
-            {
-                if (*id == fallback)
-                    *id = AssetID{};
-            }
-            else if (auto* ids = std::get_if<std::vector<AssetID>>(&component.Values[index]))
-            {
-                std::ranges::replace(*ids, fallback, AssetID{});
-            }
-        }
-
-        return component;
-    }
-
-    void ApplyPreset(const ComponentType& type, const ComponentPreset& preset, Entity entity, AssetManager& assets)
-    {
-        type.Add(entity);
-
-        void* component = type.Get(entity);
-        preset.Apply(component, assets);
-        ResolveComponentAssets(type, component, assets);
+        preset.Apply(type.Get(entity), assets);
     }
 
     FieldRef FindSpawnField(const ComponentRegistry& registry, AssetType asset)
@@ -296,9 +244,14 @@ namespace crimson
 
         if (auto* ids = std::get_if<std::vector<AssetID>>(&value))
         {
-            // A list without entries has nowhere to put it, like a mesh renderer without its mesh's slots
-            if (ids->empty())
+            // A list without entries has nowhere to put it, like a mesh renderer without its mesh's slots. The ones a
+            // list has items for are made, as the first may be the only one chosen.
+            const size_t count = info.Items ? info.Items(component, assets).size() : ids->size();
+            if (count == 0)
                 return;
+
+            if (ids->size() < count)
+                ids->resize(count);
 
             ids->front() = asset;
         }
@@ -311,7 +264,5 @@ namespace crimson
 
         if (type.Constrain)
             type.Constrain(component);
-
-        ResolveComponentAssets(type, component, assets);
     }
 }

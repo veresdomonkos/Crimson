@@ -349,7 +349,7 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[
         FieldInfo{ .Key = "tint", .Label = "Tint", .Type = FieldType::Color, .Default = glm::vec3(1.0f) },
         FieldInfo{ .Key = "weapon", .Label = "Weapon", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Of<MeshAsset>() },
         FieldInfo{ .Key = "drops", .Label = "Drops", .Type = FieldType::AssetList, .Default = std::vector<AssetID>{ AssetID{} }, .Asset = AssetType::Of<MaterialAsset>(),
-                   .ItemLabel = [](const void*, size_t index) { return "Drop " + std::to_string(index); } },
+                   .Items = [](const void*, AssetManager&) { return std::vector<AssetListItem>{ { "Drop 0", AssetID{} } }; } },
         FieldInfo{ .Key = "size", .Label = "Size", .Type = FieldType::Vec3, .Default = glm::vec3(1.0f), .UniformToggle = true }
     });
     REQUIRE(health);
@@ -439,7 +439,7 @@ TEST_CASE_METHOD(AssetFixture, "The Scene view draws through a scene camera", "[
 }
 
 // The panels queue these for after the frame, as they can't change GPU resources in the middle of it
-TEST_CASE_METHOD(AssetFixture, "Creating from the Hierarchy's presets and resolving after asset changes", "[editor]")
+TEST_CASE_METHOD(AssetFixture, "Creating from the Hierarchy's presets, and drawing after asset changes", "[editor]")
 {
     const ComponentType* renderer = Assets().Components().Find<MeshRendererComponent>();
     REQUIRE(renderer);
@@ -457,7 +457,7 @@ TEST_CASE_METHOD(AssetFixture, "Creating from the Hierarchy's presets and resolv
     RunFrames(App);
 
     REQUIRE(created);
-    CHECK_FALSE(created.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
+    CHECK(Assets().Get(created.GetComponent<MeshRendererComponent>().MeshAsset));
 
     Context().Deferred.emplace_back([&]
     {
@@ -466,7 +466,7 @@ TEST_CASE_METHOD(AssetFixture, "Creating from the Hierarchy's presets and resolv
     RunFrames(App);
 
     REQUIRE(created);
-    CHECK_FALSE(created.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
+    CHECK(Assets().Get(created.GetComponent<MeshRendererComponent>().MeshAsset));
 }
 
 TEST_CASE_METHOD(AssetFixture, "A material's edits show, undo, redo and save", "[editor]")

@@ -530,10 +530,7 @@ namespace crimson::editor::ui
                 {
                     m_context.Deferred.emplace_back([this, id = item.Id]
                     {
-                        if (slot_materials::Create(m_context.Assets, m_context.Assets.As<MeshAsset>(id)).Created.empty())
-                            return;
-
-                        ResolveSceneAssets(m_context.ActiveScene, m_context.Assets);
+                        slot_materials::Create(m_context.Assets, m_context.Assets.As<MeshAsset>(id));
                     });
                 }
 

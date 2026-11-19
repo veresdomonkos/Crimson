@@ -42,7 +42,6 @@ using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::FieldOf;
 using crimson::tests::LogCounter;
-using crimson::tests::ResolveAssets;
 using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
@@ -606,7 +605,7 @@ TEST_CASE("Destroying the manager frees what it loaded, users first", "[assets]"
     CHECK(lastMaterial < firstShader);
 }
 
-TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
+TEST_CASE("A mesh's empty slots find the materials made for them", "[assets]")
 {
     const TempFolder temp;
     temp.Write("model/two.obj", "mtllib two.mtl\nv 0 0 0\nv 1 0 0\nv 0 2 0\nv 0 0 1\nusemtl stone\nf 1 2 3\nusemtl wood\nf 1 2 4\n");
@@ -625,83 +624,9 @@ TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
     CHECK_FALSE(slot_materials::Find(assets, mesh, "wood"));
     CHECK_FALSE(slot_materials::Find(assets, MeshID{}, "stone"));
 
-    MeshRendererComponent renderer;
-    renderer.MeshAsset = mesh;
-
-    SECTION("Without one it is the default material")
-    {
-        ResolveAssets(assets, renderer);
-
-        REQUIRE(renderer.MaterialAssets.size() == 2);
-        CHECK(renderer.MaterialAssets[0] == stone);
-        CHECK(renderer.MaterialAssets[1] == slot_materials::DefaultMaterial(assets));
-        CHECK(renderer.Resolved.Materials[0] == *assets.Get(stone));
-    }
-
-    SECTION("A chosen material wins")
-    {
-        renderer.MaterialAssets = { assets.Find<MaterialAsset>("mine.mat") };
-        ResolveAssets(assets, renderer);
-
-        REQUIRE(renderer.MaterialAssets.size() == 2);
-        CHECK(renderer.MaterialAssets[0] == assets.Find<MaterialAsset>("mine.mat"));
-    }
-}
-
-TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
-{
-    const TempFolder temp;
-    temp.Write("tri.obj", kTriangleObj);
-    temp.Write("mine.mat", kValidMaterial);
-    FakeGpuResourceManager gpu;
-    AssetManager assets(gpu, temp.Path());
-
-    MeshRendererComponent renderer;
-
-    SECTION("No mesh gives nothing to draw")
-    {
-        ResolveAssets(assets, renderer);
-        CHECK(renderer.Resolved.SubMeshes.empty());
-    }
-
-    SECTION("An empty slot gets the default material")
-    {
-        renderer.MeshAsset = assets.Find<MeshAsset>("tri.obj");
-        ResolveAssets(assets, renderer);
-
-        REQUIRE(renderer.MaterialAssets.size() == 1);
-        CHECK(renderer.MaterialAssets[0] == slot_materials::DefaultMaterial(assets));
-        CHECK(renderer.Resolved.Materials[0] == *assets.Get(slot_materials::DefaultMaterial(assets)));
-    }
-
-    SECTION("A chosen material is kept")
-    {
-        renderer.MeshAsset = assets.Find<MeshAsset>("tri.obj");
-        renderer.MaterialAssets = { assets.Find<MaterialAsset>("mine.mat") };
-        ResolveAssets(assets, renderer);
-
-        CHECK(renderer.Resolved.Materials[0] == *assets.Get<MaterialAsset>("mine.mat"));
-    }
-
-    SECTION("Extra slots are dropped, as the mesh decides how many it has")
-    {
-        renderer.MeshAsset = assets.Find<MeshAsset>("tri.obj");
-        renderer.MaterialAssets = { assets.Find<MaterialAsset>("mine.mat"), assets.Find<MaterialAsset>("mine.mat"), assets.Find<MaterialAsset>("mine.mat") };
-        ResolveAssets(assets, renderer);
-
-        CHECK(renderer.MaterialAssets.size() == 1);
-    }
-
-    SECTION("Resolving again clears the old result when the mesh is removed")
-    {
-        renderer.MeshAsset = assets.Find<MeshAsset>("tri.obj");
-        ResolveAssets(assets, renderer);
-        REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
-
-        renderer.MeshAsset = {};
-        ResolveAssets(assets, renderer);
-        CHECK(renderer.Resolved.SubMeshes.empty());
-    }
+    // What a renderer's empty slot draws with
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "stone") == stone);
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "wood") == slot_materials::DefaultMaterial(assets));
 }
 
 static std::string ReadFile(const fs::path& file)
@@ -772,7 +697,7 @@ TEST_CASE("The renderer's own shaders and materials are internal", "[assets]")
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, fs::path("does/not/exist"));
 
-    for (const std::string_view path : { "engine/shaders/internal/S_ToneMap.hlsl", "engine/materials/internal/M_Outline.mat", "engine/scenes/internal/SC_NewScene.scene" })
+    for (const std::string_view path : { "engine/shaders/internal/S_ToneMap.hlsl", "engine/materials/internal/M_Outline.mat", "engine/materials/internal/M_Missing.mat", "engine/scenes/internal/SC_NewScene.scene" })
     {
         const AssetInfo* info = assets.GetInfo(assets.FindId(path));
         REQUIRE(info);

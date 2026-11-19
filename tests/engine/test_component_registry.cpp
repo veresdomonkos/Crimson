@@ -364,7 +364,7 @@ TEST_CASE_METHOD(Fixture, "Each engine component names its icon", "[components]"
     CHECK(Type("light").Icon(&spot) == "cone");
 }
 
-TEST_CASE_METHOD(Fixture, "Presets set up a component and resolve its assets", "[components]")
+TEST_CASE_METHOD(Fixture, "Presets set up a component", "[components]")
 {
     const auto preset = [](const ComponentType& type, std::string_view name) -> const ComponentPreset&
     {
@@ -400,48 +400,63 @@ TEST_CASE_METHOD(Fixture, "Presets set up a component and resolve its assets", "
 
         const auto& component = Thing.GetComponent<MeshRendererComponent>();
         CHECK(component.MeshAsset == Assets.Find<MeshAsset>("engine/meshes/SM_Cube.obj"));
-        CHECK_FALSE(component.Resolved.SubMeshes.empty());
+        CHECK(Assets.Get(component.MeshAsset));
     }
 }
 
-TEST_CASE_METHOD(Fixture, "A slot's label comes from the mesh", "[components]")
+TEST_CASE_METHOD(Fixture, "A material list has one item per slot of the mesh", "[components]")
 {
     const ComponentType& renderer = Type("meshRenderer");
     const FieldInfo& materials = Field(renderer, "materials");
-    REQUIRE(materials.ItemLabel);
+    REQUIRE(materials.Items);
 
-    CreateComponent(renderer, Thing, Assets);
-    AssignAsset(renderer, *renderer.FindField("mesh"), Thing, Assets.Find<MeshAsset>("two.obj"), Assets);
+    renderer.Add(Thing);
 
-    const void* component = renderer.Get(Thing);
-    CHECK(materials.ItemLabel(component, 0) == "stone");
-    CHECK(materials.ItemLabel(component, 1) == "wood");
-    CHECK(materials.ItemLabel(component, 2) == "Material 2");
+    SECTION("Without a mesh, one per held entry")
+    {
+        Thing.GetComponent<MeshRendererComponent>().MaterialAssets.resize(2);
+
+        const std::vector<AssetListItem> items = materials.Items(renderer.Get(Thing), Assets);
+        REQUIRE(items.size() == 2);
+        CHECK(items[0].Label == "Material 0");
+        CHECK(items[1].Label == "Material 1");
+        CHECK(items[1].Empty == AssetID(slot_materials::DefaultMaterial(Assets)));
+    }
+
+    SECTION("With one, named after its slots")
+    {
+        const MeshID two = Assets.Find<MeshAsset>("two.obj");
+        Thing.GetComponent<MeshRendererComponent>().MeshAsset = two;
+
+        const std::vector<AssetListItem> items = materials.Items(renderer.Get(Thing), Assets);
+        REQUIRE(items.size() == 2);
+        CHECK(items[0].Label == "stone");
+        CHECK(items[1].Label == "wood");
+        CHECK(items[0].Empty == AssetID(slot_materials::ForEmptySlot(Assets, two, "stone")));
+    }
 }
 
-TEST_CASE_METHOD(Fixture, "An asset fallback is saved as empty", "[components]")
+TEST_CASE_METHOD(Fixture, "A component is captured as it is", "[components]")
 {
     const ComponentType& renderer = Type("meshRenderer");
-    const MaterialID chosen = Assets.Find<MaterialAsset>("thing.mat");
     const size_t materials = *renderer.FindField("materials");
+    const MaterialID chosen = Assets.Find<MaterialAsset>("thing.mat");
 
-    CreateComponent(renderer, Thing, Assets);
-    AssignAsset(renderer, *renderer.FindField("mesh"), Thing, Assets.Find<MeshAsset>("two.obj"), Assets);
-    AssignAsset(renderer, materials, Thing, chosen, Assets);
+    renderer.Add(Thing);
+    auto& component = Thing.GetComponent<MeshRendererComponent>();
+    component.MeshAsset = Assets.Find<MeshAsset>("two.obj");
 
-    const auto& component = Thing.GetComponent<MeshRendererComponent>();
-    REQUIRE(component.MaterialAssets.size() == 2);
-    CHECK(component.MaterialAssets[1] == slot_materials::DefaultMaterial(Assets));
-
-    const SceneComponent captured = CaptureComponent(renderer, Thing, Assets);
-    const auto& saved = std::get<std::vector<AssetID>>(captured.Values[materials]);
-
+    // An empty entry stays empty, and the default, once chosen, stays chosen
+    component.MaterialAssets = { chosen, MaterialID{} };
+    auto saved = std::get<std::vector<AssetID>>(CaptureComponent(renderer, Thing).Values[materials]);
     REQUIRE(saved.size() == 2);
     CHECK(saved[0] == AssetID(chosen));
     CHECK_FALSE(saved[1]);
 
-    // Only what is saved is changed
-    CHECK(component.MaterialAssets[1] == slot_materials::DefaultMaterial(Assets));
+    component.MaterialAssets = { slot_materials::DefaultMaterial(Assets) };
+    saved = std::get<std::vector<AssetID>>(CaptureComponent(renderer, Thing).Values[materials]);
+    REQUIRE(saved.size() == 1);
+    CHECK(saved[0] == AssetID(slot_materials::DefaultMaterial(Assets)));
 }
 
 TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")
@@ -459,7 +474,7 @@ TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")
     {
         CHECK_FALSE(FindDropField(Registry, Thing, AssetType::Of<MaterialAsset>()));
 
-        CreateComponent(renderer, Thing, Assets);
+        renderer.Add(Thing);
 
         const FieldRef drop = FindDropField(Registry, Thing, AssetType::Of<MaterialAsset>());
         REQUIRE(drop);
@@ -470,26 +485,27 @@ TEST_CASE_METHOD(Fixture, "Dropped assets find their field", "[components]")
         CHECK_FALSE(FindDropField(Registry, Thing, AssetType::Of<MeshAsset>()));
     }
 
-    SECTION("Assigning sets the first slot and resolves")
+    SECTION("Assigning pads the list to the mesh's slots and sets the first")
     {
-        CreateComponent(renderer, Thing, Assets);
+        renderer.Add(Thing);
         AssignAsset(renderer, spawn.Field, Thing, Assets.Find<MeshAsset>("two.obj"), Assets);
 
         const auto& component = Thing.GetComponent<MeshRendererComponent>();
         CHECK(component.MeshAsset == Assets.Find<MeshAsset>("two.obj"));
-        REQUIRE(component.MaterialAssets.size() == 2);
+        CHECK(component.MaterialAssets.empty());
 
         const FieldRef drop = FindDropField(Registry, Thing, AssetType::Of<MaterialAsset>());
         const MaterialID material = Assets.Find<MaterialAsset>("thing.mat");
         AssignAsset(*drop.Type, drop.Field, Thing, material, Assets);
 
+        REQUIRE(component.MaterialAssets.size() == 2);
         CHECK(component.MaterialAssets[0] == material);
-        CHECK(component.Resolved.Materials[0] == *Assets.Get(material));
+        CHECK_FALSE(component.MaterialAssets[1]);
     }
 
     SECTION("A list without slots has nowhere to put it")
     {
-        CreateComponent(renderer, Thing, Assets);
+        renderer.Add(Thing);
 
         const FieldRef drop = FindDropField(Registry, Thing, AssetType::Of<MaterialAsset>());
         AssignAsset(*drop.Type, drop.Field, Thing, Assets.Find<MaterialAsset>("thing.mat"), Assets);
@@ -539,23 +555,6 @@ TEST_CASE_METHOD(Fixture, "An id that clashes with a node key is refused", "[com
 
     CHECK(Registry.IsNodeKey("scale"));
     CHECK_FALSE(Registry.IsNodeKey("light"));
-}
-
-TEST_CASE_METHOD(Fixture, "Every component with assets resolves with the scene", "[components]")
-{
-    const MeshID mesh = Assets.Find<MeshAsset>("thing.obj");
-
-    const Entity other = World.CreateEntity("Other");
-    for (const Entity entity : { Thing, other })
-    {
-        entity.AddComponent<MeshRendererComponent>().MeshAsset = mesh;
-        CHECK(entity.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
-    }
-
-    ResolveSceneAssets(World, Assets);
-
-    CHECK_FALSE(Thing.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
-    CHECK_FALSE(other.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
 }
 
 TEST_CASE_METHOD(Fixture, "A camera's far clip stays beyond its near clip", "[components]")
