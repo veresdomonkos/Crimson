@@ -77,16 +77,17 @@ float4 PSMain(VertexOutput input) : SV_Target
     }
 
     // Lit materials sample the shadow atlas, which comes from a scene renderer
-    SceneRenderer MakeSceneRenderer()
+    SceneRenderer MakeSceneRenderer(AssetManager& assets)
     {
-        return { *Gpu().GPUResources, *Gpu().Renderer, ShadowAtlasSettings{ .AtlasSize = 256, .TileSize = 256 } };
+        return { *Gpu().GPUResources, *Gpu().Renderer, assets, ShadowAtlasSettings{ .AtlasSize = 256, .TileSize = 256 } };
     }
 
     struct Fixture
     {
         TempFolder Project;
         OffscreenTarget Target{ kSize, kSize };
-        SceneRenderer Shadows = MakeSceneRenderer();
+        AssetManager SceneAssets{ *Gpu().GPUResources, Project.Path() }; // for the scene renderer, which only gives the shadow atlas here
+        SceneRenderer Shadows = MakeSceneRenderer(SceneAssets);
 
         // Full ambient light, so a lit material shows exactly what it is
         FrameLighting Lighting;
@@ -237,9 +238,9 @@ TEST_CASE("Mipmaps keep a shrunken texture from flickering", "[asset editing]")
 
     // A size that doesn't divide the texture evenly, so without mips the samples land on different mixes of the two colors
     const OffscreenTarget target(37, 37);
-    const SceneRenderer shadows = MakeSceneRenderer();
 
     AssetManager assets(*Gpu().GPUResources, project.Path());
+    const SceneRenderer shadows = MakeSceneRenderer(assets);
     const TextureID texture = assets.Find<TextureAsset>("checker.bmp");
     FrameLighting lighting;
     lighting.AmbientColor = glm::vec3(1.0f);

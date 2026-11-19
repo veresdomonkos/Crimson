@@ -75,7 +75,7 @@ namespace crimson::editor
         // For code editors to find the engine's shader headers, which may have changed since the project was last open
         ExportShaderIncludes(m_project);
 
-        m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer);
+        m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer, *m_assetManager);
         // The menu is drawn in the middle of a frame, and undoing can create entities, which load GPU resources
         m_ui = std::make_unique<ui::EditorUI>(ui::MainMenuActions{
             .SaveAll = [this] { SaveAll(); },
@@ -123,10 +123,8 @@ namespace crimson::editor
 
     void ProjectSessionMode::SetupRenderer()
     {
-        const MaterialHandle* toneMap = m_assetManager->Get<MaterialAsset>("engine/materials/internal/M_ToneMap.mat");
-        const MaterialHandle* outline = m_assetManager->Get<MaterialAsset>("engine/materials/internal/M_Outline.mat");
-        m_sceneRenderer->SetToneMapMaterial(toneMap ? *toneMap : MaterialHandle::Invalid(), kMainTargetWidth, kMainTargetHeight);
-        m_sceneRenderer->SetOutlineMaterial(outline ? *outline : MaterialHandle::Invalid(), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetToneMapMaterial(m_assetManager->Find<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetOutlineMaterial(m_assetManager->Find<MaterialAsset>("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
     }
 
     void ProjectSessionMode::SetupUI()
@@ -763,7 +761,7 @@ namespace crimson::editor
         if (!ImGui::GetIO().WantTextInput && !m_services.AppInput.IsMouseButtonDown(MouseButton::Right)
             && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_context.Selected && !m_sceneView.IsLookingThrough())
         {
-            m_cameraController->Frame(m_context.Selected);
+            m_cameraController->Frame(m_context.Selected, *m_assetManager);
         }
     }
 }

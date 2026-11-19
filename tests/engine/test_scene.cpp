@@ -1,14 +1,23 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <optional>
+#include <string_view>
 #include <vector>
 
 #include <glm/glm.hpp>
 
+#include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
 #include <crimson/scene/entity.hpp>
+
+#include "support/fake_gpu.hpp"
+#include "support/temp_folder.hpp"
 
 using namespace crimson;
 using Catch::Approx;
+using crimson::tests::FakeGpuResourceManager;
+using crimson::tests::TempFolder;
 
 static void CheckNear(const glm::vec3& a, const glm::vec3& b)
 {
@@ -24,17 +33,29 @@ static void CheckNear(const glm::mat4& a, const glm::mat4& b, float margin = 0.0
             CHECK(a[column][row] == Approx(b[column][row]).margin(margin));
 }
 
-// A box from -1 to 1 that raycasts can hit, with no GPU behind it
-static Entity CreateBox(Scene& scene, const char* name, const glm::vec3& position, const glm::vec3& scale = glm::vec3(1.0f))
+namespace
+{
+    // The mesh of the boxes: a box from -1 to 1 that raycasts can hit, with no GPU behind it
+    constexpr std::string_view kBoxObj = "v -1 -1 -1\nv 1 -1 -1\nv 1 1 1\nf 1 2 3\n";
+
+    struct BoxFixture
+    {
+        BoxFixture() { Temp.Write("box.obj", kBoxObj); }
+
+        TempFolder Temp;
+        FakeGpuResourceManager Gpu;
+        AssetManager Assets{ Gpu, Temp.Path() };
+    };
+}
+
+static Entity CreateBox(Scene& scene, AssetManager& assets, const char* name, const glm::vec3& position, const glm::vec3& scale = glm::vec3(1.0f))
 {
     const Entity entity = scene.CreateEntity(name);
     auto& transform = entity.GetComponent<TransformComponent>();
     transform.Position = position;
     transform.Scale = scale;
 
-    auto& renderer = entity.AddComponent<MeshRendererComponent>();
-    renderer.Resolved.SubMeshes.push_back({});
-    renderer.Resolved.Bounds = { glm::vec3(-1.0f), glm::vec3(1.0f) };
+    entity.AddComponent<MeshRendererComponent>().MeshAsset = assets.Find<MeshAsset>("box.obj");
 
     return entity;
 }
@@ -249,61 +270,88 @@ TEST_CASE("A transform with no scale keeps its rotation", "[scene]")
 TEST_CASE("A raycast finds the nearest box", "[scene]")
 {
     Scene scene;
+    BoxFixture boxes;
     const glm::vec3 origin(0.0f, 0.0f, 10.0f);
     const glm::vec3 forward(0.0f, 0.0f, -1.0f);
 
     SECTION("Misses when nothing is there")
     {
-        CreateBox(scene, "Aside", glm::vec3(5.0f, 0.0f, 0.0f));
+        CreateBox(scene, boxes.Assets, "Aside", glm::vec3(5.0f, 0.0f, 0.0f));
         scene.UpdateWorldTransforms();
-        CHECK_FALSE(scene.Raycast(origin, forward));
+        CHECK_FALSE(scene.Raycast(origin, forward, boxes.Assets));
     }
 
     SECTION("Doesn't hit what is behind it")
     {
-        CreateBox(scene, "Behind", glm::vec3(0.0f, 0.0f, 20.0f));
+        CreateBox(scene, boxes.Assets, "Behind", glm::vec3(0.0f, 0.0f, 20.0f));
         scene.UpdateWorldTransforms();
-        CHECK_FALSE(scene.Raycast(origin, forward));
+        CHECK_FALSE(scene.Raycast(origin, forward, boxes.Assets));
     }
 
     SECTION("Picks the nearer of two")
     {
-        CreateBox(scene, "Far", glm::vec3(0.0f));
-        const Entity near = CreateBox(scene, "Near", glm::vec3(0.0f, 0.0f, 5.0f));
+        CreateBox(scene, boxes.Assets, "Far", glm::vec3(0.0f));
+        const Entity near = CreateBox(scene, boxes.Assets, "Near", glm::vec3(0.0f, 0.0f, 5.0f));
         scene.UpdateWorldTransforms();
-        CHECK(scene.Raycast(origin, forward) == near);
+        CHECK(scene.Raycast(origin, forward, boxes.Assets) == near);
     }
 
     SECTION("Skips inactive entities")
     {
-        const Entity far = CreateBox(scene, "Far", glm::vec3(0.0f));
-        const Entity near = CreateBox(scene, "Near", glm::vec3(0.0f, 0.0f, 5.0f));
+        const Entity far = CreateBox(scene, boxes.Assets, "Far", glm::vec3(0.0f));
+        const Entity near = CreateBox(scene, boxes.Assets, "Near", glm::vec3(0.0f, 0.0f, 5.0f));
         near.GetComponent<NameComponent>().Active = false;
         scene.UpdateWorldTransforms();
-        CHECK(scene.Raycast(origin, forward) == far);
+        CHECK(scene.Raycast(origin, forward, boxes.Assets) == far);
     }
 
     SECTION("Skips entities without a loaded mesh")
     {
-        const Entity box = CreateBox(scene, "Box", glm::vec3(0.0f));
-        box.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.clear();
+        const Entity box = CreateBox(scene, boxes.Assets, "Box", glm::vec3(0.0f));
+        box.GetComponent<MeshRendererComponent>().MeshAsset = {};
         scene.UpdateWorldTransforms();
-        CHECK_FALSE(scene.Raycast(origin, forward));
+        CHECK_FALSE(scene.Raycast(origin, forward, boxes.Assets));
     }
 
     SECTION("Respects the transform's scale")
     {
-        const Entity wide = CreateBox(scene, "Wide", glm::vec3(0.0f), glm::vec3(10.0f, 1.0f, 1.0f));
+        const Entity wide = CreateBox(scene, boxes.Assets, "Wide", glm::vec3(0.0f), glm::vec3(10.0f, 1.0f, 1.0f));
         scene.UpdateWorldTransforms();
-        CHECK(scene.Raycast(glm::vec3(5.0f, 0.0f, 10.0f), forward) == wide);
+        CHECK(scene.Raycast(glm::vec3(5.0f, 0.0f, 10.0f), forward, boxes.Assets) == wide);
     }
 
     SECTION("Prefers what is in front over a box the camera is standing in")
     {
-        CreateBox(scene, "Room", glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(100.0f));
-        const Entity ahead = CreateBox(scene, "Ahead", glm::vec3(0.0f, 0.0f, 5.0f));
+        CreateBox(scene, boxes.Assets, "Room", glm::vec3(0.0f, 0.0f, 10.0f), glm::vec3(100.0f));
+        const Entity ahead = CreateBox(scene, boxes.Assets, "Ahead", glm::vec3(0.0f, 0.0f, 5.0f));
         scene.UpdateWorldTransforms();
-        CHECK(scene.Raycast(origin, forward) == ahead);
+        CHECK(scene.Raycast(origin, forward, boxes.Assets) == ahead);
+    }
+}
+
+TEST_CASE("The bounds of an entity's mesh are in the world", "[scene]")
+{
+    Scene scene;
+    BoxFixture boxes;
+
+    const Entity box = CreateBox(scene, boxes.Assets, "Box", glm::vec3(10.0f, 0.0f, 0.0f), glm::vec3(2.0f));
+    scene.UpdateWorldTransforms();
+
+    const std::optional<MeshBounds> bounds = scene.WorldBounds(box, boxes.Assets);
+    REQUIRE(bounds);
+    CheckNear(bounds->Min, glm::vec3(8.0f, -2.0f, -2.0f));
+    CheckNear(bounds->Max, glm::vec3(12.0f, 2.0f, 2.0f));
+
+    SECTION("An entity whose mesh is missing has none")
+    {
+        const Entity gone = CreateBox(scene, boxes.Assets, "Gone", glm::vec3(0.0f));
+        gone.GetComponent<MeshRendererComponent>().MeshAsset = {};
+        CHECK_FALSE(scene.WorldBounds(gone, boxes.Assets));
+    }
+
+    SECTION("An entity without a renderer has none")
+    {
+        CHECK_FALSE(scene.WorldBounds(scene.CreateEntity("Empty"), boxes.Assets));
     }
 }
 

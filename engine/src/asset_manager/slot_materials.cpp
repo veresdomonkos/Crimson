@@ -14,6 +14,7 @@ namespace fs = std::filesystem;
 namespace crimson
 {
     constexpr std::string_view kDefaultMaterialPath = "engine/materials/M_Default.mat";
+    constexpr std::string_view kMissingMaterialPath = "engine/materials/internal/M_Missing.mat";
 
     // The folder an asset is in, with a slash at the end, or empty at the top
     static std::string FolderOf(const std::string& path)
@@ -49,6 +50,17 @@ namespace crimson
                 return {};
 
             return assets.Find<MaterialAsset>(SlotMaterialPath(info->Path, slot));
+        }
+
+        MaterialID MissingMaterial(const AssetManager& assets)
+        {
+            return assets.Find<MaterialAsset>(kMissingMaterialPath);
+        }
+
+        MaterialID ForEmptySlot(const AssetManager& assets, MeshID mesh, std::string_view slot)
+        {
+            const MaterialID found = Find(assets, mesh, slot);
+            return found ? found : DefaultMaterial(assets);
         }
 
         SlotMaterials Create(AssetManager& assets, MeshID mesh)

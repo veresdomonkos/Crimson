@@ -17,7 +17,7 @@ namespace crimson::editor
         void SetPivot(const glm::vec3& pivot);
 
         // Moves the camera so the entity fills the view
-        void Frame(Entity entity);
+        void Frame(Entity entity, AssetManager& assets);
 
         void Update(float deltaTime);
 

@@ -65,7 +65,7 @@ namespace crimson::editor::ui
             return;
 
         Scene& scene = m_context.ActiveScene;
-        Entity entity = scene.Raycast(origin, direction);
+        Entity entity = scene.Raycast(origin, direction, m_context.Assets);
 
         // What is inside an instance can't be changed here, so a click means the instance
         while (entity && entity.HasComponent<InstancedComponent>())
@@ -164,7 +164,7 @@ namespace crimson::editor::ui
 
     void SceneViewportPanel::AssignAssetToEntity(AssetID asset, AssetType type, const glm::vec3& origin, const glm::vec3& direction)
     {
-        const Entity entity = m_context.ActiveScene.Raycast(origin, direction);
+        const Entity entity = m_context.ActiveScene.Raycast(origin, direction, m_context.Assets);
         if (!entity || entity.HasComponent<InstancedComponent>())
             return;
 

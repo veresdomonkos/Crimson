@@ -11,6 +11,7 @@
 
 namespace crimson
 {
+    class AssetManager; // only its name, as asset_manager.hpp includes this header through component_registry.hpp and entity.hpp
     class Entity;
 
     class Scene
@@ -43,11 +44,11 @@ namespace crimson
 
         // The nearest active mesh renderer whose bounds the ray hits, or an invalid entity.
         // Uses the world transforms of the last UpdateWorldTransforms.
-        [[nodiscard]] Entity Raycast(const glm::vec3& origin, const glm::vec3& direction);
+        [[nodiscard]] Entity Raycast(const glm::vec3& origin, const glm::vec3& direction, AssetManager& assets);
 
-        // The box around the entity's resolved mesh, in the world, or nothing without one.
+        // The box around the entity's mesh, in the world, or nothing without one.
         // Uses the world transforms of the last UpdateWorldTransforms.
-        [[nodiscard]] std::optional<MeshBounds> WorldBounds(Entity entity) const;
+        [[nodiscard]] std::optional<MeshBounds> WorldBounds(Entity entity, AssetManager& assets) const;
 
         // Call once a frame before reading TransformComponent::World or ActiveInHierarchy
         void UpdateWorldTransforms();

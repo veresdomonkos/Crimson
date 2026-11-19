@@ -23,6 +23,12 @@ namespace crimson
         // The material made for one of a mesh's slots: materials/<slot>.mat, next to the mesh. Invalid if there is none.
         [[nodiscard]] MaterialID Find(const AssetManager& assets, MeshID mesh, std::string_view slot);
 
+        // What a renderer's empty slot uses: the material made for the slot if there is one, else the default
+        [[nodiscard]] MaterialID ForEmptySlot(const AssetManager& assets, MeshID mesh, std::string_view slot);
+
+        // What a slot draws with when the material chosen for it is missing: a plain magenta one, to be seen
+        [[nodiscard]] MaterialID MissingMaterial(const AssetManager& assets);
+
         // Makes the material each slot of an .obj looks for, materials/<slot>.mat next to it, from its .mtl: colors,
         // textures and shininess on the default shader, with sRGB turned off on its normal maps. A slot that has one
         // already keeps it, so running it again changes nothing. Reimports textures, so it has to run between frames.

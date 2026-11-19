@@ -1180,3 +1180,30 @@ TEST_CASE("The version changes when assets come, go, move or load again", "[asse
         CHECK(changed());
     }
 }
+
+TEST_CASE("An empty slot uses the material made for it, or else the default", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("tri.obj", kTriangleObj);
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    const MeshID mesh = assets.Find<MeshAsset>("tri.obj");
+    const MaterialID defaultMaterial = slot_materials::DefaultMaterial(assets);
+    REQUIRE(defaultMaterial);
+
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == defaultMaterial);
+
+    temp.Write("materials/Paint.mat", kValidMaterial);
+    assets.Refresh();
+
+    const MaterialID made = assets.Find<MaterialAsset>("materials/Paint.mat");
+    REQUIRE(made);
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == made);
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Other") == defaultMaterial);
+
+    // What a missing material draws as is its own, in the engine's internal materials
+    CHECK(slot_materials::MissingMaterial(assets));
+    CHECK(slot_materials::MissingMaterial(assets) != defaultMaterial);
+    CHECK(assets.Get(slot_materials::MissingMaterial(assets)));
+}
