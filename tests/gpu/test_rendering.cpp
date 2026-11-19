@@ -163,7 +163,7 @@ float4 PSMain(VertexOutput input) : SV_Target { return Fetch(Albedo, input.UV); 
             REQUIRE(loaded);
             REQUIRE(loadedMaterial);
 
-            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*loaded, 0, { .MaterialOverride = loadedMaterial }); });
+            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*loaded, {}, 0, { .MaterialOverride = loadedMaterial }); });
 
             return Target.Read();
         }
@@ -227,8 +227,8 @@ TEST_CASE_METHOD(Fixture, "The nearer of two meshes wins, whichever is drawn fir
         RenderOneFrame([&](FrameRecorder& frame)
         {
             PassBuilder pass = frame.AddPass(Pass());
-            pass.DrawMesh(*near, 0, { .MaterialOverride = red });
-            pass.DrawMesh(*far, 0, { .MaterialOverride = green });
+            pass.DrawMesh(*near, {}, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*far, {}, 0, { .MaterialOverride = green });
         });
 
         CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kRed));
@@ -239,8 +239,8 @@ TEST_CASE_METHOD(Fixture, "The nearer of two meshes wins, whichever is drawn fir
         RenderOneFrame([&](FrameRecorder& frame)
         {
             PassBuilder pass = frame.AddPass(Pass());
-            pass.DrawMesh(*near, 0, { .MaterialOverride = green });
-            pass.DrawMesh(*far, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*near, {}, 0, { .MaterialOverride = green });
+            pass.DrawMesh(*far, {}, 0, { .MaterialOverride = red });
         });
 
         CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kGreen));
@@ -259,7 +259,7 @@ TEST_CASE_METHOD(Fixture, "An object's transform moves it", "[rendering]")
     RenderOneFrame([&](FrameRecorder& frame)
     {
         const ObjectId object = frame.AddObject(glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.0f)));
-        frame.AddPass(Pass()).DrawMesh(*mesh, object, { .MaterialOverride = red });
+        frame.AddPass(Pass()).DrawMesh(*mesh, {}, object, { .MaterialOverride = red });
     });
 
     const Image image = Target.Read();
@@ -287,8 +287,8 @@ TEST_CASE_METHOD(Fixture, "Materials keep their own properties", "[rendering]")
         RenderOneFrame([&](FrameRecorder& frame)
         {
             PassBuilder pass = frame.AddPass(Pass());
-            pass.DrawMesh(*left, 0, { .MaterialOverride = red });
-            pass.DrawMesh(*right, 0, { .MaterialOverride = green });
+            pass.DrawMesh(*left, {}, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*right, {}, 0, { .MaterialOverride = green });
         });
 
         return Target.Read();
@@ -335,7 +335,7 @@ TEST_CASE_METHOD(Fixture, "There can be more materials than one descriptor pool 
 
     Gpu().GPUResources->SetMaterialPropertyByName(materials.back(), "Color", glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
 
-    RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*mesh, 0, { .MaterialOverride = materials.back() }); });
+    RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*mesh, {}, 0, { .MaterialOverride = materials.back() }); });
     CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kGreen));
 
     for (const MaterialHandle material : materials)
@@ -387,8 +387,8 @@ TEST_CASE_METHOD(Fixture, "A transparent material blends over what is behind it"
         PassBuilder pass = frame.AddPass(Pass());
 
         // In the wrong order on purpose: opaque draws have to go first anyway
-        pass.DrawMesh(*front, 0, { .MaterialOverride = half });
-        pass.DrawMesh(*back, 0, { .MaterialOverride = red });
+        pass.DrawMesh(*front, {}, 0, { .MaterialOverride = half });
+        pass.DrawMesh(*back, {}, 0, { .MaterialOverride = red });
     });
 
     const Image image = Target.Read();
@@ -422,12 +422,12 @@ TEST_CASE_METHOD(Fixture, "Overlapping transparent draws blend back to front, wh
             PassBuilder pass = frame.AddPass(Pass());
 
             if (frontFirst)
-                pass.DrawMesh(*front, 0, { .MaterialOverride = halfGreen });
+                pass.DrawMesh(*front, {}, 0, { .MaterialOverride = halfGreen });
 
-            pass.DrawMesh(*back, 0, { .MaterialOverride = halfRed });
+            pass.DrawMesh(*back, {}, 0, { .MaterialOverride = halfRed });
 
             if (!frontFirst)
-                pass.DrawMesh(*front, 0, { .MaterialOverride = halfGreen });
+                pass.DrawMesh(*front, {}, 0, { .MaterialOverride = halfGreen });
         });
 
         return Target.Read().AtClip(0.0f, 0.0f);
@@ -459,7 +459,7 @@ TEST_CASE_METHOD(Fixture, "Passes can read what an earlier pass of the frame ren
     RenderOneFrame([&](FrameRecorder& frame)
     {
         frame.AddPass({ .Target = source.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f) } });
-        frame.AddPass(Pass()).DrawMesh(*mesh, 0, { .MaterialOverride = textured });
+        frame.AddPass(Pass()).DrawMesh(*mesh, {}, 0, { .MaterialOverride = textured });
     });
 
     CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kGreen));
@@ -560,7 +560,7 @@ float4 PSMain(VertexOutput input) : SV_Target { return float4(input.Correct, 0.0
     RenderOneFrame([&](FrameRecorder& frame)
     {
         const ObjectId object = frame.AddObject(transform);
-        frame.AddPass(Pass()).DrawMesh(*mesh, object, { .MaterialOverride = material });
+        frame.AddPass(Pass()).DrawMesh(*mesh, {}, object, { .MaterialOverride = material });
     });
 
     CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kRed));
@@ -612,8 +612,8 @@ TEST_CASE_METHOD(Fixture, "S_Unlit draws its color and texture, ignoring lights"
         RenderOneFrame([&](FrameRecorder& frame)
         {
             PassBuilder pass = frame.AddPass(Pass());
-            pass.DrawMesh(*back, 0, { .MaterialOverride = red });
-            pass.DrawMesh(*front, 0, { .MaterialOverride = half });
+            pass.DrawMesh(*back, {}, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*front, {}, 0, { .MaterialOverride = half });
         });
 
         const Image image = Target.Read();

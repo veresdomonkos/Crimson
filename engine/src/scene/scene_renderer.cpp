@@ -165,7 +165,7 @@ namespace crimson
         PassBuilder pass = frame.AddPass(sceneInfo);
 
         for (const Drawable& drawable : m_drawables)
-            pass.DrawMesh(*drawable.Mesh, drawable.Object);
+            pass.DrawMesh(*drawable.Mesh, drawable.Mesh->Materials, drawable.Object);
 
         if (m_hdrTarget)
         {
@@ -204,7 +204,7 @@ namespace crimson
             for (const Drawable& drawable : m_drawables)
             {
                 if (drawable.CastsShadows)
-                    pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth, .View = view });
+                    pass.DrawMesh(*drawable.Mesh, drawable.Mesh->Materials, drawable.Object, { .Variant = ShaderVariant::Depth, .View = view });
             }
         }
     }
@@ -223,7 +223,7 @@ namespace crimson
         for (const Drawable& drawable : m_drawables)
         {
             if (drawable.Outlined)
-                pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth });
+                pass.DrawMesh(*drawable.Mesh, drawable.Mesh->Materials, drawable.Object, { .Variant = ShaderVariant::Depth });
         }
     }
 }
