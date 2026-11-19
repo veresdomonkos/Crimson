@@ -5,7 +5,6 @@
 #include <fstream>
 #include <iterator>
 #include <system_error>
-#include <type_traits>
 #include <utility>
 #include "crimson/asset_manager/importers/material_importer.hpp"
 #include "crimson/asset_manager/importers/mesh_importer.hpp"
@@ -13,7 +12,6 @@
 #include "crimson/asset_manager/importers/shader_importer.hpp"
 #include "crimson/asset_manager/importers/texture_importer.hpp"
 #include "crimson/asset_manager/meta_file.hpp"
-#include "asset_store.hpp"
 #include "crimson/core/engine_resources.hpp"
 #include "crimson/core/hash.hpp"
 #include "crimson/core/log.hpp"
@@ -336,111 +334,15 @@ namespace crimson
         return store && store->IsLoaded(id);
     }
 
-    template <typename T>
-    AssetStore<T>& AssetManager::Store()
-    {
-        // Each one is made for its own place, in the constructor
-        return static_cast<AssetStore<T>&>(*m_stores[static_cast<size_t>(T::Tag)]);
-    }
-
     AssetStoreBase* AssetManager::StoreOf(AssetType type)
     {
         return m_stores[static_cast<size_t>(type)].get();
-    }
-
-    template <typename T>
-    typename AssetStore<T>::Slot* AssetManager::SlotFor(AssetID id)
-    {
-        const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.Type != T::Tag)
-            return nullptr;
-
-        return &Store<T>().GetOrCreate(id, static_cast<AssetImporter<T>&>(*it->second.Importer));
     }
 
     AssetSource AssetManager::SourceOf(const Record& record) const
     {
         return AssetSource{ record.Info, record.Embedded ? fs::path() : m_root / fs::path(record.Info.Path), record.Embedded };
     }
-
-    template <typename T>
-    LoadResult<T> AssetManager::Load(TypedAssetID<T> id)
-    {
-        auto* slot = SlotFor<T>(id);
-
-        if (slot && !slot->Tried())
-        {
-            ImportContext ctx{ m_gpuResources, *this, CacheFor(m_assets.at(id)) };
-
-            slot->Loaded = slot->Import(SourceOf(m_assets.at(id)), ctx);
-            slot->Failed = !slot->Loaded;
-
-            if (slot->Failed)
-                LOG_ERROR("[Assets] Failed to load {}", GetInfo(id)->Path);
-        }
-
-        const LoadedAsset<T>* loaded = slot && slot->Loaded ? &*slot->Loaded : nullptr;
-
-        if constexpr (std::is_pointer_v<LoadResult<T>>)
-            return loaded;
-        else
-            return loaded ? *loaded : LoadedAsset<T>::Invalid();
-    }
-
-    template <typename T>
-    const AssetData<T>* AssetManager::GetData(TypedAssetID<T> id)
-    {
-        auto* slot = SlotFor<T>(id);
-        if (!slot)
-            return nullptr;
-
-        if (!slot->Data)
-            slot->Data = Read(id);
-
-        return slot->Data ? &*slot->Data : nullptr;
-    }
-
-    template <typename T>
-    AssetUpdate AssetManager::Apply(TypedAssetID<T> id, const AssetData<T>& data)
-    {
-        const AssetInfo* info = GetInfo(id);
-        if (!info || info->ReadOnly)
-            return AssetUpdate::Failed;
-
-        Load(id);
-        const AssetData<T>* current = GetData(id);
-
-        auto& slot = *SlotFor<T>(id);
-        ImportContext ctx{ m_gpuResources, *this, CacheFor(m_assets.at(id)) };
-
-        if (slot.Loaded && current && slot.Importer->Update(*slot.Loaded, *current, data, ctx))
-        {
-            slot.Data = data;
-            slot.Uses = std::move(ctx.Uses);
-            return AssetUpdate::Updated;
-        }
-
-        ctx.Uses.clear();
-
-        std::optional<LoadedAsset<T>> replacement = slot.Importer->Create(data, SourceOf(m_assets.at(id)), ctx);
-        if (!replacement)
-            return AssetUpdate::Failed;
-
-        slot.Unload(m_gpuResources);
-        slot.Loaded = std::move(replacement);
-        slot.Failed = false;
-        slot.Data = data;
-        slot.Uses = std::move(ctx.Uses);
-        return AssetUpdate::Replaced;
-    }
-
-    template TextureHandle AssetManager::Load(TextureID);
-    template ShaderHandle AssetManager::Load(ShaderID);
-    template MaterialHandle AssetManager::Load(MaterialID);
-    template const Mesh* AssetManager::Load(MeshID);
-
-    template const MaterialData* AssetManager::GetData(MaterialID);
-    template AssetUpdate AssetManager::Apply(MaterialID, const MaterialData&);
 
     void AssetManager::WarnWrongType(std::string_view path, AssetType wanted) const
     {

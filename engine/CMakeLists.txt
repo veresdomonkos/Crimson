@@ -45,6 +45,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/asset_manager/asset_id.hpp
     include/crimson/asset_manager/asset_importer.hpp
     include/crimson/asset_manager/asset_manager.hpp
+    include/crimson/asset_manager/asset_store.hpp
     include/crimson/asset_manager/asset_types.hpp
     include/crimson/asset_manager/import_cache.hpp
     include/crimson/asset_manager/material_data.hpp
@@ -83,7 +84,6 @@ set(ENGINE_SOURCES
     src/asset_manager/asset_manager.cpp
     src/asset_manager/asset_ref.cpp
     src/asset_manager/asset_ref.hpp
-    src/asset_manager/asset_store.hpp
     src/asset_manager/binary_io.hpp
     src/asset_manager/engine_renames.hpp
     src/asset_manager/import_cache.cpp

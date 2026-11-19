@@ -10,11 +10,14 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <type_traits>
 
 #include "crimson/asset_manager/asset_importer.hpp"
+#include "crimson/asset_manager/asset_store.hpp"
 #include "crimson/asset_manager/import_cache.hpp"
 #include "crimson/asset_manager/material_data.hpp"
 #include "crimson/asset_manager/scene_data.hpp"
+#include "crimson/core/log.hpp"
 #include "crimson/scene/component_registry.hpp"
 
 namespace crimson
@@ -26,9 +29,6 @@ namespace crimson
         bool PathOnly = false; // written by hand without a guid, so its id was made up from the path
         AssetType Type = AssetType::None; // what it was read as, so it keeps a typed id while its asset is away
     };
-
-    class AssetStoreBase;
-    template <typename T> class AssetStore;
 
     // Knows every asset under one folder and loads them on first use. Destroying it frees what it loaded.
     // The engine's own shaders, materials and scenes are always available too, read-only, under "engine/".
@@ -220,4 +220,92 @@ namespace crimson
         // One per type that loads, by AssetType. Scenes have none.
         std::array<std::unique_ptr<AssetStoreBase>, kAssetTypeCount> m_stores;
     };
+
+    template <typename T>
+    AssetStore<T>& AssetManager::Store()
+    {
+        // Each one is made for its own place, in the constructor
+        return static_cast<AssetStore<T>&>(*m_stores[static_cast<size_t>(T::Tag)]);
+    }
+
+    template <typename T>
+    typename AssetStore<T>::Slot* AssetManager::SlotFor(AssetID id)
+    {
+        const auto it = m_assets.find(id);
+        if (it == m_assets.end() || it->second.Info.Type != T::Tag)
+            return nullptr;
+
+        return &Store<T>().GetOrCreate(id, static_cast<AssetImporter<T>&>(*it->second.Importer));
+    }
+
+    template <typename T>
+    LoadResult<T> AssetManager::Load(TypedAssetID<T> id)
+    {
+        auto* slot = SlotFor<T>(id);
+
+        if (slot && !slot->Tried())
+        {
+            ImportContext ctx{ m_gpuResources, *this, CacheFor(m_assets.at(id)) };
+
+            slot->Loaded = slot->Import(SourceOf(m_assets.at(id)), ctx);
+            slot->Failed = !slot->Loaded;
+
+            if (slot->Failed)
+                LOG_ERROR("[Assets] Failed to load {}", GetInfo(id)->Path);
+        }
+
+        const LoadedAsset<T>* loaded = slot && slot->Loaded ? &*slot->Loaded : nullptr;
+
+        if constexpr (std::is_pointer_v<LoadResult<T>>)
+            return loaded;
+        else
+            return loaded ? *loaded : LoadedAsset<T>::Invalid();
+    }
+
+    template <typename T>
+    const AssetData<T>* AssetManager::GetData(TypedAssetID<T> id)
+    {
+        auto* slot = SlotFor<T>(id);
+        if (!slot)
+            return nullptr;
+
+        if (!slot->Data)
+            slot->Data = Read(id);
+
+        return slot->Data ? &*slot->Data : nullptr;
+    }
+
+    template <typename T>
+    AssetUpdate AssetManager::Apply(TypedAssetID<T> id, const AssetData<T>& data)
+    {
+        const AssetInfo* info = GetInfo(id);
+        if (!info || info->ReadOnly)
+            return AssetUpdate::Failed;
+
+        Load(id);
+        const AssetData<T>* current = GetData(id);
+
+        auto& slot = *SlotFor<T>(id);
+        ImportContext ctx{ m_gpuResources, *this, CacheFor(m_assets.at(id)) };
+
+        if (slot.Loaded && current && slot.Importer->Update(*slot.Loaded, *current, data, ctx))
+        {
+            slot.Data = data;
+            slot.Uses = std::move(ctx.Uses);
+            return AssetUpdate::Updated;
+        }
+
+        ctx.Uses.clear();
+
+        std::optional<LoadedAsset<T>> replacement = slot.Importer->Create(data, SourceOf(m_assets.at(id)), ctx);
+        if (!replacement)
+            return AssetUpdate::Failed;
+
+        slot.Unload(m_gpuResources);
+        slot.Loaded = std::move(replacement);
+        slot.Failed = false;
+        slot.Data = data;
+        slot.Uses = std::move(ctx.Uses);
+        return AssetUpdate::Replaced;
+    }
 }
