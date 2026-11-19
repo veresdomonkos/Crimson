@@ -29,7 +29,7 @@ namespace crimson
 
     // The asset a reference's guid names, if it still exists
     template <typename Json>
-    static AssetID ResolveGuid(const AssetManager& assets, const Json& ref)
+    static AssetID ReadGuid(const AssetManager& assets, const Json& ref)
     {
         const AssetID id = assets.Redirect(ReadGuid(ref));
         return id && assets.GetInfo(id) ? id : AssetID{};
@@ -57,7 +57,7 @@ namespace crimson
     }
 
     // A missing one is remembered as the type it was expected to be
-    static AssetID ResolveAnyAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
+    static AssetID ReadAnyAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
     {
         if (ref.is_string())
         {
@@ -71,14 +71,14 @@ namespace crimson
         if (!ref.is_object())
             return {};
 
-        if (const AssetID id = ResolveGuid(assets, ref))
+        if (const AssetID id = ReadGuid(assets, ref))
             return id;
 
         std::string path = ref.contains("path") && ref["path"].is_string() ? ref["path"].get<std::string>() : std::string();
 
         if (const AssetID byPath = path.empty() ? AssetID{} : assets.FindId(path))
         {
-            LOG_WARN("[Assets] {}: stale guid, resolved by path '{}'", context, path);
+            LOG_WARN("[Assets] {}: stale guid, found by path '{}'", context, path);
             return byPath;
         }
 
@@ -86,12 +86,12 @@ namespace crimson
         return guid || !path.empty() ? RememberMissing(assets, guid, std::move(path), expected, context) : AssetID{};
     }
 
-    AssetID ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
+    AssetID ReadAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
     {
         if (!expected)
             return {};
 
-        const AssetID id = ResolveAnyAssetRef(assets, ref, expected, context);
+        const AssetID id = ReadAnyAssetRef(assets, ref, expected, context);
         if (!id)
             return id;
 
@@ -142,7 +142,7 @@ namespace crimson
         // The id wins over the path when reading, so this one was about something else that used to be there
         if (hasPath)
         {
-            if (const AssetID id = ResolveGuid(assets, ref); id && id != it->second)
+            if (const AssetID id = ReadGuid(assets, ref); id && id != it->second)
                 return false;
         }
 

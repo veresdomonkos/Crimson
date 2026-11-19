@@ -13,12 +13,12 @@ namespace crimson
     // The id goes first, and the path is what's left if the id went away. One whose asset isn't there keeps its id
     // (made up from the path if it had none), and AssetManager remembers how it was written and as what type, for
     // WriteAssetRef. One to an asset of another type is dropped, with a warning.
-    [[nodiscard]] AssetID ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context);
+    [[nodiscard]] AssetID ReadAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context);
 
     template <typename T>
-    [[nodiscard]] TypedAssetID<T> ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
+    [[nodiscard]] TypedAssetID<T> ReadAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
     {
-        return assets.As<T>(ResolveAssetRef(assets, ref, AssetType::Of<T>(), context));
+        return assets.As<T>(ReadAssetRef(assets, ref, AssetType::Of<T>(), context));
     }
 
     [[nodiscard]] nlohmann::ordered_json WriteAssetRef(const AssetManager& assets, AssetID id);

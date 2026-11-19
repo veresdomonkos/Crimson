@@ -98,7 +98,7 @@ namespace crimson
             data.Settings = ParseSettings(j, name);
 
             if (const auto shader = j.find("shader"); shader != j.end())
-                data.Shader = ResolveAssetRef<ShaderAsset>(assets, *shader, name);
+                data.Shader = ReadAssetRef<ShaderAsset>(assets, *shader, name);
             else
                 LOG_ERROR("[MaterialImporter] '{}': missing 'shader'", name);
 
@@ -116,7 +116,7 @@ namespace crimson
                 for (const auto& [slot, ref] : textures->items())
                 {
                     // One that is missing stays, for the file not to lose it
-                    if (const TextureID texture = ResolveAssetRef<TextureAsset>(assets, ref, std::string(name) + " " + slot))
+                    if (const TextureID texture = ReadAssetRef<TextureAsset>(assets, ref, std::string(name) + " " + slot))
                         data.Textures[slot] = texture;
                 }
             }

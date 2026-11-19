@@ -74,7 +74,7 @@ namespace crimson
         [[nodiscard]] bool IsLoaded(AssetID id) const;
 
         // A reference that was read while its asset wasn't there keeps its id, for it to be saved and work again once the
-        // file is back. Resolving a reference is only a read of the project, so remembering one counts as const.
+        // file is back. Reading a reference is only a read of the project, so remembering one counts as const.
         [[nodiscard]] bool IsMissing(AssetID id) const { return id && !GetInfo(id); }
         [[nodiscard]] const MissingAssetRef* GetMissing(AssetID id) const; // null unless IsMissing
         bool RememberMissing(AssetID id, MissingAssetRef ref) const; // whether it is new, for a warning only the first time

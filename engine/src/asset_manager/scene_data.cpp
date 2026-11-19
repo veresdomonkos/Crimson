@@ -95,7 +95,7 @@ namespace crimson
     // A missing asset is worth a warning only if the file named one
     static AssetID ReadRef(const AssetManager& assets, const nlohmann::ordered_json& ref, AssetType type, std::string_view file)
     {
-        const AssetID id = ResolveAssetRef(assets, ref, type, file);
+        const AssetID id = ReadAssetRef(assets, ref, type, file);
         if (!id && !ref.is_null())
             LOG_WARN("[Scene] '{}': no asset for {}", file, ref.dump());
 
