@@ -6,11 +6,6 @@
 #include <utility>
 
 #include "crimson/asset_manager/asset_manager.hpp"
-#include "crimson/asset_manager/importers/material_asset.hpp"
-#include "crimson/asset_manager/importers/mesh_asset.hpp"
-#include "crimson/asset_manager/importers/scene_asset.hpp"
-#include "crimson/asset_manager/importers/shader_asset.hpp"
-#include "crimson/asset_manager/importers/texture_asset.hpp"
 #include "crimson/core/hash.hpp"
 #include "crimson/core/log.hpp"
 
@@ -91,27 +86,27 @@ namespace crimson
         return guid || !path.empty() ? RememberMissing(assets, guid, std::move(path), expected, context) : AssetID{};
     }
 
-    template <typename T>
-    TypedAssetID<T> ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
+    AssetID ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
     {
-        const AssetID id = ResolveAnyAssetRef(assets, ref, T::Tag, context);
-        const TypedAssetID<T> typed = assets.As<T>(id);
+        if (expected == AssetType::None)
+            return {};
+
+        const AssetID id = ResolveAnyAssetRef(assets, ref, expected, context);
+        if (!id)
+            return id;
+
+        // What AssetManager::As checks
+        const AssetInfo* info = assets.GetInfo(id);
+        const MissingAssetRef* missing = info ? nullptr : assets.GetMissing(id);
+        const AssetType actual = info ? info->Type : missing ? missing->Type : AssetType::None;
+
+        if (actual == expected)
+            return id;
 
         // A broken file rather than one that is away for a while, so it isn't kept
-        if (id && !typed)
-        {
-            const AssetInfo* info = assets.GetInfo(id);
-            LOG_WARN("[Assets] {}: {} isn't a {}", context, info ? info->Path : id.ToString(), ToString(T::Tag));
-        }
-
-        return typed;
+        LOG_WARN("[Assets] {}: {} isn't a {}", context, info ? info->Path : id.ToString(), ToString(expected));
+        return {};
     }
-
-    template TextureID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
-    template MeshID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
-    template ShaderID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
-    template MaterialID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
-    template SceneID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
 
     nlohmann::ordered_json WriteAssetRef(const AssetManager& assets, AssetID id)
     {

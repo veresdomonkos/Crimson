@@ -5,18 +5,21 @@
 
 #include <nlohmann/json.hpp>
 
-#include "crimson/asset_manager/asset_id.hpp"
+#include "crimson/asset_manager/asset_manager.hpp"
 
 namespace crimson
 {
-    class AssetManager;
-
     // How the JSON asset formats point to other assets: { "guid": ..., "path": ... }, or only a path when written by hand.
     // The id goes first, and the path is what's left if the id went away. One whose asset isn't there keeps its id
     // (made up from the path if it had none), and AssetManager remembers how it was written and as what type, for
     // WriteAssetRef. One to an asset of another type is dropped, with a warning.
+    [[nodiscard]] AssetID ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context);
+
     template <typename T>
-    [[nodiscard]] TypedAssetID<T> ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context);
+    [[nodiscard]] TypedAssetID<T> ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
+    {
+        return assets.As<T>(ResolveAssetRef(assets, ref, T::Tag, context));
+    }
 
     [[nodiscard]] nlohmann::ordered_json WriteAssetRef(const AssetManager& assets, AssetID id);
 
