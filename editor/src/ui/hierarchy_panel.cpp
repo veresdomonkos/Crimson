@@ -41,12 +41,12 @@ namespace crimson::editor::ui
     {
         ImGui::Begin("Hierarchy");
 
-        Scene& scene = m_context.ActiveScene;
+        Scene& scene = m_context.Session.GetScene();
 
-        if (const AssetInfo* info = m_context.Assets.GetInfo(m_context.ActiveSceneAsset))
+        if (const AssetInfo* info = m_context.Session.GetAssets().GetInfo(m_context.Session.GetSceneAsset()))
         {
             const std::string name = std::filesystem::path(info->Path).stem().string();
-            ImGui::TextDisabled("%s%s", m_context.SceneChanged ? "* " : "", name.c_str());
+            ImGui::TextDisabled("%s%s", m_context.Session.IsSceneChanged() ? "* " : "", name.c_str());
             ImGui::SetItemTooltip("%s", info->Path.c_str());
         }
         else
@@ -79,7 +79,7 @@ namespace crimson::editor::ui
         ImGui::InvisibleButton("##HierarchyBackground", ImVec2(std::max(available.x, 1.0f), std::max(available.y, 1.0f)));
 
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-            m_context.SelectEntity({});
+            m_context.Session.SelectEntity({});
 
         if (ImGui::BeginDragDropTarget())
         {
@@ -88,9 +88,9 @@ namespace crimson::editor::ui
                 const entt::entity dropped = *static_cast<const entt::entity*>(payload->Data);
                 m_deferred.emplace_back([this, dropped]
                 {
-                    const Entity moved = m_context.ActiveScene.GetEntity(dropped);
-                    m_context.SceneUndo.Record(moved);
-                    m_context.ActiveScene.SetParent(moved, {});
+                    const Entity moved = m_context.Session.GetScene().GetEntity(dropped);
+                    m_context.Session.GetSceneEdits().Record(moved);
+                    m_context.Session.GetScene().SetParent(moved, {});
                 });
             }
 
@@ -103,10 +103,10 @@ namespace crimson::editor::ui
             ImGui::EndPopup();
         }
 
-        if (m_context.Selected && !m_context.Selected.HasComponent<InstancedComponent>() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)
+        if (m_context.Session.GetSelected() && !m_context.Session.GetSelected().HasComponent<InstancedComponent>() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)
             && !ImGui::GetIO().WantTextInput)
         {
-            const Entity selected = m_context.Selected;
+            const Entity selected = m_context.Session.GetSelected();
 
             if (ImGui::IsKeyPressed(ImGuiKey_Delete, false))
                 DeleteEntity(selected);
@@ -121,7 +121,8 @@ namespace crimson::editor::ui
         ImGui::End();
 
         // They are edits made at once, so they are steps of their own right away
-        m_context.Edited = m_context.Edited || !m_deferred.empty();
+        if (!m_deferred.empty())
+            m_context.Session.MarkEdited();
 
         for (const auto& action : m_deferred)
             action();
@@ -132,7 +133,7 @@ namespace crimson::editor::ui
     void HierarchyPanel::OnMainMenuBar()
     {
         // What comes from an instance's scene can only be looked at
-        const Entity selected = m_context.Selected;
+        const Entity selected = m_context.Session.GetSelected();
         const bool editable = selected && !selected.HasComponent<InstancedComponent>();
 
         if (ImGui::BeginMenu("Edit"))
@@ -157,8 +158,8 @@ namespace crimson::editor::ui
     {
         m_deferred.emplace_back([this, entity]
         {
-            m_context.SceneUndo.RecordDestroy(entity);
-            m_context.ActiveScene.DestroyEntity(entity);
+            m_context.Session.GetSceneEdits().RecordDestroy(entity);
+            m_context.Session.GetScene().DestroyEntity(entity);
         });
     }
 
@@ -178,7 +179,7 @@ namespace crimson::editor::ui
     // Marks an entity to be shown when its name matches or something under it does, and says whether it is
     bool HierarchyPanel::CollectMatches(entt::entity handle)
     {
-        const Entity entity = m_context.ActiveScene.GetEntity(handle);
+        const Entity entity = m_context.Session.GetScene().GetEntity(handle);
 
         bool shown = m_filter.PassFilter(entity.GetComponent<NameComponent>().Name.c_str());
 
@@ -199,7 +200,7 @@ namespace crimson::editor::ui
         if (searching && !m_shown.contains(handle))
             return;
 
-        Scene& scene = m_context.ActiveScene;
+        Scene& scene = m_context.Session.GetScene();
         const Entity entity = scene.GetEntity(handle);
 
         const auto& relationship = entity.GetComponent<RelationshipComponent>();
@@ -218,7 +219,7 @@ namespace crimson::editor::ui
         if (relationship.Children.empty())
             flags |= ImGuiTreeNodeFlags_Leaf;
 
-        if (m_context.Selected == entity)
+        if (m_context.Session.GetSelected() == entity)
             flags |= ImGuiTreeNodeFlags_Selected;
 
         const bool dimmed = readOnly || !entity.GetComponent<TransformComponent>().ActiveInHierarchy;
@@ -228,13 +229,13 @@ namespace crimson::editor::ui
         ImGui::PushID(static_cast<int>(entt::to_integral(handle)));
         const bool renaming = handle == m_renaming;
         const std::string label = renaming ? std::string() : isInstance ? name.Name + " [scene]" : name.Name;
-        const bool open = theme::IconTreeNode("##Entity", flags, EntityIcon(entity, m_context.Assets.Components()), theme::TextMuted, label.c_str());
+        const bool open = theme::IconTreeNode("##Entity", flags, EntityIcon(entity, m_context.Session.GetAssets().Components()), theme::TextMuted, label.c_str());
 
         if (dimmed)
             ImGui::PopStyleColor();
 
         if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
-            m_context.SelectEntity(entity);
+            m_context.Session.SelectEntity(entity);
 
         if (!readOnly && !renaming && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
             BeginRename(entity);
@@ -253,9 +254,9 @@ namespace crimson::editor::ui
                 const entt::entity dropped = *static_cast<const entt::entity*>(payload->Data);
                 m_deferred.emplace_back([this, dropped, entity]
                 {
-                    const Entity moved = m_context.ActiveScene.GetEntity(dropped);
-                    m_context.SceneUndo.Record(moved);
-                    m_context.ActiveScene.SetParent(moved, entity);
+                    const Entity moved = m_context.Session.GetScene().GetEntity(dropped);
+                    m_context.Session.GetSceneEdits().Record(moved);
+                    m_context.Session.GetScene().SetParent(moved, entity);
                 });
             }
 
@@ -308,7 +309,7 @@ namespace crimson::editor::ui
     void HierarchyPanel::DrawRenameField(Entity entity)
     {
         // The icon is drawn over the node and takes no room, so the field starts after it
-        const char* icon = EntityIcon(entity, m_context.Assets.Components());
+        const char* icon = EntityIcon(entity, m_context.Session.GetAssets().Components());
         ImGui::SameLine(0.0f, ImGui::CalcTextSize(icon).x + ImGui::GetStyle().ItemInnerSpacing.x * 2.0f);
         ImGui::SetNextItemWidth(-FLT_MIN);
 
@@ -337,7 +338,7 @@ namespace crimson::editor::ui
         if (!name.empty())
             m_deferred.emplace_back([this, entity, name = std::move(name)]
             {
-                m_context.SceneUndo.Record(entity);
+                m_context.Session.GetSceneEdits().Record(entity);
                 entity.GetComponent<NameComponent>().Name = name;
             });
     }
@@ -348,12 +349,12 @@ namespace crimson::editor::ui
         {
             m_deferred.emplace_back([this, parent, name = std::move(name), setup = std::move(setup)]
             {
-                const Entity created = m_context.ActiveScene.CreateEntity(name, parent);
+                const Entity created = m_context.Session.GetScene().CreateEntity(name, parent);
                 if (setup)
                     setup(created);
 
-                m_context.SceneUndo.RecordCreated(created);
-                m_context.SelectEntity(created);
+                m_context.Session.GetSceneEdits().RecordCreated(created);
+                m_context.Session.SelectEntity(created);
             });
         };
 
@@ -361,7 +362,7 @@ namespace crimson::editor::ui
             create("Entity", nullptr);
 
         // A submenu for each menu the components' presets name, in the order the components were registered
-        const ComponentRegistry& components = m_context.Assets.Components();
+        const ComponentRegistry& components = m_context.Session.GetAssets().Components();
 
         std::vector<std::string_view> menus;
         for (const ComponentType& type : components.Types())
@@ -383,7 +384,7 @@ namespace crimson::editor::ui
                 for (const ComponentPreset& preset : type.Presets)
                 {
                     if (preset.Menu == menu && ImGui::MenuItem(preset.Name.c_str()))
-                        create(preset.Name, [this, &type, &preset](Entity entity) { ApplyPreset(type, preset, entity, m_context.Assets); });
+                        create(preset.Name, [this, &type, &preset](Entity entity) { ApplyPreset(type, preset, entity, m_context.Session.GetAssets()); });
                 }
             }
 

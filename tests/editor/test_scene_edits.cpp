@@ -40,8 +40,7 @@ namespace
         AssetManager Assets{ Gpu, Temp.Path() };
         Scene World;
         SceneSettings Settings;
-        int SettingsChanges = 0;
-        SceneEdits Edits{ World, Assets, Settings, [this] { ++SettingsChanges; } };
+        SceneEdits Edits{ World, Assets, Settings };
         EditHistory History;
 
         Fixture() { History.AddSource(Edits); }
@@ -238,11 +237,9 @@ TEST_CASE_METHOD(Fixture, "The scene's settings are part of a step", "[scene edi
 
     REQUIRE(History.Undo());
     CHECK(Settings.PostProcessing.Exposure == 1.0f);
-    CHECK(SettingsChanges == 1);
 
     REQUIRE(History.Redo());
     CHECK(Settings.PostProcessing.Exposure == 2.0f);
-    CHECK(SettingsChanges == 2);
 }
 
 TEST_CASE_METHOD(Fixture, "The selection before a step comes back with its undo, once", "[scene edits]")
@@ -304,11 +301,9 @@ TEST_CASE_METHOD(Fixture, "Changing the main camera is a step", "[scene edits]")
 
     REQUIRE(History.Undo());
     CHECK_FALSE(Settings.MainCamera);
-    CHECK(SettingsChanges == 1);
 
     REQUIRE(History.Redo());
     CHECK(Settings.MainCamera == IdOf(camera));
-    CHECK(SettingsChanges == 2);
 }
 
 TEST_CASE_METHOD(Fixture, "A deleted main camera comes back as the main camera", "[scene edits]")

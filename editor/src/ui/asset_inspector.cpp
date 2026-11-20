@@ -82,7 +82,7 @@ namespace crimson::editor::ui
 
     void AssetInspector::Draw(AssetID id)
     {
-        const AssetInfo* info = m_context.Assets.GetInfo(id);
+        const AssetInfo* info = m_context.Session.GetAssets().GetInfo(id);
         if (!info)
         {
             ImGui::TextDisabled("Nothing selected");
@@ -100,14 +100,14 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawScene(const AssetInfo& info)
     {
-        const SceneID scene = m_context.Assets.As<SceneAsset>(info.Id);
-        const bool open = scene == m_context.ActiveSceneAsset;
+        const SceneID scene = m_context.Session.GetAssets().As<SceneAsset>(info.Id);
+        const bool open = scene == m_context.Session.GetSceneAsset();
 
         Section("Scene", false, [&]
         {
             ImGui::BeginDisabled(open);
             if (ImGui::Button(open ? "Open Already" : "Open", ImVec2(-1.0f, 0.0f)))
-                m_context.OpenScene(scene);
+                m_context.Session.OpenScene(scene);
             ImGui::EndDisabled();
 
             ImGui::TextDisabled("Drag it into the Scene view to use it in another scene");
@@ -123,7 +123,7 @@ namespace crimson::editor::ui
         ImGui::SameLine(0.0f, ImGui::GetStyle().ItemInnerSpacing.x * 2.0f);
         {
             const theme::ScopedBold bold;
-            ImGui::TextUnformatted(m_context.Edits.IsDirty(info.Id) ? (name + " *").c_str() : name.c_str());
+            ImGui::TextUnformatted(m_context.Session.GetAssetEdits().IsDirty(info.Id) ? (name + " *").c_str() : name.c_str());
         }
 
         // What it is and where, in a smaller muted line
@@ -142,8 +142,8 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawMaterial(const AssetInfo& info)
     {
-        AssetEdits& edits = m_context.Edits;
-        const MaterialID id = m_context.Assets.As<MaterialAsset>(info.Id);
+        AssetEdits& edits = m_context.Session.GetAssetEdits();
+        const MaterialID id = m_context.Session.GetAssets().As<MaterialAsset>(info.Id);
 
         const MaterialData* current = edits.Get(id);
         if (!current)
@@ -157,11 +157,11 @@ namespace crimson::editor::ui
 
         DrawMaterialSettings(id, info.ReadOnly, data, changed);
 
-        const ShaderHandle* shader = m_context.Assets.Get(data.Shader);
+        const ShaderHandle* shader = m_context.Session.GetAssets().Get(data.Shader);
 
         if (shader)
         {
-            const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(*shader);
+            const ShaderInterface& shaderInterface = m_context.Session.GetAssets().GetShaderInterface(*shader);
 
             if (!shaderInterface.Properties.empty())
                 Section("Properties", info.ReadOnly, [&] { DrawMaterialProperties(shaderInterface, data, changed); });
@@ -177,7 +177,7 @@ namespace crimson::editor::ui
         if (changed)
         {
             edits.Set(id, data);
-            m_context.Edited = true; // a drop or a choice from a list is a step right away, a drag only when it is let go
+            m_context.Session.MarkEdited(); // a drop or a choice from a list is a step right away, a drag only when it is let go
         }
     }
 
@@ -186,11 +186,11 @@ namespace crimson::editor::ui
         // Another material is drawn, so the picker was left by selecting it and the first one is still unpruned
         if (m_pickingShaderFor && m_pickingShaderFor != id)
         {
-            if (const MaterialData* left = m_context.Edits.Get(m_pickingShaderFor))
+            if (const MaterialData* left = m_context.Session.GetAssetEdits().Get(m_pickingShaderFor))
             {
                 MaterialData pruned = *left;
-                if (PruneToShader(m_context.Assets, pruned))
-                    m_context.Edits.Set(m_pickingShaderFor, pruned);
+                if (PruneToShader(m_context.Session.GetAssets(), pruned))
+                    m_context.Session.GetAssetEdits().Set(m_pickingShaderFor, pruned);
             }
 
             m_pickingShaderFor = {};
@@ -201,7 +201,7 @@ namespace crimson::editor::ui
         // The picker closed, by Enter or a click outside, or by Escape and the old shader is back. Checked outside the
         // section, so closing it while picking doesn't leave the material unpruned.
         const bool picking = m_shaderField && m_context.Picker.IsOpenFor(m_shaderField);
-        if (m_pickingShaderFor == id && !picking && PruneToShader(m_context.Assets, data))
+        if (m_pickingShaderFor == id && !picking && PruneToShader(m_context.Session.GetAssets(), data))
             changed = true;
 
         m_pickingShaderFor = picking ? id : MaterialID{};
@@ -224,7 +224,7 @@ namespace crimson::editor::ui
 
             // A drop has no picker to wait for
             if (!m_context.Picker.IsOpenFor(m_shaderField))
-                PruneToShader(m_context.Assets, data);
+                PruneToShader(m_context.Session.GetAssets(), data);
         }
 
         props::EndRow(false);
@@ -318,7 +318,7 @@ namespace crimson::editor::ui
         if (!props::BeginTable("##MaterialTextures"))
             return;
 
-        const AssetManager& assets = m_context.Assets;
+        const AssetManager& assets = m_context.Session.GetAssets();
 
         for (const auto& [name, texture] : SortedByName(shader.Textures))
         {
@@ -362,7 +362,7 @@ namespace crimson::editor::ui
         m_textureSize.reset();
         m_textureFileSize = 0;
 
-        const std::filesystem::path path = m_context.Assets.GetFilePath(info.Id);
+        const std::filesystem::path path = m_context.Session.GetAssets().GetFilePath(info.Id);
 
         std::ifstream file(path, std::ios::binary);
         if (!file)
@@ -384,7 +384,7 @@ namespace crimson::editor::ui
             ? static_cast<float>(m_textureSize->first) / static_cast<float>(m_textureSize->second)
             : 1.0f;
 
-        if (const ImTextureID preview = m_context.Thumbnails.Get(m_context.Assets.As<TextureAsset>(info.Id)))
+        if (const ImTextureID preview = m_context.Thumbnails.Get(m_context.Session.GetAssets().As<TextureAsset>(info.Id)))
             ImGui::Image(preview, ImVec2(available, available / aspect));
         else
             ImGui::TextDisabled("This image can't be read, see the console");
@@ -446,11 +446,11 @@ namespace crimson::editor::ui
 
         if (theme::PrimaryButton("Apply"))
         {
-            m_context.Deferred.emplace_back([this, id = m_context.Assets.As<TextureAsset>(info.Id), settings = m_textureSettings]
+            m_context.Deferred.emplace_back([this, id = m_context.Session.GetAssets().As<TextureAsset>(info.Id), settings = m_textureSettings]
             {
                 // Its id is about to stop working, and the next draw gets a new one
                 m_context.Thumbnails.Release(id);
-                m_context.Assets.Reimport(id, settings);
+                m_context.Session.GetAssets().Reimport(id, settings);
             });
         }
 
@@ -463,18 +463,18 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawMesh(const AssetInfo& info)
     {
-        const MeshID id = m_context.Assets.As<MeshAsset>(info.Id);
+        const MeshID id = m_context.Session.GetAssets().As<MeshAsset>(info.Id);
 
-        if (!m_context.Assets.IsLoaded(id))
+        if (!m_context.Session.GetAssets().IsLoaded(id))
         {
             // It can take seconds, so only when asked
             if (ImGui::Button("Load to see details"))
-                m_context.Deferred.emplace_back([this, id] { (void)m_context.Assets.Get(id); });
+                m_context.Deferred.emplace_back([this, id] { (void)m_context.Session.GetAssets().Get(id); });
 
             return;
         }
 
-        const Mesh* mesh = m_context.Assets.Get(id);
+        const Mesh* mesh = m_context.Session.GetAssets().Get(id);
         if (!mesh)
         {
             ImGui::TextDisabled("This mesh can't be read, see the console");
@@ -513,14 +513,14 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawShader(const AssetInfo& info)
     {
-        const ShaderHandle* shader = m_context.Assets.Get(m_context.Assets.As<ShaderAsset>(info.Id));
+        const ShaderHandle* shader = m_context.Session.GetAssets().Get(m_context.Session.GetAssets().As<ShaderAsset>(info.Id));
         if (!shader)
         {
             ImGui::TextDisabled("This shader doesn't compile, see the console");
             return;
         }
 
-        const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(*shader);
+        const ShaderInterface& shaderInterface = m_context.Session.GetAssets().GetShaderInterface(*shader);
 
         if (!shaderInterface.Properties.empty())
         {

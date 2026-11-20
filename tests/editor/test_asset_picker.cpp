@@ -128,7 +128,7 @@ TEST_CASE("A choice reaches only the field that opened the picker, once", "[asse
     CHECK_FALSE(picker.TakeChoice(1));
 }
 
-TEST_CASE("Confirming applies and closes, closing keeps the choice, and Reset drops it", "[asset picker]")
+TEST_CASE("Confirming applies and closes, and closing keeps the choice", "[asset picker]")
 {
     const AssetID current = AssetID::Generate();
     const AssetID chosen = AssetID::Generate();
@@ -175,16 +175,6 @@ TEST_CASE("Confirming applies and closes, closing keeps the choice, and Reset dr
         CHECK(picker.TakeChoice(1) == chosen);
     }
 
-    SECTION("Reset drops it")
-    {
-        picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
-        picker.Choose(chosen);
-        picker.Reset();
-
-        CHECK_FALSE(picker.IsOpen());
-        CHECK_FALSE(picker.TakeChoice(1));
-    }
-
     SECTION("Cancel goes back to what the field had before the picker opened")
     {
         picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
@@ -214,6 +204,72 @@ TEST_CASE("Confirming applies and closes, closing keeps the choice, and Reset dr
 
         picker.Cancel();
         CHECK(picker.TakeChoice(1) == current);
+    }
+}
+
+TEST_CASE("The picker closes once the field that opened it isn't drawn, and drops what it chose", "[asset picker]")
+{
+    const AssetID chosen = AssetID::Generate();
+
+    AssetPicker picker;
+
+    SECTION("It stays open while its field asks for a choice every frame")
+    {
+        picker.Open(1, AssetType::Of<MaterialAsset>(), {}, {});
+
+        for (int frame = 0; frame < 3; ++frame)
+        {
+            picker.EndFrame();
+            CHECK(picker.IsOpenFor(1));
+            CHECK_FALSE(picker.TakeChoice(1));
+        }
+    }
+
+    SECTION("It closes once its field is not drawn for a frame")
+    {
+        picker.Open(1, AssetType::Of<MaterialAsset>(), {}, {});
+        picker.EndFrame();
+        CHECK(picker.IsOpen());
+
+        picker.Choose(chosen);
+        picker.EndFrame();
+
+        CHECK_FALSE(picker.IsOpen());
+        CHECK_FALSE(picker.TakeChoice(1));
+    }
+
+    SECTION("Another field asking doesn't keep it open")
+    {
+        picker.Open(1, AssetType::Of<MaterialAsset>(), {}, {});
+        picker.EndFrame();
+
+        CHECK_FALSE(picker.TakeChoice(2));
+        picker.EndFrame();
+
+        CHECK_FALSE(picker.IsOpen());
+    }
+
+    SECTION("A choice made as it closed is dropped if its field is gone the next frame")
+    {
+        picker.Open(1, AssetType::Of<MaterialAsset>(), {}, {});
+        picker.EndFrame();
+
+        picker.Choose(chosen);
+        picker.Confirm();
+        picker.EndFrame();
+
+        CHECK_FALSE(picker.TakeChoice(1));
+    }
+
+    SECTION("A choice made as it closed reaches its field when that is drawn the next frame")
+    {
+        picker.Open(1, AssetType::Of<MaterialAsset>(), {}, {});
+        picker.EndFrame();
+
+        picker.Choose(chosen);
+        picker.Confirm();
+
+        CHECK(picker.TakeChoice(1) == chosen);
     }
 }
 

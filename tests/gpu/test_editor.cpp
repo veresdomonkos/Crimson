@@ -5,9 +5,11 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <crimson/core/log.hpp>
@@ -19,11 +21,15 @@
 #include <crimson/asset_manager/importers/shader_asset.hpp>
 #include <crimson/asset_manager/importers/texture_asset.hpp>
 
+#include <imgui.h>
+#include <imgui_internal.h>
+
 #include <crimson/scene/scene_serializer.hpp>
 #include <crimson_editor/editor_application.hpp>
 #include <crimson_editor/editor_settings.hpp>
 #include <crimson_editor/project_manager_mode.hpp>
 #include <crimson_editor/project_session_mode.hpp>
+#include <crimson_editor/ui/asset_field.hpp>
 
 #include "gpu/gpu_test.hpp"
 #include "support/temp_folder.hpp"
@@ -220,7 +226,7 @@ namespace
 
         ProjectSessionMode& Session() { return dynamic_cast<ProjectSessionMode&>(App.CurrentMode()); }
         EditorContext& Context() { return Session().GetContext(); }
-        AssetManager& Assets() { return Context().Assets; }
+        AssetManager& Assets() { return Context().Session.GetAssets(); }
     };
 }
 
@@ -235,10 +241,10 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of asset can be selected", "[editor]"
         const AssetID id = Assets().FindId(path);
         REQUIRE(id);
 
-        Context().SelectAsset(id);
+        Context().Session.SelectAsset(id);
         RunFrames(App);
 
-        CHECK(Context().SelectedAsset == id);
+        CHECK(Context().Session.GetSelectedAsset() == id);
     }
 }
 
@@ -271,60 +277,86 @@ TEST_CASE_METHOD(AssetFixture, "The Assets panel draws with and without the engi
 
 TEST_CASE_METHOD(AssetFixture, "Selecting an entity and an asset replace each other", "[editor]")
 {
-    const Entity entity = Context().ActiveScene.CreateEntity("Thing");
+    const Entity entity = Context().Session.GetScene().CreateEntity("Thing");
 
-    Context().SelectEntity(entity);
-    Context().SelectAsset(Assets().Find<MaterialAsset>("materials/floor.mat"));
-    CHECK_FALSE(Context().Selected);
+    Context().Session.SelectEntity(entity);
+    Context().Session.SelectAsset(Assets().Find<MaterialAsset>("materials/floor.mat"));
+    CHECK_FALSE(Context().Session.GetSelected());
 
-    Context().SelectEntity(entity);
-    CHECK_FALSE(Context().SelectedAsset);
+    Context().Session.SelectEntity(entity);
+    CHECK_FALSE(Context().Session.GetSelectedAsset());
 }
 
-// What it picks is checked by the picker's unit tests, as nothing here can click in it
-TEST_CASE_METHOD(AssetFixture, "The asset picker opens, draws both views and closes when the selection changes", "[editor]")
+namespace
 {
+    // Draws something in every frame, before the panels, for as long as it lives
+    class FrameDraw
+    {
+    public:
+        explicit FrameDraw(std::function<void()> draw)
+            : m_draw(std::move(draw)), m_context(ImGui::GetCurrentContext())
+        {
+            ImGuiContextHook hook;
+            hook.Type = ImGuiContextHookType_NewFramePost;
+            hook.Callback = [](ImGuiContext*, ImGuiContextHook* self) { (*static_cast<std::function<void()>*>(self->UserData))(); };
+            hook.UserData = &m_draw;
+            m_hook = ImGui::AddContextHook(m_context, &hook);
+        }
+
+        ~FrameDraw() { ImGui::RemoveContextHook(m_context, m_hook); }
+
+        FrameDraw(const FrameDraw&) = delete;
+        FrameDraw& operator=(const FrameDraw&) = delete;
+    private:
+        std::function<void()> m_draw;
+        ImGuiContext* m_context;
+        ImGuiID m_hook = 0;
+    };
+}
+
+// What it picks, and when it closes, is checked by the picker's unit tests. Nothing here can click a field's button, so a
+// field is drawn the way the Inspector draws its own, and the picker is opened for it.
+TEST_CASE_METHOD(AssetFixture, "The asset picker opens from a field and draws both views", "[editor]")
+{
+    using crimson::editor::ui::AssetField;
     using crimson::editor::ui::AssetPicker;
 
-    // The first root is the floor, which has a mesh and a material to draw fields for
-    Context().SelectEntity(Context().ActiveScene.GetEntity(Context().ActiveScene.GetRoots()[0]));
-    RunFrames(App);
-
     AssetPicker& picker = Context().Picker;
-    picker.Open(1, AssetType::Of<TextureAsset>(), {}, {});
-    RunFrames(App);
-    CHECK(picker.IsOpen());
+    AssetID texture;
+    ImGuiID owner = 0;
 
-    // The grid loads the texture's thumbnail
+    const FrameDraw field([&]
+    {
+        ImGui::Begin("Picker Field");
+        owner = ImGui::GetID("##Asset");
+        AssetField("##Asset", Context(), AssetType::Of<TextureAsset>(), texture);
+        ImGui::End();
+    });
+
+    RunFrames(App, 1);
+    REQUIRE(owner);
+
+    picker.Open(owner, AssetType::Of<TextureAsset>(), texture, {});
+    RunFrames(App);
+    CHECK(picker.IsOpenFor(owner));
+
+    // The grid loads the texture's thumbnail on the frame it is first drawn
     picker.SetView(AssetPicker::View::Grid);
     RunFrames(App);
-    CHECK(picker.IsOpen());
-
-    picker.Open(1, AssetType::Of<MaterialAsset>(), {}, {});
-    RunFrames(App);
-    CHECK(picker.IsOpen());
-
-    const MaterialID floor = Assets().Find<MaterialAsset>("materials/floor.mat");
-    Context().SelectAsset(floor);
-    RunFrames(App);
-    CHECK_FALSE(picker.IsOpen());
-
-    // The material's shader and texture fields
-    RunFrames(App);
-    CHECK(Context().SelectedAsset == floor);
+    CHECK(picker.IsOpenFor(owner));
 }
 
 TEST_CASE_METHOD(AssetFixture, "A pinged asset is shown in the Assets panel", "[editor]")
 {
     const AssetID selected = Assets().Find<MaterialAsset>("materials/floor.mat");
-    Context().SelectAsset(selected);
+    Context().Session.SelectAsset(selected);
 
     Context().PingedAsset = Assets().FindId("textures/picture.bmp");
     REQUIRE(Context().PingedAsset);
     RunFrames(App);
 
     CHECK_FALSE(Context().PingedAsset);
-    CHECK(Context().SelectedAsset == selected);
+    CHECK(Context().Session.GetSelectedAsset() == selected);
 
     // An engine asset is only in the panel while the engine's content is shown, so pinging one turns that on
     EditorSettings& settings = App.Services().Settings;
@@ -334,7 +366,7 @@ TEST_CASE_METHOD(AssetFixture, "A pinged asset is shown in the Assets panel", "[
     RunFrames(App);
 
     CHECK(settings.GetShowEngineContent());
-    CHECK(Context().SelectedAsset == selected);
+    CHECK(Context().Session.GetSelectedAsset() == selected);
 
     // The settings are shared by the tests that come after
     settings.SetShowEngineContent(false);
@@ -354,7 +386,7 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[
     });
     REQUIRE(health);
 
-    Scene& scene = Context().ActiveScene;
+    Scene& scene = Context().Session.GetScene();
     std::vector<Entity> entities;
 
     for (const LightType type : { LightType::Directional, LightType::Point, LightType::Spot })
@@ -397,7 +429,7 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[
     for (const Entity entity : entities)
     {
         CAPTURE(entity.GetComponent<NameComponent>().Name);
-        Context().SelectEntity(entity);
+        Context().Session.SelectEntity(entity);
         RunFrames(App, 2);
     }
 
@@ -406,12 +438,12 @@ TEST_CASE_METHOD(AssetFixture, "Every kind of entity draws in the Inspector", "[
 
 TEST_CASE_METHOD(AssetFixture, "The Scene view draws through a scene camera", "[editor]")
 {
-    Scene& scene = Context().ActiveScene;
+    Scene& scene = Context().Session.GetScene();
 
     const Entity camera = scene.CreateEntity("Camera");
     camera.AddComponent<CameraComponent>();
     camera.GetComponent<TransformComponent>().Position = glm::vec3(0.0f, 2.0f, 6.0f);
-    Context().SelectEntity(camera);
+    Context().Session.SelectEntity(camera);
 
     auto& view = Session().GetSceneView();
     view.LookThrough(camera);
@@ -441,9 +473,9 @@ TEST_CASE_METHOD(AssetFixture, "Creating from the Hierarchy's presets, and drawi
     Entity created;
     Context().Deferred.emplace_back([&]
     {
-        created = Context().ActiveScene.CreateEntity("Cube");
+        created = Context().Session.GetScene().CreateEntity("Cube");
         ApplyPreset(*renderer, *cube, created, Assets());
-        Context().SelectEntity(created);
+        Context().Session.SelectEntity(created);
     });
     RunFrames(App);
 
@@ -465,56 +497,56 @@ TEST_CASE_METHOD(AssetFixture, "A material's edits show, undo, redo and save", "
     const MaterialID id = Assets().Find<MaterialAsset>("materials/floor.mat");
     const MaterialHandle handle = *Assets().Get(id);
 
-    Context().SelectAsset(id);
+    Context().Session.SelectAsset(id);
     RunFrames(App);
 
-    MaterialData data = *Context().Edits.Get(id);
+    MaterialData data = *Context().Session.GetAssetEdits().Get(id);
     data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
     data.Textures["ColorMap"] = Assets().Find<TextureAsset>("textures/picture.bmp");
-    Context().Edits.Set(id, data);
+    Context().Session.GetAssetEdits().Set(id, data);
     RunFrames(App);
 
     CHECK(*Assets().Get(id) == handle);
     CHECK(*Assets().GetData(id) == data);
-    CHECK(Context().Edits.IsDirty(id));
+    CHECK(Context().Session.GetAssetEdits().IsDirty(id));
 
-    Session().Undo();
+    Session().GetSession().Undo();
     RunFrames(App);
 
     CHECK_FALSE(Assets().GetData(id)->Textures.contains("ColorMap"));
-    CHECK_FALSE(Context().Edits.IsDirty(id));
+    CHECK_FALSE(Context().Session.GetAssetEdits().IsDirty(id));
 
-    Session().Redo();
+    Session().GetSession().Redo();
     RunFrames(App);
 
     CHECK(*Assets().GetData(id) == data);
-    CHECK(Context().Edits.IsDirty(id));
+    CHECK(Context().Session.GetAssetEdits().IsDirty(id));
 
-    REQUIRE(Context().Edits.Save(id));
+    REQUIRE(Context().Session.GetAssetEdits().Save(id));
     CHECK(Assets().Read(id)->Properties.at("Color") == data.Properties.at("Color"));
 
     // A scene step undone with its entity still selected leaves no selection behind for a later step to undo into
-    Scene& scene = Context().ActiveScene;
+    Scene& scene = Context().Session.GetScene();
     const Entity entity = scene.GetEntity(scene.GetRoots()[0]);
-    Context().SelectEntity(entity);
+    Context().Session.SelectEntity(entity);
     RunFrames(App);
 
-    Context().SceneUndo.Record(entity);
+    Context().Session.GetSceneEdits().Record(entity);
     entity.GetComponent<TransformComponent>().Position.x += 1.0f;
-    REQUIRE(Session().GetHistory().Commit());
-    Session().Undo();
-    Session().Redo();
+    REQUIRE(Session().GetSession().GetHistory().Commit());
+    Session().GetSession().Undo();
+    Session().GetSession().Redo();
 
-    Context().SelectAsset(id);
+    Context().Session.SelectAsset(id);
     RunFrames(App);
 
-    MaterialData again = *Context().Edits.Get(id);
+    MaterialData again = *Context().Session.GetAssetEdits().Get(id);
     again.Properties["Color"] = { 0.0f, 0.0f, 1.0f, 1.0f };
-    Context().Edits.Set(id, again);
-    Session().Undo();
+    Context().Session.GetAssetEdits().Set(id, again);
+    Session().GetSession().Undo();
 
-    CHECK(Context().SelectedAsset == AssetID(id));
-    CHECK_FALSE(Context().Selected);
+    CHECK(Context().Session.GetSelectedAsset() == AssetID(id));
+    CHECK_FALSE(Context().Session.GetSelected());
 }
 
 TEST_CASE_METHOD(AssetFixture, "Changing a material's shader keeps the scene drawing", "[editor]")
@@ -522,9 +554,9 @@ TEST_CASE_METHOD(AssetFixture, "Changing a material's shader keeps the scene dra
     const MaterialID id = Assets().Find<MaterialAsset>("materials/floor.mat");
     const MaterialHandle before = *Assets().Get(id);
 
-    MaterialData data = *Context().Edits.Get(id);
+    MaterialData data = *Context().Session.GetAssetEdits().Get(id);
     data.Shader = Assets().Find<ShaderAsset>("shaders/own.hlsl");
-    Context().Edits.Set(id, data);
+    Context().Session.GetAssetEdits().Set(id, data);
     RunFrames(App);
 
     CHECK(*Assets().Get(id) != before);
@@ -537,7 +569,7 @@ TEST_CASE_METHOD(AssetFixture, "Reimporting a texture a panel is showing", "[edi
 {
     const TextureID id = Assets().Find<TextureAsset>("textures/picture.bmp");
 
-    Context().SelectAsset(id);
+    Context().Session.SelectAsset(id);
     RunFrames(App);
 
     nlohmann::json settings = Assets().GetInfo(id)->Settings;
@@ -554,7 +586,7 @@ TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
     SECTION("A material: the entity falls back to the default one")
     {
         const MaterialID id = Assets().Find<MaterialAsset>("materials/floor.mat");
-        Context().SelectAsset(id);
+        Context().Session.SelectAsset(id);
         RunFrames(App);
 
         Context().Deferred.emplace_back([&]
@@ -565,7 +597,7 @@ TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
         });
         RunFrames(App);
 
-        CHECK_FALSE(Context().SelectedAsset);
+        CHECK_FALSE(Context().Session.GetSelectedAsset());
         CHECK(App.Services().Graphics.Renderer->GetStats().DrawCalls > 0);
     }
 
@@ -588,10 +620,10 @@ TEST_CASE_METHOD(AssetFixture, "Deleting assets the scene is using", "[editor]")
     {
         const MaterialID material = Assets().Find<MaterialAsset>("materials/floor.mat");
 
-        MaterialData data = *Context().Edits.Get(material);
+        MaterialData data = *Context().Session.GetAssetEdits().Get(material);
         data.Textures["ColorMap"] = Assets().Find<TextureAsset>("textures/picture.bmp");
-        Context().Edits.Set(material, data);
-        Context().SelectAsset(material);
+        Context().Session.GetAssetEdits().Set(material, data);
+        Context().Session.SelectAsset(material);
         RunFrames(App);
 
         Context().Deferred.emplace_back([&]
@@ -627,29 +659,29 @@ TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[edit
 {
     const MaterialID id = Assets().Find<MaterialAsset>("materials/floor.mat");
 
-    MaterialData data = *Context().Edits.Get(id);
+    MaterialData data = *Context().Session.GetAssetEdits().Get(id);
     data.Properties["Color"] = { 0.0f, 1.0f, 0.0f, 1.0f };
-    Context().Edits.Set(id, data);
+    Context().Session.GetAssetEdits().Set(id, data);
     RunFrames(App);
 
     App.RequestQuit();
     RunFrames(App);
 
     CHECK(App.IsRunning());
-    REQUIRE(Session().IsAskingAboutUnsavedChanges());
+    REQUIRE(Session().GetSession().IsClosePending());
 
     SECTION("Cancel stays")
     {
-        Session().CancelClose();
+        Session().GetSession().CancelClose();
         RunFrames(App);
 
         CHECK(App.IsRunning());
-        CHECK(Context().Edits.IsDirty(id));
+        CHECK(Context().Session.GetAssetEdits().IsDirty(id));
     }
 
     SECTION("Discard closes without saving")
     {
-        Session().DiscardAllAndClose();
+        Session().GetSession().DiscardAllAndClose();
 
         CHECK_FALSE(App.IsRunning());
         CHECK_FALSE(Assets().Read(id)->Properties.contains("Color"));
@@ -657,7 +689,7 @@ TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[edit
 
     SECTION("Save writes it and closes")
     {
-        Session().SaveAllAndClose();
+        Session().GetSession().SaveAllAndClose();
 
         CHECK_FALSE(App.IsRunning());
         CHECK(Assets().Read(id)->Properties.at("Color") == data.Properties.at("Color"));
@@ -667,33 +699,33 @@ TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[edit
 TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[editor]")
 {
     const SceneID id = Assets().Find<SceneAsset>("scenes/main.scene");
-    REQUIRE(Context().ActiveSceneAsset == id);
-    CHECK_FALSE(Session().IsSceneChanged());
+    REQUIRE(Context().Session.GetSceneAsset() == id);
+    CHECK_FALSE(Session().GetSession().CheckSceneChanged());
 
-    Context().ActiveScene.CreateEntity("New");
-    CHECK(Session().IsSceneChanged());
+    Context().Session.GetScene().CreateEntity("New");
+    CHECK(Session().GetSession().CheckSceneChanged());
 
     SECTION("Saving writes it")
     {
-        REQUIRE(Session().SaveAll());
+        REQUIRE(Session().GetSession().SaveAll());
 
-        CHECK_FALSE(Session().IsSceneChanged());
+        CHECK_FALSE(Session().GetSession().CheckSceneChanged());
         CHECK(Assets().Read(id)->Roots.back().Name == "New");
     }
 
     SECTION("The main camera is part of it")
     {
-        const Entity camera = Context().ActiveScene.CreateEntity("Camera");
+        const Entity camera = Context().Session.GetScene().CreateEntity("Camera");
         camera.AddComponent<CameraComponent>();
-        REQUIRE(Session().SaveAll());
-        REQUIRE_FALSE(Session().IsSceneChanged());
+        REQUIRE(Session().GetSession().SaveAll());
+        REQUIRE_FALSE(Session().GetSession().CheckSceneChanged());
 
         const AssetID cameraId = camera.GetComponent<NameComponent>().Id;
-        Session().GetSettings().MainCamera = cameraId;
-        CHECK(Session().IsSceneChanged());
+        Session().GetSession().GetSettings().MainCamera = cameraId;
+        CHECK(Session().GetSession().CheckSceneChanged());
 
-        REQUIRE(Session().SaveAll());
-        CHECK_FALSE(Session().IsSceneChanged());
+        REQUIRE(Session().GetSession().SaveAll());
+        CHECK_FALSE(Session().GetSession().CheckSceneChanged());
 
         // What a reopened scene is made from
         CHECK(Assets().Read(id)->Settings.MainCamera == cameraId);
@@ -703,9 +735,9 @@ TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[edit
     {
         App.RequestQuit();
         RunFrames(App);
-        REQUIRE(Session().IsAskingAboutUnsavedChanges());
+        REQUIRE(Session().GetSession().IsClosePending());
 
-        Session().SaveAllAndClose();
+        Session().GetSession().SaveAllAndClose();
 
         CHECK_FALSE(App.IsRunning());
         CHECK(Assets().Read(id)->Roots.back().Name == "New");
@@ -718,25 +750,25 @@ TEST_CASE_METHOD(AssetFixture, "A scene's changes show and can be saved", "[edit
         RunFrames(App);
         REQUIRE(other);
 
-        Context().OpenScene(other);
+        Context().Session.OpenScene(other);
         RunFrames(App);
-        REQUIRE(Session().IsAskingAboutUnsavedChanges());
-        CHECK(Context().ActiveSceneAsset == id);
+        REQUIRE(Session().GetSession().IsClosePending());
+        CHECK(Context().Session.GetSceneAsset() == id);
 
-        Session().DiscardAllAndClose();
+        Session().GetSession().DiscardAllAndClose();
         RunFrames(App);
 
-        CHECK(Context().ActiveSceneAsset == other);
-        CHECK_FALSE(Session().IsSceneChanged());
+        CHECK(Context().Session.GetSceneAsset() == other);
+        CHECK_FALSE(Session().GetSession().CheckSceneChanged());
         CHECK(Assets().Read(id)->Roots.back().Name == "Sun");
     }
 }
 
 TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]")
 {
-    Scene& scene = Context().ActiveScene;
+    Scene& scene = Context().Session.GetScene();
     REQUIRE(scene.GetRoots().size() >= 2);
-    CHECK_FALSE(Session().GetHistory().CanUndo());
+    CHECK_FALSE(Session().GetSession().GetHistory().CanUndo());
 
     const auto root = [&scene](size_t index) { return scene.GetEntity(scene.GetRoots()[index]); };
     const auto idOf = [](Entity entity) { return entity.GetComponent<NameComponent>().Id; };
@@ -746,142 +778,142 @@ TEST_CASE_METHOD(AssetFixture, "Scene edits can be undone and redone", "[editor]
 
     SECTION("A deleted entity comes back where it was, with its id, and the scene is as saved again")
     {
-        Context().SceneUndo.RecordDestroy(root(0));
+        Context().Session.GetSceneEdits().RecordDestroy(root(0));
         scene.DestroyEntity(root(0));
-        Session().GetHistory().Commit();
-        REQUIRE(Session().GetHistory().CanUndo());
+        Session().GetSession().GetHistory().Commit();
+        REQUIRE(Session().GetSession().GetHistory().CanUndo());
 
-        Session().Undo();
+        Session().GetSession().Undo();
 
         REQUIRE(scene.GetRoots().size() == roots);
         CHECK(idOf(root(0)) == firstId);
-        CHECK_FALSE(Session().IsSceneChanged());
-        CHECK_FALSE(Context().SceneChanged);
+        CHECK_FALSE(Session().GetSession().CheckSceneChanged());
+        CHECK_FALSE(Context().Session.IsSceneChanged());
 
-        Session().Redo();
+        Session().GetSession().Redo();
 
         CHECK(scene.GetRoots().size() == roots - 1);
-        CHECK(Session().IsSceneChanged());
+        CHECK(Session().GetSession().CheckSceneChanged());
     }
 
     SECTION("A deleted entity that was selected is selected again, by its id")
     {
-        Context().SelectEntity(root(0));
+        Context().Session.SelectEntity(root(0));
         RunFrames(App, 1);
 
         Context().Deferred.emplace_back([&]
         {
-            Context().SceneUndo.RecordDestroy(root(0));
+            Context().Session.GetSceneEdits().RecordDestroy(root(0));
             scene.DestroyEntity(root(0));
         });
         RunFrames(App, 1);
-        CHECK_FALSE(Context().Selected);
+        CHECK_FALSE(Context().Session.GetSelected());
 
-        Session().Undo();
+        Session().GetSession().Undo();
 
-        REQUIRE(Context().Selected);
-        CHECK(idOf(Context().Selected) == firstId);
-        CHECK(Context().Selected == root(0));
+        REQUIRE(Context().Session.GetSelected());
+        CHECK(idOf(Context().Session.GetSelected()) == firstId);
+        CHECK(Context().Session.GetSelected() == root(0));
 
         // With nothing left to undo, the selection stays as it is
-        REQUIRE_FALSE(Session().GetHistory().CanUndo());
-        Context().SelectEntity({});
-        Session().Undo();
-        CHECK_FALSE(Context().Selected);
+        REQUIRE_FALSE(Session().GetSession().GetHistory().CanUndo());
+        Context().Session.SelectEntity({});
+        Session().GetSession().Undo();
+        CHECK_FALSE(Context().Session.GetSelected());
     }
 
     SECTION("The selected entity is recorded, so what the Inspector or the gizmo does to it is one step")
     {
         const Entity selected = root(1);
-        Context().SelectEntity(selected);
+        Context().Session.SelectEntity(selected);
         RunFrames(App, 1);
 
         // Changed over a few frames, as a drag would
         for (int frame = 0; frame < 3; ++frame)
             selected.GetComponent<TransformComponent>().Position.x += 1.0f;
 
-        Context().Edited = true;
+        Context().Session.MarkEdited();
         RunFrames(App, 1);
 
-        Session().Undo();
+        Session().GetSession().Undo();
 
         // The same entity, as only it was put back
-        CHECK(Context().Selected == selected);
+        CHECK(Context().Session.GetSelected() == selected);
         CHECK(selected.GetComponent<TransformComponent>().Position.x == 0.0f);
-        CHECK_FALSE(Session().GetHistory().CanUndo());
+        CHECK_FALSE(Session().GetSession().GetHistory().CanUndo());
     }
 
     SECTION("Edits recorded between frames are each a step of their own, right away")
     {
-        Context().Deferred.emplace_back([&] { Context().SceneUndo.RecordCreated(scene.CreateEntity("First")); });
+        Context().Deferred.emplace_back([&] { Context().Session.GetSceneEdits().RecordCreated(scene.CreateEntity("First")); });
         RunFrames(App, 1);
-        CHECK(Session().GetHistory().CanUndo());
+        CHECK(Session().GetSession().GetHistory().CanUndo());
 
-        Context().Deferred.emplace_back([&] { Context().SceneUndo.RecordCreated(scene.CreateEntity("Second")); });
+        Context().Deferred.emplace_back([&] { Context().Session.GetSceneEdits().RecordCreated(scene.CreateEntity("Second")); });
         RunFrames(App, 1);
 
-        Session().Undo();
+        Session().GetSession().Undo();
         CHECK(scene.GetRoots().size() == roots + 1);
 
-        Session().Undo();
+        Session().GetSession().Undo();
         CHECK(scene.GetRoots().size() == roots);
     }
 
     SECTION("Nothing is undone while the asset picker is open")
     {
-        Context().Deferred.emplace_back([&] { Context().SceneUndo.RecordCreated(scene.CreateEntity("First")); });
+        Context().Deferred.emplace_back([&] { Context().Session.GetSceneEdits().RecordCreated(scene.CreateEntity("First")); });
         RunFrames(App, 1);
 
         Context().Picker.Open(1, AssetType::Of<TextureAsset>(), {}, {});
         RunFrames(App, 1);
         REQUIRE(Context().Picker.IsOpen());
 
-        Session().Undo();
+        Session().GetSession().Undo();
         CHECK(scene.GetRoots().size() == roots + 1);
 
         Context().Picker.Close();
         RunFrames(App, 1);
 
-        Session().Undo();
+        Session().GetSession().Undo();
         CHECK(scene.GetRoots().size() == roots);
     }
 
     SECTION("Opening another scene forgets the steps")
     {
-        Context().SceneUndo.RecordDestroy(root(0));
+        Context().Session.GetSceneEdits().RecordDestroy(root(0));
         scene.DestroyEntity(root(0));
-        Session().GetHistory().Commit();
-        REQUIRE(Session().SaveAll());
+        Session().GetSession().GetHistory().Commit();
+        REQUIRE(Session().GetSession().SaveAll());
 
         SceneID other;
         Context().Deferred.emplace_back([&] { other = Assets().Create<SceneAsset>("scenes/other.scene"); });
         RunFrames(App);
 
-        Context().OpenScene(other);
+        Context().Session.OpenScene(other);
         RunFrames(App);
 
-        REQUIRE(Context().ActiveSceneAsset == other);
-        CHECK_FALSE(Session().GetHistory().CanUndo());
-        CHECK_FALSE(Session().GetHistory().CanRedo());
+        REQUIRE(Context().Session.GetSceneAsset() == other);
+        CHECK_FALSE(Session().GetSession().GetHistory().CanUndo());
+        CHECK_FALSE(Session().GetSession().GetHistory().CanRedo());
     }
 }
 
 TEST_CASE_METHOD(AssetFixture, "Opening a scene replaces the one showing", "[editor]")
 {
-    const Entity old = Context().ActiveScene.GetEntity(Context().ActiveScene.GetRoots()[0]);
-    Context().SelectEntity(old);
+    const Entity old = Context().Session.GetScene().GetEntity(Context().Session.GetScene().GetRoots()[0]);
+    Context().Session.SelectEntity(old);
 
     SceneID other;
     Context().Deferred.emplace_back([&] { other = Assets().Create<SceneAsset>("scenes/other.scene"); });
     RunFrames(App);
 
-    Context().OpenScene(other);
+    Context().Session.OpenScene(other);
     RunFrames(App);
 
-    CHECK(Context().ActiveSceneAsset == other);
-    CHECK_FALSE(Context().Selected);
-    REQUIRE(Context().ActiveScene.GetRoots().size() == 1);
-    CHECK(Context().ActiveScene.GetEntity(Context().ActiveScene.GetRoots()[0]).GetComponent<NameComponent>().Name == "Sun");
+    CHECK(Context().Session.GetSceneAsset() == other);
+    CHECK_FALSE(Context().Session.GetSelected());
+    REQUIRE(Context().Session.GetScene().GetRoots().size() == 1);
+    CHECK(Context().Session.GetScene().GetEntity(Context().Session.GetScene().GetRoots()[0]).GetComponent<NameComponent>().Name == "Sun");
 
     SECTION("It is the one that opens next time")
     {
@@ -890,12 +922,12 @@ TEST_CASE_METHOD(AssetFixture, "Opening a scene replaces the one showing", "[edi
         App.Services().OpenProject(OpenProject);
         RunFrames(App);
 
-        CHECK(Context().ActiveSceneAsset == other);
+        CHECK(Context().Session.GetSceneAsset() == other);
     }
 
     SECTION("Deleting it goes on to another one, without asking")
     {
-        Context().ActiveScene.CreateEntity("Unsaved");
+        Context().Session.GetScene().CreateEntity("Unsaved");
 
         Context().Deferred.emplace_back([&]
         {
@@ -905,8 +937,8 @@ TEST_CASE_METHOD(AssetFixture, "Opening a scene replaces the one showing", "[edi
         });
         RunFrames(App);
 
-        CHECK(Context().ActiveSceneAsset == Assets().Find<SceneAsset>("scenes/main.scene"));
-        CHECK_FALSE(Session().IsAskingAboutUnsavedChanges());
+        CHECK(Context().Session.GetSceneAsset() == Assets().Find<SceneAsset>("scenes/main.scene"));
+        CHECK_FALSE(Session().GetSession().IsClosePending());
     }
 }
 
@@ -922,8 +954,8 @@ TEST_CASE_METHOD(AssetFixture, "Deleting the only scene makes a new one", "[edit
     });
     RunFrames(App);
 
-    CHECK(Context().ActiveSceneAsset);
-    CHECK(Context().ActiveSceneAsset != id);
+    CHECK(Context().Session.GetSceneAsset());
+    CHECK(Context().Session.GetSceneAsset() != id);
     CHECK(IsShowing<ProjectSessionMode>(App));
 }
 
@@ -938,7 +970,7 @@ TEST_CASE_METHOD(AssetFixture, "A scene's instances draw, and go empty without t
     {
         Assets().Refresh();
         source = Assets().Find<SceneAsset>("scenes/crate.scene");
-        instance = CreateSceneInstance(source, Context().ActiveScene, {}, Assets(), Context().ActiveSceneAsset);
+        instance = CreateSceneInstance(source, Context().Session.GetScene(), {}, Assets(), Context().Session.GetSceneAsset());
     });
     RunFrames(App);
 
@@ -949,10 +981,10 @@ TEST_CASE_METHOD(AssetFixture, "A scene's instances draw, and go empty without t
     CHECK(drawCalls > 0);
 
     // Panels draw what is selected, read-only or not
-    const Entity child = Context().ActiveScene.GetEntity(instance.GetComponent<RelationshipComponent>().Children[0]);
-    Context().SelectEntity(child);
+    const Entity child = Context().Session.GetScene().GetEntity(instance.GetComponent<RelationshipComponent>().Children[0]);
+    Context().Session.SelectEntity(child);
     RunFrames(App);
-    Context().SelectEntity(instance);
+    Context().Session.SelectEntity(instance);
     RunFrames(App);
 
     Context().Deferred.emplace_back([&]
@@ -979,9 +1011,9 @@ TEST_CASE("A project with no scene gets one", "[editor]")
 
     auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
 
-    CHECK(session.GetContext().ActiveSceneAsset == session.GetContext().Assets.Find<SceneAsset>("scenes/main.scene"));
+    CHECK(session.GetContext().Session.GetSceneAsset() == session.GetContext().Session.GetAssets().Find<SceneAsset>("scenes/main.scene"));
     CHECK(std::filesystem::exists(temp.Path() / "Empty/assets/scenes/main.scene"));
-    CHECK_FALSE(session.IsSceneChanged());
+    CHECK_FALSE(session.GetSession().CheckSceneChanged());
 }
 
 TEST_CASE("A broken scene isn't saved over", "[editor]")
@@ -1000,12 +1032,12 @@ TEST_CASE("A broken scene isn't saved over", "[editor]")
     auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
     EditorContext& context = session.GetContext();
 
-    CHECK_FALSE(context.ActiveSceneAsset);
+    CHECK_FALSE(context.Session.GetSceneAsset());
     CHECK(ExpectLoggedErrors("scenes/main.scene") > 0);
 
-    context.ActiveScene.CreateEntity("Would be lost");
-    CHECK_FALSE(session.IsSceneChanged());
-    CHECK(session.SaveAll());
+    context.Session.GetScene().CreateEntity("Would be lost");
+    CHECK_FALSE(session.GetSession().CheckSceneChanged());
+    CHECK(session.GetSession().SaveAll());
 
     std::ifstream stream(file, std::ios::binary);
     CHECK(std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()) == kBroken);
@@ -1013,7 +1045,7 @@ TEST_CASE("A broken scene isn't saved over", "[editor]")
     RunFrames(app);
 }
 
-TEST_CASE("A project with a broken shader still opens", "[editor]")
+TEST_CASE("A project with a broken shader and a broken scene still opens", "[editor]")
 {
     ShutdownGpu();
 
@@ -1021,6 +1053,7 @@ TEST_CASE("A project with a broken shader still opens", "[editor]")
     const Project project = MakeProject(temp, "Broken", true);
     temp.Write("Broken/assets/broken.hlsl", "this does not compile");
     temp.Write("Broken/assets/materials/floor.mat", R"({ "shader": "broken.hlsl" })");
+    temp.Write("Broken/assets/scenes/main.scene", "{ not json");
 
     EditorApplication app(SelectedBackend(), project.Root());
     RunFrames(app);
@@ -1029,6 +1062,7 @@ TEST_CASE("A project with a broken shader still opens", "[editor]")
 
     CHECK(ExpectLoggedErrors("broken.hlsl") > 0);
     CHECK(ExpectLoggedErrors("materials/floor.mat") > 0);
+    CHECK(ExpectLoggedErrors("scenes/main.scene") > 0);
 }
 
 static std::string ReadBytes(const std::filesystem::path& file)
@@ -1062,12 +1096,12 @@ TEST_CASE("A scene that wasn't closed normally is offered again", "[editor]")
         RunFrames(app);
 
         auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
-        id = session.GetContext().ActiveSceneAsset;
+        id = session.GetContext().Session.GetSceneAsset();
         REQUIRE(id);
 
-        session.GetContext().ActiveScene.CreateEntity("Unsaved");
-        session.WriteRecovery();
-        CHECK_FALSE(session.IsAskingAboutRecovery());
+        session.GetContext().Session.GetScene().CreateEntity("Unsaved");
+        session.GetSession().WriteRecovery();
+        CHECK_FALSE(session.GetSession().GetOfferedRecovery().has_value());
 
         // Gone without closing, like a killed process. The recovery files finish what they were writing.
     }
@@ -1082,22 +1116,22 @@ TEST_CASE("A scene that wasn't closed normally is offered again", "[editor]")
     auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
     EditorContext& context = session.GetContext();
 
-    REQUIRE(session.IsAskingAboutRecovery());
-    CHECK(context.ActiveSceneAsset == id);
-    CHECK(context.Assets.List(AssetType::Of<SceneAsset>()).size() == 2); // this one and the engine's
-    CHECK(std::ranges::count_if(context.Assets.List(AssetType::Of<SceneAsset>()), [](const AssetInfo* scene) { return !scene->ReadOnly; }) == 1);
-    CHECK_FALSE(session.IsSceneChanged());
+    REQUIRE(session.GetSession().GetOfferedRecovery().has_value());
+    CHECK(context.Session.GetSceneAsset() == id);
+    CHECK(context.Session.GetAssets().List(AssetType::Of<SceneAsset>()).size() == 2); // this one and the engine's
+    CHECK(std::ranges::count_if(context.Session.GetAssets().List(AssetType::Of<SceneAsset>()), [](const AssetInfo* scene) { return !scene->ReadOnly; }) == 1);
+    CHECK_FALSE(session.GetSession().CheckSceneChanged());
 
-    session.RestoreRecovery();
+    session.GetSession().RestoreRecovery();
     RunFrames(app);
 
-    CHECK_FALSE(session.IsAskingAboutRecovery());
-    CHECK(session.IsSceneChanged());
-    CHECK(HasEntityNamed(context.ActiveScene, "Unsaved"));
+    CHECK_FALSE(session.GetSession().GetOfferedRecovery().has_value());
+    CHECK(session.GetSession().CheckSceneChanged());
+    CHECK(HasEntityNamed(context.Session.GetScene(), "Unsaved"));
     CHECK(ReadBytes(sceneFile) == savedBytes);
 
-    REQUIRE(session.SaveAll());
-    CHECK(context.Assets.Read(id)->Roots.back().Name == "Unsaved");
+    REQUIRE(session.GetSession().SaveAll());
+    CHECK(context.Session.GetAssets().Read(id)->Roots.back().Name == "Unsaved");
     CHECK_FALSE(std::filesystem::exists(copy));
 }
 
@@ -1114,11 +1148,11 @@ TEST_CASE("Discarding a recovery copy keeps the file, and a stale one goes witho
 
     auto& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
     EditorContext& context = session.GetContext();
-    const SceneID main = context.ActiveSceneAsset;
+    const SceneID main = context.Session.GetSceneAsset();
     REQUIRE(main);
 
     SceneID other;
-    context.Deferred.emplace_back([&] { other = context.Assets.Create<SceneAsset>("scenes/other.scene"); });
+    context.Deferred.emplace_back([&] { other = context.Session.GetAssets().Create<SceneAsset>("scenes/other.scene"); });
     RunFrames(app);
     REQUIRE(other);
 
@@ -1135,24 +1169,24 @@ TEST_CASE("Discarding a recovery copy keeps the file, and a stale one goes witho
                                                       R"({ "version": 1, "entities": [ { "name": "Too old" } ] })");
     std::filesystem::last_write_time(mainCopy, std::filesystem::last_write_time(mainFile) - std::chrono::hours(1));
 
-    context.OpenScene(other);
+    context.Session.OpenScene(other);
     RunFrames(app);
 
-    REQUIRE(context.ActiveSceneAsset == other);
-    REQUIRE(session.IsAskingAboutRecovery());
+    REQUIRE(context.Session.GetSceneAsset() == other);
+    REQUIRE(session.GetSession().GetOfferedRecovery().has_value());
 
-    session.DiscardRecovery();
-    CHECK_FALSE(session.IsAskingAboutRecovery());
+    session.GetSession().DiscardRecovery();
+    CHECK_FALSE(session.GetSession().GetOfferedRecovery().has_value());
     CHECK_FALSE(std::filesystem::exists(otherCopy));
-    CHECK_FALSE(session.IsSceneChanged());
-    CHECK_FALSE(HasEntityNamed(context.ActiveScene, "From the copy"));
+    CHECK_FALSE(session.GetSession().CheckSceneChanged());
+    CHECK_FALSE(HasEntityNamed(context.Session.GetScene(), "From the copy"));
     CHECK(ReadBytes(otherFile) == otherBytes);
 
-    context.OpenScene(main);
+    context.Session.OpenScene(main);
     RunFrames(app);
 
-    CHECK(context.ActiveSceneAsset == main);
-    CHECK_FALSE(session.IsAskingAboutRecovery());
+    CHECK(context.Session.GetSceneAsset() == main);
+    CHECK_FALSE(session.GetSession().GetOfferedRecovery().has_value());
     CHECK_FALSE(std::filesystem::exists(mainCopy));
 
     app.RequestQuit();

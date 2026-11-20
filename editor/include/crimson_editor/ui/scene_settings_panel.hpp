@@ -1,7 +1,5 @@
 #pragma once
 
-#include <crimson/scene/scene_renderer.hpp>
-
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/ui/panel.hpp"
 
@@ -13,8 +11,7 @@ namespace crimson::editor::ui
     class SceneSettingsPanel : public Panel
     {
     public:
-        SceneSettingsPanel(EditorContext& context, SceneRenderer& renderer, SceneSettings& settings)
-            : m_context(context), m_renderer(renderer), m_settings(settings) {}
+        explicit SceneSettingsPanel(EditorContext& context) : m_context(context) {}
 
         void OnImGui() override;
     private:
@@ -22,7 +19,5 @@ namespace crimson::editor::ui
         void DrawPostProcessing();
     private:
         EditorContext& m_context;
-        SceneRenderer& m_renderer;
-        SceneSettings& m_settings;
     };
 }

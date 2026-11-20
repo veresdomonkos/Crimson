@@ -24,7 +24,7 @@ namespace crimson::editor::ui
         if (!AssetField(id, context, AssetType::Of<T>(), picked))
             return false;
 
-        current = context.Assets.As<T>(picked);
+        current = context.Session.GetAssets().As<T>(picked);
         return true;
     }
 }

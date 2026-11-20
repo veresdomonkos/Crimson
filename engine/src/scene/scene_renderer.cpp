@@ -105,7 +105,12 @@ namespace crimson
 
     void SceneRenderer::SetToneMapping(float exposure, ToneMapper mapper)
     {
-        m_toneMapping = std::make_pair(exposure, mapper);
+        const std::pair<float, ToneMapper> values(exposure, mapper);
+
+        if (m_toneMapping == values)
+            return;
+
+        m_toneMapping = values;
 
         if (m_hdrTarget)
         {
