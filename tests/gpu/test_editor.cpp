@@ -558,7 +558,8 @@ TEST_CASE_METHOD(AssetFixture, "Deleting a material and a mesh the scene draws k
     CHECK(IsShowing<ProjectSessionMode>(App));
 }
 
-TEST_CASE("A project with a broken shader and a broken scene still opens", "[editor]")
+// Separate from the broken scene, as a scene that doesn't load never gets to the shader
+TEST_CASE("A project with a broken shader still opens", "[editor]")
 {
     ShutdownGpu();
 
@@ -566,7 +567,6 @@ TEST_CASE("A project with a broken shader and a broken scene still opens", "[edi
     const Project project = MakeProject(temp, "Broken", true);
     temp.Write("Broken/assets/broken.hlsl", "this does not compile");
     temp.Write("Broken/assets/materials/floor.mat", R"({ "shader": "broken.hlsl" })");
-    temp.Write("Broken/assets/scenes/main.scene", "{ not json");
 
     EditorApplication app(SelectedBackend(), project.Root());
     RunFrames(app);
@@ -575,6 +575,21 @@ TEST_CASE("A project with a broken shader and a broken scene still opens", "[edi
 
     CHECK(ExpectLoggedErrors("broken.hlsl") > 0);
     CHECK(ExpectLoggedErrors("materials/floor.mat") > 0);
+}
+
+TEST_CASE("A project with a broken scene still opens", "[editor]")
+{
+    ShutdownGpu();
+
+    const TempFolder temp;
+    const Project project = MakeProject(temp, "Broken", true);
+    temp.Write("Broken/assets/scenes/main.scene", "{ not json");
+
+    EditorApplication app(SelectedBackend(), project.Root());
+    RunFrames(app);
+
+    CHECK(IsShowing<ProjectSessionMode>(app));
+
     CHECK(ExpectLoggedErrors("scenes/main.scene") > 0);
 }
 

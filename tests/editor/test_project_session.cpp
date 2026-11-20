@@ -35,10 +35,12 @@ namespace
 {
     constexpr std::string_view kQuad = "v -1 0 1\nv 1 0 1\nv 1 0 -1\nv -1 0 -1\nvn 0 1 0\nf 1//1 2//1 3//1 4//1\n";
 
+    // With ids, as the editor saves them. An entity without one gets a new id on every load, so a scene loaded again
+    // would never match a copy of it.
     constexpr std::string_view kMainScene = R"({ "version": 1, "entities": [
-            { "name": "Floor", "meshRenderer": { "mesh": "meshes/floor.obj", "materials": [ "materials/floor.mat" ] } },
-            { "name": "Pyramid", "meshRenderer": { "mesh": "meshes/pyramid.obj" } },
-            { "name": "Sun", "light": { "type": "directional" } }
+            { "id": "00000000000000a1", "name": "Floor", "meshRenderer": { "mesh": "meshes/floor.obj", "materials": [ "materials/floor.mat" ] } },
+            { "id": "00000000000000a2", "name": "Pyramid", "meshRenderer": { "mesh": "meshes/pyramid.obj" } },
+            { "id": "00000000000000a3", "name": "Sun", "light": { "type": "directional" } }
         ] })";
 
     // One pixel
