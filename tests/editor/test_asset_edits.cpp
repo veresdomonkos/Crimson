@@ -8,6 +8,10 @@
 #include <vector>
 
 #include <crimson/asset_manager/slot_materials.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/shader_asset.hpp>
+#include <crimson/asset_manager/importers/texture_asset.hpp>
+
 #include <crimson/scene/entity.hpp>
 #include <crimson_editor/asset_edits.hpp>
 #include <crimson_editor/edit_history.hpp>
@@ -52,7 +56,7 @@ namespace
         AssetManager Assets{ Gpu, Temp.Path() };
         AssetEdits Edits{ Assets };
         EditHistory History;
-        MaterialID Id = Assets.Find<AssetType::Material>("mine.mat");
+        MaterialID Id = Assets.Find<MaterialAsset>("mine.mat");
 
         MaterialData MakeChanged()
         {
@@ -146,7 +150,7 @@ TEST_CASE_METHOD(Fixture, "An edit is unsaved until it is saved", "[asset edits]
 
 TEST_CASE_METHOD(Fixture, "Edits reach the GPU when they are applied", "[asset edits]")
 {
-    const MaterialHandle handle = Assets.Load(Id);
+    const MaterialHandle handle = *Assets.Get(Id);
     REQUIRE(handle);
 
     MaterialData changed = MakeChanged();
@@ -156,18 +160,18 @@ TEST_CASE_METHOD(Fixture, "Edits reach the GPU when they are applied", "[asset e
     // Panels make the edit in the middle of a frame, when the GPU's copy has to stay as it is
     CHECK(GpuCull(handle) == CullMode::Back);
 
-    CHECK_FALSE(Edits.Apply());
+    Edits.Apply();
     CHECK(GpuCull(handle) == CullMode::None);
 
     SECTION("Discarding everything shows the file's version again")
     {
         Edits.DiscardAll();
-        CHECK_FALSE(Edits.Apply());
+        Edits.Apply();
         CHECK(GpuCull(handle) == CullMode::Back);
     }
 }
 
-TEST_CASE_METHOD(Fixture, "Another shader asks for handles to be got again", "[asset edits]")
+TEST_CASE_METHOD(Fixture, "Another shader gives the material a new handle", "[asset edits]")
 {
     Temp.Write("own.hlsl", R"(
 #include "crimson/bindings.hlsli"
@@ -177,13 +181,17 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     Assets.Refresh();
 
     MaterialData changed = *Edits.Get(Id);
-    changed.Shader = Assets.Find<AssetType::Shader>("own.hlsl");
+    changed.Shader = Assets.Find<ShaderAsset>("own.hlsl");
     Edits.Set(Id, changed);
 
-    CHECK(Edits.Apply());
+    const MaterialHandle before = *Assets.Get(Id);
+    Edits.Apply();
+    CHECK(*Assets.Get(Id) != before);
 
-    // It only happens once, not on every call
-    CHECK_FALSE(Edits.Apply());
+    // Not again on the next call
+    const MaterialHandle after = *Assets.Get(Id);
+    Edits.Apply();
+    CHECK(*Assets.Get(Id) == after);
 }
 
 TEST_CASE_METHOD(Fixture, "An edit that can't be shown is undone", "[asset edits]")
@@ -192,12 +200,12 @@ TEST_CASE_METHOD(Fixture, "An edit that can't be shown is undone", "[asset edits
     Assets.Refresh();
 
     MaterialData changed = *Edits.Get(Id);
-    changed.Shader = Assets.Find<AssetType::Shader>("broken.hlsl");
+    changed.Shader = Assets.Find<ShaderAsset>("broken.hlsl");
     Edits.Set(Id, changed);
 
-    CHECK_FALSE(Edits.Apply());
+    Edits.Apply();
 
-    CHECK(Edits.Get(Id)->Shader == Assets.Find<AssetType::Shader>("engine/shaders/S_Lit.hlsl"));
+    CHECK(Edits.Get(Id)->Shader == Assets.Find<ShaderAsset>("engine/shaders/S_Lit.hlsl"));
     CHECK_FALSE(Edits.IsDirty(Id));
 
     // Nothing is left of it to undo
@@ -219,7 +227,7 @@ TEST_CASE_METHOD(Fixture, "Engine materials can't be edited", "[asset edits]")
 
 TEST_CASE_METHOD(Fixture, "A material property change is undone and redone", "[asset edits]")
 {
-    const MaterialHandle handle = Assets.Load(Id);
+    const MaterialHandle handle = *Assets.Get(Id);
     const MaterialData original = *Edits.Get(Id);
 
     MaterialData changed = MakeChanged();
@@ -250,7 +258,7 @@ TEST_CASE_METHOD(Fixture, "A setting and a texture are undone", "[asset edits]")
 
     MaterialData changed = original;
     changed.Settings.Cull = CullMode::None;
-    changed.Textures["ColorMap"] = Assets.Find<AssetType::Texture>("picture.bmp");
+    changed.Textures["ColorMap"] = Assets.Find<TextureAsset>("picture.bmp");
     Edits.Set(Id, changed);
     REQUIRE(History.Commit());
 
@@ -316,14 +324,14 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     Assets.Refresh();
 
     MaterialData changed = *Edits.Get(Id);
-    changed.Shader = Assets.Find<AssetType::Shader>("own.hlsl");
+    changed.Shader = Assets.Find<ShaderAsset>("own.hlsl");
     Edits.Set(Id, changed);
     REQUIRE(History.Commit());
-    REQUIRE(Edits.Apply());
+    Edits.Apply();
 
     REQUIRE(History.Undo());
-    CHECK(Edits.Apply());
-    CHECK(Assets.GetData(Id)->Shader == Assets.Find<AssetType::Shader>("engine/shaders/S_Lit.hlsl"));
+    Edits.Apply();
+    CHECK(Assets.GetData(Id)->Shader == Assets.Find<ShaderAsset>("engine/shaders/S_Lit.hlsl"));
 }
 
 TEST_CASE_METHOD(Fixture, "A step for a forgotten material is skipped", "[asset edits]")

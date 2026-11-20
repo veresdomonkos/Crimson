@@ -1,5 +1,6 @@
 #pragma once
 #include "crimson/asset_manager/asset_importer.hpp"
+#include "crimson/asset_manager/importers/scene_asset.hpp"
 
 namespace crimson
 {
@@ -7,7 +8,7 @@ namespace crimson
     class SceneImporter final : public AssetImporterBase
     {
     public:
-        AssetType Type() const override { return AssetType::Scene; }
+        AssetType Type() const override { return AssetType::Of<SceneAsset>(); }
         std::span<const std::string_view> Extensions() const override;
         nlohmann::json DefaultSettings() const override { return nlohmann::json::object(); }
 

@@ -8,6 +8,10 @@
 #include <fmt/format.h>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/shader_asset.hpp>
+
 
 #include "gpu/gpu_test.hpp"
 #include "support/temp_folder.hpp"
@@ -154,12 +158,12 @@ float4 PSMain(VertexOutput input) : SV_Target { return Fetch(Albedo, input.UV); 
 
         Image RenderMesh(AssetManager& assets, const char* mesh, const char* material)
         {
-            const Mesh* loaded = assets.Load<AssetType::Mesh>(mesh);
-            const MaterialHandle loadedMaterial = assets.Load<AssetType::Material>(material);
+            const Mesh* loaded = assets.Get<MeshAsset>(mesh);
+            const MaterialHandle loadedMaterial = *assets.Get<MaterialAsset>(material);
             REQUIRE(loaded);
             REQUIRE(loadedMaterial);
 
-            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*loaded, 0, { .MaterialOverride = loadedMaterial }); });
+            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*loaded, {}, 0, { .MaterialOverride = loadedMaterial }); });
 
             return Target.Read();
         }
@@ -210,21 +214,21 @@ TEST_CASE_METHOD(Fixture, "The nearer of two meshes wins, whichever is drawn fir
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
-    const Mesh* near = assets.Load<AssetType::Mesh>("near.obj");
-    const Mesh* far = assets.Load<AssetType::Mesh>("far.obj");
+    const Mesh* near = assets.Get<MeshAsset>("near.obj");
+    const Mesh* far = assets.Get<MeshAsset>("far.obj");
     REQUIRE(near);
     REQUIRE(far);
 
-    const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
-    const MaterialHandle green = assets.Load<AssetType::Material>("green.mat");
+    const MaterialHandle red = *assets.Get<MaterialAsset>("red.mat");
+    const MaterialHandle green = *assets.Get<MaterialAsset>("green.mat");
 
     SECTION("Near one sorts first")
     {
         RenderOneFrame([&](FrameRecorder& frame)
         {
             PassBuilder pass = frame.AddPass(Pass());
-            pass.DrawMesh(*near, 0, { .MaterialOverride = red });
-            pass.DrawMesh(*far, 0, { .MaterialOverride = green });
+            pass.DrawMesh(*near, {}, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*far, {}, 0, { .MaterialOverride = green });
         });
 
         CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kRed));
@@ -235,8 +239,8 @@ TEST_CASE_METHOD(Fixture, "The nearer of two meshes wins, whichever is drawn fir
         RenderOneFrame([&](FrameRecorder& frame)
         {
             PassBuilder pass = frame.AddPass(Pass());
-            pass.DrawMesh(*near, 0, { .MaterialOverride = green });
-            pass.DrawMesh(*far, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*near, {}, 0, { .MaterialOverride = green });
+            pass.DrawMesh(*far, {}, 0, { .MaterialOverride = red });
         });
 
         CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kGreen));
@@ -248,14 +252,14 @@ TEST_CASE_METHOD(Fixture, "An object's transform moves it", "[rendering]")
     Project.Write("small.obj", MakeQuad(-0.25f, -0.25f, 0.25f, 0.25f));
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
-    const Mesh* mesh = assets.Load<AssetType::Mesh>("small.obj");
+    const Mesh* mesh = assets.Get<MeshAsset>("small.obj");
     REQUIRE(mesh);
-    const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
+    const MaterialHandle red = *assets.Get<MaterialAsset>("red.mat");
 
     RenderOneFrame([&](FrameRecorder& frame)
     {
         const ObjectId object = frame.AddObject(glm::translate(glm::mat4(1.0f), glm::vec3(0.5f, 0.5f, 0.0f)));
-        frame.AddPass(Pass()).DrawMesh(*mesh, object, { .MaterialOverride = red });
+        frame.AddPass(Pass()).DrawMesh(*mesh, {}, object, { .MaterialOverride = red });
     });
 
     const Image image = Target.Read();
@@ -270,21 +274,21 @@ TEST_CASE_METHOD(Fixture, "Materials keep their own properties", "[rendering]")
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
-    const Mesh* left = assets.Load<AssetType::Mesh>("left.obj");
-    const Mesh* right = assets.Load<AssetType::Mesh>("right.obj");
+    const Mesh* left = assets.Get<MeshAsset>("left.obj");
+    const Mesh* right = assets.Get<MeshAsset>("right.obj");
     REQUIRE(left);
     REQUIRE(right);
 
-    const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
-    const MaterialHandle green = assets.Load<AssetType::Material>("green.mat");
+    const MaterialHandle red = *assets.Get<MaterialAsset>("red.mat");
+    const MaterialHandle green = *assets.Get<MaterialAsset>("green.mat");
 
     const auto render = [&]
     {
         RenderOneFrame([&](FrameRecorder& frame)
         {
             PassBuilder pass = frame.AddPass(Pass());
-            pass.DrawMesh(*left, 0, { .MaterialOverride = red });
-            pass.DrawMesh(*right, 0, { .MaterialOverride = green });
+            pass.DrawMesh(*left, {}, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*right, {}, 0, { .MaterialOverride = green });
         });
 
         return Target.Read();
@@ -313,8 +317,8 @@ TEST_CASE_METHOD(Fixture, "There can be more materials than one descriptor pool 
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
-    const Mesh* mesh = assets.Load<AssetType::Mesh>("all.obj");
-    const ShaderHandle shader = assets.Load<AssetType::Shader>("flat.hlsl");
+    const Mesh* mesh = assets.Get<MeshAsset>("all.obj");
+    const ShaderHandle shader = *assets.Get<ShaderAsset>("flat.hlsl");
     REQUIRE(mesh);
     REQUIRE(shader);
 
@@ -331,7 +335,7 @@ TEST_CASE_METHOD(Fixture, "There can be more materials than one descriptor pool 
 
     Gpu().GPUResources->SetMaterialPropertyByName(materials.back(), "Color", glm::vec4(0.0f, 1.0f, 0.0f, 1.0f));
 
-    RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*mesh, 0, { .MaterialOverride = materials.back() }); });
+    RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*mesh, {}, 0, { .MaterialOverride = materials.back() }); });
     CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kGreen));
 
     for (const MaterialHandle material : materials)
@@ -370,21 +374,21 @@ TEST_CASE_METHOD(Fixture, "A transparent material blends over what is behind it"
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
-    const Mesh* back = assets.Load<AssetType::Mesh>("back.obj");
-    const Mesh* front = assets.Load<AssetType::Mesh>("front.obj");
+    const Mesh* back = assets.Get<MeshAsset>("back.obj");
+    const Mesh* front = assets.Get<MeshAsset>("front.obj");
     REQUIRE(back);
     REQUIRE(front);
 
-    const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
-    const MaterialHandle half = assets.Load<AssetType::Material>("half.mat");
+    const MaterialHandle red = *assets.Get<MaterialAsset>("red.mat");
+    const MaterialHandle half = *assets.Get<MaterialAsset>("half.mat");
 
     RenderOneFrame([&](FrameRecorder& frame)
     {
         PassBuilder pass = frame.AddPass(Pass());
 
         // In the wrong order on purpose: opaque draws have to go first anyway
-        pass.DrawMesh(*front, 0, { .MaterialOverride = half });
-        pass.DrawMesh(*back, 0, { .MaterialOverride = red });
+        pass.DrawMesh(*front, {}, 0, { .MaterialOverride = half });
+        pass.DrawMesh(*back, {}, 0, { .MaterialOverride = red });
     });
 
     const Image image = Target.Read();
@@ -402,13 +406,13 @@ TEST_CASE_METHOD(Fixture, "Overlapping transparent draws blend back to front, wh
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
 
-    const Mesh* back = assets.Load<AssetType::Mesh>("back.obj");
-    const Mesh* front = assets.Load<AssetType::Mesh>("front.obj");
+    const Mesh* back = assets.Get<MeshAsset>("back.obj");
+    const Mesh* front = assets.Get<MeshAsset>("front.obj");
     REQUIRE(back);
     REQUIRE(front);
 
-    const MaterialHandle halfRed = assets.Load<AssetType::Material>("half_red.mat");
-    const MaterialHandle halfGreen = assets.Load<AssetType::Material>("half_green.mat");
+    const MaterialHandle halfRed = *assets.Get<MaterialAsset>("half_red.mat");
+    const MaterialHandle halfGreen = *assets.Get<MaterialAsset>("half_green.mat");
 
     const auto render = [&](bool frontFirst)
     {
@@ -418,12 +422,12 @@ TEST_CASE_METHOD(Fixture, "Overlapping transparent draws blend back to front, wh
             PassBuilder pass = frame.AddPass(Pass());
 
             if (frontFirst)
-                pass.DrawMesh(*front, 0, { .MaterialOverride = halfGreen });
+                pass.DrawMesh(*front, {}, 0, { .MaterialOverride = halfGreen });
 
-            pass.DrawMesh(*back, 0, { .MaterialOverride = halfRed });
+            pass.DrawMesh(*back, {}, 0, { .MaterialOverride = halfRed });
 
             if (!frontFirst)
-                pass.DrawMesh(*front, 0, { .MaterialOverride = halfGreen });
+                pass.DrawMesh(*front, {}, 0, { .MaterialOverride = halfGreen });
         });
 
         return Target.Read().AtClip(0.0f, 0.0f);
@@ -443,19 +447,19 @@ TEST_CASE_METHOD(Fixture, "Passes can read what an earlier pass of the frame ren
     Project.Write("all.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
-    const Mesh* mesh = assets.Load<AssetType::Mesh>("all.obj");
+    const Mesh* mesh = assets.Get<MeshAsset>("all.obj");
     REQUIRE(mesh);
 
     const OffscreenTarget source(kSize, kSize);
 
-    const MaterialHandle textured = assets.Load<AssetType::Material>("textured.mat");
+    const MaterialHandle textured = *assets.Get<MaterialAsset>("textured.mat");
     REQUIRE(textured);
     Gpu().GPUResources->SetMaterialTexture(textured, "Albedo", Gpu().GPUResources->GetColorAttachment(source.Handle(), 0));
 
     RenderOneFrame([&](FrameRecorder& frame)
     {
         frame.AddPass({ .Target = source.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f) } });
-        frame.AddPass(Pass()).DrawMesh(*mesh, 0, { .MaterialOverride = textured });
+        frame.AddPass(Pass()).DrawMesh(*mesh, {}, 0, { .MaterialOverride = textured });
     });
 
     CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kGreen));
@@ -544,8 +548,8 @@ float4 PSMain(VertexOutput input) : SV_Target { return float4(input.Correct, 0.0
     Project.Write("full.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
-    const Mesh* mesh = assets.Load<AssetType::Mesh>("full.obj");
-    const MaterialHandle material = assets.Load<AssetType::Material>("round_trip.mat");
+    const Mesh* mesh = assets.Get<MeshAsset>("full.obj");
+    const MaterialHandle material = *assets.Get<MaterialAsset>("round_trip.mat");
     REQUIRE(mesh);
     REQUIRE(material);
 
@@ -556,7 +560,7 @@ float4 PSMain(VertexOutput input) : SV_Target { return float4(input.Correct, 0.0
     RenderOneFrame([&](FrameRecorder& frame)
     {
         const ObjectId object = frame.AddObject(transform);
-        frame.AddPass(Pass()).DrawMesh(*mesh, object, { .MaterialOverride = material });
+        frame.AddPass(Pass()).DrawMesh(*mesh, {}, object, { .MaterialOverride = material });
     });
 
     CHECK(IsNear(Target.Read().AtClip(0.0f, 0.0f), kRed));
@@ -598,18 +602,18 @@ TEST_CASE_METHOD(Fixture, "S_Unlit draws its color and texture, ignoring lights"
 
     SECTION("Transparent blends with its alpha")
     {
-        const Mesh* back = assets.Load<AssetType::Mesh>("back.obj");
-        const Mesh* front = assets.Load<AssetType::Mesh>("front.obj");
-        const MaterialHandle red = assets.Load<AssetType::Material>("red.mat");
-        const MaterialHandle half = assets.Load<AssetType::Material>("half.mat");
+        const Mesh* back = assets.Get<MeshAsset>("back.obj");
+        const Mesh* front = assets.Get<MeshAsset>("front.obj");
+        const MaterialHandle red = *assets.Get<MaterialAsset>("red.mat");
+        const MaterialHandle half = *assets.Get<MaterialAsset>("half.mat");
         REQUIRE(back);
         REQUIRE(front);
 
         RenderOneFrame([&](FrameRecorder& frame)
         {
             PassBuilder pass = frame.AddPass(Pass());
-            pass.DrawMesh(*back, 0, { .MaterialOverride = red });
-            pass.DrawMesh(*front, 0, { .MaterialOverride = half });
+            pass.DrawMesh(*back, {}, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*front, {}, 0, { .MaterialOverride = half });
         });
 
         const Image image = Target.Read();

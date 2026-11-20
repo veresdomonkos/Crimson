@@ -2,6 +2,11 @@
 #include <string_view>
 
 #include <crimson/asset_manager/asset_types.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/scene_asset.hpp>
+#include <crimson/asset_manager/importers/shader_asset.hpp>
+#include <crimson/asset_manager/importers/texture_asset.hpp>
 
 // Icons from the Lucide font (editor/resources/fonts/lucide.ttf, version 1.61.0), merged into the editor's fonts, so they
 // can go straight into a label: ImGui::Button(icons::kMove). Only the icons the editor uses are here. To add one, find its
@@ -38,15 +43,13 @@ namespace crimson::editor::ui::icons
 
     inline const char* ForAsset(AssetType type)
     {
-        switch (type)
-        {
-            case AssetType::Mesh:     return kMesh;
-            case AssetType::Material: return kMaterial;
-            case AssetType::Shader:   return kShader;
-            case AssetType::Texture:  return kTexture;
-            case AssetType::Scene:    return kScene;
-            default:                  return kFile;
-        }
+        if (type.Is<MeshAsset>())     return kMesh;
+        if (type.Is<MaterialAsset>()) return kMaterial;
+        if (type.Is<ShaderAsset>())   return kShader;
+        if (type.Is<TextureAsset>())  return kTexture;
+        if (type.Is<SceneAsset>())    return kScene;
+
+        return kFile;
     }
 
     // An icon by its Lucide name, which is how a component registers its own. Null for a name that isn't here.

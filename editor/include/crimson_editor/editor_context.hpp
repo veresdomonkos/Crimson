@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/importers/scene_asset.hpp>
 #include <crimson/scene/entity.hpp>
 
 #include "crimson_editor/asset_edits.hpp"
@@ -58,9 +59,6 @@ namespace crimson::editor
 
         // Panels draw in the middle of a frame, when GPU resources can't change. These run right after it.
         std::vector<std::function<void()>> Deferred;
-
-        // Goes up when the project's files change, for the panels that show them
-        uint64_t AssetsVersion = 0;
 
         void SelectEntity(Entity entity)
         {

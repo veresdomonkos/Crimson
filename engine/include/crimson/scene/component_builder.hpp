@@ -27,14 +27,11 @@ namespace crimson
         // Whether it means anything with the component's other values, like a light's range with a directional one
         std::function<bool(const T&)> VisibleIf;
 
-        // For an AssetList: the name of an entry, like a mesh's material slot
-        std::function<std::string(const T&, size_t index)> ItemLabel;
+        // For an AssetList whose entries follow another of the component's assets, like a mesh's slots: one item per entry
+        std::function<std::vector<AssetListItem>(const T&, AssetManager&)> Items;
 
         // For a Vec3: a "Uniform <Label>" row, which makes all axes change together
         bool UniformToggle = false;
-
-        // For an Asset or AssetList: what an empty reference ends up as. It is saved as empty.
-        std::function<AssetID(const AssetManager&)> Fallback;
 
         // For an Asset: dropping such an asset in the Scene view makes an entity with this component
         bool SpawnsFrom = false;
@@ -98,11 +95,11 @@ namespace crimson
             return Push(std::move(info));
         }
 
-        template <AssetType A>
+        template <typename A>
         ComponentBuilder& Asset(std::string key, std::string label, TypedAssetID<A> T::* member, Options options = {})
         {
             FieldInfo info = Describe(FieldType::Asset, std::move(key), std::move(label), std::move(options));
-            info.Asset = A;
+            info.Asset = AssetType::Of<A>();
             info.Get = [member](const void* component) -> FieldValue { return AssetID(static_cast<const T*>(component)->*member); };
             info.Set = [member, assets = &m_assets](void* component, const FieldValue& value)
             {
@@ -111,11 +108,11 @@ namespace crimson
             return Push(std::move(info));
         }
 
-        template <AssetType A>
+        template <typename A>
         ComponentBuilder& AssetList(std::string key, std::string label, std::vector<TypedAssetID<A>> T::* member, Options options = {})
         {
             FieldInfo info = Describe(FieldType::AssetList, std::move(key), std::move(label), std::move(options));
-            info.Asset = A;
+            info.Asset = AssetType::Of<A>();
             info.Get = [member](const void* component) -> FieldValue
             {
                 const auto& ids = static_cast<const T*>(component)->*member;
@@ -159,13 +156,6 @@ namespace crimson
             return *this;
         }
 
-        // Loads what its asset fields refer to, after they changed or it was made, like a mesh renderer's mesh
-        ComponentBuilder& ResolveAssets(std::function<void(T&, AssetManager&)> resolve)
-        {
-            m_type.ResolveAssets = [resolve = std::move(resolve)](void* component, AssetManager& assets) { resolve(*static_cast<T*>(component), assets); };
-            return *this;
-        }
-
         // A way to set it up that the editor offers when creating an entity, in the submenu of the same menu name
         ComponentBuilder& Preset(std::string menu, std::string name, std::function<void(T&, const AssetManager&)> apply)
         {
@@ -195,14 +185,13 @@ namespace crimson
                 .Speed = options.Speed,
                 .UniformToggle = options.UniformToggle,
                 .SpawnsFrom = options.SpawnsFrom,
-                .DropTarget = options.DropTarget,
-                .Fallback = std::move(options.Fallback) };
+                .DropTarget = options.DropTarget };
 
             if (options.VisibleIf)
                 info.Visible = [visible = std::move(options.VisibleIf)](const void* component) { return visible(*static_cast<const T*>(component)); };
 
-            if (options.ItemLabel)
-                info.ItemLabel = [itemLabel = std::move(options.ItemLabel)](const void* component, size_t index) { return itemLabel(*static_cast<const T*>(component), index); };
+            if (options.Items)
+                info.Items = [items = std::move(options.Items)](const void* component, AssetManager& assets) { return items(*static_cast<const T*>(component), assets); };
 
             return info;
         }

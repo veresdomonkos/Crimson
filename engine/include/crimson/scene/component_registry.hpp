@@ -35,6 +35,13 @@ namespace crimson
         std::string Label; // in the Inspector, like "Directional"
     };
 
+    // An entry of an AssetList in the Inspector
+    struct AssetListItem
+    {
+        std::string Label;
+        AssetID Empty; // what the entry uses while it is empty, shown in its place
+    };
+
     struct FieldInfo
     {
         std::string Key;   // in files, like "innerCone"
@@ -42,7 +49,7 @@ namespace crimson
         FieldType Type = FieldType::Float;
         FieldValue Default;
 
-        AssetType Asset = AssetType::None;  // what an Asset or AssetList field points to
+        AssetType Asset;  // what an Asset or AssetList field points to
         std::vector<EnumOption> EnumOptions;
 
         // For the Inspector: what a number can be, and how fast it changes when dragged
@@ -57,10 +64,6 @@ namespace crimson
         bool SpawnsFrom = false;
         bool DropTarget = false;
 
-        // What an empty reference ends up as once the component's assets are resolved. It is saved as empty, so that
-        // it can still be replaced by something that fits better when the file is loaded again.
-        std::function<AssetID(const AssetManager& assets)> Fallback;
-
         std::function<FieldValue(const void* component)> Get;
         std::function<void(void* component, const FieldValue& value)> Set;
 
@@ -68,8 +71,9 @@ namespace crimson
         // Always when not set.
         std::function<bool(const void* component)> Visible;
 
-        // The name of an AssetList's entry in the Inspector, like a mesh's material slot. "<Label> <index>" when not set.
-        std::function<std::string(const void* component, size_t index)> ItemLabel;
+        // For an AssetList whose entries follow another of the component's assets, like a mesh's slots: one item per entry.
+        // An edit sizes the list to them. When not set, each held id is an entry named "<Label> <index>".
+        std::function<std::vector<AssetListItem>(const void* component, AssetManager& assets)> Items;
     };
 
     // A ready-made setup of a component, offered by the editor when creating an entity, like a light of one type
@@ -99,9 +103,6 @@ namespace crimson
 
         // Runs after its fields are set, to keep them consistent, like a spot light's inner cone inside its outer one
         std::function<void(void* component)> Constrain;
-
-        // Loads what its asset fields refer to, like a mesh renderer's mesh. Runs after they changed, and once it is made.
-        std::function<void(void* component, AssetManager& assets)> ResolveAssets;
 
         // The Lucide name of its icon, which can depend on its values. Empty for none.
         std::function<std::string_view(const void* component)> Icon;
@@ -204,20 +205,11 @@ namespace crimson
 
     void CopyComponent(const ComponentType& type, Entity from, Entity to);
 
-    // Adds the component with its fields' defaults, and resolves its assets
-    void CreateComponent(const ComponentType& type, Entity entity, AssetManager& assets);
+    // The component as a scene file saves it, with its values as they are
+    [[nodiscard]] SceneComponent CaptureComponent(const ComponentType& type, Entity entity);
 
-    // Does nothing for a type without assets to resolve
-    void ResolveComponentAssets(const ComponentType& type, void* component, AssetManager& assets);
-
-    // Every component of the scene that has assets to resolve
-    void ResolveSceneAssets(Scene& scene, AssetManager& assets);
-
-    // The component as a scene file saves it: with its fallback assets left empty
-    [[nodiscard]] SceneComponent CaptureComponent(const ComponentType& type, Entity entity, const AssetManager& assets);
-
-    // Adds the component the preset is of, sets it up with the preset and resolves its assets
-    void ApplyPreset(const ComponentType& type, const ComponentPreset& preset, Entity entity, AssetManager& assets);
+    // Adds the component the preset is of, and sets it up with the preset
+    void ApplyPreset(const ComponentType& type, const ComponentPreset& preset, Entity entity, const AssetManager& assets);
 
     // A field of a type of component
     struct FieldRef
@@ -234,6 +226,7 @@ namespace crimson
     // The first field of a component the entity has that a dropped asset of this type is set on, or none
     [[nodiscard]] FieldRef FindDropField(const ComponentRegistry& registry, Entity entity, AssetType asset);
 
-    // Sets an Asset field, or the first entry of an AssetList one, then constrains the component and resolves its assets
+    // Sets an Asset field, or the first entry of an AssetList one, then constrains the component. A list with items is sized
+    // to them first, and one without any has nowhere to put it.
     void AssignAsset(const ComponentType& type, size_t field, Entity entity, AssetID asset, AssetManager& assets);
 }

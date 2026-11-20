@@ -12,6 +12,10 @@
 #include <glm/gtc/quaternion.hpp>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/texture_asset.hpp>
+
 #include <crimson/scene/scene_renderer.hpp>
 
 #include "gpu/gpu_test.hpp"
@@ -60,11 +64,11 @@ namespace
             Project.Write("white.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "properties": { "Color": [1, 1, 1, 1] } })");
 
             Assets = std::make_unique<AssetManager>(*Gpu().GPUResources, Project.Path());
-            Subject = std::make_unique<SceneRenderer>(*Gpu().GPUResources, *Gpu().Renderer, ShadowAtlasSettings{ .AtlasSize = 1024, .TileSize = 256 });
+            Subject = std::make_unique<SceneRenderer>(*Gpu().GPUResources, *Gpu().Renderer, *Assets, ShadowAtlasSettings{ .AtlasSize = 1024, .TileSize = 256 });
 
-            Subject->SetToneMapMaterial(Assets->Load<AssetType::Material>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
+            Subject->SetToneMapMaterial(Assets->Find<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
             Subject->SetToneMapping(1.0f, ToneMapper::None); // so that expected colors only need the sRGB encoding
-            Subject->SetOutlineMaterial(Assets->Load<AssetType::Material>("engine/materials/internal/M_Outline.mat"), kSize, kSize);
+            Subject->SetOutlineMaterial(Assets->Find<MaterialAsset>("engine/materials/internal/M_Outline.mat"), kSize, kSize);
 
             Lighting.AmbientColor = glm::vec3(0.0f);
         }
@@ -83,10 +87,9 @@ namespace
             transform.Scale = scale;
 
             auto& renderer = entity.AddComponent<MeshRendererComponent>();
-            renderer.MeshAsset = Assets->Find<AssetType::Mesh>(mesh);
-            renderer.MaterialAssets = { Assets->Find<AssetType::Material>("white.mat") };
-            ResolveAssets(*Assets, renderer);
-            REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
+            renderer.MeshAsset = Assets->Find<MeshAsset>(mesh);
+            renderer.MaterialAssets = { Assets->Find<MaterialAsset>("white.mat") };
+            REQUIRE(Assets->Get(renderer.MeshAsset));
 
             return entity;
         }
@@ -352,8 +355,8 @@ TEST_CASE_METHOD(ShadowFixture, "The last of 64 shadowed point lights still cast
     // 1024 tiles, for 384 views. Far more than a frame has passes, they are all drawn by one.
     Gpu().Device->WaitIdle();
     Subject.reset();
-    Subject = std::make_unique<SceneRenderer>(*Gpu().GPUResources, *Gpu().Renderer, ShadowAtlasSettings{ .AtlasSize = 4096, .TileSize = 128 });
-    Subject->SetToneMapMaterial(Assets->Load<AssetType::Material>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
+    Subject = std::make_unique<SceneRenderer>(*Gpu().GPUResources, *Gpu().Renderer, *Assets, ShadowAtlasSettings{ .AtlasSize = 4096, .TileSize = 128 });
+    Subject->SetToneMapMaterial(Assets->Find<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kSize, kSize);
 
     Lighting.AmbientColor = glm::vec3(0.1f);
 
@@ -405,10 +408,9 @@ namespace
 
             const Entity entity = World.CreateEntity(name);
             auto& renderer = entity.AddComponent<MeshRendererComponent>();
-            renderer.MeshAsset = Assets->Find<AssetType::Mesh>(mesh);
-            renderer.MaterialAssets = { Assets->Find<AssetType::Material>(name) };
-            ResolveAssets(*Assets, renderer);
-            REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
+            renderer.MeshAsset = Assets->Find<MeshAsset>(mesh);
+            renderer.MaterialAssets = { Assets->Find<MaterialAsset>(name) };
+            REQUIRE(Assets->Get(renderer.MeshAsset));
 
             return entity;
         }
@@ -418,7 +420,7 @@ namespace
         {
             Project.Write(name, MakeBmp(1, 1, { color }));
             Assets->Refresh();
-            REQUIRE(Assets->Reimport(Assets->Find<AssetType::Texture>(name), { { "srgb", false } }));
+            REQUIRE(Assets->Reimport(Assets->Find<TextureAsset>(name), { { "srgb", false } }));
         }
 
         float RenderCenter()
@@ -566,8 +568,7 @@ TEST_CASE_METHOD(MaterialFixture, "A normal map bends the light the same way on 
         Assets->Refresh();
 
         auto& renderer = AddMesh("wall.obj").GetComponent<MeshRendererComponent>();
-        renderer.MaterialAssets = { Assets->Find<AssetType::Material>("nouv.mat") };
-        ResolveAssets(*Assets, renderer);
+        renderer.MaterialAssets = { Assets->Find<MaterialAsset>("nouv.mat") };
 
         const float right = render(kFromRight);
         const float left = render(kFromLeft);
@@ -700,8 +701,7 @@ static std::string CutNothing(std::string_view shader)
 static void UseMaterial(Entity entity, AssetManager& assets, std::string_view path)
 {
     auto& renderer = entity.GetComponent<MeshRendererComponent>();
-    renderer.MaterialAssets = { assets.Find<AssetType::Material>(path) };
-    ResolveAssets(assets, renderer);
+    renderer.MaterialAssets = { assets.Find<MaterialAsset>(path) };
 }
 
 TEST_CASE_METHOD(Fixture, "What a cutout material cuts away isn't drawn", "[lighting]")

@@ -10,6 +10,7 @@
 #include <nlohmann/json.hpp>
 
 #include "crimson/asset_manager/asset_manager.hpp"
+#include "crimson/asset_manager/importers/scene_asset.hpp"
 #include "crimson/core/log.hpp"
 
 #include "asset_ref.hpp"
@@ -92,29 +93,13 @@ namespace crimson
     }
 
     // A missing asset is worth a warning only if the file named one
-    template <AssetType T>
-    static AssetID ReadRef(const AssetManager& assets, const nlohmann::ordered_json& ref, std::string_view file)
+    static AssetID ReadRef(const AssetManager& assets, const nlohmann::ordered_json& ref, AssetType type, std::string_view file)
     {
-        const TypedAssetID<T> id = ResolveAssetRef<T>(assets, ref, file);
+        const AssetID id = ReadAssetRef(assets, ref, type, file);
         if (!id && !ref.is_null())
             LOG_WARN("[Scene] '{}': no asset for {}", file, ref.dump());
 
         return id;
-    }
-
-    static AssetID ReadRef(const AssetManager& assets, const nlohmann::ordered_json& ref, AssetType type, std::string_view file)
-    {
-        switch (type)
-        {
-            case AssetType::Texture:  return ReadRef<AssetType::Texture>(assets, ref, file);
-            case AssetType::Mesh:     return ReadRef<AssetType::Mesh>(assets, ref, file);
-            case AssetType::Shader:   return ReadRef<AssetType::Shader>(assets, ref, file);
-            case AssetType::Material: return ReadRef<AssetType::Material>(assets, ref, file);
-            case AssetType::Scene:    return ReadRef<AssetType::Scene>(assets, ref, file);
-            case AssetType::None:     break;
-        }
-
-        return AssetID{};
     }
 
     // A wrongly typed value throws, which makes the whole file fail to read, as for the node's own fields
@@ -266,7 +251,7 @@ namespace crimson
         }
 
         if (const auto instance = j.find("instance"); instance != j.end())
-            node.Instance = assets.As<AssetType::Scene>(ReadRef<AssetType::Scene>(assets, *instance, file));
+            node.Instance = assets.As<SceneAsset>(ReadRef(assets, *instance, AssetType::Of<SceneAsset>(), file));
 
         if (const auto children = j.find("children"); children != j.end())
         {

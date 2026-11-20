@@ -2,6 +2,7 @@
 #include <imgui.h>
 #include <ImGuizmo.h>
 
+#include "crimson/asset_manager/importers/scene_asset.hpp"
 #include "crimson/renderer/camera_data.hpp"
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/scene_view.hpp"

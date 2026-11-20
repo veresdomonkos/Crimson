@@ -1,9 +1,10 @@
 #pragma once
 #include "crimson/asset_manager/asset_importer.hpp"
+#include "crimson/asset_manager/importers/shader_asset.hpp"
 
 namespace crimson
 {
-    class ShaderImporter final : public AssetImporter<AssetType::Shader>
+    class ShaderImporter final : public AssetImporter<ShaderAsset>
     {
     public:
         std::span<const std::string_view> Extensions() const override;

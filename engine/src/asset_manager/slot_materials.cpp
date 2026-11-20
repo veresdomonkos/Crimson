@@ -14,6 +14,7 @@ namespace fs = std::filesystem;
 namespace crimson
 {
     constexpr std::string_view kDefaultMaterialPath = "engine/materials/M_Default.mat";
+    constexpr std::string_view kMissingMaterialPath = "engine/materials/internal/M_Missing.mat";
 
     // The folder an asset is in, with a slash at the end, or empty at the top
     static std::string FolderOf(const std::string& path)
@@ -39,16 +40,27 @@ namespace crimson
     {
         MaterialID DefaultMaterial(const AssetManager& assets)
         {
-            return assets.Find<AssetType::Material>(kDefaultMaterialPath);
+            return assets.Find<MaterialAsset>(kDefaultMaterialPath);
         }
 
         MaterialID Find(const AssetManager& assets, MeshID mesh, std::string_view slot)
         {
             const AssetInfo* info = assets.GetInfo(mesh);
-            if (!info || info->Type != AssetType::Mesh)
+            if (!info || !info->Type.Is<MeshAsset>())
                 return {};
 
-            return assets.Find<AssetType::Material>(SlotMaterialPath(info->Path, slot));
+            return assets.Find<MaterialAsset>(SlotMaterialPath(info->Path, slot));
+        }
+
+        MaterialID MissingMaterial(const AssetManager& assets)
+        {
+            return assets.Find<MaterialAsset>(kMissingMaterialPath);
+        }
+
+        MaterialID ForEmptySlot(const AssetManager& assets, MeshID mesh, std::string_view slot)
+        {
+            const MaterialID found = Find(assets, mesh, slot);
+            return found ? found : DefaultMaterial(assets);
         }
 
         SlotMaterials Create(AssetManager& assets, MeshID mesh)
@@ -56,7 +68,7 @@ namespace crimson
             SlotMaterials result;
 
             const AssetInfo* info = assets.GetInfo(mesh);
-            if (!info || info->Type != AssetType::Mesh || info->ReadOnly || !IsObj(info->Path))
+            if (!info || !info->Type.Is<MeshAsset>() || info->ReadOnly || !IsObj(info->Path))
             {
                 LOG_ERROR("[Assets] Only a project's .obj meshes can get materials from their .mtl");
                 return result;
@@ -79,7 +91,7 @@ namespace crimson
 
                 MtlMaterial material = MaterialFromMtl(mtl, FolderOf(meshPath), assets);
 
-                if (const MaterialID created = assets.Create<AssetType::Material>(path, material.Data))
+                if (const MaterialID created = assets.Create<MaterialAsset>(path, material.Data))
                 {
                     result.Created.push_back(created);
                     std::ranges::move(material.DataTextures, std::back_inserter(dataTextures));

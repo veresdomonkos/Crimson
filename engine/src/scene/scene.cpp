@@ -9,6 +9,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
+#include "crimson/asset_manager/asset_manager.hpp"
 #include "crimson/scene/entity.hpp"
 
 namespace crimson
@@ -158,14 +159,15 @@ namespace crimson
         return startsInside ? exit : enter;
     }
 
-    Entity Scene::Raycast(const glm::vec3& origin, const glm::vec3& direction)
+    Entity Scene::Raycast(const glm::vec3& origin, const glm::vec3& direction, AssetManager& assets)
     {
         entt::entity closest = entt::null;
         float closestDistance = std::numeric_limits<float>::max();
 
         for (const auto [handle, renderer, transform] : m_registry.view<MeshRendererComponent, TransformComponent>().each())
         {
-            if (!transform.ActiveInHierarchy || renderer.Resolved.SubMeshes.empty())
+            const Mesh* mesh = transform.ActiveInHierarchy ? assets.Get(renderer.MeshAsset) : nullptr;
+            if (!mesh || mesh->SubMeshes.empty())
                 continue;
 
             // The direction isn't normalized afterwards, so distances stay comparable between entities
@@ -173,7 +175,7 @@ namespace crimson
             const glm::vec3 localOrigin(toLocal * glm::vec4(origin, 1.0f));
             const glm::vec3 localDirection(toLocal * glm::vec4(direction, 0.0f));
 
-            const std::optional<float> distance = IntersectBounds(localOrigin, localDirection, renderer.Resolved.Bounds);
+            const std::optional<float> distance = IntersectBounds(localOrigin, localDirection, mesh->Bounds);
 
             if (distance && *distance < closestDistance)
             {
@@ -185,14 +187,15 @@ namespace crimson
         return closest == entt::null ? Entity{} : Entity{ closest, this };
     }
 
-    std::optional<MeshBounds> Scene::WorldBounds(Entity entity) const
+    std::optional<MeshBounds> Scene::WorldBounds(Entity entity, AssetManager& assets) const
     {
         const auto* renderer = entity.TryGetComponent<MeshRendererComponent>();
         const auto* transform = entity.TryGetComponent<TransformComponent>();
-        if (!renderer || !transform || renderer->Resolved.SubMeshes.empty())
+        const Mesh* mesh = renderer ? assets.Get(renderer->MeshAsset) : nullptr;
+        if (!mesh || !transform || mesh->SubMeshes.empty())
             return std::nullopt;
 
-        const MeshBounds& local = renderer->Resolved.Bounds;
+        const MeshBounds& local = mesh->Bounds;
         MeshBounds bounds{ glm::vec3(std::numeric_limits<float>::max()), glm::vec3(std::numeric_limits<float>::lowest()) };
 
         // The box turns with the entity, so it is the one around all of its corners

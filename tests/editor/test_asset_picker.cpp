@@ -2,6 +2,7 @@
 
 #include <vector>
 
+#include <crimson/asset_manager/importers/material_asset.hpp>
 #include <crimson_editor/ui/asset_field.hpp>
 #include <crimson_editor/ui/asset_picker.hpp>
 
@@ -37,7 +38,7 @@ static std::vector<std::string> NamesOf(const std::vector<PickerEntry>& entries)
 
 static AssetInfo Material(const char* path, bool engine = false)
 {
-    return AssetInfo{ .Id = AssetID::Generate(), .Type = AssetType::Material, .Path = path, .ReadOnly = engine };
+    return AssetInfo{ .Id = AssetID::Generate(), .Type = AssetType::Of<MaterialAsset>(), .Path = path, .ReadOnly = engine };
 }
 
 TEST_CASE("The picker lists None first, then the project's assets, then the engine's", "[asset picker]")
@@ -115,7 +116,7 @@ TEST_CASE("A choice reaches only the field that opened the picker, once", "[asse
     const AssetID chosen = AssetID::Generate();
 
     AssetPicker picker;
-    picker.Open(1, AssetType::Texture, {}, {});
+    picker.Open(1, AssetType::Of<TextureAsset>(), {}, {});
     picker.Choose(chosen);
 
     CHECK_FALSE(picker.TakeChoice(2));
@@ -136,7 +137,7 @@ TEST_CASE("Confirming applies and closes, closing keeps the choice, and Reset dr
 
     SECTION("Opening highlights the current asset and has nothing to apply")
     {
-        picker.Open(1, AssetType::Material, current, {});
+        picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
 
         CHECK(picker.IsOpen());
         CHECK(picker.IsOpenFor(1));
@@ -147,16 +148,16 @@ TEST_CASE("Confirming applies and closes, closing keeps the choice, and Reset dr
 
     SECTION("Opening forgets a choice nobody took")
     {
-        picker.Open(1, AssetType::Material, current, {});
+        picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
         picker.Choose(chosen);
-        picker.Open(1, AssetType::Material, current, {});
+        picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
 
         CHECK_FALSE(picker.TakeChoice(1));
     }
 
     SECTION("Confirm applies the selection and closes")
     {
-        picker.Open(1, AssetType::Material, current, {});
+        picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
         picker.Choose(chosen);
         picker.Confirm();
 
@@ -166,7 +167,7 @@ TEST_CASE("Confirming applies and closes, closing keeps the choice, and Reset dr
 
     SECTION("Close keeps the choice")
     {
-        picker.Open(1, AssetType::Material, current, {});
+        picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
         picker.Choose(chosen);
         picker.Close();
 
@@ -176,7 +177,7 @@ TEST_CASE("Confirming applies and closes, closing keeps the choice, and Reset dr
 
     SECTION("Reset drops it")
     {
-        picker.Open(1, AssetType::Material, current, {});
+        picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
         picker.Choose(chosen);
         picker.Reset();
 
@@ -186,7 +187,7 @@ TEST_CASE("Confirming applies and closes, closing keeps the choice, and Reset dr
 
     SECTION("Cancel goes back to what the field had before the picker opened")
     {
-        picker.Open(1, AssetType::Material, current, {});
+        picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
         picker.Choose(chosen);
         picker.Choose(AssetID::Generate());
         picker.Cancel();
@@ -198,7 +199,7 @@ TEST_CASE("Confirming applies and closes, closing keeps the choice, and Reset dr
 
     SECTION("Cancel without a choice leaves the field alone")
     {
-        picker.Open(1, AssetType::Material, current, {});
+        picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
         picker.Cancel();
 
         CHECK_FALSE(picker.IsOpen());
@@ -207,7 +208,7 @@ TEST_CASE("Confirming applies and closes, closing keeps the choice, and Reset dr
 
     SECTION("Cancel after the choice was taken still goes back")
     {
-        picker.Open(1, AssetType::Material, current, {});
+        picker.Open(1, AssetType::Of<MaterialAsset>(), current, {});
         picker.Choose(chosen);
         REQUIRE(picker.TakeChoice(1));
 
@@ -224,14 +225,14 @@ TEST_CASE("A field names its asset, None by type, or what is missing", "[asset p
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
 
-    const MaterialID floor = assets.Find<AssetType::Material>("floor.mat");
+    const MaterialID floor = assets.Find<MaterialAsset>("floor.mat");
     REQUIRE(floor);
 
-    CHECK(AssetFieldText(assets, floor, AssetType::Material) == "floor.mat");
-    CHECK(AssetFieldText(assets, {}, AssetType::Material) == "None (Material)");
-    CHECK(AssetFieldText(assets, {}, AssetType::Texture) == "None (Texture)");
+    CHECK(AssetFieldText(assets, floor, AssetType::Of<MaterialAsset>()) == "floor.mat");
+    CHECK(AssetFieldText(assets, {}, AssetType::Of<MaterialAsset>()) == "None (Material)");
+    CHECK(AssetFieldText(assets, {}, AssetType::Of<TextureAsset>()) == "None (Texture)");
 
     const AssetID gone = AssetID::Generate();
-    assets.RememberMissing(gone, { .Path = "textures/a.png", .Type = AssetType::Texture });
-    CHECK(AssetFieldText(assets, gone, AssetType::Texture) == "Missing: textures/a.png");
+    assets.RememberMissing(gone, { .Path = "textures/a.png", .Type = AssetType::Of<TextureAsset>() });
+    CHECK(AssetFieldText(assets, gone, AssetType::Of<TextureAsset>()) == "Missing: textures/a.png");
 }

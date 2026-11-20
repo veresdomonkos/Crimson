@@ -20,10 +20,10 @@ namespace crimson::editor::ui
         if (const MissingAssetRef* missing = assets.GetMissing(id))
             return "Missing: " + (missing->Path.empty() ? id.ToString() : missing->Path);
 
-        return id ? "Missing" : "None (" + std::string(ToString(type)) + ")";
+        return id ? "Missing" : "None (" + std::string(type.Name()) + ")";
     }
 
-    bool AssetField(const char* id, EditorContext& context, AssetType type, AssetID& current)
+    bool AssetField(const char* id, EditorContext& context, AssetType type, AssetID& current, AssetID whenEmpty)
     {
         const ImGuiStyle& style = ImGui::GetStyle();
         const AssetManager& assets = context.Assets;
@@ -45,16 +45,22 @@ namespace crimson::editor::ui
         const bool overName = ImGui::GetIO().MousePos.x < nameRight;
         const bool hovered = frameHovered && overName;
 
-        const AssetInfo* info = assets.GetInfo(current);
-        const bool missing = assets.IsMissing(current);
+        // What it shows, which is what an empty one uses if it says so. Choices are compared with what is stored.
+        const bool showsFallback = !current && whenEmpty;
+        const AssetID shown = showsFallback ? whenEmpty : current;
 
-        if (frameClicked && overName && current)
-            context.PingedAsset = current;
+        const AssetInfo* info = assets.GetInfo(shown);
+        const bool missing = assets.IsMissing(shown);
+
+        if (frameClicked && overName && shown)
+            context.PingedAsset = shown;
 
         if (hovered)
         {
             if (missing)
                 ImGui::SetTooltip("The file isn't there. The reference is kept, and works again once it is back.");
+            else if (showsFallback)
+                ImGui::SetTooltip("Empty, so it uses %s", info ? info->Path.c_str() : "nothing");
             else if (info)
                 ImGui::SetTooltip("%s", info->Path.c_str());
         }
@@ -72,7 +78,7 @@ namespace crimson::editor::ui
         ImGui::PopID();
 
         if (pickerClicked)
-            context.Picker.Open(owner, type, current, ImVec2(min.x, max.y));
+            context.Picker.Open(owner, type, shown, ImVec2(min.x, max.y));
 
         if (ImGui::IsItemHovered())
         {
@@ -91,7 +97,7 @@ namespace crimson::editor::ui
         drawIcon(nameRight, icons::kPicker, style.Colors[ImGuiCol_Text]);
 
         // Not for a missing one, as the empty thumbnail would be kept after the file is back
-        const ImTextureID picture = type == AssetType::Texture && info ? context.Thumbnails.Get(assets.As<AssetType::Texture>(current)) : ImTextureID{ 0 };
+        const ImTextureID picture = type.Is<TextureAsset>() && info ? context.Thumbnails.Get(assets.As<TextureAsset>(shown)) : ImTextureID{ 0 };
 
         if (picture)
         {
@@ -104,8 +110,8 @@ namespace crimson::editor::ui
             drawIcon(min.x, icons::ForAsset(type), theme::AssetColor(type));
         }
 
-        const ImVec4 textColor = missing ? theme::Warning : info && info->ReadOnly ? theme::TextMuted : style.Colors[ImGuiCol_Text];
-        const std::string text = AssetFieldText(assets, current, type);
+        const ImVec4 textColor = missing ? theme::Warning : showsFallback || (info && info->ReadOnly) ? theme::TextMuted : style.Colors[ImGuiCol_Text];
+        const std::string text = AssetFieldText(assets, shown, type);
 
         drawList->PushClipRect(ImVec2(min.x, min.y), ImVec2(nameRight, max.y), true);
         drawList->AddText(ImVec2(min.x + height, min.y + style.FramePadding.y), ImGui::GetColorU32(textColor), text.c_str());

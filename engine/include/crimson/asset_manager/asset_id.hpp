@@ -4,6 +4,8 @@
 #include <functional>
 #include <random>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <cstdio>
 
 namespace crimson
@@ -33,18 +35,41 @@ namespace crimson
         static AssetID FromString(const std::string& s) { return AssetID{ std::stoull(s, nullptr, 16) }; }
     };
 
-    enum class AssetType : uint8_t { None, Texture, Mesh, Shader, Material, Scene };
-    inline constexpr size_t kAssetTypeCount = static_cast<size_t>(AssetType::Scene) + 1;
+    // A type of asset, known by the name its files have. Only AssetType::Of makes one, from a type's struct, so the name
+    // is always the type's own and lives as long as the program. A default one is no type.
+    class AssetType
+    {
+    public:
+        constexpr AssetType() = default;
+
+        template <typename T>
+        [[nodiscard]] static constexpr AssetType Of() { return AssetType(T::Name); }
+
+        template <typename T>
+        [[nodiscard]] constexpr bool Is() const { return *this == Of<T>(); }
+
+        // Empty for none
+        [[nodiscard]] constexpr std::string_view Name() const { return m_name; }
+
+        constexpr explicit operator bool() const { return !m_name.empty(); }
+        bool operator==(const AssetType&) const = default; // by the name's contents
+
+    private:
+        constexpr explicit AssetType(std::string_view name) : m_name(name) {}
+
+        std::string_view m_name;
+    };
+
+    // What an asset's file says, for the types whose files hold nothing to edit
+    struct NoAssetData {};
 
     // An AssetID known to be of one type, so code wanting a shader can't be given a texture by mistake.
     // Only AssetManager makes one from an AssetID, after checking the type. Forgetting the type is always fine.
     // Being of the right type doesn't make it loadable: its file can still be broken.
-    template <AssetType T>
+    template <typename T>
     class TypedAssetID
     {
     public:
-        static constexpr AssetType Type = T;
-
         TypedAssetID() = default;
 
         operator AssetID() const { return m_id; }
@@ -52,7 +77,7 @@ namespace crimson
         bool operator==(const TypedAssetID&) const = default;
 
         // Both would turn into AssetIDs and compare, though a texture is never a mesh
-        template <AssetType U> requires (U != T)
+        template <typename U> requires (!std::is_same_v<U, T>)
         bool operator==(const TypedAssetID<U>&) const = delete;
 
         [[nodiscard]] std::string ToString() const { return m_id.ToString(); }
@@ -62,12 +87,6 @@ namespace crimson
 
         AssetID m_id;
     };
-
-    using TextureID  = TypedAssetID<AssetType::Texture>;
-    using MeshID     = TypedAssetID<AssetType::Mesh>;
-    using ShaderID   = TypedAssetID<AssetType::Shader>;
-    using MaterialID = TypedAssetID<AssetType::Material>;
-    using SceneID    = TypedAssetID<AssetType::Scene>;
 }
 
 template<>
@@ -79,11 +98,20 @@ struct std::hash<crimson::AssetID>
     }
 };
 
-template <crimson::AssetType T>
+template <typename T>
 struct std::hash<crimson::TypedAssetID<T>>
 {
     size_t operator()(const crimson::TypedAssetID<T>& id) const noexcept
     {
         return std::hash<crimson::AssetID>{}(id);
+    }
+};
+
+template<>
+struct std::hash<crimson::AssetType>
+{
+    size_t operator()(const crimson::AssetType& type) const noexcept
+    {
+        return std::hash<std::string_view>{}(type.Name());
     }
 };

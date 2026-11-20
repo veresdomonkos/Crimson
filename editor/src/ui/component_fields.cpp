@@ -12,18 +12,36 @@
 
 namespace crimson::editor::ui
 {
-    // One row per entry, as a list of assets is usually short and each entry has a meaning of its own, like a slot
+    // One row per entry, as a list of assets is usually short and each entry has a meaning of its own, like a slot.
+    // An entry that is empty shows what it uses instead. The list is sized to its rows only in the copy, so looking at it
+    // changes nothing, and an edit takes the whole copy.
     static bool DrawAssetList(const FieldInfo& field, const void* component, std::vector<AssetID>& ids, EditorContext& context)
     {
+        std::vector<AssetListItem> items;
+
+        if (field.Items)
+        {
+            items = field.Items(component, context.Assets);
+        }
+        else
+        {
+            for (size_t index = 0; index < ids.size(); ++index)
+                items.push_back({ field.Label + " " + std::to_string(index), AssetID{} });
+        }
+
+        ids.resize(items.size());
+
         bool changed = false;
 
-        for (size_t index = 0; index < ids.size(); ++index)
+        for (size_t index = 0; index < items.size(); ++index)
         {
-            const std::string label = field.ItemLabel ? field.ItemLabel(component, index) : field.Label + " " + std::to_string(index);
-
             ImGui::PushID(static_cast<int>(index));
-            props::BeginRow(label.c_str());
-            changed |= AssetField("##Asset", context, field.Asset, ids[index]);
+            props::BeginRow(items[index].Label.c_str());
+
+            // The stored id is compared with the pick, so choosing what an empty entry shows stores it
+            if (AssetField("##Asset", context, field.Asset, ids[index], items[index].Empty))
+                changed = true;
+
             props::ResetTarget();
 
             if (props::EndRow(true) && ids[index])

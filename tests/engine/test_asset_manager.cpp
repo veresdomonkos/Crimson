@@ -8,13 +8,26 @@
 #include <fstream>
 #include <iterator>
 #include <memory>
+#include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/asset_manager/import_cache.hpp>
+#include <crimson/asset_manager/meta_file.hpp>
 #include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/asset_manager/importers/texture_importer.hpp>
+#include <crimson/asset_manager/importers/material_importer.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_importer.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/scene_asset.hpp>
+#include <crimson/asset_manager/importers/scene_importer.hpp>
+#include <crimson/asset_manager/importers/shader_importer.hpp>
+#include <crimson/asset_manager/importers/shader_asset.hpp>
+#include <crimson/asset_manager/importers/texture_asset.hpp>
+
 #include <crimson/core/log.hpp>
 #include <crimson/scene/scene_renderer.hpp>
 
@@ -29,7 +42,6 @@ using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::FieldOf;
 using crimson::tests::LogCounter;
-using crimson::tests::ResolveAssets;
 using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
@@ -61,18 +73,18 @@ TEST_CASE("Scanning finds a folder's assets and skips the rest", "[assets]")
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
 
-    const MeshID mesh = assets.Find<AssetType::Mesh>("meshes/nested/tri.obj");
+    const MeshID mesh = assets.Find<MeshAsset>("meshes/nested/tri.obj");
     REQUIRE(mesh);
     REQUIRE(assets.GetInfo(mesh));
-    CHECK(assets.GetInfo(mesh)->Type == AssetType::Mesh);
+    CHECK(assets.GetInfo(mesh)->Type.Is<MeshAsset>());
     CHECK(assets.GetInfo(mesh)->Path == "meshes/nested/tri.obj");
 
     // The extension's case doesn't matter
-    CHECK(assets.Find<AssetType::Texture>("textures/a.BMP"));
+    CHECK(assets.Find<TextureAsset>("textures/a.BMP"));
 
     CHECK_FALSE(assets.FindId("notes.txt"));
     CHECK_FALSE(assets.FindId("shaders/common.hlsli"));
-    CHECK_FALSE(assets.Find<AssetType::Mesh>("no/such/asset.obj"));
+    CHECK_FALSE(assets.Find<MeshAsset>("no/such/asset.obj"));
     CHECK(assets.GetInfo(AssetID{}) == nullptr);
 }
 
@@ -83,8 +95,8 @@ TEST_CASE("A folder that doesn't exist gives just the engine's assets", "[assets
 
     AssetManager assets(gpu, temp.Path() / "nothing");
 
-    CHECK(assets.Find<AssetType::Material>("engine/materials/M_Default.mat"));
-    CHECK(std::ranges::all_of(assets.List(AssetType::Mesh), [](const AssetInfo* info) { return info->ReadOnly && info->Path.starts_with("engine/"); }));
+    CHECK(assets.Find<MaterialAsset>("engine/materials/M_Default.mat"));
+    CHECK(std::ranges::all_of(assets.List(AssetType::Of<MeshAsset>()), [](const AssetInfo* info) { return info->ReadOnly && info->Path.starts_with("engine/"); }));
 }
 
 TEST_CASE("The engine's built-in meshes load, at the size they are meant to be", "[assets]")
@@ -115,11 +127,11 @@ TEST_CASE("The engine's built-in meshes load, at the size they are meant to be",
     {
         CAPTURE(expected.Path);
 
-        const MeshID id = assets.Find<AssetType::Mesh>(expected.Path);
+        const MeshID id = assets.Find<MeshAsset>(expected.Path);
         REQUIRE(id);
         CHECK(assets.GetInfo(id)->ReadOnly);
 
-        const Mesh* mesh = assets.Load(id);
+        const Mesh* mesh = assets.Get(id);
         REQUIRE(mesh);
         CHECK(mesh->SubMeshes.size() == 1);
         CHECK(mesh->MaterialSlots.size() == 1);
@@ -127,7 +139,7 @@ TEST_CASE("The engine's built-in meshes load, at the size they are meant to be",
         CHECK(near(mesh->Bounds.Max, expected.Max));
     }
 
-    CHECK(assets.List(AssetType::Mesh).size() == kMeshes.size());
+    CHECK(assets.List(AssetType::Of<MeshAsset>()).size() == kMeshes.size());
 }
 
 TEST_CASE("An asset keeps its id through its meta file", "[assets]")
@@ -136,14 +148,14 @@ TEST_CASE("An asset keeps its id through its meta file", "[assets]")
     const fs::path file = temp.Write("tri.obj", kTriangleObj);
     FakeGpuResourceManager gpu;
 
-    const AssetID first = AssetManager(gpu, temp.Path()).Find<AssetType::Mesh>("tri.obj");
+    const AssetID first = AssetManager(gpu, temp.Path()).Find<MeshAsset>("tri.obj");
     REQUIRE(first);
 
     CHECK(fs::exists(fs::path(file) += ".meta"));
 
     SECTION("When reopened")
     {
-        CHECK(AssetManager(gpu, temp.Path()).Find<AssetType::Mesh>("tri.obj") == first);
+        CHECK(AssetManager(gpu, temp.Path()).Find<MeshAsset>("tri.obj") == first);
     }
 
     SECTION("When the file is moved along with its meta")
@@ -154,14 +166,14 @@ TEST_CASE("An asset keeps its id through its meta file", "[assets]")
 
         AssetManager assets(gpu, temp.Path());
 
-        CHECK(assets.Find<AssetType::Mesh>("moved/tri.obj") == first);
-        CHECK_FALSE(assets.Find<AssetType::Mesh>("tri.obj"));
+        CHECK(assets.Find<MeshAsset>("moved/tri.obj") == first);
+        CHECK_FALSE(assets.Find<MeshAsset>("tri.obj"));
     }
 
     SECTION("Unless the meta is lost")
     {
         fs::remove(fs::path(file) += ".meta");
-        CHECK(AssetManager(gpu, temp.Path()).Find<AssetType::Mesh>("tri.obj") != first);
+        CHECK(AssetManager(gpu, temp.Path()).Find<MeshAsset>("tri.obj") != first);
     }
 }
 
@@ -172,10 +184,10 @@ TEST_CASE("A corrupt meta file gets replaced", "[assets]")
     temp.Write("tri.obj.meta", "{ not json");
     FakeGpuResourceManager gpu;
 
-    const AssetID id = AssetManager(gpu, temp.Path()).Find<AssetType::Mesh>("tri.obj");
+    const AssetID id = AssetManager(gpu, temp.Path()).Find<MeshAsset>("tri.obj");
 
     CHECK(id);
-    CHECK(AssetManager(gpu, temp.Path()).Find<AssetType::Mesh>("tri.obj") == id);
+    CHECK(AssetManager(gpu, temp.Path()).Find<MeshAsset>("tri.obj") == id);
 }
 
 TEST_CASE("A file copied along with its meta gets its own id", "[assets]")
@@ -191,8 +203,8 @@ TEST_CASE("A file copied along with its meta gets its own id", "[assets]")
 
     AssetManager assets(gpu, temp.Path());
 
-    const MeshID a = assets.Find<AssetType::Mesh>("a.obj");
-    const MeshID b = assets.Find<AssetType::Mesh>("b.obj");
+    const MeshID a = assets.Find<MeshAsset>("a.obj");
+    const MeshID b = assets.Find<MeshAsset>("b.obj");
 
     REQUIRE(a);
     REQUIRE(b);
@@ -202,7 +214,7 @@ TEST_CASE("A file copied along with its meta gets its own id", "[assets]")
 
     // And it sticks
     AssetManager reopened(gpu, temp.Path());
-    CHECK(reopened.Find<AssetType::Mesh>("a.obj") != reopened.Find<AssetType::Mesh>("b.obj"));
+    CHECK(reopened.Find<MeshAsset>("a.obj") != reopened.Find<MeshAsset>("b.obj"));
 }
 
 TEST_CASE("Listing is sorted by path and filtered by type", "[assets]")
@@ -218,7 +230,7 @@ TEST_CASE("Listing is sorted by path and filtered by type", "[assets]")
 
     // The engine's own meshes are listed too, but only the project's are under test here
     std::vector<std::string> paths;
-    for (const AssetInfo* info : assets.List(AssetType::Mesh))
+    for (const AssetInfo* info : assets.List(AssetType::Of<MeshAsset>()))
     {
         if (!info->ReadOnly)
             paths.push_back(info->Path);
@@ -244,7 +256,7 @@ TEST_CASE("Engine assets are always there, with the same id everywhere", "[asset
         CHECK(a.FindId(path) == b.FindId(path));
     }
 
-    CHECK(slot_materials::DefaultMaterial(a) == a.Find<AssetType::Material>("engine/materials/M_Default.mat"));
+    CHECK(slot_materials::DefaultMaterial(a) == a.Find<MaterialAsset>("engine/materials/M_Default.mat"));
 
     // Includes aren't assets, and engine assets don't write metas anywhere
     CHECK_FALSE(a.FindId("engine/shaders/crimson/bindings.hlsli"));
@@ -257,13 +269,13 @@ TEST_CASE("Every engine material loads, without any project files", "[assets]")
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
 
-    const auto materials = assets.List(AssetType::Material);
+    const auto materials = assets.List(AssetType::Of<MaterialAsset>());
     REQUIRE_FALSE(materials.empty());
 
     for (const AssetInfo* info : materials)
     {
         CAPTURE(info->Path);
-        CHECK(assets.Load(assets.As<AssetType::Material>(info->Id)));
+        CHECK(assets.Get(assets.As<MaterialAsset>(info->Id)));
     }
 }
 
@@ -275,7 +287,7 @@ TEST_CASE("A project can't shadow the engine's assets", "[assets]")
 
     AssetManager assets(gpu, temp.Path());
 
-    CHECK(assets.Load<AssetType::Material>("engine/materials/M_Default.mat"));
+    CHECK(assets.Get<MaterialAsset>("engine/materials/M_Default.mat"));
     CHECK_FALSE(fs::exists(temp.Path() / "engine/materials/M_Default.mat.meta"));
 }
 
@@ -302,19 +314,19 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 
     SECTION("Engine shader, with settings, properties and textures")
     {
-        const MaterialHandle material = assets.Load<AssetType::Material>("mine.mat");
+        const MaterialHandle material = *assets.Get<MaterialAsset>("mine.mat");
         REQUIRE(material);
 
         const auto& record = gpu.Materials.at(material.GetRaw());
         CHECK(record.Settings.RenderMode == MaterialRenderMode::Transparent);
         CHECK(record.Settings.Cull == CullMode::None);
         CHECK(record.Properties.at("Color").size() == sizeof(glm::vec4));
-        CHECK(record.Textures.at("Albedo") == assets.Load<AssetType::Texture>("image.bmp"));
+        CHECK(record.Textures.at("Albedo") == *assets.Get<TextureAsset>("image.bmp"));
     }
 
     SECTION("Own shader, in a subfolder, using the engine's includes")
     {
-        CHECK(assets.Load<AssetType::Material>("custom.mat"));
+        CHECK(assets.Get<MaterialAsset>("custom.mat"));
     }
 }
 
@@ -328,13 +340,15 @@ TEST_CASE("A load only happens once", "[assets]")
 
     CHECK(gpu.LiveMaterials == 0);
 
-    const MaterialHandle first = assets.Load<AssetType::Material>("a.mat");
-    CHECK(assets.Load<AssetType::Material>("a.mat") == first);
-    CHECK(assets.Load(assets.Find<AssetType::Material>("a.mat")) == first);
+    const MaterialHandle first = *assets.Get<MaterialAsset>("a.mat");
+    CHECK(*assets.Get<MaterialAsset>("a.mat") == first);
+    CHECK(assets.Get(assets.Find<MaterialAsset>("a.mat")) == assets.Get(assets.Find<MaterialAsset>("a.mat")));
+    CHECK(assets.Get<MaterialAsset>("a.mat") == assets.Get(assets.Find<MaterialAsset>("a.mat")));
+    CHECK(*assets.Get(assets.Find<MaterialAsset>("a.mat")) == first);
     CHECK(gpu.LiveMaterials == 1);
 
     // Two materials share one shader
-    CHECK(assets.Load<AssetType::Material>("b.mat"));
+    CHECK(assets.Get<MaterialAsset>("b.mat"));
     CHECK(gpu.LiveMaterials == 2);
     CHECK(gpu.ShadersCreated == 1);
 }
@@ -352,11 +366,11 @@ TEST_CASE("A failed load is logged once and not tried again", "[assets]")
 
     for (int i = 0; i < 3; ++i)
     {
-        CHECK_FALSE(assets.Load<AssetType::Shader>("broken.hlsl"));
-        CHECK_FALSE(assets.Load<AssetType::Material>("uses_broken.mat"));
+        CHECK_FALSE(assets.Get<ShaderAsset>("broken.hlsl"));
+        CHECK_FALSE(assets.Get<MaterialAsset>("uses_broken.mat"));
     }
 
-    CHECK_FALSE(assets.Load<AssetType::Material>("also_uses_broken.mat"));
+    CHECK_FALSE(assets.Get<MaterialAsset>("also_uses_broken.mat"));
 
     CHECK(errors.Count() == 1);
     CHECK(gpu.ShadersCreated == 0);
@@ -372,28 +386,28 @@ TEST_CASE("Materials that can't load fail cleanly", "[assets]")
     {
         temp.Write("m.mat", "{ not json");
         AssetManager assets(gpu, temp.Path());
-        CHECK_FALSE(assets.Load<AssetType::Material>("m.mat"));
+        CHECK_FALSE(assets.Get<MaterialAsset>("m.mat"));
     }
 
     SECTION("No shader")
     {
         temp.Write("m.mat", "{}");
         AssetManager assets(gpu, temp.Path());
-        CHECK_FALSE(assets.Load<AssetType::Material>("m.mat"));
+        CHECK_FALSE(assets.Get<MaterialAsset>("m.mat"));
     }
 
     SECTION("A shader that doesn't exist")
     {
         temp.Write("m.mat", R"({ "shader": "nope.hlsl" })");
         AssetManager assets(gpu, temp.Path());
-        CHECK_FALSE(assets.Load<AssetType::Material>("m.mat"));
+        CHECK_FALSE(assets.Get<MaterialAsset>("m.mat"));
     }
 
     SECTION("A missing texture only loses the texture")
     {
         temp.Write("m.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "textures": { "Albedo": "nope.bmp" } })");
         AssetManager assets(gpu, temp.Path());
-        const MaterialHandle material = assets.Load<AssetType::Material>("m.mat");
+        const MaterialHandle material = *assets.Get<MaterialAsset>("m.mat");
         REQUIRE(material);
         CHECK_FALSE(gpu.Materials.at(material.GetRaw()).Textures.contains("Albedo"));
     }
@@ -406,16 +420,16 @@ TEST_CASE("Empty and mistyped requests get nothing", "[assets]")
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
 
-    CHECK_FALSE(assets.Load(MaterialID{}));
-    CHECK(assets.Load(MeshID{}) == nullptr);
-    CHECK_FALSE(assets.Load<AssetType::Material>("no/such.mat"));
+    CHECK_FALSE(assets.Get(MaterialID{}));
+    CHECK(assets.Get(MeshID{}) == nullptr);
+    CHECK_FALSE(assets.Get<MaterialAsset>("no/such.mat"));
 
     SECTION("Asking for the wrong type doesn't load it as that")
     {
-        CHECK_FALSE(assets.Load<AssetType::Material>("tri.obj"));
-        CHECK_FALSE(assets.Load<AssetType::Texture>("tri.obj"));
-        CHECK_FALSE(assets.Load<AssetType::Shader>("tri.obj"));
-        CHECK(assets.Load<AssetType::Mesh>("tri.obj") != nullptr);
+        CHECK_FALSE(assets.Get<MaterialAsset>("tri.obj"));
+        CHECK_FALSE(assets.Get<TextureAsset>("tri.obj"));
+        CHECK_FALSE(assets.Get<ShaderAsset>("tri.obj"));
+        CHECK(assets.Get<MeshAsset>("tri.obj") != nullptr);
     }
 }
 
@@ -426,34 +440,34 @@ TEST_CASE("Typed ids only come from assets of their type", "[assets]")
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
 
-    const MeshID untyped = assets.Find<AssetType::Mesh>("tri.obj");
-    const MeshID mesh = assets.Find<AssetType::Mesh>("tri.obj");
+    const MeshID untyped = assets.Find<MeshAsset>("tri.obj");
+    const MeshID mesh = assets.Find<MeshAsset>("tri.obj");
 
     CHECK(mesh);
-    CHECK(mesh == assets.As<AssetType::Mesh>(untyped));
+    CHECK(mesh == assets.As<MeshAsset>(untyped));
     CHECK(static_cast<AssetID>(mesh) == untyped);
-    CHECK(assets.Load(mesh) != nullptr);
-    CHECK(assets.Load<AssetType::Mesh>("tri.obj") == assets.Load(mesh));
+    CHECK(assets.Get(mesh) != nullptr);
+    CHECK(assets.Get<MeshAsset>("tri.obj") == assets.Get(mesh));
 
     SECTION("Another type gives an empty id")
     {
-        CHECK_FALSE(assets.As<AssetType::Texture>(untyped));
-        CHECK_FALSE(assets.Find<AssetType::Material>("tri.obj"));
-        CHECK_FALSE(assets.Load<AssetType::Material>("tri.obj"));
+        CHECK_FALSE(assets.As<TextureAsset>(untyped));
+        CHECK_FALSE(assets.Find<MaterialAsset>("tri.obj"));
+        CHECK_FALSE(assets.Get<MaterialAsset>("tri.obj"));
     }
 
     SECTION("So does an id or path that doesn't exist")
     {
-        CHECK_FALSE(assets.As<AssetType::Mesh>(AssetID{ 1234 }));
-        CHECK_FALSE(assets.Find<AssetType::Mesh>("no/such.obj"));
-        CHECK(assets.Load(MeshID{}) == nullptr);
+        CHECK_FALSE(assets.As<MeshAsset>(AssetID{ 1234 }));
+        CHECK_FALSE(assets.Find<MeshAsset>("no/such.obj"));
+        CHECK(assets.Get(MeshID{}) == nullptr);
     }
 
     SECTION("Engine assets have types too")
     {
-        const ShaderID shader = assets.Find<AssetType::Shader>("engine/shaders/S_Lit.hlsl");
+        const ShaderID shader = assets.Find<ShaderAsset>("engine/shaders/S_Lit.hlsl");
         REQUIRE(shader);
-        CHECK(assets.Load(shader));
+        CHECK(assets.Get(shader));
     }
 }
 
@@ -467,7 +481,7 @@ TEST_CASE("Meshes load their geometry, bounds and material slots", "[assets]")
         temp.Write("tri.obj", kTriangleObj);
         AssetManager assets(gpu, temp.Path());
 
-        const Mesh* mesh = assets.Load<AssetType::Mesh>("tri.obj");
+        const Mesh* mesh = assets.Get<MeshAsset>("tri.obj");
         REQUIRE(mesh);
         CHECK(mesh->VertexBuffer);
         CHECK(mesh->IndexBuffer);
@@ -484,7 +498,7 @@ TEST_CASE("Meshes load their geometry, bounds and material slots", "[assets]")
         temp.Write("tri.obj", "mtllib tri.mtl\nv 0 0 0\nv 1 0 0\nv 0 1 0\nusemtl blue\nf 1 2 3\n");
         AssetManager assets(gpu, temp.Path());
 
-        const Mesh* mesh = assets.Load<AssetType::Mesh>("tri.obj");
+        const Mesh* mesh = assets.Get<MeshAsset>("tri.obj");
         REQUIRE(mesh);
         CHECK(mesh->MaterialSlots.size() == 2);
         REQUIRE(mesh->SubMeshes.size() == 1);
@@ -495,7 +509,7 @@ TEST_CASE("Meshes load their geometry, bounds and material slots", "[assets]")
     {
         temp.Write("empty.obj", "# nothing here\n");
         AssetManager assets(gpu, temp.Path());
-        CHECK(assets.Load<AssetType::Mesh>("empty.obj") == nullptr);
+        CHECK(assets.Get<MeshAsset>("empty.obj") == nullptr);
     }
 }
 
@@ -518,11 +532,11 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path() / folder);
 
-    const Mesh* mesh = assets.Load<AssetType::Mesh>("tri.obj");
+    const Mesh* mesh = assets.Get<MeshAsset>("tri.obj");
     REQUIRE(mesh);
     CHECK(mesh->MaterialSlots == std::vector<std::string>{ "red" });
-    CHECK(assets.Load<AssetType::Texture>("image.bmp"));
-    CHECK(assets.Load<AssetType::Material>("own.mat"));
+    CHECK(assets.Get<TextureAsset>("image.bmp"));
+    CHECK(assets.Get<MaterialAsset>("own.mat"));
 }
 
 TEST_CASE("Images decode from memory", "[assets]")
@@ -552,9 +566,9 @@ TEST_CASE("A texture's srgb setting picks its format", "[assets]")
 
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
-    const TextureID id = assets.Find<AssetType::Texture>("image.bmp");
+    const TextureID id = assets.Find<TextureAsset>("image.bmp");
 
-    REQUIRE(assets.Load(id));
+    REQUIRE(assets.Get(id));
     CHECK(gpu.LastTextureInfo.Format == TextureFormat::RGBA8Srgb);
 
     SECTION("Turning it off")
@@ -575,8 +589,8 @@ TEST_CASE("Destroying the manager frees what it loaded, users first", "[assets]"
 
     {
         AssetManager assets(gpu, temp.Path());
-        CHECK(assets.Load<AssetType::Mesh>("tri.obj"));
-        CHECK(assets.Load<AssetType::Material>("mine.mat"));
+        CHECK(assets.Get<MeshAsset>("tri.obj"));
+        CHECK(assets.Get<MaterialAsset>("mine.mat"));
 
         CHECK(gpu.LiveMaterials == 1);
         CHECK(gpu.LiveShaders == 1);
@@ -591,7 +605,7 @@ TEST_CASE("Destroying the manager frees what it loaded, users first", "[assets]"
     CHECK(lastMaterial < firstShader);
 }
 
-TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
+TEST_CASE("A mesh's empty slots find the materials made for them", "[assets]")
 {
     const TempFolder temp;
     temp.Write("model/two.obj", "mtllib two.mtl\nv 0 0 0\nv 1 0 0\nv 0 2 0\nv 0 0 1\nusemtl stone\nf 1 2 3\nusemtl wood\nf 1 2 4\n");
@@ -603,90 +617,16 @@ TEST_CASE("A mesh's empty slots use the materials made for them", "[assets]")
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
 
-    const MeshID mesh = assets.Find<AssetType::Mesh>("model/two.obj");
-    const MaterialID stone = assets.Find<AssetType::Material>("model/materials/stone.mat");
+    const MeshID mesh = assets.Find<MeshAsset>("model/two.obj");
+    const MaterialID stone = assets.Find<MaterialAsset>("model/materials/stone.mat");
 
     CHECK(slot_materials::Find(assets, mesh, "stone") == stone);
     CHECK_FALSE(slot_materials::Find(assets, mesh, "wood"));
     CHECK_FALSE(slot_materials::Find(assets, MeshID{}, "stone"));
 
-    MeshRendererComponent renderer;
-    renderer.MeshAsset = mesh;
-
-    SECTION("Without one it is the default material")
-    {
-        ResolveAssets(assets, renderer);
-
-        REQUIRE(renderer.MaterialAssets.size() == 2);
-        CHECK(renderer.MaterialAssets[0] == stone);
-        CHECK(renderer.MaterialAssets[1] == slot_materials::DefaultMaterial(assets));
-        CHECK(renderer.Resolved.Materials[0] == assets.Load(stone));
-    }
-
-    SECTION("A chosen material wins")
-    {
-        renderer.MaterialAssets = { assets.Find<AssetType::Material>("mine.mat") };
-        ResolveAssets(assets, renderer);
-
-        REQUIRE(renderer.MaterialAssets.size() == 2);
-        CHECK(renderer.MaterialAssets[0] == assets.Find<AssetType::Material>("mine.mat"));
-    }
-}
-
-TEST_CASE("Resolving a mesh renderer fills in what is missing", "[assets]")
-{
-    const TempFolder temp;
-    temp.Write("tri.obj", kTriangleObj);
-    temp.Write("mine.mat", kValidMaterial);
-    FakeGpuResourceManager gpu;
-    AssetManager assets(gpu, temp.Path());
-
-    MeshRendererComponent renderer;
-
-    SECTION("No mesh gives nothing to draw")
-    {
-        ResolveAssets(assets, renderer);
-        CHECK(renderer.Resolved.SubMeshes.empty());
-    }
-
-    SECTION("An empty slot gets the default material")
-    {
-        renderer.MeshAsset = assets.Find<AssetType::Mesh>("tri.obj");
-        ResolveAssets(assets, renderer);
-
-        REQUIRE(renderer.MaterialAssets.size() == 1);
-        CHECK(renderer.MaterialAssets[0] == slot_materials::DefaultMaterial(assets));
-        CHECK(renderer.Resolved.Materials[0] == assets.Load(slot_materials::DefaultMaterial(assets)));
-    }
-
-    SECTION("A chosen material is kept")
-    {
-        renderer.MeshAsset = assets.Find<AssetType::Mesh>("tri.obj");
-        renderer.MaterialAssets = { assets.Find<AssetType::Material>("mine.mat") };
-        ResolveAssets(assets, renderer);
-
-        CHECK(renderer.Resolved.Materials[0] == assets.Load<AssetType::Material>("mine.mat"));
-    }
-
-    SECTION("Extra slots are dropped, as the mesh decides how many it has")
-    {
-        renderer.MeshAsset = assets.Find<AssetType::Mesh>("tri.obj");
-        renderer.MaterialAssets = { assets.Find<AssetType::Material>("mine.mat"), assets.Find<AssetType::Material>("mine.mat"), assets.Find<AssetType::Material>("mine.mat") };
-        ResolveAssets(assets, renderer);
-
-        CHECK(renderer.MaterialAssets.size() == 1);
-    }
-
-    SECTION("Resolving again clears the old result when the mesh is removed")
-    {
-        renderer.MeshAsset = assets.Find<AssetType::Mesh>("tri.obj");
-        ResolveAssets(assets, renderer);
-        REQUIRE_FALSE(renderer.Resolved.SubMeshes.empty());
-
-        renderer.MeshAsset = {};
-        ResolveAssets(assets, renderer);
-        CHECK(renderer.Resolved.SubMeshes.empty());
-    }
+    // What a renderer's empty slot draws with
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "stone") == stone);
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "wood") == slot_materials::DefaultMaterial(assets));
 }
 
 static std::string ReadFile(const fs::path& file)
@@ -757,7 +697,7 @@ TEST_CASE("The renderer's own shaders and materials are internal", "[assets]")
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, fs::path("does/not/exist"));
 
-    for (const std::string_view path : { "engine/shaders/internal/S_ToneMap.hlsl", "engine/materials/internal/M_Outline.mat", "engine/scenes/internal/SC_NewScene.scene" })
+    for (const std::string_view path : { "engine/shaders/internal/S_ToneMap.hlsl", "engine/materials/internal/M_Outline.mat", "engine/materials/internal/M_Missing.mat", "engine/scenes/internal/SC_NewScene.scene" })
     {
         const AssetInfo* info = assets.GetInfo(assets.FindId(path));
         REQUIRE(info);
@@ -837,7 +777,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     ImportCacheStats before = ImportCache::Stats();
     {
         AssetManager assets(gpu, temp.Path() / "assets", cacheFolder);
-        CHECK(assets.Load<AssetType::Shader>("mine.hlsl"));
+        CHECK(assets.Get<ShaderAsset>("mine.hlsl"));
     }
     CHECK(ImportCache::Stats().Stores - before.Stores == 1);
 
@@ -846,7 +786,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     before = ImportCache::Stats();
 
     AssetManager assets(gpu, temp.Path() / "assets", cacheFolder);
-    CHECK(assets.Load<AssetType::Shader>("mine.hlsl"));
+    CHECK(assets.Get<ShaderAsset>("mine.hlsl"));
     CHECK(ImportCache::Stats().Stores == before.Stores);
     CHECK(ImportCache::Stats().Hits - before.Hits == 1);
 
@@ -869,7 +809,7 @@ TEST_CASE("The engine's shaders use the engine cache", "[assets]")
 
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path() / "assets", projectCache);
-    REQUIRE(assets.Load<AssetType::Shader>("engine/shaders/S_Lit.hlsl"));
+    REQUIRE(assets.Get<ShaderAsset>("engine/shaders/S_Lit.hlsl"));
 
     REQUIRE(fs::is_directory(engineCache / "shaders"));
     CHECK_FALSE(fs::is_empty(engineCache / "shaders"));
@@ -891,7 +831,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 
     {
         AssetManager assets(gpu, temp.Path() / "a" / "assets", temp.Path() / "a" / ".crimson" / "cache");
-        REQUIRE(assets.Load<AssetType::Shader>("mine.hlsl"));
+        REQUIRE(assets.Get<ShaderAsset>("mine.hlsl"));
     }
 
     ImportCache::ForgetMemory();
@@ -899,7 +839,7 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 
     const ImportCacheStats before = ImportCache::Stats();
     AssetManager assets(gpu, temp.Path() / "b" / "assets", temp.Path() / "b" / ".crimson" / "cache");
-    CHECK(assets.Load<AssetType::Shader>("mine.hlsl"));
+    CHECK(assets.Get<ShaderAsset>("mine.hlsl"));
     CHECK(ImportCache::Stats().Hits - before.Hits == 1);
     CHECK(ImportCache::Stats().Stores == before.Stores);
 
@@ -910,4 +850,285 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     const ImportCacheStats beforeChange = ImportCache::Stats();
     CHECK_FALSE(assets.ReloadChanged().empty());
     CHECK(ImportCache::Stats().Stores - beforeChange.Stores == 1);
+}
+
+namespace
+{
+    // The file that makes an asset of the type: asset_Texture.png, empty
+    template <typename T, typename Importer>
+    fs::path TypeFileName()
+    {
+        const Importer importer;
+        return "asset_" + std::string(T::Name) + std::string(importer.Extensions().front());
+    }
+
+    template <typename T, typename Importer>
+    void CheckRegistered(AssetManager& assets, const TempFolder& temp)
+    {
+        const std::vector<AssetType> types = assets.Types();
+        const auto position = [&types](AssetType type) { return std::ranges::find(types, type) - types.begin(); };
+        const std::ptrdiff_t at = position(AssetType::Of<T>());
+        CHECK(at < std::ssize(types));
+
+        // Every entry of Uses comes before it, which is the order they are unloaded in, reversed
+        for (const AssetType used : T::Uses)
+            CHECK(position(used) < at);
+
+        // The importer is registered, as it made this one's info
+        const Importer importer;
+        CHECK(importer.Type() == AssetType::Of<T>());
+
+        const AssetID id = assets.FindId(TypeFileName<T, Importer>().generic_string());
+        REQUIRE(assets.GetInfo(id));
+        CHECK(assets.GetInfo(id)->Type.Is<T>());
+
+        // The name goes into files and comes out as itself
+        std::ifstream meta(meta::PathFor(temp.Path() / TypeFileName<T, Importer>()));
+        CHECK(nlohmann::json::parse(meta)["type"].get<std::string>() == T::Name);
+
+        // Its store loads it or fails to, and says which
+        if constexpr (LoadableAsset<T>)
+        {
+            const auto loaded = assets.Get(assets.As<T>(id));
+            CHECK(assets.IsLoaded(id) == static_cast<bool>(loaded));
+        }
+    }
+}
+
+TEST_CASE("The built-in asset types register completely, each after what it uses", "[assets]")
+{
+    static_assert(CompleteAssetType<TextureAsset> && CompleteAssetType<MeshAsset> && CompleteAssetType<ShaderAsset>
+        && CompleteAssetType<MaterialAsset> && CompleteAssetType<SceneAsset>);
+    static_assert(ImporterFor<TextureImporter, TextureAsset> && ImporterFor<MeshImporter, MeshAsset> && ImporterFor<ShaderImporter, ShaderAsset>
+        && ImporterFor<MaterialImporter, MaterialAsset> && ImporterFor<SceneImporter, SceneAsset>);
+
+    const TempFolder temp;
+    temp.Write(TypeFileName<TextureAsset, TextureImporter>(), "");
+    temp.Write(TypeFileName<MeshAsset, MeshImporter>(), "");
+    temp.Write(TypeFileName<ShaderAsset, ShaderImporter>(), "");
+    temp.Write(TypeFileName<MaterialAsset, MaterialImporter>(), "");
+    temp.Write(TypeFileName<SceneAsset, SceneImporter>(), "");
+
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    CheckRegistered<TextureAsset, TextureImporter>(assets, temp);
+    CheckRegistered<MeshAsset, MeshImporter>(assets, temp);
+    CheckRegistered<ShaderAsset, ShaderImporter>(assets, temp);
+    CheckRegistered<MaterialAsset, MaterialImporter>(assets, temp);
+    CheckRegistered<SceneAsset, SceneImporter>(assets, temp);
+}
+
+namespace
+{
+    // Two types made only for the test: a whole is made of parts
+    struct PartAsset
+    {
+        using Data = NoAssetData;
+
+        static constexpr std::string_view Name = "Part";
+        static constexpr std::array<AssetType, 0> Uses{};
+    };
+
+    struct WholeAsset
+    {
+        using Data = NoAssetData;
+
+        static constexpr std::string_view Name = "Whole";
+        static constexpr std::array<AssetType, 1> Uses = { AssetType::Of<PartAsset>() };
+    };
+
+    class PartImporter final : public AssetImporterBase
+    {
+    public:
+        AssetType Type() const override { return AssetType::Of<PartAsset>(); }
+        nlohmann::json DefaultSettings() const override { return nlohmann::json::object(); }
+
+        std::span<const std::string_view> Extensions() const override
+        {
+            static constexpr std::string_view exts[] = { ".testpart" };
+            return exts;
+        }
+    };
+
+    class WholeImporter final : public AssetImporterBase
+    {
+    public:
+        AssetType Type() const override { return AssetType::Of<WholeAsset>(); }
+        nlohmann::json DefaultSettings() const override { return nlohmann::json::object(); }
+
+        std::span<const std::string_view> Extensions() const override
+        {
+            static constexpr std::string_view exts[] = { ".testwhole" };
+            return exts;
+        }
+    };
+
+    // Has no name, which would make it the same as no type
+    struct NamelessAsset
+    {
+        using Data = NoAssetData;
+
+        static constexpr std::string_view Name = "";
+        static constexpr std::array<AssetType, 0> Uses{};
+    };
+}
+
+TEST_CASE("An asset type is refused until what it uses is registered", "[assets]")
+{
+    static_assert(CompleteAssetType<PartAsset> && CompleteAssetType<WholeAsset> && CompleteAssetType<NamelessAsset>);
+
+    const TempFolder temp;
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    {
+        const LogCounter errors(LogLevel::Error, "the Part it uses isn't registered yet");
+        CHECK_FALSE(assets.RegisterType<WholeAsset, WholeImporter>());
+        CHECK(errors.Count() == 1);
+    }
+
+    std::vector<AssetType> types = assets.Types();
+    CHECK(std::ranges::find(types, AssetType::Of<WholeAsset>()) == types.end());
+
+    CHECK(assets.RegisterType<PartAsset, PartImporter>());
+    CHECK(assets.RegisterType<WholeAsset, WholeImporter>());
+
+    types = assets.Types();
+    const auto part = std::ranges::find(types, AssetType::Of<PartAsset>());
+    const auto whole = std::ranges::find(types, AssetType::Of<WholeAsset>());
+    REQUIRE(part != types.end());
+    REQUIRE(whole != types.end());
+    CHECK(part < whole);
+
+    {
+        const LogCounter errors(LogLevel::Error, "is registered already");
+        CHECK_FALSE(assets.RegisterType<TextureAsset, TextureImporter>());
+        CHECK(errors.Count() == 1);
+    }
+
+    {
+        const LogCounter errors(LogLevel::Error, "with no name");
+        CHECK_FALSE(assets.RegisterType<NamelessAsset, PartImporter>());
+        CHECK(errors.Count() == 1);
+    }
+}
+
+TEST_CASE("Asset types keep the names their files have", "[assets]")
+{
+    CHECK(TextureAsset::Name == "Texture");
+    CHECK(MeshAsset::Name == "Mesh");
+    CHECK(ShaderAsset::Name == "Shader");
+    CHECK(MaterialAsset::Name == "Material");
+    CHECK(SceneAsset::Name == "Scene");
+
+    CHECK(AssetType::Of<MaterialAsset>().Name() == "Material");
+    CHECK(AssetType::Of<MaterialAsset>() != AssetType::Of<SceneAsset>());
+
+    CHECK_FALSE(AssetType{});
+    CHECK(AssetType{}.Name().empty());
+}
+
+TEST_CASE("A meta file naming another type is warned about, and its importer's type wins", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("tri.obj", kTriangleObj);
+    temp.Write("tri.obj.meta", R"({ "guid": "00000000000000ab", "type": "Texture", "importerVersion": 1, "settings": {} })");
+    FakeGpuResourceManager gpu;
+
+    const LogCounter warnings(LogLevel::Warn, "says it is a Texture, but its importer makes Mesh");
+    AssetManager assets(gpu, temp.Path());
+
+    CHECK(warnings.Count() == 1);
+
+    const AssetInfo* info = assets.GetInfo(AssetID{ 0xab });
+    REQUIRE(info);
+    CHECK(info->Path == "tri.obj");
+    CHECK(info->Type.Is<MeshAsset>());
+}
+
+TEST_CASE("The version changes when assets come, go, move or load again", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("a.mat", kValidMaterial);
+    temp.Write("image.bmp", MakeImage());
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    uint64_t version = assets.Version();
+    const auto changed = [&]
+    {
+        const bool different = assets.Version() != version;
+        version = assets.Version();
+        return different;
+    };
+
+    const MaterialID material = assets.Find<MaterialAsset>("a.mat");
+    const TextureID texture = assets.Find<TextureAsset>("image.bmp");
+
+    SECTION("Not by looking things up, or by changing them in place")
+    {
+        REQUIRE(assets.Get(material));
+        CHECK_FALSE(changed());
+
+        MaterialData data = *assets.GetData(material);
+        data.Properties["Color"] = { 1.0f, 0.0f, 0.0f, 1.0f };
+        CHECK(assets.Apply(material, data) == AssetUpdate::Updated);
+        CHECK_FALSE(changed());
+    }
+
+    SECTION("By what comes, moves and goes")
+    {
+        const MaterialID created = assets.Create<MaterialAsset>("b.mat");
+        REQUIRE(created);
+        CHECK(changed());
+
+        REQUIRE(assets.Rename(created, "folder/b.mat"));
+        CHECK(changed());
+
+        REQUIRE(assets.Delete(created));
+        CHECK(changed());
+
+        temp.Write("c.mat", kValidMaterial);
+        CHECK(assets.Refresh().empty());
+        CHECK(changed());
+    }
+
+    SECTION("By loading one again")
+    {
+        REQUIRE(assets.Get(texture));
+        CHECK_FALSE(changed());
+
+        nlohmann::json settings = assets.GetInfo(texture)->Settings;
+        settings["flipY"] = true;
+        REQUIRE(assets.Reimport(texture, settings));
+        CHECK(changed());
+    }
+}
+
+TEST_CASE("An empty slot uses the material made for it, or else the default", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("tri.obj", kTriangleObj);
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    const MeshID mesh = assets.Find<MeshAsset>("tri.obj");
+    const MaterialID defaultMaterial = slot_materials::DefaultMaterial(assets);
+    REQUIRE(defaultMaterial);
+
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == defaultMaterial);
+
+    temp.Write("materials/Paint.mat", kValidMaterial);
+    assets.Refresh();
+
+    const MaterialID made = assets.Find<MaterialAsset>("materials/Paint.mat");
+    REQUIRE(made);
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == made);
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Other") == defaultMaterial);
+
+    // What a missing material draws as is its own, in the engine's internal materials
+    CHECK(slot_materials::MissingMaterial(assets));
+    CHECK(slot_materials::MissingMaterial(assets) != defaultMaterial);
+    CHECK(assets.Get(slot_materials::MissingMaterial(assets)));
 }

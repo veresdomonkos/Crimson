@@ -1,16 +1,15 @@
 #pragma once
+#include <concepts>
 #include <filesystem>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 #include "crimson/asset_manager/asset_types.hpp"
-#include "crimson/asset_manager/material_data.hpp"
-#include "crimson/asset_manager/scene_data.hpp"
 #include "crimson/core/embedded_resource.hpp"
-#include "crimson/renderer/mesh.hpp"
 #include "crimson/renderer/resource_manager.hpp"
 
 namespace crimson
@@ -18,48 +17,18 @@ namespace crimson
     class AssetManager;
     class ImportCache;
 
-    // What an asset's file says, for the types whose files hold nothing to edit
-    struct NoAssetData {};
+    // What loading a type of asset gives, and what its file says, as the type's struct names them
+    template <typename T>
+    using LoadedAsset = typename T::Loaded;
 
-    // What loading each type of asset gives, and what its file says. Scenes load as nothing: they are read as data instead.
-    // A type whose files hold data also says how to parse and write it.
-    template <AssetType T> struct AssetTraits;
-    template <> struct AssetTraits<AssetType::Texture>  { using Loaded = TextureHandle;  using Result = TextureHandle; using Data = NoAssetData; };
-    template <> struct AssetTraits<AssetType::Shader>   { using Loaded = ShaderHandle;   using Result = ShaderHandle;  using Data = NoAssetData; };
-    template <> struct AssetTraits<AssetType::Mesh>     { using Loaded = Mesh;           using Result = const Mesh*; using Data = NoAssetData; }; // valid as long as the manager
-
-    template <> struct AssetTraits<AssetType::Material>
-    {
-        using Loaded = MaterialHandle;
-        using Result = MaterialHandle;
-        using Data = MaterialData;
-
-        static constexpr auto Parse = &material_data::Parse;
-        static constexpr auto Write = &material_data::Write;
-    };
-
-    template <> struct AssetTraits<AssetType::Scene>
-    {
-        using Data = SceneData;
-
-        static constexpr auto Parse = &scene_data::Parse;
-        static constexpr auto Write = &scene_data::Write;
-    };
-
-    template <AssetType T>
-    using LoadedAsset = typename AssetTraits<T>::Loaded;
-
-    template <AssetType T>
-    using LoadResult = typename AssetTraits<T>::Result;
-
-    template <AssetType T>
-    using AssetData = typename AssetTraits<T>::Data;
+    template <typename T>
+    using AssetData = typename T::Data;
 
     enum class AssetUpdate
     {
         Failed,
         Updated,  // the asset's handle is the same
-        Replaced  // the asset has a new handle, so anything holding on to the old one has to get it again
+        Replaced  // the asset was made again, with a new handle, which lookups give from now on
     };
 
     struct ImportContext
@@ -106,19 +75,16 @@ namespace crimson
         // Whether a change to the file on disk should load the asset again
         [[nodiscard]] virtual bool ReloadsWhenChanged() const { return false; }
 
-        // Whether a loaded asset can be replaced: false when what uses it holds a pointer that nothing would resolve again
-        [[nodiscard]] virtual bool CanReimport() const { return true; }
-
         // Frees what the importer made to share between its assets, once they are all unloaded
         virtual void ReleaseShared(GpuResourceManager&) {}
     };
 
     // One that also loads them. Errors go to the log and give nothing.
-    template <AssetType T>
+    template <typename T>
     class AssetImporter : public AssetImporterBase
     {
     public:
-        [[nodiscard]] AssetType Type() const final { return T; }
+        [[nodiscard]] AssetType Type() const final { return AssetType::Of<T>(); }
 
         virtual std::optional<LoadedAsset<T>> Load(const AssetSource& source, ImportContext& ctx) = 0;
         virtual void Unload(LoadedAsset<T>& asset, GpuResourceManager& gpu) = 0;
@@ -132,4 +98,25 @@ namespace crimson
         // Points the asset at one it uses that was loaded again or removed. False means it has to be made again.
         virtual bool UpdateUse(LoadedAsset<T>&, const AssetInfo&, AssetID /*used*/, ImportContext&) { return false; }
     };
+
+    // Whether a type of asset loads as something. Scenes don't: they are read as data instead.
+    template <typename T>
+    concept LoadableAsset = requires { typename T::Loaded; };
+
+    // What the struct of an asset type has to say for AssetManager::RegisterType to take it: what it is called,
+    // what its file holds, how to parse and write that if it holds any, and the types it is made from
+    template <typename T>
+    concept CompleteAssetType =
+        requires
+        {
+            typename T::Data;
+            { T::Uses } -> std::convertible_to<std::span<const AssetType>>;
+        }
+        && std::same_as<decltype(T::Name), const std::string_view> // a constant, as it is the type's identity
+        && (std::is_same_v<typename T::Data, NoAssetData> || requires { T::Parse; T::Write; });
+
+    // Whether an importer can make the assets of a type: it is made without arguments, and loads what the type says it loads
+    template <typename Importer, typename T>
+    concept ImporterFor = std::derived_from<Importer, AssetImporterBase> && std::default_initializable<Importer>
+        && (!LoadableAsset<T> || std::derived_from<Importer, AssetImporter<T>>);
 }

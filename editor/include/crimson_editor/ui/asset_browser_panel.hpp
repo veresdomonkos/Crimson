@@ -32,7 +32,7 @@ namespace crimson::editor::ui
         struct Item
         {
             AssetID Id;
-            AssetType Type = AssetType::None;
+            AssetType Type;
             std::string Path;
             std::string Name;
             std::string Folder;

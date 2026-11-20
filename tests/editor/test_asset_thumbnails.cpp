@@ -3,6 +3,7 @@
 #include <array>
 #include <string>
 
+#include <crimson/asset_manager/importers/texture_asset.hpp>
 #include <crimson_editor/asset_thumbnails.hpp>
 
 #include "support/fake_gpu.hpp"
@@ -32,9 +33,9 @@ TEST_CASE("A texture preview shows what is stored, and belongs to the caller", "
 
     FakeGpuResourceManager gpu;
     AssetManager assets(gpu, temp.Path());
-    const TextureID id = assets.Find<AssetType::Texture>("image.bmp");
+    const TextureID id = assets.Find<TextureAsset>("image.bmp");
 
-    REQUIRE(assets.Load(id));
+    REQUIRE(assets.Get(id));
     CHECK(gpu.LastTextureInfo.Format == TextureFormat::RGBA8Srgb);
 
     const int before = gpu.LiveTextures;

@@ -186,7 +186,7 @@ namespace crimson::editor::ui
 
         {
             const theme::ScopedBold bold;
-            ImGui::Text("Select %.*s", static_cast<int>(ToString(m_type).size()), ToString(m_type).data());
+            ImGui::Text("Select %.*s", static_cast<int>(m_type.Name().size()), m_type.Name().data());
         }
 
         const bool appearing = ImGui::IsWindowAppearing();
@@ -281,8 +281,8 @@ namespace crimson::editor::ui
 
                 // Only pictures that are on screen get loaded
                 ImTextureID picture = 0;
-                if (m_type == AssetType::Texture && entry.Id && ImGui::IsItemVisible())
-                    picture = thumbnails.Get(assets.As<AssetType::Texture>(entry.Id));
+                if (m_type.Is<TextureAsset>() && entry.Id && ImGui::IsItemVisible())
+                    picture = thumbnails.Get(assets.As<TextureAsset>(entry.Id));
 
                 if (picture)
                 {

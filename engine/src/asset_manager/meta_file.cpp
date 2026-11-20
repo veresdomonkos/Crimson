@@ -13,7 +13,7 @@ namespace crimson::meta
         return p;
     }
 
-    std::optional<AssetInfo> Read(const std::filesystem::path& metaPath)
+    std::optional<AssetInfo> Read(const std::filesystem::path& metaPath, AssetType importerType)
     {
         std::ifstream file(metaPath);
         if (!file) return std::nullopt;
@@ -24,7 +24,12 @@ namespace crimson::meta
 
             AssetInfo m;
             m.Id = AssetID::FromString(j.at("guid").get<std::string>());
-            m.Type = AssetTypeFromString(j.at("type").get<std::string>());
+            // The importer decides what the file is, so a meta that says otherwise is only worth a warning
+            const std::string written = j.at("type").get<std::string>();
+            if (written != importerType.Name())
+                LOG_WARN("[Assets] {} says it is a {}, but its importer makes {}, which it is taken for", metaPath.string(), written, importerType.Name());
+
+            m.Type = importerType;
             m.ImporterVersion = j.value("importerVersion", 1u);
             m.Settings = j.value("settings", nlohmann::json::object());
             return m;
@@ -40,7 +45,7 @@ namespace crimson::meta
     {
         nlohmann::json j;
         j["guid"] = m.Id.ToString();
-        j["type"] = std::string(ToString(m.Type));
+        j["type"] = std::string(m.Type.Name());
         j["importerVersion"]= m.ImporterVersion;
         j["settings"] = m.Settings;
 

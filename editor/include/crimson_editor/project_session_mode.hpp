@@ -6,6 +6,7 @@
 #include <span>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/importers/scene_asset.hpp>
 #include <crimson/project/project.hpp>
 #include <crimson/scene/scene_renderer.hpp>
 

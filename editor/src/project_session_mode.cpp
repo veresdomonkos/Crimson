@@ -75,7 +75,7 @@ namespace crimson::editor
         // For code editors to find the engine's shader headers, which may have changed since the project was last open
         ExportShaderIncludes(m_project);
 
-        m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer);
+        m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer, *m_assetManager);
         // The menu is drawn in the middle of a frame, and undoing can create entities, which load GPU resources
         m_ui = std::make_unique<ui::EditorUI>(ui::MainMenuActions{
             .SaveAll = [this] { SaveAll(); },
@@ -123,8 +123,8 @@ namespace crimson::editor
 
     void ProjectSessionMode::SetupRenderer()
     {
-        m_sceneRenderer->SetToneMapMaterial(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_ToneMap.mat"), kMainTargetWidth, kMainTargetHeight);
-        m_sceneRenderer->SetOutlineMaterial(m_assetManager->Load<AssetType::Material>("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetToneMapMaterial(m_assetManager->Find<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetOutlineMaterial(m_assetManager->Find<MaterialAsset>("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
     }
 
     void ProjectSessionMode::SetupUI()
@@ -155,8 +155,7 @@ namespace crimson::editor
 
         m_context.Deferred.clear();
 
-        if (m_assetEdits->Apply())
-            ResolveSceneAssets(m_scene, *m_assetManager);
+        m_assetEdits->Apply();
     }
 
     void ProjectSessionMode::ForgetAssets(std::span<const AssetID> removed)
@@ -169,10 +168,6 @@ namespace crimson::editor
             if (m_context.SelectedAsset == id)
                 m_context.SelectAsset({});
         }
-
-        // The scene's references to what went keep its id, to be saved and to work again when it comes back, which a
-        // refresh with nothing removed can be. Also for materials that went away because a shader they used is gone.
-        ResolveSceneAssets(m_scene, *m_assetManager);
 
         const auto isRemoved = [removed](AssetID id) { return std::ranges::find(removed, id) != removed.end(); };
 
@@ -202,14 +197,14 @@ namespace crimson::editor
 
     SceneID ProjectSessionMode::ChooseScene(AssetID preferred)
     {
-        if (const SceneID scene = m_assetManager->As<AssetType::Scene>(preferred))
+        if (const SceneID scene = m_assetManager->As<SceneAsset>(preferred))
             return scene;
 
         // Not the engine's template, which is listed too
-        const std::vector<const AssetInfo*> scenes = m_assetManager->List(AssetType::Scene);
+        const std::vector<const AssetInfo*> scenes = m_assetManager->List(AssetType::Of<SceneAsset>());
         const auto first = std::ranges::find_if(scenes, [](const AssetInfo* scene) { return !scene->ReadOnly; });
 
-        return first == scenes.end() ? m_assetManager->Create<AssetType::Scene>("scenes/main.scene") : m_assetManager->As<AssetType::Scene>((*first)->Id);
+        return first == scenes.end() ? m_assetManager->Create<SceneAsset>("scenes/main.scene") : m_assetManager->As<SceneAsset>((*first)->Id);
     }
 
     void ProjectSessionMode::OpenScene(SceneID id)
@@ -693,8 +688,7 @@ namespace crimson::editor
         {
             m_sinceShaderCheck = 0.0f;
 
-            if (!m_assetManager->ReloadChanged().empty())
-                ResolveSceneAssets(m_scene, *m_assetManager);
+            m_assetManager->ReloadChanged();
         }
 
         // The editor camera stays where it is while a scene camera is looked through
@@ -761,7 +755,7 @@ namespace crimson::editor
         if (!ImGui::GetIO().WantTextInput && !m_services.AppInput.IsMouseButtonDown(MouseButton::Right)
             && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_context.Selected && !m_sceneView.IsLookingThrough())
         {
-            m_cameraController->Frame(m_context.Selected);
+            m_cameraController->Frame(m_context.Selected, *m_assetManager);
         }
     }
 }

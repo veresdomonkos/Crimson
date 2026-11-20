@@ -11,6 +11,10 @@
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/asset_manager/meta_file.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/scene_asset.hpp>
+
 #include <crimson/scene/scene_renderer.hpp>
 #include <crimson/scene/scene_serializer.hpp>
 
@@ -21,7 +25,6 @@
 using namespace crimson;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::FieldOf;
-using crimson::tests::ResolveAssets;
 using crimson::tests::TempFolder;
 
 namespace fs = std::filesystem;
@@ -54,7 +57,7 @@ namespace
 
         void Open(AssetManager& assets, std::string_view path, Scene& scene) const
         {
-            const SceneID id = assets.Find<AssetType::Scene>(path);
+            const SceneID id = assets.Find<SceneAsset>(path);
             const auto data = assets.Read(id);
             REQUIRE(data);
             InstantiateScene(*data, scene, {}, assets, id);
@@ -82,10 +85,10 @@ TEST_CASE_METHOD(Fixture, "A scene survives being saved and loaded", "[scene dat
 
     const Entity mesh = scene.CreateEntity("Mesh");
     auto& renderer = mesh.AddComponent<MeshRendererComponent>();
-    renderer.MeshAsset = assets.Find<AssetType::Mesh>("meshes/thing.obj");
-    renderer.MaterialAssets = { assets.Find<AssetType::Material>("materials/thing.mat") };
+    renderer.MeshAsset = assets.Find<MeshAsset>("meshes/thing.obj");
+    renderer.MaterialAssets = { assets.Find<MaterialAsset>("materials/thing.mat") };
     renderer.CastsShadows = false;
-    ResolveAssets(assets, renderer);
+    REQUIRE(assets.Get(renderer.MeshAsset));
 
     const Entity camera = scene.CreateEntity("Camera");
     camera.AddComponent<CameraComponent>(CameraComponent{ .FieldOfViewDegrees = 45.0f, .NearClip = 0.3f, .FarClip = 250.0f });
@@ -104,7 +107,7 @@ TEST_CASE_METHOD(Fixture, "A scene survives being saved and loaded", "[scene dat
     REQUIRE(loaded.GetRoots().size() == 3);
     const Entity loadedMesh = loaded.GetEntity(loaded.GetRoots()[1]);
     CHECK(loadedMesh.GetComponent<NameComponent>().Id == mesh.GetComponent<NameComponent>().Id);
-    CHECK_FALSE(loadedMesh.GetComponent<MeshRendererComponent>().Resolved.SubMeshes.empty());
+    CHECK(assets.Get(loadedMesh.GetComponent<MeshRendererComponent>().MeshAsset));
 }
 
 TEST_CASE_METHOD(Fixture, "Numbers are written the short way", "[scene data]")
@@ -132,7 +135,7 @@ TEST_CASE_METHOD(Fixture, "Scene files written by hand work", "[scene data]")
     CHECK(data->Roots[0].Id);
     CHECK(data->Roots[0].Active);
     CHECK(FieldOf<glm::vec3>(assets, data->Roots[0], "transform", "scale") == glm::vec3(1.0f));
-    CHECK(FieldOf<AssetID>(assets, data->Roots[0], "meshRenderer", "mesh") == assets.Find<AssetType::Mesh>("thing.obj"));
+    CHECK(FieldOf<AssetID>(assets, data->Roots[0], "meshRenderer", "mesh") == assets.Find<MeshAsset>("thing.obj"));
 }
 
 TEST_CASE_METHOD(Fixture, "A broken scene file doesn't load", "[scene data]")
@@ -156,12 +159,11 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
 
     Scene scene;
     auto& renderer = scene.CreateEntity("Mesh").AddComponent<MeshRendererComponent>();
-    renderer.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
-    ResolveAssets(assets, renderer);
-    REQUIRE(renderer.MaterialAssets[0] == slot_materials::DefaultMaterial(assets));
+    const MeshID mesh = assets.Find<MeshAsset>("thing.obj");
+    renderer.MeshAsset = mesh;
 
     const SceneData data = CaptureScene(scene, {}, assets);
-    CHECK_FALSE(FieldOf<std::vector<AssetID>>(assets, data.Roots[0], "meshRenderer", "materials")[0]);
+    CHECK(FieldOf<std::vector<AssetID>>(assets, data.Roots[0], "meshRenderer", "materials").empty());
 
     // So a material made for the slot afterwards gets used
     Temp.Write("materials/Paint.mat", kMaterial);
@@ -171,36 +173,37 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
     InstantiateScene(*scene_data::Parse(scene_data::Write(data, assets), assets, "test"), loaded, {}, assets, {});
 
     const Entity entity = loaded.GetEntity(loaded.GetRoots()[0]);
-    CHECK(entity.GetComponent<MeshRendererComponent>().MaterialAssets[0] == assets.Find<AssetType::Material>("materials/Paint.mat"));
+    CHECK(entity.GetComponent<MeshRendererComponent>().MaterialAssets.empty());
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == assets.Find<MaterialAsset>("materials/Paint.mat"));
 }
 
-TEST_CASE_METHOD(Fixture, "A slot on the default material finds one made for it, and a chosen one stays", "[scene data]")
+TEST_CASE_METHOD(Fixture, "An empty slot finds a material made for it later, and a chosen one stays", "[scene data]")
 {
     Temp.Write("thing.obj", "mtllib thing.mtl\nusemtl Paint\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n");
     Temp.Write("thing.mtl", "newmtl Paint\n");
     Temp.Write("other.mat", kMaterial);
     AssetManager assets(Gpu, Temp.Path());
 
+    const MeshID mesh = assets.Find<MeshAsset>("thing.obj");
+    const MaterialID other = assets.Find<MaterialAsset>("other.mat");
+
     Scene scene;
-    auto& onDefault = scene.CreateEntity("Default").AddComponent<MeshRendererComponent>();
-    onDefault.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
-    ResolveAssets(assets, onDefault);
-    REQUIRE(onDefault.MaterialAssets[0] == slot_materials::DefaultMaterial(assets));
+    auto& empty = scene.CreateEntity("Empty").AddComponent<MeshRendererComponent>();
+    empty.MeshAsset = mesh;
 
     auto& chosen = scene.CreateEntity("Chosen").AddComponent<MeshRendererComponent>();
-    chosen.MeshAsset = assets.Find<AssetType::Mesh>("thing.obj");
-    chosen.MaterialAssets = { assets.Find<AssetType::Material>("other.mat") };
-    ResolveAssets(assets, chosen);
+    chosen.MeshAsset = mesh;
+    chosen.MaterialAssets = { other };
+
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == slot_materials::DefaultMaterial(assets));
 
     // As the editor's Create Materials from .mtl does
     Temp.Write("materials/Paint.mat", kMaterial);
     assets.Refresh();
 
-    ResolveAssets(assets, onDefault);
-    ResolveAssets(assets, chosen);
-
-    CHECK(onDefault.MaterialAssets[0] == assets.FindId("materials/Paint.mat"));
-    CHECK(chosen.MaterialAssets[0] == assets.FindId("other.mat"));
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == assets.Find<MaterialAsset>("materials/Paint.mat"));
+    CHECK(empty.MaterialAssets.empty());
+    CHECK(chosen.MaterialAssets == std::vector{ other });
 }
 
 TEST_CASE_METHOD(Fixture, "An instance's entities come from its scene", "[scene data]")
@@ -218,7 +221,7 @@ TEST_CASE_METHOD(Fixture, "An instance's entities come from its scene", "[scene 
     SECTION("It holds the source's roots, which can't be changed")
     {
         CHECK(root.GetComponent<NameComponent>().Name == "Here");
-        CHECK(root.GetComponent<SceneInstanceComponent>().Scene == assets.Find<AssetType::Scene>("crate.scene"));
+        CHECK(root.GetComponent<SceneInstanceComponent>().Scene == assets.Find<SceneAsset>("crate.scene"));
         CHECK_FALSE(root.HasComponent<InstancedComponent>());
 
         const auto& children = root.GetComponent<RelationshipComponent>().Children;
@@ -241,7 +244,7 @@ TEST_CASE_METHOD(Fixture, "An instance's entities come from its scene", "[scene 
 
         REQUIRE(data.Roots.size() == 1);
         CHECK(FieldOf<glm::vec3>(assets, data.Roots[0], "transform", "position") == glm::vec3(9.0f));
-        CHECK(data.Roots[0].Instance == assets.Find<AssetType::Scene>("crate.scene"));
+        CHECK(data.Roots[0].Instance == assets.Find<SceneAsset>("crate.scene"));
         CHECK(data.Roots[0].Children.empty());
     }
 
@@ -273,7 +276,7 @@ TEST_CASE_METHOD(Fixture, "A new instance is named after its file and placed und
 
     Scene scene;
     const Entity parent = scene.CreateEntity("Parent");
-    const Entity instance = CreateSceneInstance(assets.Find<AssetType::Scene>("props/crate.scene"), scene, parent, assets, {});
+    const Entity instance = CreateSceneInstance(assets.Find<SceneAsset>("props/crate.scene"), scene, parent, assets, {});
 
     REQUIRE(instance);
     CHECK(instance.GetComponent<NameComponent>().Name == "crate");
@@ -317,8 +320,8 @@ TEST_CASE_METHOD(Fixture, "A scene containing itself doesn't go on forever", "[s
         Temp.Write("uses_host.scene", SceneWith(InstanceOf("Host", "host.scene")));
         assets.Refresh();
 
-        const SceneID host = assets.Find<AssetType::Scene>("host.scene");
-        const SceneID usesHost = assets.Find<AssetType::Scene>("uses_host.scene");
+        const SceneID host = assets.Find<SceneAsset>("host.scene");
+        const SceneID usesHost = assets.Find<SceneAsset>("uses_host.scene");
 
         CHECK(SceneUses(usesHost, host, assets));
         CHECK_FALSE(SceneUses(host, usesHost, assets));
@@ -343,7 +346,7 @@ TEST_CASE_METHOD(Fixture, "An instance whose source can't be used stays an entit
         Open(assets, "level.scene", scene);
 
         REQUIRE(scene.GetRoots().size() == 1);
-        CHECK(CaptureScene(scene, {}, assets).Roots[0].Instance == assets.Find<AssetType::Scene>("broken.scene"));
+        CHECK(CaptureScene(scene, {}, assets).Roots[0].Instance == assets.Find<SceneAsset>("broken.scene"));
     }
 
     SECTION("A missing file keeps the reference too")
@@ -379,7 +382,7 @@ TEST_CASE_METHOD(Fixture, "A scene keeps its references to missing files", "[sce
         AssetManager assets(Gpu, Temp.Path());
         Scene scene;
         Open(assets, "level.scene", scene);
-        REQUIRE(assets.Save(assets.Find<AssetType::Scene>("level.scene"), CaptureScene(scene, {}, assets)));
+        REQUIRE(assets.Save(assets.Find<SceneAsset>("level.scene"), CaptureScene(scene, {}, assets)));
     }
 
     const std::string saved = ReadFile(levelFile);
@@ -406,7 +409,7 @@ TEST_CASE_METHOD(Fixture, "A scene keeps its references to missing files", "[sce
         CHECK(assets.GetMissing(FieldOf<std::vector<AssetID>>(assets, captured.Roots[0], "meshRenderer", "materials").at(0))->Path == "thing.mat");
         CHECK(assets.GetMissing(captured.Roots[1].Instance)->Path == "crate.scene");
 
-        REQUIRE(assets.Save(assets.Find<AssetType::Scene>("level.scene"), captured));
+        REQUIRE(assets.Save(assets.Find<SceneAsset>("level.scene"), captured));
         CHECK(ReadFile(levelFile) == saved);
     }
 
@@ -420,13 +423,13 @@ TEST_CASE_METHOD(Fixture, "A scene keeps its references to missing files", "[sce
 
         const Entity mesh = scene.GetEntity(scene.GetRoots()[0]);
         const auto& renderer = mesh.GetComponent<MeshRendererComponent>();
-        CHECK_FALSE(renderer.Resolved.SubMeshes.empty());
+        CHECK(assets.Get(renderer.MeshAsset));
         CHECK(renderer.MaterialAssets.at(0) == assets.FindId("thing.mat"));
         CHECK(CaptureScene(scene, {}, assets).Roots[1].Instance == assets.FindId("crate.scene"));
     }
 }
 
-TEST_CASE_METHOD(Fixture, "A missing material stays in its slot, with the default drawn instead", "[scene data]")
+TEST_CASE_METHOD(Fixture, "A missing material stays in its slot", "[scene data]")
 {
     Temp.Write("thing.obj", kTriangleObj);
     AssetManager assets(Gpu, Temp.Path());
@@ -439,7 +442,6 @@ TEST_CASE_METHOD(Fixture, "A missing material stays in its slot, with the defaul
 
     const auto& renderer = scene.GetEntity(scene.GetRoots()[0]).GetComponent<MeshRendererComponent>();
     CHECK(assets.IsMissing(renderer.MaterialAssets.at(0)));
-    CHECK(renderer.Resolved.Materials.at(0) == assets.Load(slot_materials::DefaultMaterial(assets)));
     CHECK(CaptureScene(scene, {}, assets) == *data);
 }
 
@@ -448,15 +450,15 @@ TEST_CASE_METHOD(Fixture, "Scenes are assets", "[scene data]")
     AssetManager assets(Gpu, Temp.Path());
 
     // The engine's template for new scenes is listed too
-    const auto projectScenes = [&assets] { return std::ranges::count_if(assets.List(AssetType::Scene), [](const AssetInfo* scene) { return !scene->ReadOnly; }); };
+    const auto projectScenes = [&assets] { return std::ranges::count_if(assets.List(AssetType::Of<SceneAsset>()), [](const AssetInfo* scene) { return !scene->ReadOnly; }); };
 
-    const SceneID id = assets.Create<AssetType::Scene>("scenes/new.scene");
+    const SceneID id = assets.Create<SceneAsset>("scenes/new.scene");
     REQUIRE(id);
-    CHECK(assets.GetInfo(id)->Type == AssetType::Scene);
+    CHECK(assets.GetInfo(id)->Type.Is<SceneAsset>());
     CHECK(projectScenes() == 1);
     CHECK(fs::exists(Temp.Path() / "scenes/new.scene.meta"));
-    CHECK_FALSE(assets.Create<AssetType::Scene>("scenes/new.scene"));
-    CHECK_FALSE(assets.Create<AssetType::Scene>("scenes/wrong.mat"));
+    CHECK_FALSE(assets.Create<SceneAsset>("scenes/new.scene"));
+    CHECK_FALSE(assets.Create<SceneAsset>("scenes/wrong.mat"));
 
     SECTION("A new one has a light")
     {
@@ -466,7 +468,7 @@ TEST_CASE_METHOD(Fixture, "Scenes are assets", "[scene data]")
         CHECK(FieldOf<int32_t>(assets, data->Roots[0], "light", "type") == static_cast<int32_t>(LightType::Directional));
         CHECK(data->Roots[0].Name == "Sun");
 
-        const SceneID other = assets.Create<AssetType::Scene>("scenes/other.scene");
+        const SceneID other = assets.Create<SceneAsset>("scenes/other.scene");
         REQUIRE(other);
         CHECK(assets.Read(other)->Roots[0].Id != data->Roots[0].Id);
     }
@@ -479,7 +481,7 @@ TEST_CASE_METHOD(Fixture, "Scenes are assets", "[scene data]")
 
         CHECK(assets.Read(id)->Settings.PostProcessing.Exposure == 3.0f);
         CHECK_FALSE(fs::exists(Temp.Path() / "scenes/new.scene.saving"));
-        CHECK(AssetManager(Gpu, Temp.Path()).Find<AssetType::Scene>("scenes/new.scene") == id);
+        CHECK(AssetManager(Gpu, Temp.Path()).Find<SceneAsset>("scenes/new.scene") == id);
     }
 
     SECTION("Deleting removes it")
@@ -507,9 +509,9 @@ TEST_CASE_METHOD(Fixture, "Moving a file updates the scenes referencing it", "[s
 
     AssetManager assets(Gpu, Temp.Path());
 
-    const MeshID mesh = assets.Find<AssetType::Mesh>("old.obj");
-    const MaterialID material = assets.Find<AssetType::Material>("old.mat");
-    const SceneID source = assets.Find<AssetType::Scene>("old.scene");
+    const MeshID mesh = assets.Find<MeshAsset>("old.obj");
+    const MaterialID material = assets.Find<MaterialAsset>("old.mat");
+    const SceneID source = assets.Find<SceneAsset>("old.scene");
 
     REQUIRE(assets.Rename(mesh, "folder/new.obj"));
     REQUIRE(assets.Rename(material, "folder/new.mat"));
@@ -518,7 +520,7 @@ TEST_CASE_METHOD(Fixture, "Moving a file updates the scenes referencing it", "[s
     CHECK(ReadFile(unrelated) == other);
 
     AssetManager reopened(Gpu, Temp.Path());
-    const auto data = reopened.Read(reopened.Find<AssetType::Scene>("level.scene"));
+    const auto data = reopened.Read(reopened.Find<SceneAsset>("level.scene"));
 
     REQUIRE(data);
     CHECK(FieldOf<AssetID>(assets, data->Roots[0], "meshRenderer", "mesh") == mesh);
@@ -533,13 +535,13 @@ TEST_CASE_METHOD(Fixture, "A renamed folder keeps a scene's references working",
     Temp.Write("props/crate.scene", SceneWith(R"({ "meshRenderer": { "mesh": "props/crate.obj" } })"));
     AssetManager assets(Gpu, Temp.Path());
 
-    const MeshID mesh = assets.Find<AssetType::Mesh>("props/crate.obj");
+    const MeshID mesh = assets.Find<MeshAsset>("props/crate.obj");
 
     fs::rename(Temp.Path() / "props", Temp.Path() / "renamed");
     CHECK(assets.Refresh().empty());
 
     AssetManager reopened(Gpu, Temp.Path());
-    const auto data = reopened.Read(reopened.Find<AssetType::Scene>("renamed/crate.scene"));
+    const auto data = reopened.Read(reopened.Find<SceneAsset>("renamed/crate.scene"));
 
     REQUIRE(data);
     CHECK(FieldOf<AssetID>(assets, data->Roots[0], "meshRenderer", "mesh") == mesh);
@@ -585,11 +587,11 @@ TEST_CASE_METHOD(Fixture, "A component registered at runtime is saved and loaded
 {
     Temp.Write("sword.obj", kTriangleObj);
     AssetManager assets(Gpu, Temp.Path());
-    const MeshID sword = assets.Find<AssetType::Mesh>("sword.obj");
+    const MeshID sword = assets.Find<MeshAsset>("sword.obj");
 
     const ComponentType* health = assets.Components().RegisterRuntime("health", "Health", {
         FieldInfo{ .Key = "max", .Label = "Max", .Type = FieldType::Int, .Default = int32_t{ 3 } },
-        FieldInfo{ .Key = "weapon", .Label = "Weapon", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh }
+        FieldInfo{ .Key = "weapon", .Label = "Weapon", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Of<MeshAsset>() }
     });
     REQUIRE(health);
 
@@ -681,8 +683,8 @@ TEST_CASE_METHOD(Fixture, "Every kind of field survives saving and loading", "[s
         FieldInfo{ .Key = "tint", .Label = "Tint", .Type = FieldType::Color, .Default = glm::vec3(1.0f) },
         FieldInfo{ .Key = "title", .Label = "Title", .Type = FieldType::String, .Default = std::string() },
         FieldInfo{ .Key = "kind", .Label = "Kind", .Type = FieldType::Enum, .Default = int32_t{ 0 }, .EnumOptions = { { "first", "First" }, { "second", "Second" } } },
-        FieldInfo{ .Key = "mesh", .Label = "Mesh", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh },
-        FieldInfo{ .Key = "materials", .Label = "Materials", .Type = FieldType::AssetList, .Default = std::vector<AssetID>(), .Asset = AssetType::Material }
+        FieldInfo{ .Key = "mesh", .Label = "Mesh", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Of<MeshAsset>() },
+        FieldInfo{ .Key = "materials", .Label = "Materials", .Type = FieldType::AssetList, .Default = std::vector<AssetID>(), .Asset = AssetType::Of<MaterialAsset>() }
     });
     REQUIRE(everything);
 
@@ -698,8 +700,8 @@ TEST_CASE_METHOD(Fixture, "Every kind of field survives saving and loading", "[s
         { "tint", glm::vec3(0.5f, 0.25f, 0.125f) },
         { "title", std::string("hello") },
         { "kind", int32_t{ 1 } },
-        { "mesh", AssetID(assets.Find<AssetType::Mesh>("meshes/thing.obj")) },
-        { "materials", std::vector<AssetID>{ assets.Find<AssetType::Material>("materials/thing.mat"), AssetID{} } } }));
+        { "mesh", AssetID(assets.Find<MeshAsset>("meshes/thing.obj")) },
+        { "materials", std::vector<AssetID>{ assets.Find<MaterialAsset>("materials/thing.mat"), AssetID{} } } }));
 
     SceneData data;
     data.Roots.push_back(node);
@@ -735,12 +737,12 @@ TEST_CASE_METHOD(Fixture, "Moving a file updates a runtime component's asset fie
     AssetManager assets(Gpu, Temp.Path());
 
     REQUIRE(assets.Components().RegisterRuntime("holder", "Holder", {
-        FieldInfo{ .Key = "mesh", .Label = "Mesh", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Mesh },
+        FieldInfo{ .Key = "mesh", .Label = "Mesh", .Type = FieldType::Asset, .Default = AssetID{}, .Asset = AssetType::Of<MeshAsset>() },
         FieldInfo{ .Key = "title", .Label = "Title", .Type = FieldType::String, .Default = std::string() }
     }));
 
     const std::string text = SceneWith(R"({ "name": "A", "holder": { "mesh": "old/thing.obj", "title": "old/thing.obj" } })");
-    const std::unordered_map<std::string, AssetID> moved = { { "old/thing.obj", assets.Find<AssetType::Mesh>("meshes/thing.obj") } };
+    const std::unordered_map<std::string, AssetID> moved = { { "old/thing.obj", assets.Find<MeshAsset>("meshes/thing.obj") } };
 
     const auto updated = scene_data::UpdateReferences(text, moved, assets);
     REQUIRE(updated);
@@ -789,7 +791,7 @@ TEST_CASE_METHOD(Fixture, "One entity can be captured and set from its node", "[
 
     SECTION("An instance root only takes its name and transform, and keeps what was expanded")
     {
-        const Entity crate = CreateSceneInstance(assets.Find<AssetType::Scene>("crate.scene"), scene, {}, assets, {});
+        const Entity crate = CreateSceneInstance(assets.Find<SceneAsset>("crate.scene"), scene, {}, assets, {});
         const SceneNode before = CaptureNode(crate, scene, assets, false);
 
         crate.GetComponent<NameComponent>().Name = "Renamed";
@@ -807,7 +809,7 @@ TEST_CASE_METHOD(Fixture, "One entity can be captured and set from its node", "[
         CHECK(FindEntity(scene, lamp.GetComponent<NameComponent>().Id) == lamp);
         CHECK_FALSE(FindEntity(scene, AssetID::Generate()));
 
-        const Entity crate = CreateSceneInstance(assets.Find<AssetType::Scene>("crate.scene"), scene, {}, assets, {});
+        const Entity crate = CreateSceneInstance(assets.Find<SceneAsset>("crate.scene"), scene, {}, assets, {});
         const Entity lid = scene.GetEntity(crate.GetComponent<RelationshipComponent>().Children.at(0));
         CHECK_FALSE(FindEntity(scene, lid.GetComponent<NameComponent>().Id));
     }

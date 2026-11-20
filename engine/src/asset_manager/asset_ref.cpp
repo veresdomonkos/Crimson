@@ -29,7 +29,7 @@ namespace crimson
 
     // The asset a reference's guid names, if it still exists
     template <typename Json>
-    static AssetID ResolveGuid(const AssetManager& assets, const Json& ref)
+    static AssetID ReadGuid(const AssetManager& assets, const Json& ref)
     {
         const AssetID id = assets.Redirect(ReadGuid(ref));
         return id && assets.GetInfo(id) ? id : AssetID{};
@@ -57,7 +57,7 @@ namespace crimson
     }
 
     // A missing one is remembered as the type it was expected to be
-    static AssetID ResolveAnyAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
+    static AssetID ReadAnyAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
     {
         if (ref.is_string())
         {
@@ -71,14 +71,14 @@ namespace crimson
         if (!ref.is_object())
             return {};
 
-        if (const AssetID id = ResolveGuid(assets, ref))
+        if (const AssetID id = ReadGuid(assets, ref))
             return id;
 
         std::string path = ref.contains("path") && ref["path"].is_string() ? ref["path"].get<std::string>() : std::string();
 
         if (const AssetID byPath = path.empty() ? AssetID{} : assets.FindId(path))
         {
-            LOG_WARN("[Assets] {}: stale guid, resolved by path '{}'", context, path);
+            LOG_WARN("[Assets] {}: stale guid, found by path '{}'", context, path);
             return byPath;
         }
 
@@ -86,27 +86,27 @@ namespace crimson
         return guid || !path.empty() ? RememberMissing(assets, guid, std::move(path), expected, context) : AssetID{};
     }
 
-    template <AssetType T>
-    TypedAssetID<T> ResolveAssetRef(const AssetManager& assets, const nlohmann::json& ref, std::string_view context)
+    AssetID ReadAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
     {
-        const AssetID id = ResolveAnyAssetRef(assets, ref, T, context);
-        const TypedAssetID<T> typed = assets.As<T>(id);
+        if (!expected)
+            return {};
+
+        const AssetID id = ReadAnyAssetRef(assets, ref, expected, context);
+        if (!id)
+            return id;
+
+        // What AssetManager::As checks
+        const AssetInfo* info = assets.GetInfo(id);
+        const MissingAssetRef* missing = info ? nullptr : assets.GetMissing(id);
+        const AssetType actual = info ? info->Type : missing ? missing->Type : AssetType{};
+
+        if (actual == expected)
+            return id;
 
         // A broken file rather than one that is away for a while, so it isn't kept
-        if (id && !typed)
-        {
-            const AssetInfo* info = assets.GetInfo(id);
-            LOG_WARN("[Assets] {}: {} isn't a {}", context, info ? info->Path : id.ToString(), ToString(T));
-        }
-
-        return typed;
+        LOG_WARN("[Assets] {}: {} isn't a {}", context, info ? info->Path : id.ToString(), expected.Name());
+        return {};
     }
-
-    template TextureID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
-    template MeshID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
-    template ShaderID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
-    template MaterialID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
-    template SceneID ResolveAssetRef(const AssetManager&, const nlohmann::json&, std::string_view);
 
     nlohmann::ordered_json WriteAssetRef(const AssetManager& assets, AssetID id)
     {
@@ -142,7 +142,7 @@ namespace crimson
         // The id wins over the path when reading, so this one was about something else that used to be there
         if (hasPath)
         {
-            if (const AssetID id = ResolveGuid(assets, ref); id && id != it->second)
+            if (const AssetID id = ReadGuid(assets, ref); id && id != it->second)
                 return false;
         }
 

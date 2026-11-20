@@ -4,16 +4,10 @@
 #include <cctype>
 #include <fstream>
 #include <iterator>
+#include <ranges>
 #include <system_error>
-#include <type_traits>
 #include <utility>
-#include "crimson/asset_manager/importers/material_importer.hpp"
-#include "crimson/asset_manager/importers/mesh_importer.hpp"
-#include "crimson/asset_manager/importers/scene_importer.hpp"
-#include "crimson/asset_manager/importers/shader_importer.hpp"
-#include "crimson/asset_manager/importers/texture_importer.hpp"
 #include "crimson/asset_manager/meta_file.hpp"
-#include "asset_store.hpp"
 #include "crimson/core/engine_resources.hpp"
 #include "crimson/core/hash.hpp"
 #include "crimson/core/log.hpp"
@@ -26,9 +20,6 @@ namespace fs = std::filesystem;
 namespace crimson
 {
     constexpr std::string_view kEnginePathPrefix = "engine/";
-
-    // Each can use the ones after it
-    constexpr std::array kUnloadOrder = { AssetType::Material, AssetType::Mesh, AssetType::Texture, AssetType::Shader };
 
     // An engine resource has no meta to store an id in, and scenes must find it again in any project.
     static AssetID EngineResourceId(std::string_view path)
@@ -62,17 +53,7 @@ namespace crimson
         : m_gpuResources(gpuResources), m_root(fs::absolute(std::move(root)).lexically_normal()), m_cache(std::move(cacheFolder), m_root)
     {
         RegisterNativeComponents(m_components);
-
-        AddImporter(std::make_unique<TextureImporter>());
-        AddImporter(std::make_unique<ShaderImporter>());
-        AddImporter(std::make_unique<MaterialImporter>());
-        AddImporter(std::make_unique<MeshImporter>());
-        AddImporter(std::make_unique<SceneImporter>());
-
-        m_stores[static_cast<size_t>(AssetType::Texture)] = std::make_unique<AssetStore<AssetType::Texture>>();
-        m_stores[static_cast<size_t>(AssetType::Shader)] = std::make_unique<AssetStore<AssetType::Shader>>();
-        m_stores[static_cast<size_t>(AssetType::Material)] = std::make_unique<AssetStore<AssetType::Material>>();
-        m_stores[static_cast<size_t>(AssetType::Mesh)] = std::make_unique<AssetStore<AssetType::Mesh>>();
+        RegisterBuiltinAssetTypes(*this);
 
         RegisterEngineResources();
 
@@ -85,19 +66,15 @@ namespace crimson
 
     AssetManager::~AssetManager()
     {
-        for (const AssetType type : kUnloadOrder)
-            StoreOf(type)->UnloadAll(m_gpuResources);
+        // Each type was registered after the ones it uses, so those go last
+        for (const TypeRecord& record : std::views::reverse(m_types))
+        {
+            if (record.Store)
+                record.Store->UnloadAll(m_gpuResources);
+        }
 
-        for (const auto& importer : m_importers)
-            importer->ReleaseShared(m_gpuResources);
-    }
-
-    void AssetManager::AddImporter(std::unique_ptr<AssetImporterBase> importer)
-    {
-        for (std::string_view ext : importer->Extensions())
-            m_importersByExtension[std::string(ext)] = importer.get();
-
-        m_importers.push_back(std::move(importer));
+        for (const TypeRecord& record : m_types)
+            record.Importer->ReleaseShared(m_gpuResources);
     }
 
     void AssetManager::RegisterEngineResources()
@@ -190,7 +167,7 @@ namespace crimson
         }
 
         const fs::path metaPath = meta::PathFor(file);
-        std::optional<AssetInfo> existing = meta::Read(metaPath);
+        std::optional<AssetInfo> existing = meta::Read(metaPath, importer->second->Type());
 
         // Already known from an earlier scan. If only its meta is gone, it keeps the id it has.
         if (const AssetID known = FindId(path); known && (!existing || existing->Id == known))
@@ -251,7 +228,7 @@ namespace crimson
                 LOG_ERROR("[Assets] Failed to write {}", metaPath.string());
         }
 
-        LOG_INFO("[Assets] {} [{}] id={}", info.Path, ToString(info.Type), info.Id.ToString());
+        LOG_INFO("[Assets] {} [{}] id={}", info.Path, info.Type.Name(), info.Id.ToString());
 
         m_idsByPath[info.Path] = info.Id;
         const AssetID id = info.Id;
@@ -332,30 +309,31 @@ namespace crimson
     bool AssetManager::IsLoaded(AssetID id) const
     {
         const AssetInfo* info = GetInfo(id);
-        const AssetStoreBase* store = info ? m_stores[static_cast<size_t>(info->Type)].get() : nullptr;
+        const AssetStoreBase* store = info ? StoreOf(info->Type) : nullptr;
         return store && store->IsLoaded(id);
     }
 
-    template <AssetType T>
-    AssetStore<T>& AssetManager::Store()
+    const AssetManager::TypeRecord* AssetManager::RecordOf(AssetType type) const
     {
-        // Each one is made for its own place, in the constructor
-        return static_cast<AssetStore<T>&>(*m_stores[static_cast<size_t>(T)]);
+        const auto it = std::ranges::find(m_types, type, &TypeRecord::Type);
+        return it != m_types.end() ? &*it : nullptr;
     }
 
-    AssetStoreBase* AssetManager::StoreOf(AssetType type)
+    AssetStoreBase* AssetManager::StoreOf(AssetType type) const
     {
-        return m_stores[static_cast<size_t>(type)].get();
+        const TypeRecord* record = RecordOf(type);
+        return record ? record->Store.get() : nullptr;
     }
 
-    template <AssetType T>
-    typename AssetStore<T>::Slot* AssetManager::SlotFor(AssetID id)
+    std::vector<AssetType> AssetManager::Types() const
     {
-        const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.Type != T)
-            return nullptr;
+        std::vector<AssetType> types;
+        types.reserve(m_types.size());
 
-        return &Store<T>().GetOrCreate(id, static_cast<AssetImporter<T>&>(*it->second.Importer));
+        for (const TypeRecord& record : m_types)
+            types.push_back(record.Type);
+
+        return types;
     }
 
     AssetSource AssetManager::SourceOf(const Record& record) const
@@ -363,88 +341,9 @@ namespace crimson
         return AssetSource{ record.Info, record.Embedded ? fs::path() : m_root / fs::path(record.Info.Path), record.Embedded };
     }
 
-    template <AssetType T>
-    LoadResult<T> AssetManager::Load(TypedAssetID<T> id)
-    {
-        auto* slot = SlotFor<T>(id);
-
-        if (slot && !slot->Tried())
-        {
-            ImportContext ctx{ m_gpuResources, *this, CacheFor(m_assets.at(id)) };
-
-            slot->Loaded = slot->Import(SourceOf(m_assets.at(id)), ctx);
-            slot->Failed = !slot->Loaded;
-
-            if (slot->Failed)
-                LOG_ERROR("[Assets] Failed to load {}", GetInfo(id)->Path);
-        }
-
-        const LoadedAsset<T>* loaded = slot && slot->Loaded ? &*slot->Loaded : nullptr;
-
-        if constexpr (std::is_pointer_v<LoadResult<T>>)
-            return loaded;
-        else
-            return loaded ? *loaded : LoadedAsset<T>::Invalid();
-    }
-
-    template <AssetType T>
-    const AssetData<T>* AssetManager::GetData(TypedAssetID<T> id)
-    {
-        auto* slot = SlotFor<T>(id);
-        if (!slot)
-            return nullptr;
-
-        if (!slot->Data)
-            slot->Data = Read(id);
-
-        return slot->Data ? &*slot->Data : nullptr;
-    }
-
-    template <AssetType T>
-    AssetUpdate AssetManager::Apply(TypedAssetID<T> id, const AssetData<T>& data)
-    {
-        const AssetInfo* info = GetInfo(id);
-        if (!info || info->ReadOnly)
-            return AssetUpdate::Failed;
-
-        Load(id);
-        const AssetData<T>* current = GetData(id);
-
-        auto& slot = *SlotFor<T>(id);
-        ImportContext ctx{ m_gpuResources, *this, CacheFor(m_assets.at(id)) };
-
-        if (slot.Loaded && current && slot.Importer->Update(*slot.Loaded, *current, data, ctx))
-        {
-            slot.Data = data;
-            slot.Uses = std::move(ctx.Uses);
-            return AssetUpdate::Updated;
-        }
-
-        ctx.Uses.clear();
-
-        std::optional<LoadedAsset<T>> replacement = slot.Importer->Create(data, SourceOf(m_assets.at(id)), ctx);
-        if (!replacement)
-            return AssetUpdate::Failed;
-
-        slot.Unload(m_gpuResources);
-        slot.Loaded = std::move(replacement);
-        slot.Failed = false;
-        slot.Data = data;
-        slot.Uses = std::move(ctx.Uses);
-        return AssetUpdate::Replaced;
-    }
-
-    template TextureHandle AssetManager::Load(TextureID);
-    template ShaderHandle AssetManager::Load(ShaderID);
-    template MaterialHandle AssetManager::Load(MaterialID);
-    template const Mesh* AssetManager::Load(MeshID);
-
-    template const MaterialData* AssetManager::GetData(MaterialID);
-    template AssetUpdate AssetManager::Apply(MaterialID, const MaterialData&);
-
     void AssetManager::WarnWrongType(std::string_view path, AssetType wanted) const
     {
-        LOG_WARN("[Assets] '{}' isn't a {}", path, ToString(wanted));
+        LOG_WARN("[Assets] '{}' isn't a {}", path, wanted.Name());
     }
 
     fs::path AssetManager::GetFilePath(AssetID id) const
@@ -480,6 +379,7 @@ namespace crimson
         });
 
         UpdateReferencesTo(moved);
+        ++m_version;
         return removed;
     }
 
@@ -513,15 +413,15 @@ namespace crimson
         // What the users say names the removed ones as their files do, which is lost once those are gone
         for (const AssetID id : ids)
         {
-            for (const auto& store : m_stores)
+            for (const TypeRecord& record : m_types)
             {
-                if (!store)
+                if (!record.Store)
                     continue;
 
-                for (const AssetID user : store->UsersOf(id))
+                for (const AssetID user : record.Store->UsersOf(id))
                 {
                     if (const auto it = m_assets.find(user); it != m_assets.end())
-                        store->ReadData(user, SourceOf(it->second), *this);
+                        record.Store->ReadData(user, SourceOf(it->second), *this);
                 }
             }
         }
@@ -543,25 +443,28 @@ namespace crimson
         for (const auto& [id, type] : removed)
             UpdateUsersOf(id, true, nullptr);
 
-        for (const AssetType type : kUnloadOrder)
+        for (const TypeRecord& record : std::views::reverse(m_types))
         {
+            if (!record.Store)
+                continue;
+
             for (const auto& [id, removedType] : removed)
             {
-                if (removedType == type)
-                    StoreOf(type)->Forget(id, m_gpuResources);
+                if (removedType == record.Type)
+                    record.Store->Forget(id, m_gpuResources);
             }
         }
     }
 
     void AssetManager::UpdateUsersOf(AssetID used, bool removed, std::vector<AssetID>* replaced)
     {
-        for (const auto& store : m_stores)
+        for (const TypeRecord& record : m_types)
         {
-            if (!store)
+            if (!record.Store)
                 continue;
 
             // Collected first, as updating one can load others
-            for (const AssetID user : store->UsersOf(used))
+            for (const AssetID user : record.Store->UsersOf(used))
             {
                 const auto it = m_assets.find(user);
                 if (it == m_assets.end())
@@ -569,7 +472,7 @@ namespace crimson
 
                 ImportContext ctx{ m_gpuResources, *this, CacheFor(it->second) };
 
-                if (store->UpdateUser(user, used, removed, SourceOf(it->second), ctx) && replaced)
+                if (record.Store->UpdateUser(user, used, removed, SourceOf(it->second), ctx) && replaced)
                     replaced->push_back(user);
             }
         }
@@ -591,7 +494,7 @@ namespace crimson
 
         if (!IsUsableAssetPath(path) || importer == m_importersByExtension.end() || importer->second->Type() != type)
         {
-            LOG_ERROR("[Assets] Can't create a {} file at '{}'", ToString(type), path);
+            LOG_ERROR("[Assets] Can't create a {} file at '{}'", type.Name(), path);
             return {};
         }
 
@@ -609,7 +512,7 @@ namespace crimson
 
         if (!contents)
         {
-            LOG_ERROR("[Assets] A {} can't be made without contents", ToString(type));
+            LOG_ERROR("[Assets] A {} can't be made without contents", type.Name());
             return {};
         }
 
@@ -623,6 +526,7 @@ namespace crimson
 
         std::unordered_set<AssetID> seen;
         RegisterFile(file, seen);
+        ++m_version;
         return FindId(path);
     }
 
@@ -675,6 +579,7 @@ namespace crimson
 
         UpdateReferencesTo({ { oldPath, id } });
 
+        ++m_version;
         return true;
     }
 
@@ -703,6 +608,7 @@ namespace crimson
 
         const std::array removed = { id };
         RemoveAssets(removed);
+        ++m_version;
         return true;
     }
 
@@ -734,7 +640,7 @@ namespace crimson
     bool AssetManager::Reimport(AssetID id, nlohmann::json settings)
     {
         const auto it = m_assets.find(id);
-        if (it == m_assets.end() || it->second.Info.ReadOnly || !it->second.Importer->CanReimport())
+        if (it == m_assets.end() || it->second.Info.ReadOnly)
         {
             LOG_ERROR("[Assets] This asset can't be reimported");
             return false;
@@ -794,6 +700,7 @@ namespace crimson
             return {};
         }
 
+        ++m_version;
         LOG_INFO("[Assets] Reloaded {}", record.Info.Path);
         return replaced;
     }

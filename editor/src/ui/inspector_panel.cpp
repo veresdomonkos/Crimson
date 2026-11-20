@@ -94,20 +94,8 @@ namespace crimson::editor::ui
         {
             if (props::BeginTable(type.Id.c_str()))
             {
-                // Between frames, as resolving its assets may load them
                 if (DrawComponentFields(type, component, m_context))
-                {
                     m_context.Edited = true;
-
-                    if (type.ResolveAssets)
-                    {
-                        m_context.Deferred.emplace_back([this, &type, entity]
-                        {
-                            if (entity && type.Has(entity))
-                                ResolveComponentAssets(type, type.Get(entity), m_context.Assets);
-                        });
-                    }
-                }
 
                 props::EndTable();
             }
@@ -171,7 +159,7 @@ namespace crimson::editor::ui
                 if (!type.Addable)
                     continue;
 
-                // Between frames, as a component may load assets once it is there
+                // Between frames, as adding a component can move the others, which this frame's panels still point to
                 if (ImGui::MenuItem(type.Name.c_str(), nullptr, false, !type.Has(entity)))
                 {
                     m_context.Deferred.emplace_back([this, &type, entity]
@@ -179,7 +167,7 @@ namespace crimson::editor::ui
                         if (!entity || type.Has(entity))
                             return;
 
-                        CreateComponent(type, entity, m_context.Assets);
+                        type.Add(entity);
                     });
                 }
             }

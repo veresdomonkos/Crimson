@@ -1,6 +1,5 @@
 #pragma once
 #include <algorithm>
-#include <array>
 #include <memory>
 #include <ranges>
 #include <unordered_map>
@@ -27,10 +26,10 @@ namespace crimson::editor
         explicit AssetEdits(AssetManager& assets) : m_assets(assets) {}
 
         // The asset as it is being edited. Null if it can't be read.
-        template <AssetType T>
+        template <typename T>
         [[nodiscard]] const AssetData<T>* Get(TypedAssetID<T> id) { return TableFor<T>().Get(id); }
 
-        template <AssetType T>
+        template <typename T>
         void Set(TypedAssetID<T> id, const AssetData<T>& data) { TableFor<T>().Set(id, data); }
 
         [[nodiscard]] bool IsDirty(AssetID id) const;
@@ -41,9 +40,8 @@ namespace crimson::editor
         void DiscardAll();
         void Forget(AssetID id); // any asset, as it is called for whatever was removed
 
-        // Shows the edits made since the last call. Returns true if an asset got a new handle, which happens when
-        // a material's shader changes, so whatever holds the old one has to get it again. An edit that can't be shown is undone.
-        bool Apply();
+        // Shows the edits made since the last call. An edit that can't be shown is undone.
+        void Apply();
 
         void Collect(std::vector<std::unique_ptr<EditChange>>& changes) override;
         void Discard() override;
@@ -59,13 +57,13 @@ namespace crimson::editor
             virtual bool SaveAll() = 0;
             virtual void DiscardAll() = 0;
             virtual void Forget(AssetID id) = 0;
-            virtual bool Apply() = 0;
+            virtual void Apply() = 0;
             virtual void Collect(std::vector<std::unique_ptr<EditChange>>& changes) = 0;
             virtual void Discard() = 0;
         };
 
         // The edits to the assets of one type
-        template <AssetType T>
+        template <typename T>
         class Table final : public TableBase
         {
         public:
@@ -137,10 +135,8 @@ namespace crimson::editor
                 std::erase_if(m_before, [id](const auto& entry) { return AssetID(entry.first) == id; });
             }
 
-            bool Apply() override
+            void Apply() override
             {
-                bool replaced = false;
-
                 for (auto& [id, edit] : m_edits)
                 {
                     if (!edit.Pending)
@@ -148,23 +144,12 @@ namespace crimson::editor
 
                     edit.Pending = false;
 
-                    switch (m_assets.Apply(id, edit.Working))
+                    if (m_assets.Apply(id, edit.Working) == AssetUpdate::Failed)
                     {
-                        case AssetUpdate::Replaced:
-                            replaced = true;
-                            break;
-
-                        case AssetUpdate::Updated:
-                            break;
-
-                        case AssetUpdate::Failed:
-                            if (const AssetData<T>* live = m_assets.GetData(id))
-                                edit.Working = *live;
-                            break;
+                        if (const AssetData<T>* live = m_assets.GetData(id))
+                            edit.Working = *live;
                     }
                 }
-
-                return replaced;
             }
 
             void Collect(std::vector<std::unique_ptr<EditChange>>& changes) override
@@ -265,10 +250,10 @@ namespace crimson::editor
             std::unordered_map<TypedAssetID<T>, AssetData<T>> m_before; // as it was when the step's first Set came
         };
 
-        template <AssetType T>
+        template <typename T>
         Table<T>& TableFor()
         {
-            std::unique_ptr<TableBase>& table = m_tables[static_cast<size_t>(T)];
+            std::unique_ptr<TableBase>& table = m_tables[AssetType::Of<T>()];
             if (!table)
                 table = std::make_unique<Table<T>>(m_assets);
 
@@ -279,6 +264,6 @@ namespace crimson::editor
         [[nodiscard]] TableBase* TableOf(AssetID id) const;
 
         AssetManager& m_assets;
-        std::array<std::unique_ptr<TableBase>, kAssetTypeCount> m_tables;
+        std::unordered_map<AssetType, std::unique_ptr<TableBase>> m_tables;
     };
 }

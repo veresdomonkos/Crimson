@@ -25,7 +25,7 @@ namespace crimson::editor::ui
     // entity from them or takes them
     static bool CanDrop(const ComponentRegistry& components, AssetType type)
     {
-        if (type == AssetType::Scene || FindSpawnField(components, type))
+        if (type.Is<SceneAsset>() || FindSpawnField(components, type))
             return true;
 
         return std::ranges::any_of(components.Types(), [type](const ComponentType& component)
@@ -65,7 +65,7 @@ namespace crimson::editor::ui
             return;
 
         Scene& scene = m_context.ActiveScene;
-        Entity entity = scene.Raycast(origin, direction);
+        Entity entity = scene.Raycast(origin, direction, m_context.Assets);
 
         // What is inside an instance can't be changed here, so a click means the instance
         while (entity && entity.HasComponent<InstancedComponent>())
@@ -101,11 +101,10 @@ namespace crimson::editor::ui
         const ComponentRegistry& components = m_context.Assets.Components();
 
         AssetID dropped;
-        AssetType droppedType = AssetType::None;
+        AssetType droppedType;
 
-        for (size_t index = 1; index < kAssetTypeCount; ++index)
+        for (const AssetType type : m_context.Assets.Types())
         {
-            const auto type = static_cast<AssetType>(index);
             if (!CanDrop(components, type))
                 continue;
 
@@ -126,8 +125,8 @@ namespace crimson::editor::ui
 
         m_context.Deferred.emplace_back([this, dropped, droppedType, origin, direction]
         {
-            if (droppedType == AssetType::Scene)
-                CreateInstanceOfScene(m_context.Assets.As<AssetType::Scene>(dropped), origin, direction);
+            if (droppedType.Is<SceneAsset>())
+                CreateInstanceOfScene(m_context.Assets.As<SceneAsset>(dropped), origin, direction);
             else if (const FieldRef spawn = FindSpawnField(m_context.Assets.Components(), droppedType))
                 CreateEntityFromAsset(spawn, dropped, origin, direction);
             else
@@ -144,7 +143,7 @@ namespace crimson::editor::ui
         const Entity entity = m_context.ActiveScene.CreateEntity(std::filesystem::path(info->Path).stem().string());
         entity.GetComponent<TransformComponent>().Position = GetDropPosition(origin, direction);
 
-        CreateComponent(*spawn.Type, entity, m_context.Assets);
+        spawn.Type->Add(entity);
         AssignAsset(*spawn.Type, spawn.Field, entity, asset, m_context.Assets);
 
         m_context.SceneUndo.RecordCreated(entity);
@@ -165,7 +164,7 @@ namespace crimson::editor::ui
 
     void SceneViewportPanel::AssignAssetToEntity(AssetID asset, AssetType type, const glm::vec3& origin, const glm::vec3& direction)
     {
-        const Entity entity = m_context.ActiveScene.Raycast(origin, direction);
+        const Entity entity = m_context.ActiveScene.Raycast(origin, direction, m_context.Assets);
         if (!entity || entity.HasComponent<InstancedComponent>())
             return;
 

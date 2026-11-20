@@ -38,8 +38,7 @@ namespace crimson
         IndexBufferHandle  IndexBuffer;
 
         std::vector<SubMesh> SubMeshes;
-        std::vector<MaterialHandle> Materials;
-        std::vector<std::string> MaterialSlots; // names, in the same order as Materials
+        std::vector<std::string> MaterialSlots; // one name per material slot, which SubMesh::MaterialSlot and a renderer's MaterialAssets index
         MeshBounds Bounds;
     };
 }

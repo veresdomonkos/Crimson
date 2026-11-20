@@ -45,16 +45,22 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/asset_manager/asset_id.hpp
     include/crimson/asset_manager/asset_importer.hpp
     include/crimson/asset_manager/asset_manager.hpp
+    include/crimson/asset_manager/asset_store.hpp
     include/crimson/asset_manager/asset_types.hpp
     include/crimson/asset_manager/import_cache.hpp
     include/crimson/asset_manager/material_data.hpp
     include/crimson/asset_manager/meta_file.hpp
     include/crimson/asset_manager/scene_data.hpp
     include/crimson/asset_manager/slot_materials.hpp
+    include/crimson/asset_manager/importers/material_asset.hpp
     include/crimson/asset_manager/importers/material_importer.hpp
+    include/crimson/asset_manager/importers/mesh_asset.hpp
     include/crimson/asset_manager/importers/mesh_importer.hpp
+    include/crimson/asset_manager/importers/scene_asset.hpp
     include/crimson/asset_manager/importers/scene_importer.hpp
+    include/crimson/asset_manager/importers/shader_asset.hpp
     include/crimson/asset_manager/importers/shader_importer.hpp
+    include/crimson/asset_manager/importers/texture_asset.hpp
     include/crimson/asset_manager/importers/texture_importer.hpp
 
     include/crimson/scene/component_builder.hpp
@@ -78,8 +84,8 @@ set(ENGINE_SOURCES
     src/asset_manager/asset_manager.cpp
     src/asset_manager/asset_ref.cpp
     src/asset_manager/asset_ref.hpp
-    src/asset_manager/asset_store.hpp
     src/asset_manager/binary_io.hpp
+    src/asset_manager/builtin_asset_types.cpp
     src/asset_manager/engine_renames.hpp
     src/asset_manager/import_cache.cpp
     src/asset_manager/importers/material_importer.cpp

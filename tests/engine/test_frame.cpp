@@ -1,5 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
+#include <array>
 #include <chrono>
 #include <limits>
 #include <map>
@@ -112,7 +113,7 @@ TEST_CASE("A draw without a material is left out", "[frame]")
 TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
 {
     Mesh mesh;
-    mesh.Materials = { kMaterial, MaterialHandle::Invalid() };
+    const std::array materials = { kMaterial, MaterialHandle::Invalid() };
     mesh.SubMeshes = { { .FirstIndex = 0, .IndexCount = 3, .MaterialSlot = 0 }, { .FirstIndex = 3, .IndexCount = 6, .MaterialSlot = 1 } };
 
     FramePacket packet;
@@ -122,7 +123,7 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
     SECTION("Each with its own material, and the one that failed to load is skipped")
     {
         const ObjectId object = frame.AddObject(glm::mat4(1.0f));
-        pass.DrawMesh(mesh, object);
+        pass.DrawMesh(mesh, materials, object);
 
         REQUIRE(pass.GetDraws().size() == 1);
         CHECK(pass.GetDraws()[0].Material == kMaterial);
@@ -131,9 +132,20 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
         CHECK(pass.GetDraws()[0].Variant == ShaderVariant::Main);
     }
 
+    SECTION("A slot past the materials is skipped")
+    {
+        pass.DrawMesh(mesh, std::span(materials).first(1));
+
+        REQUIRE(pass.GetDraws().size() == 1);
+        CHECK(pass.GetDraws()[0].IndexCount == 3);
+
+        pass.DrawMesh(mesh, {});
+        CHECK(pass.GetDraws().size() == 1);
+    }
+
     SECTION("An override replaces all of them")
     {
-        pass.DrawMesh(mesh, 0, { .MaterialOverride = kOverride });
+        pass.DrawMesh(mesh, materials, 0, { .MaterialOverride = kOverride });
 
         REQUIRE(pass.GetDraws().size() == 2);
         CHECK(pass.GetDraws()[0].Material == kOverride);
@@ -142,7 +154,7 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
 
     SECTION("A depth pass keeps each one's own material, in its depth version")
     {
-        pass.DrawMesh(mesh, 0, { .Variant = ShaderVariant::Depth });
+        pass.DrawMesh(mesh, materials, 0, { .Variant = ShaderVariant::Depth });
 
         REQUIRE(pass.GetDraws().size() == 1);
         CHECK(pass.GetDraws()[0].Material == kMaterial);
@@ -372,7 +384,7 @@ TEST_CASE("A transparent material's depth version sorts like an opaque one", "[d
 TEST_CASE("A mesh's draws sort by the distance from the camera to its center", "[frame]")
 {
     Mesh mesh;
-    mesh.Materials = { kMaterial, kOverride };
+    const std::array materials = { kMaterial, kOverride };
     mesh.SubMeshes = { { .MaterialSlot = 0 }, { .MaterialSlot = 1 } };
     mesh.Bounds = { glm::vec3(-1.0f), glm::vec3(3.0f) }; // centered on (1, 1, 1)
 
@@ -381,7 +393,7 @@ TEST_CASE("A mesh's draws sort by the distance from the camera to its center", "
 
     const ObjectId object = frame.AddObject(glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -2.0f)));
     PassBuilder pass = frame.AddPass({ .View = { .CameraPosition = glm::vec3(1.0f, 1.0f, 2.0f) } });
-    pass.DrawMesh(mesh, object);
+    pass.DrawMesh(mesh, materials, object);
 
     // The center ends up at (1, 1, -1), 3 away from the camera
     REQUIRE(pass.GetDraws().size() == 2);
@@ -437,7 +449,7 @@ TEST_CASE("A draw uses its pass's view unless it names one", "[frame]")
 TEST_CASE("A mesh drawn with a view of its own sorts by the distance from that view", "[frame]")
 {
     Mesh mesh;
-    mesh.Materials = { kMaterial };
+    const std::array materials = { kMaterial };
     mesh.SubMeshes = { { .MaterialSlot = 0 } };
     mesh.Bounds = { glm::vec3(-1.0f), glm::vec3(1.0f) };
 
@@ -447,8 +459,8 @@ TEST_CASE("A mesh drawn with a view of its own sorts by the distance from that v
     PassBuilder pass = frame.AddPass({ .View = { .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) } });
     const ViewId far = frame.AddView({ .CameraPosition = glm::vec3(0.0f, 0.0f, 5.0f) });
 
-    pass.DrawMesh(mesh);
-    pass.DrawMesh(mesh, 0, { .View = far });
+    pass.DrawMesh(mesh, materials);
+    pass.DrawMesh(mesh, materials, 0, { .View = far });
 
     REQUIRE(pass.GetDraws().size() == 2);
     CHECK(pass.GetDraws()[0].SortDepth == 4.0f);

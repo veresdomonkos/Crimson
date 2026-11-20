@@ -25,7 +25,6 @@ namespace crimson
                 }
 
                 WriteComponent(*type, entity, component.Values);
-                ResolveComponentAssets(*type, type->Get(entity), assets);
             }
         }
 
@@ -107,7 +106,7 @@ namespace crimson
         for (const ComponentType& type : assets.Components().Types())
         {
             if (type.Has(entity) && (!instance || type.InlineInFile))
-                node.Components.push_back(CaptureComponent(type, entity, assets));
+                node.Components.push_back(CaptureComponent(type, entity));
         }
 
         if (instance)
@@ -180,7 +179,7 @@ namespace crimson
     Entity CreateSceneInstance(SceneID source, Scene& scene, Entity parent, AssetManager& assets, SceneID owner)
     {
         const AssetInfo* info = assets.GetInfo(source);
-        if (!info || info->Type != AssetType::Scene)
+        if (!info || !info->Type.Is<SceneAsset>())
             return {};
 
         if (owner && SceneUses(source, owner, assets))

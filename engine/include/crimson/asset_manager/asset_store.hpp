@@ -48,7 +48,7 @@ namespace crimson
     };
 
     // The assets of one type that were loaded or asked about
-    template <AssetType T>
+    template <typename T>
     class AssetStore final : public AssetStoreBase
     {
     public:
@@ -239,7 +239,7 @@ namespace crimson
                     return;
 
                 if (const std::optional<std::string> text = source.Read())
-                    slot->Data = AssetTraits<T>::Parse(*text, assets, source.Info.Path);
+                    slot->Data = T::Parse(*text, assets, source.Info.Path);
             }
         }
 

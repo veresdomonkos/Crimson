@@ -2,6 +2,7 @@
 #include <unordered_map>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/importers/texture_asset.hpp>
 #include <crimson/ui/imgui_backend.hpp>
 
 namespace crimson::editor

@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "crimson/asset_manager/asset_importer.hpp"
+#include "crimson/asset_manager/importers/material_asset.hpp"
 #include "crimson/asset_manager/material_data.hpp"
 
 namespace crimson
@@ -17,7 +18,7 @@ namespace crimson
     // Sets every property the shader declares a default for
     void ApplyShaderPropertyDefaults(ShaderHandle shader, MaterialHandle material, ImportContext& ctx);
 
-    class MaterialImporter final : public AssetImporter<AssetType::Material>
+    class MaterialImporter final : public AssetImporter<MaterialAsset>
     {
     public:
         std::span<const std::string_view> Extensions() const override;

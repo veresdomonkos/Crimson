@@ -161,8 +161,9 @@ namespace crimson
             draw.View = Resolve(item.View);
         }
 
-        // One draw per submesh, each with its slot's material. They sort by the distance to the mesh's center.
-        void DrawMesh(const Mesh& mesh, ObjectId object = 0, const DrawOptions& options = {})
+        // One draw per submesh, with the material at its slot in materials (one per slot of the mesh, by SubMesh::MaterialSlot).
+        // A slot past the end has none, and is skipped like one that failed to load. They sort by the distance to the mesh's center.
+        void DrawMesh(const Mesh& mesh, std::span<const MaterialHandle> materials, ObjectId object = 0, const DrawOptions& options = {})
         {
             assert(object < m_packet->m_objects.size() && "The object has to come from this frame's AddObject");
 
@@ -173,7 +174,8 @@ namespace crimson
 
             for (const SubMesh& subMesh : mesh.SubMeshes)
             {
-                const MaterialHandle material = options.MaterialOverride ? options.MaterialOverride : mesh.Materials[subMesh.MaterialSlot];
+                const MaterialHandle material = options.MaterialOverride ? options.MaterialOverride
+                    : subMesh.MaterialSlot < materials.size() ? materials[subMesh.MaterialSlot] : MaterialHandle::Invalid();
                 Draw(DrawItem{ mesh.VertexBuffer, mesh.IndexBuffer, material, subMesh.FirstIndex, subMesh.IndexCount, object, options.Variant, depth, options.View });
             }
         }

@@ -1,9 +1,10 @@
 #pragma once
 #include "crimson/asset_manager/asset_importer.hpp"
+#include "crimson/asset_manager/importers/mesh_asset.hpp"
 
 namespace crimson
 {
-    class MeshImporter final : public AssetImporter<AssetType::Mesh>
+    class MeshImporter final : public AssetImporter<MeshAsset>
     {
     public:
         std::span<const std::string_view> Extensions() const override;
@@ -11,8 +12,5 @@ namespace crimson
 
         std::optional<Mesh> Load(const AssetSource&, ImportContext&) override;
         void Unload(Mesh&, GpuResourceManager&) override;
-
-        // Components hold a mesh by pointer
-        bool CanReimport() const override { return false; }
     };
 }

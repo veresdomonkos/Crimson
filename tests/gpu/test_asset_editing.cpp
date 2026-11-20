@@ -6,6 +6,11 @@
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/shader_asset.hpp>
+#include <crimson/asset_manager/importers/texture_asset.hpp>
+
 #include <crimson/scene/scene_renderer.hpp>
 
 #include "gpu/gpu_test.hpp"
@@ -72,16 +77,17 @@ float4 PSMain(VertexOutput input) : SV_Target
     }
 
     // Lit materials sample the shadow atlas, which comes from a scene renderer
-    SceneRenderer MakeSceneRenderer()
+    SceneRenderer MakeSceneRenderer(AssetManager& assets)
     {
-        return { *Gpu().GPUResources, *Gpu().Renderer, ShadowAtlasSettings{ .AtlasSize = 256, .TileSize = 256 } };
+        return { *Gpu().GPUResources, *Gpu().Renderer, assets, ShadowAtlasSettings{ .AtlasSize = 256, .TileSize = 256 } };
     }
 
     struct Fixture
     {
         TempFolder Project;
         OffscreenTarget Target{ kSize, kSize };
-        SceneRenderer Shadows = MakeSceneRenderer();
+        AssetManager SceneAssets{ *Gpu().GPUResources, Project.Path() }; // for the scene renderer, which only gives the shadow atlas here
+        SceneRenderer Shadows = MakeSceneRenderer(SceneAssets);
 
         // Full ambient light, so a lit material shows exactly what it is
         FrameLighting Lighting;
@@ -96,15 +102,15 @@ float4 PSMain(VertexOutput input) : SV_Target
 
         Image Draw(AssetManager& assets, const OffscreenTarget& target, const char* material = "mine.mat")
         {
-            const Mesh* mesh = assets.Load<AssetType::Mesh>("quad.obj");
-            const MaterialHandle handle = assets.Load<AssetType::Material>(material);
+            const Mesh* mesh = assets.Get<MeshAsset>("quad.obj");
+            const MaterialHandle handle = *assets.Get<MaterialAsset>(material);
             REQUIRE(mesh);
             REQUIRE(handle);
 
             // In front of the quad, which faces +Z, for the lighting to see it from the front
             const PassInfo pass{ .Target = target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth }, .View = { .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) } };
 
-            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).DrawMesh(*mesh, 0, { .MaterialOverride = handle }); }, Lighting);
+            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).DrawMesh(*mesh, {}, 0, { .MaterialOverride = handle }); }, Lighting);
 
             return target.Read();
         }
@@ -114,7 +120,7 @@ float4 PSMain(VertexOutput input) : SV_Target
 TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset editing]")
 {
     AssetManager assets(*Gpu().GPUResources, Project.Path());
-    const MaterialID id = assets.Find<AssetType::Material>("mine.mat");
+    const MaterialID id = assets.Find<MaterialAsset>("mine.mat");
 
     REQUIRE(IsNear(Draw(assets, Target).AtClip(0.0f, 0.0f), glm::ivec3(255, 0, 0), kLitTolerance));
 
@@ -135,13 +141,13 @@ TEST_CASE_METHOD(Fixture, "Editing a material shows on the next frame", "[asset 
 
         const auto drawAway = [&]
         {
-            const Mesh* mesh = assets.Load<AssetType::Mesh>("away.obj");
+            const Mesh* mesh = assets.Get<MeshAsset>("away.obj");
             REQUIRE(mesh);
 
-            const MaterialHandle handle = assets.Load(id);
+            const MaterialHandle handle = *assets.Get(id);
             const PassInfo pass{ .Target = Target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth }, .View = { .CameraPosition = glm::vec3(0.0f, 0.0f, 2.0f) } };
 
-            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).DrawMesh(*mesh, 0, { .MaterialOverride = handle }); }, Lighting);
+            RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).DrawMesh(*mesh, {}, 0, { .MaterialOverride = handle }); }, Lighting);
 
             return Target.Read().AtClip(0.0f, 0.0f);
         };
@@ -171,7 +177,7 @@ float4 PSMain() : SV_Target { return float4(0.0, 1.0, 0.0, 1.0); }
 )");
         assets.Refresh();
 
-        data.Shader = assets.Find<AssetType::Shader>("green.hlsl");
+        data.Shader = assets.Find<ShaderAsset>("green.hlsl");
         data.Properties.clear();
 
         REQUIRE(assets.Apply(id, data) == AssetUpdate::Replaced);
@@ -197,12 +203,12 @@ TEST_CASE_METHOD(Fixture, "A material's color map multiplies its color", "[asset
     Project.Write("white.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "cull": "none", "properties": { "Color": [1, 1, 1, 1] } })");
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
-    const MaterialID id = assets.Find<AssetType::Material>("white.mat");
+    const MaterialID id = assets.Find<MaterialAsset>("white.mat");
 
     REQUIRE(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 255), kLitTolerance));
 
     MaterialData data = *assets.GetData(id);
-    data.Textures["ColorMap"] = assets.Find<AssetType::Texture>("blue.bmp");
+    data.Textures["ColorMap"] = assets.Find<TextureAsset>("blue.bmp");
     REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
 
     CHECK(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(0, 0, 255), kLitTolerance));
@@ -217,7 +223,7 @@ TEST_CASE_METHOD(Fixture, "A material's color map multiplies its color", "[asset
 
     SECTION("Deleting the texture goes back to white too")
     {
-        REQUIRE(assets.Delete(assets.Find<AssetType::Texture>("blue.bmp")));
+        REQUIRE(assets.Delete(assets.Find<TextureAsset>("blue.bmp")));
 
         CHECK(IsNear(Draw(assets, Target, "white.mat").AtClip(0.0f, 0.0f), glm::ivec3(255, 255, 255), kLitTolerance));
     }
@@ -232,22 +238,22 @@ TEST_CASE("Mipmaps keep a shrunken texture from flickering", "[asset editing]")
 
     // A size that doesn't divide the texture evenly, so without mips the samples land on different mixes of the two colors
     const OffscreenTarget target(37, 37);
-    const SceneRenderer shadows = MakeSceneRenderer();
 
     AssetManager assets(*Gpu().GPUResources, project.Path());
-    const TextureID texture = assets.Find<AssetType::Texture>("checker.bmp");
+    const SceneRenderer shadows = MakeSceneRenderer(assets);
+    const TextureID texture = assets.Find<TextureAsset>("checker.bmp");
     FrameLighting lighting;
     lighting.AmbientColor = glm::vec3(1.0f);
 
     const auto spread = [&]
     {
-        const Mesh* mesh = assets.Load<AssetType::Mesh>("quad.obj");
-        const MaterialHandle material = assets.Load<AssetType::Material>("mine.mat");
+        const Mesh* mesh = assets.Get<MeshAsset>("quad.obj");
+        const MaterialHandle material = *assets.Get<MaterialAsset>("mine.mat");
         REQUIRE(mesh);
         REQUIRE(material);
 
         const PassInfo pass{ .Target = target.Handle(), .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth } };
-        RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).DrawMesh(*mesh, 0, { .MaterialOverride = material }); }, lighting);
+        RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(pass).DrawMesh(*mesh, {}, 0, { .MaterialOverride = material }); }, lighting);
 
         const Image image = target.Read();
         int lowest = 255;
@@ -286,7 +292,7 @@ TEST_CASE_METHOD(Fixture, "Flip Y turns the picture upside down", "[asset editin
     Project.Write("rows.mat", R"({ "shader": "engine/shaders/S_Lit.hlsl", "cull": "none", "properties": { "Color": [1, 1, 1, 1] }, "textures": { "ColorMap": "rows.bmp" } })");
 
     AssetManager assets(*Gpu().GPUResources, Project.Path());
-    const TextureID texture = assets.Find<AssetType::Texture>("rows.bmp");
+    const TextureID texture = assets.Find<TextureAsset>("rows.bmp");
 
     nlohmann::json settings = assets.GetInfo(texture)->Settings;
     settings["generateMips"] = false;
@@ -321,7 +327,7 @@ TEST_CASE_METHOD(Fixture, "An sRGB texture is decoded to linear when sampled", "
 
     SECTION("Not when it is turned off")
     {
-        REQUIRE(assets.Reimport(assets.Find<AssetType::Texture>("gray.bmp"), { { "srgb", false } }));
+        REQUIRE(assets.Reimport(assets.Find<TextureAsset>("gray.bmp"), { { "srgb", false } }));
         CHECK(IsNear(Draw(assets, Target, "unlit.mat").AtClip(0.0f, 0.0f), glm::ivec3(188, 188, 188), 2));
     }
 

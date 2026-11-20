@@ -76,8 +76,8 @@ namespace crimson::editor::ui
     // Prunes for the material's shader, if it loads
     static bool PruneToShader(AssetManager& assets, MaterialData& data)
     {
-        const ShaderHandle handle = assets.Load(data.Shader);
-        return handle && PruneToShader(data, assets.GetShaderInterface(handle));
+        const ShaderHandle* handle = assets.Get(data.Shader);
+        return handle && PruneToShader(data, assets.GetShaderInterface(*handle));
     }
 
     void AssetInspector::Draw(AssetID id)
@@ -91,20 +91,16 @@ namespace crimson::editor::ui
 
         DrawHeader(*info);
 
-        switch (info->Type)
-        {
-            case AssetType::Material: DrawMaterial(*info); break;
-            case AssetType::Texture:  DrawTexture(*info); break;
-            case AssetType::Mesh:     DrawMesh(*info); break;
-            case AssetType::Shader:   DrawShader(*info); break;
-            case AssetType::Scene:    DrawScene(*info); break;
-            default: break;
-        }
+        if (info->Type.Is<MaterialAsset>())     DrawMaterial(*info);
+        else if (info->Type.Is<TextureAsset>()) DrawTexture(*info);
+        else if (info->Type.Is<MeshAsset>())    DrawMesh(*info);
+        else if (info->Type.Is<ShaderAsset>())  DrawShader(*info);
+        else if (info->Type.Is<SceneAsset>())   DrawScene(*info);
     }
 
     void AssetInspector::DrawScene(const AssetInfo& info)
     {
-        const SceneID scene = m_context.Assets.As<AssetType::Scene>(info.Id);
+        const SceneID scene = m_context.Assets.As<SceneAsset>(info.Id);
         const bool open = scene == m_context.ActiveSceneAsset;
 
         Section("Scene", false, [&]
@@ -133,7 +129,7 @@ namespace crimson::editor::ui
         // What it is and where, in a smaller muted line
         {
             const theme::ScopedFont small(nullptr, theme::FontSmall);
-            const std::string_view type = ToString(info.Type);
+            const std::string_view type = info.Type.Name();
             const std::string where = info.ReadOnly ? "engine, read-only" : info.Path;
 
             ImGui::PushStyleColor(ImGuiCol_Text, theme::TextMuted);
@@ -147,7 +143,7 @@ namespace crimson::editor::ui
     void AssetInspector::DrawMaterial(const AssetInfo& info)
     {
         AssetEdits& edits = m_context.Edits;
-        const MaterialID id = m_context.Assets.As<AssetType::Material>(info.Id);
+        const MaterialID id = m_context.Assets.As<MaterialAsset>(info.Id);
 
         const MaterialData* current = edits.Get(id);
         if (!current)
@@ -161,11 +157,11 @@ namespace crimson::editor::ui
 
         DrawMaterialSettings(id, info.ReadOnly, data, changed);
 
-        const ShaderHandle shader = m_context.Assets.Load(data.Shader);
+        const ShaderHandle* shader = m_context.Assets.Get(data.Shader);
 
         if (shader)
         {
-            const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(shader);
+            const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(*shader);
 
             if (!shaderInterface.Properties.empty())
                 Section("Properties", info.ReadOnly, [&] { DrawMaterialProperties(shaderInterface, data, changed); });
@@ -221,7 +217,7 @@ namespace crimson::editor::ui
         ShaderID picked = data.Shader;
         m_shaderField = ImGui::GetID("##Shader");
 
-        if (AssetField<AssetType::Shader>("##Shader", m_context, picked))
+        if (AssetField<ShaderAsset>("##Shader", m_context, picked))
         {
             data.Shader = picked;
             changed = true;
@@ -334,7 +330,7 @@ namespace crimson::editor::ui
             TextureID picked = current;
 
             ImGui::SetNextItemWidth(-FLT_MIN);
-            AssetField<AssetType::Texture>("##Texture", m_context, picked);
+            AssetField<TextureAsset>("##Texture", m_context, picked);
 
             props::ResetTarget();
 
@@ -388,7 +384,7 @@ namespace crimson::editor::ui
             ? static_cast<float>(m_textureSize->first) / static_cast<float>(m_textureSize->second)
             : 1.0f;
 
-        if (const ImTextureID preview = m_context.Thumbnails.Get(m_context.Assets.As<AssetType::Texture>(info.Id)))
+        if (const ImTextureID preview = m_context.Thumbnails.Get(m_context.Assets.As<TextureAsset>(info.Id)))
             ImGui::Image(preview, ImVec2(available, available / aspect));
         else
             ImGui::TextDisabled("This image can't be read, see the console");
@@ -450,7 +446,7 @@ namespace crimson::editor::ui
 
         if (theme::PrimaryButton("Apply"))
         {
-            m_context.Deferred.emplace_back([this, id = m_context.Assets.As<AssetType::Texture>(info.Id), settings = m_textureSettings]
+            m_context.Deferred.emplace_back([this, id = m_context.Assets.As<TextureAsset>(info.Id), settings = m_textureSettings]
             {
                 // Its id is about to stop working, and the next draw gets a new one
                 m_context.Thumbnails.Release(id);
@@ -467,18 +463,18 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawMesh(const AssetInfo& info)
     {
-        const MeshID id = m_context.Assets.As<AssetType::Mesh>(info.Id);
+        const MeshID id = m_context.Assets.As<MeshAsset>(info.Id);
 
         if (!m_context.Assets.IsLoaded(id))
         {
             // It can take seconds, so only when asked
             if (ImGui::Button("Load to see details"))
-                m_context.Deferred.emplace_back([this, id] { m_context.Assets.Load(id); });
+                m_context.Deferred.emplace_back([this, id] { (void)m_context.Assets.Get(id); });
 
             return;
         }
 
-        const Mesh* mesh = m_context.Assets.Load(id);
+        const Mesh* mesh = m_context.Assets.Get(id);
         if (!mesh)
         {
             ImGui::TextDisabled("This mesh can't be read, see the console");
@@ -517,14 +513,14 @@ namespace crimson::editor::ui
 
     void AssetInspector::DrawShader(const AssetInfo& info)
     {
-        const ShaderHandle shader = m_context.Assets.Load(m_context.Assets.As<AssetType::Shader>(info.Id));
+        const ShaderHandle* shader = m_context.Assets.Get(m_context.Assets.As<ShaderAsset>(info.Id));
         if (!shader)
         {
             ImGui::TextDisabled("This shader doesn't compile, see the console");
             return;
         }
 
-        const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(shader);
+        const ShaderInterface& shaderInterface = m_context.Assets.GetShaderInterface(*shader);
 
         if (!shaderInterface.Properties.empty())
         {

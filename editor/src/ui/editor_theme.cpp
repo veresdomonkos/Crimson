@@ -7,6 +7,11 @@
 #include <imgui.h>
 #include <imgui_internal.h>
 
+#include <crimson/asset_manager/importers/material_asset.hpp>
+#include <crimson/asset_manager/importers/mesh_asset.hpp>
+#include <crimson/asset_manager/importers/scene_asset.hpp>
+#include <crimson/asset_manager/importers/shader_asset.hpp>
+#include <crimson/asset_manager/importers/texture_asset.hpp>
 #include <crimson/core/log.hpp>
 
 #include "crimson_editor/editor_resources.hpp"
@@ -211,15 +216,13 @@ namespace crimson::editor::ui
 
         ImVec4 AssetColor(AssetType type)
         {
-            switch (type)
-            {
-                case AssetType::Material: return ImVec4(0.66f, 0.42f, 0.52f, 1.00f);
-                case AssetType::Mesh:     return ImVec4(0.38f, 0.54f, 0.68f, 1.00f);
-                case AssetType::Shader:   return ImVec4(0.52f, 0.46f, 0.70f, 1.00f);
-                case AssetType::Texture:  return ImVec4(0.40f, 0.62f, 0.48f, 1.00f);
-                case AssetType::Scene:    return ImVec4(0.70f, 0.50f, 0.36f, 1.00f);
-                default:                  return ImVec4(0.42f, 0.43f, 0.46f, 1.00f);
-            }
+            if (type.Is<MaterialAsset>()) return ImVec4(0.66f, 0.42f, 0.52f, 1.00f);
+            if (type.Is<MeshAsset>())     return ImVec4(0.38f, 0.54f, 0.68f, 1.00f);
+            if (type.Is<ShaderAsset>())   return ImVec4(0.52f, 0.46f, 0.70f, 1.00f);
+            if (type.Is<TextureAsset>())  return ImVec4(0.40f, 0.62f, 0.48f, 1.00f);
+            if (type.Is<SceneAsset>())    return ImVec4(0.70f, 0.50f, 0.36f, 1.00f);
+
+            return ImVec4(0.42f, 0.43f, 0.46f, 1.00f);
         }
 
         ImFont* RegularFont() { return s_regular; }

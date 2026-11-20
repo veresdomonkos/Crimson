@@ -5,13 +5,14 @@
 #include <cassert>
 
 #include "crimson/asset_manager/asset_manager.hpp"
+#include "crimson/asset_manager/slot_materials.hpp"
 #include "crimson/core/log.hpp"
 #include "crimson/scene/entity.hpp"
 
 namespace crimson
 {
-    SceneRenderer::SceneRenderer(GpuResourceManager& resources, Renderer& renderer, ShadowAtlasSettings atlas)
-        : m_resources(resources), m_atlas(atlas)
+    SceneRenderer::SceneRenderer(GpuResourceManager& resources, Renderer& renderer, AssetManager& assets, ShadowAtlasSettings atlas)
+        : m_resources(resources), m_assets(assets), m_atlas(atlas)
     {
         const RenderTargetInfo info{ .Width = atlas.AtlasSize, .Height = atlas.AtlasSize, .DepthFormat = TextureFormat::Depth32F };
         m_shadowTarget = resources.CreateRenderTarget(info);
@@ -50,42 +51,86 @@ namespace crimson
         m_screenTriangleIndices = m_resources.CreateIndexBuffer({ .Size = sizeof(indices), .Usage = BufferUsage::Static, .Type = IndexType::UInt32 }, indices.data());
     }
 
-    void SceneRenderer::SetToneMapMaterial(MaterialHandle material, uint32_t width, uint32_t height)
+    // The material an id gives now. If that is another handle than the one it was set up on, it was made again, and
+    // setUp does what it needs. That runs inside a frame, which is safe as a handle that changed was made between frames,
+    // so none in flight uses it.
+    template <typename SetUp>
+    static MaterialHandle FollowMaterial(AssetManager& assets, MaterialID id, MaterialHandle& setUp, SetUp&& setUpNew)
     {
-        if (!material)
+        const MaterialHandle* found = assets.Get(id);
+        if (!found)
+            return {};
+
+        if (*found != setUp)
+        {
+            setUp = *found;
+            setUpNew(*found);
+        }
+
+        return *found;
+    }
+
+    void SceneRenderer::SetUpToneMap(MaterialHandle material)
+    {
+        m_resources.SetMaterialTexture(material, "SceneColor", m_hdrColor);
+        ApplyToneMapping(material);
+    }
+
+    void SceneRenderer::ApplyToneMapping(MaterialHandle material)
+    {
+        if (!m_toneMapping)
             return;
 
+        m_resources.SetMaterialPropertyByName(material, "Exposure", m_toneMapping->first);
+        m_resources.SetMaterialPropertyByName(material, "ToneMapper", static_cast<float>(m_toneMapping->second));
+    }
+
+    void SceneRenderer::SetToneMapMaterial(MaterialID material, uint32_t width, uint32_t height)
+    {
         m_toneMapMaterial = material;
+
+        const MaterialHandle* handle = m_assets.Get(material);
+        if (!handle)
+            return;
 
         const RenderTargetInfo info{ .Width = width, .Height = height, .ColorFormats = { TextureFormat::RGBA16F }, .DepthFormat = TextureFormat::Depth32F };
         m_hdrTarget = m_resources.CreateRenderTarget(info);
         m_hdrColor = m_resources.GetColorAttachment(m_hdrTarget, 0);
-        m_resources.SetMaterialTexture(material, "SceneColor", m_hdrColor);
+
+        m_toneMapSetUp = *handle;
+        SetUpToneMap(*handle);
 
         CreateScreenTriangle();
     }
 
     void SceneRenderer::SetToneMapping(float exposure, ToneMapper mapper)
     {
-        if (!m_toneMapMaterial)
-            return;
+        m_toneMapping = std::make_pair(exposure, mapper);
 
-        m_resources.SetMaterialPropertyByName(m_toneMapMaterial, "Exposure", exposure);
-        m_resources.SetMaterialPropertyByName(m_toneMapMaterial, "ToneMapper", static_cast<float>(mapper));
+        if (m_hdrTarget)
+        {
+            // On the handle it has now, which a new one would have been set up on
+            const MaterialHandle handle = FollowMaterial(m_assets, m_toneMapMaterial, m_toneMapSetUp, [this](MaterialHandle made) { SetUpToneMap(made); });
+            if (handle)
+                ApplyToneMapping(handle);
+        }
     }
 
-    void SceneRenderer::SetOutlineMaterial(MaterialHandle outline, uint32_t width, uint32_t height)
+    void SceneRenderer::SetOutlineMaterial(MaterialID outline, uint32_t width, uint32_t height)
     {
-        if (!outline)
-            return;
-
         m_outlineMaterial = outline;
+
+        const MaterialHandle* handle = m_assets.Get(outline);
+        if (!handle)
+            return;
 
         // The outlined meshes' depth, drawn like a shadow, so their shaders decide their shape there too
         const RenderTargetInfo info{ .Width = width, .Height = height, .DepthFormat = TextureFormat::Depth32F };
         m_outlineMaskTarget = m_resources.CreateRenderTarget(info);
         m_outlineMask = m_resources.GetDepthAttachment(m_outlineMaskTarget).value();
-        m_resources.SetMaterialTexture(outline, "OutlineMask", m_outlineMask);
+
+        m_outlineSetUp = *handle;
+        m_resources.SetMaterialTexture(*handle, "OutlineMask", m_outlineMask);
 
         CreateScreenTriangle();
     }
@@ -121,16 +166,43 @@ namespace crimson
         m_atlasFullLogged = skipped > 0;
     }
 
+    const std::vector<MaterialID>& SceneRenderer::EmptySlotMaterials(MeshID mesh, const Mesh& loaded)
+    {
+        auto [it, added] = m_emptySlotMaterials.try_emplace(mesh);
+
+        if (added)
+        {
+            for (const std::string& slot : loaded.MaterialSlots)
+                it->second.push_back(slot_materials::ForEmptySlot(m_assets, mesh, slot));
+        }
+
+        return it->second;
+    }
+
     void SceneRenderer::Record(FrameRecorder& frame, Scene& scene, const PassInfo& mainPass, Entity outlined)
     {
         m_drawables.clear();
+        m_materials.clear();
+
+        // What the empty slots use depends on which assets exist, so it is worked out again when those change
+        if (m_cachedVersion != m_assets.Version())
+        {
+            m_emptySlotMaterials.clear();
+            m_missingMaterial = slot_materials::MissingMaterial(m_assets);
+            m_cachedVersion = m_assets.Version();
+        }
 
         const bool outlining = outlined && m_outlineMaskTarget;
         bool anyOutlined = false;
 
         for (const auto [handle, renderer, transform] : scene.GetRegistry().view<MeshRendererComponent, TransformComponent>().each())
         {
-            if (!transform.ActiveInHierarchy || renderer.Resolved.SubMeshes.empty())
+            if (!transform.ActiveInHierarchy)
+                continue;
+
+            // Looked up every frame, so a mesh or material that was made again is the one drawn
+            const Mesh* mesh = m_assets.Get(renderer.MeshAsset);
+            if (!mesh || mesh->SubMeshes.empty())
                 continue;
 
             bool isOutlined = false;
@@ -142,7 +214,24 @@ namespace crimson
             }
 
             anyOutlined = anyOutlined || isOutlined;
-            m_drawables.push_back({ &renderer.Resolved, frame.AddObject(transform.World), renderer.CastsShadows, isOutlined });
+
+            const auto first = static_cast<uint32_t>(m_materials.size());
+            const std::vector<MaterialID>& empty = EmptySlotMaterials(renderer.MeshAsset, *mesh);
+
+            for (size_t slot = 0; slot < mesh->MaterialSlots.size(); ++slot)
+            {
+                const MaterialID chosen = slot < renderer.MaterialAssets.size() ? renderer.MaterialAssets[slot] : MaterialID{};
+                const MaterialID id = chosen ? chosen : empty[slot];
+
+                // One that isn't there or doesn't load is drawn as the missing material, to be seen, so no pass leaves it out
+                const MaterialHandle* material = m_assets.Get(id);
+                if (!material)
+                    material = m_assets.Get(m_missingMaterial);
+
+                m_materials.push_back(material ? *material : MaterialHandle::Invalid());
+            }
+
+            m_drawables.push_back({ mesh, first, static_cast<uint32_t>(m_materials.size()) - first, frame.AddObject(transform.World), renderer.CastsShadows, isOutlined });
         }
 
         RecordShadows(frame);
@@ -165,7 +254,7 @@ namespace crimson
         PassBuilder pass = frame.AddPass(sceneInfo);
 
         for (const Drawable& drawable : m_drawables)
-            pass.DrawMesh(*drawable.Mesh, drawable.Object);
+            pass.DrawMesh(*drawable.Mesh, MaterialsOf(drawable), drawable.Object);
 
         if (m_hdrTarget)
         {
@@ -177,14 +266,16 @@ namespace crimson
                 .Viewport = mainPass.Viewport,
                 .Reads = { m_hdrColor }
             };
-            frame.AddPass(toneMapInfo).Draw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, m_toneMapMaterial });
+            const MaterialHandle toneMap = FollowMaterial(m_assets, m_toneMapMaterial, m_toneMapSetUp, [this](MaterialHandle made) { SetUpToneMap(made); });
+            frame.AddPass(toneMapInfo).Draw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, toneMap });
         }
 
         // In display colors, after the tone mapping, so that it stays the color it was set to
         if (anyOutlined)
         {
             const PassInfo outlineInfo{ .Name = "Outline", .Target = mainPass.Target, .Viewport = mainPass.Viewport, .Reads = { m_outlineMask } };
-            frame.AddPass(outlineInfo).Draw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, m_outlineMaterial });
+            const MaterialHandle outline = FollowMaterial(m_assets, m_outlineMaterial, m_outlineSetUp, [this](MaterialHandle made) { m_resources.SetMaterialTexture(made, "OutlineMask", m_outlineMask); });
+            frame.AddPass(outlineInfo).Draw(DrawItem{ m_screenTriangleVertices, m_screenTriangleIndices, outline });
         }
     }
 
@@ -204,7 +295,7 @@ namespace crimson
             for (const Drawable& drawable : m_drawables)
             {
                 if (drawable.CastsShadows)
-                    pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth, .View = view });
+                    pass.DrawMesh(*drawable.Mesh, MaterialsOf(drawable), drawable.Object, { .Variant = ShaderVariant::Depth, .View = view });
             }
         }
     }
@@ -223,7 +314,7 @@ namespace crimson
         for (const Drawable& drawable : m_drawables)
         {
             if (drawable.Outlined)
-                pass.DrawMesh(*drawable.Mesh, drawable.Object, { .Variant = ShaderVariant::Depth });
+                pass.DrawMesh(*drawable.Mesh, MaterialsOf(drawable), drawable.Object, { .Variant = ShaderVariant::Depth });
         }
     }
 }

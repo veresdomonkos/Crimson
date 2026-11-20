@@ -27,7 +27,7 @@ namespace crimson::editor
         m_camera.LookAt(pivot);
     }
 
-    void SceneCameraController::Frame(Entity entity)
+    void SceneCameraController::Frame(Entity entity, AssetManager& assets)
     {
         constexpr float kDefaultRadius = 1.0f;
         constexpr float kMargin = 1.2f;
@@ -37,7 +37,7 @@ namespace crimson::editor
         glm::vec3 center(world[3]);
         float radius = kDefaultRadius;
 
-        if (const std::optional<MeshBounds> bounds = entity.GetScene()->WorldBounds(entity))
+        if (const std::optional<MeshBounds> bounds = entity.GetScene()->WorldBounds(entity, assets))
         {
             center = (bounds->Min + bounds->Max) * 0.5f;
             radius = glm::length(bounds->Max - bounds->Min) * 0.5f;

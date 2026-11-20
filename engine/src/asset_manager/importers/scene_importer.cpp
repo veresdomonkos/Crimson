@@ -16,7 +16,7 @@ namespace crimson
     std::optional<std::string> SceneImporter::NewFile(const AssetManager& assets) const
     {
         // Read and written again, as parsing gives every node an id of its own, for two new scenes not to share any
-        const std::optional<SceneData> data = assets.Read(assets.Find<AssetType::Scene>(kNewSceneTemplate));
+        const std::optional<SceneData> data = assets.Read(assets.Find<SceneAsset>(kNewSceneTemplate));
         if (!data)
         {
             LOG_ERROR("[SceneImporter] Can't read {}", kNewSceneTemplate);
