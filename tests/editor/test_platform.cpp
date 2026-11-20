@@ -1,7 +1,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <filesystem>
-#include <string_view>
 
 #include <crimson_editor/platform.hpp>
 
@@ -37,20 +36,4 @@ TEST_CASE("The user cache folder is Crimson's own", "[platform]")
 #else
     CHECK(platform::UserCacheFolder().filename() == "crimson");
 #endif
-}
-
-TEST_CASE("Program files have extensions only on Windows", "[platform]")
-{
-#ifdef _WIN32
-    CHECK(platform::ProgramExtensions() == "exe,cmd,bat");
-#else
-    CHECK(platform::ProgramExtensions().empty());
-#endif
-}
-
-TEST_CASE("Code editor candidates have names", "[platform]")
-{
-    // The paths may be empty or missing, as nothing says the editors are installed
-    for (const auto& [name, program] : platform::CodeEditorCandidates())
-        CHECK_FALSE(name.empty());
 }

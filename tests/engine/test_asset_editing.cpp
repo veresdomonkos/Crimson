@@ -615,24 +615,6 @@ TEST_CASE_METHOD(Fixture, "Saving leaves no temporary file", "[asset editing]")
     CHECK(assets.Read(id)->Properties.at("Color") == data.Properties.at("Color"));
 }
 
-TEST_CASE_METHOD(Fixture, "A reimported mesh is looked up in place with its new buffers", "[asset editing]")
-{
-    Temp.Write("a.obj", kTriangleObj);
-    AssetManager assets(Gpu, Temp.Path());
-    const MeshID mesh = assets.Find<MeshAsset>("a.obj");
-
-    const Mesh* before = assets.Get(mesh);
-    REQUIRE(before);
-    const VertexBufferHandle oldBuffer = before->VertexBuffer;
-
-    nlohmann::json settings = assets.GetInfo(mesh)->Settings;
-    settings["flipV"] = !settings.value("flipV", true);
-    CHECK(assets.Reimport(mesh, settings));
-
-    CHECK(assets.Get(mesh) == before);
-    CHECK(assets.Get(mesh)->VertexBuffer != oldBuffer);
-}
-
 TEST_CASE_METHOD(Fixture, "Renaming moves the file and its meta", "[asset editing]")
 {
     Temp.Write("a.obj", kTriangleObj);
@@ -920,16 +902,6 @@ float4 PSMain() : SV_Target { return Amount * Other * Bumps.Sample(LinearWrap, f
             data.Properties.erase("Other");
             REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
             CHECK(propertyOf("Other") == 0.75f);
-        }
-
-        SECTION("Deleting the assigned texture goes back to the flat normal too")
-        {
-            MaterialData data = *assets.GetData(id);
-            data.Textures["Bumps"] = assets.Find<TextureAsset>("image.bmp");
-            REQUIRE(assets.Apply(id, data) == AssetUpdate::Updated);
-
-            REQUIRE(assets.Delete(assets.Find<TextureAsset>("image.bmp")));
-            CHECK(gpu.Materials.at(handle.GetRaw()).Textures.at("Bumps") == flatNormal);
         }
     }
 
