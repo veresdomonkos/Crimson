@@ -3,7 +3,6 @@
 #include <crimson/core/log.hpp>
 #include <crimson/core/profiler.hpp>
 #include <crimson/project/shader_includes.hpp>
-#include <crimson/scene/scene_serializer.hpp>
 #include <algorithm>
 #include <chrono>
 #include <ctime>
@@ -11,9 +10,7 @@
 #include <iomanip>
 #include <sstream>
 #include <string>
-#include <system_error>
 #include <utility>
-#include <vector>
 #include <glm/gtc/matrix_transform.hpp>
 #include <GLFW/glfw3.h>
 
@@ -36,12 +33,6 @@ namespace crimson::editor
     constexpr uint32_t kMainTargetWidth = 1920;
     constexpr uint32_t kMainTargetHeight = 1080;
 
-    // The only part of the recovery files that knows they are scenes
-    static std::string RecoveryName(SceneID id)
-    {
-        return id.ToString() + ".scene";
-    }
-
     static std::string FormatTime(std::filesystem::file_time_type time)
     {
         const auto system = std::chrono::time_point_cast<std::chrono::system_clock::duration>(std::chrono::file_clock::to_sys(time));
@@ -54,42 +45,39 @@ namespace crimson::editor
 
     ProjectSessionMode::ProjectSessionMode(EditorServices& services, Project project)
         : m_services(services),
-          m_project(std::move(project)),
-          m_recovery(m_project.DataDir() / "recovery"),
-          m_assetManager(std::make_unique<AssetManager>(GpuResources(), m_project.AssetsDir(), m_project.DataDir() / "cache")),
-          m_assetEdits(std::make_unique<AssetEdits>(*m_assetManager)),
-          m_assetThumbnails(std::make_unique<AssetThumbnails>(*m_assetManager, GpuResources(), *m_services.Graphics.Imgui)),
-          m_sceneView(m_scene, m_camera, static_cast<float>(kMainTargetWidth) / kMainTargetHeight),
-          m_sceneEdits(m_scene, *m_assetManager, m_settings, [this] { m_sceneRenderer->SetToneMapping(m_settings.PostProcessing.Exposure, m_settings.PostProcessing.Mapper); }),
-          m_context{ .ActiveScene = m_scene, .Assets = *m_assetManager, .Edits = *m_assetEdits, .Thumbnails = *m_assetThumbnails, .SceneUndo = m_sceneEdits,
-                     .OnAssetsRemoved = [this](std::span<const AssetID> removed) { ForgetAssets(removed); },
-                     .OpenScene = [this](SceneID id) { OpenScene(id); },
-                     .OpenCodeFile = [this](const std::filesystem::path& file) { script_editor::Open(m_services.Settings.GetScriptEditor(), file, m_project.Root()); } }
-    {
-        // In the order the sources are collected from, which is the order a step's changes are redone in
-        m_history.AddSource(m_sceneEdits);
-        m_history.AddSource(*m_assetEdits);
+          m_session(std::move(project), GpuResources(), m_services.Recents, [this] { return IsEditing(); }),
+          m_assetThumbnails(std::make_unique<AssetThumbnails>(m_session.GetAssets(), GpuResources(), *m_services.Graphics.Imgui)),
+          m_sceneView(m_session.GetScene(), m_camera, static_cast<float>(kMainTargetWidth) / kMainTargetHeight),
+          m_context{ .Session = m_session, .Thumbnails = *m_assetThumbnails,
+                     .OnAssetsRemoved = [this](std::span<const AssetID> removed)
+                     {
+                         for (const AssetID id : removed)
+                             m_assetThumbnails->Release(id);
 
-        LOG_INFO("[Editor] Opening project '{}' at {}", m_project.Name(), m_project.Root().string());
+                         m_session.ForgetAssets(removed);
+                     },
+                     .OpenCodeFile = [this](const std::filesystem::path& file) { script_editor::Open(m_services.Settings.GetScriptEditor(), file, m_session.GetProject().Root()); } }
+    {
+        LOG_INFO("[Editor] Opening project '{}' at {}", m_session.GetProject().Name(), m_session.GetProject().Root().string());
 
         // For code editors to find the engine's shader headers, which may have changed since the project was last open
-        ExportShaderIncludes(m_project);
+        ExportShaderIncludes(m_session.GetProject());
 
-        m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer, *m_assetManager);
+        m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer, m_session.GetAssets());
         // The menu is drawn in the middle of a frame, and undoing can create entities, which load GPU resources
         m_ui = std::make_unique<ui::EditorUI>(ui::MainMenuActions{
             .SaveAll = [this] { SaveAll(); },
             .CloseProject = [this] { RequestClose(m_services.CloseProject); },
-            .Undo = [this] { m_context.Deferred.emplace_back([this] { Undo(); }); },
-            .Redo = [this] { m_context.Deferred.emplace_back([this] { Redo(); }); },
-            .CanUndo = [this] { return m_history.CanUndo(); },
-            .CanRedo = [this] { return m_history.CanRedo(); }
+            .Undo = [this] { m_context.Deferred.emplace_back([this] { m_session.Undo(); }); },
+            .Redo = [this] { m_context.Deferred.emplace_back([this] { m_session.Redo(); }); },
+            .CanUndo = [this] { return m_session.GetHistory().CanUndo(); },
+            .CanRedo = [this] { return m_session.GetHistory().CanRedo(); }
         });
 
         CreateRenderTargets();
         SetupRenderer();
+        ApplyToneMapping();
         SetupUI();
-        LoadScene(ChooseScene(m_services.Recents.GetLastScene(m_project.Root())));
 
         m_cameraController = std::make_unique<SceneCameraController>(m_camera, m_services.AppInput, *m_sceneViewport);
 
@@ -123,8 +111,10 @@ namespace crimson::editor
 
     void ProjectSessionMode::SetupRenderer()
     {
-        m_sceneRenderer->SetToneMapMaterial(m_assetManager->Find<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kMainTargetWidth, kMainTargetHeight);
-        m_sceneRenderer->SetOutlineMaterial(m_assetManager->Find<MaterialAsset>("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
+        AssetManager& assets = m_session.GetAssets();
+
+        m_sceneRenderer->SetToneMapMaterial(assets.Find<MaterialAsset>("engine/materials/internal/M_ToneMap.mat"), kMainTargetWidth, kMainTargetHeight);
+        m_sceneRenderer->SetOutlineMaterial(assets.Find<MaterialAsset>("engine/materials/internal/M_Outline.mat"), kMainTargetWidth, kMainTargetHeight);
     }
 
     void ProjectSessionMode::SetupUI()
@@ -138,14 +128,16 @@ namespace crimson::editor
         m_ui->AddPanel<ui::HierarchyPanel>(m_context);
         m_ui->AddPanel<ui::InspectorPanel>(m_context);
         m_ui->AddPanel<ui::StatsPanel>(m_frameStats, m_services.RendererType);
-        m_ui->AddPanel<ui::SceneSettingsPanel>(m_context, *m_sceneRenderer, m_settings);
+        m_ui->AddPanel<ui::SceneSettingsPanel>(m_context);
 
         // Last, for its Edit menu item to come after the Hierarchy's
         m_ui->AddPanel<ui::PreferencesPanel>(m_services.Settings, m_services.AppWindow);
     }
 
-    void ProjectSessionMode::RunDeferred()
+    bool ProjectSessionMode::RunDeferred()
     {
+        const bool any = !m_context.Deferred.empty();
+
         // An action can add more, which run in the same go
         for (size_t i = 0; i < m_context.Deferred.size(); ++i)
         {
@@ -155,241 +147,7 @@ namespace crimson::editor
 
         m_context.Deferred.clear();
 
-        m_assetEdits->Apply();
-    }
-
-    void ProjectSessionMode::ForgetAssets(std::span<const AssetID> removed)
-    {
-        for (const AssetID id : removed)
-        {
-            m_assetEdits->Forget(id);
-            m_assetThumbnails->Release(id);
-
-            if (m_context.SelectedAsset == id)
-                m_context.SelectAsset({});
-        }
-
-        const auto isRemoved = [removed](AssetID id) { return std::ranges::find(removed, id) != removed.end(); };
-
-        if (isRemoved(m_context.ActiveSceneAsset))
-        {
-            // Nothing is left of the scene for its copy to restore into
-            m_recovery.Remove(RecoveryName(m_context.ActiveSceneAsset));
-            LoadScene(ChooseScene({}));
-            return;
-        }
-
-        std::vector<Entity> emptied;
-
-        for (auto [handle, instance] : m_scene.GetRegistry().view<SceneInstanceComponent>().each())
-        {
-            if (isRemoved(instance.Scene))
-                emptied.push_back(m_scene.GetEntity(handle));
-        }
-
-        for (const Entity instance : emptied)
-        {
-            // It can be inside of another one that just went
-            if (instance)
-                EmptySceneInstance(instance, m_scene);
-        }
-    }
-
-    SceneID ProjectSessionMode::ChooseScene(AssetID preferred)
-    {
-        if (const SceneID scene = m_assetManager->As<SceneAsset>(preferred))
-            return scene;
-
-        // Not the engine's template, which is listed too
-        const std::vector<const AssetInfo*> scenes = m_assetManager->List(AssetType::Of<SceneAsset>());
-        const auto first = std::ranges::find_if(scenes, [](const AssetInfo* scene) { return !scene->ReadOnly; });
-
-        return first == scenes.end() ? m_assetManager->Create<SceneAsset>("scenes/main.scene") : m_assetManager->As<SceneAsset>((*first)->Id);
-    }
-
-    void ProjectSessionMode::OpenScene(SceneID id)
-    {
-        if (id == m_context.ActiveSceneAsset)
-            return;
-
-        RequestClose([this, id]
-        {
-            m_context.Deferred.emplace_back([this, id] { LoadScene(id); });
-        });
-    }
-
-    // The references in a scene file to assets that aren't there, not counting what's inside its instances
-    static size_t CountMissing(const std::vector<SceneNode>& nodes, const AssetManager& assets)
-    {
-        size_t missing = 0;
-
-        for (const SceneNode& node : nodes)
-        {
-            missing += assets.IsMissing(node.Instance);
-
-            // Whatever component they are in
-            for (const SceneComponent& component : node.Components)
-            {
-                for (const FieldValue& value : component.Values)
-                {
-                    if (const AssetID* id = std::get_if<AssetID>(&value))
-                        missing += assets.IsMissing(*id);
-                    else if (const auto* ids = std::get_if<std::vector<AssetID>>(&value))
-                        missing += std::ranges::count_if(*ids, [&](AssetID id) { return assets.IsMissing(id); });
-                }
-            }
-
-            missing += CountMissing(node.Children, assets);
-        }
-
-        return missing;
-    }
-
-    void ProjectSessionMode::ShowScene(const SceneData& data, SceneID id)
-    {
-        m_context.Selected = {};
-        m_context.Picker.Reset();
-        m_scene.Clear();
-
-        // What was done to the last scene can't be undone in this one
-        m_history.Clear();
-
-        InstantiateScene(data, m_scene, {}, *m_assetManager, id);
-
-        if (const size_t missing = CountMissing(data.Roots, *m_assetManager))
-        {
-            const std::string text = missing == 1
-                ? "1 asset this scene uses is missing, see the Console"
-                : std::to_string(missing) + " assets this scene uses are missing, see the Console";
-
-            m_ui->GetNotifications().Push(ui::Notifications::Kind::Warning, text);
-        }
-
-        m_settings = data.Settings;
-        m_sceneRenderer->SetToneMapping(m_settings.PostProcessing.Exposure, m_settings.PostProcessing.Mapper);
-    }
-
-    void ProjectSessionMode::LoadScene(SceneID id)
-    {
-        m_context.ActiveSceneAsset = {};
-        m_context.SceneChanged = false;
-        m_writtenRecovery.reset();
-        m_offeredRecovery.reset();
-
-        const std::optional<SceneData> data = m_assetManager->Read(id);
-        if (!data)
-        {
-            m_context.Selected = {};
-            m_context.Picker.Reset();
-            m_scene.Clear();
-            m_history.Clear();
-            return;
-        }
-
-        ShowScene(*data, id);
-
-        // Not the file's data, as loading can fill things in that shouldn't count as a change
-        m_savedScene = CaptureScene(m_scene, m_settings, *m_assetManager);
-        m_context.ActiveSceneAsset = id;
-
-        m_services.Recents.SetLastScene(m_project.Root(), id);
-
-        OfferRecovery(id);
-    }
-
-    void ProjectSessionMode::OfferRecovery(SceneID id)
-    {
-        const std::string name = RecoveryName(id);
-
-        const std::optional<std::filesystem::file_time_type> copied = m_recovery.WrittenAt(name);
-        if (!copied)
-            return;
-
-        std::error_code error;
-        const std::filesystem::file_time_type saved = std::filesystem::last_write_time(m_assetManager->GetFilePath(id), error);
-
-        // A copy older than the file has nothing the file doesn't, as saving removes it. One with the same time is kept, as
-        // some file systems only keep whole seconds, which a copy written right after the file shares.
-        if (error || *copied < saved)
-        {
-            m_recovery.Remove(name);
-            return;
-        }
-
-        m_offeredRecovery = copied;
-        m_openRecoveryDialog = true;
-    }
-
-    void ProjectSessionMode::WriteRecovery()
-    {
-        if (!m_context.ActiveSceneAsset)
-            return;
-
-        // On this thread, as they read the scene and the assets. Only the write to the disk is on another.
-        SceneData current = CaptureScene(m_scene, m_settings, *m_assetManager);
-
-        if (current == m_savedScene)
-        {
-            // Undoing back to the saved state leaves a copy of this session out of date
-            ForgetRecovery();
-        }
-        else if (m_writtenRecovery != current)
-        {
-            m_recovery.Write(RecoveryName(m_context.ActiveSceneAsset), scene_data::Write(current, *m_assetManager));
-            m_writtenRecovery = std::move(current);
-        }
-    }
-
-    void ProjectSessionMode::ForgetRecovery()
-    {
-        // Only a copy of this session. One that was offered and not answered yet may be the only trace of lost work.
-        if (!m_writtenRecovery)
-            return;
-
-        m_recovery.Remove(RecoveryName(m_context.ActiveSceneAsset));
-        m_writtenRecovery.reset();
-    }
-
-    void ProjectSessionMode::RestoreRecovery()
-    {
-        if (!m_offeredRecovery || !m_context.ActiveSceneAsset)
-            return;
-
-        const SceneID id = m_context.ActiveSceneAsset;
-        const std::string name = RecoveryName(id);
-        const AssetInfo* info = m_assetManager->GetInfo(id);
-
-        const std::optional<std::string> text = m_recovery.Read(name);
-        std::optional<SceneData> data;
-        if (text && info)
-            data = scene_data::Parse(*text, *m_assetManager, info->Path);
-
-        if (!data)
-        {
-            LOG_WARN("[Recovery] The copy of the scene can't be read, so it is deleted");
-            m_recovery.Remove(name);
-            m_offeredRecovery.reset();
-            return;
-        }
-
-        // The saved scene stays as it was, which makes what was restored an unsaved change
-        ShowScene(*data, id);
-        m_writtenRecovery = CaptureScene(m_scene, m_settings, *m_assetManager);
-        m_offeredRecovery.reset();
-        m_context.SceneChanged = IsSceneChanged();
-    }
-
-    void ProjectSessionMode::DiscardRecovery()
-    {
-        if (m_context.ActiveSceneAsset)
-            m_recovery.Remove(RecoveryName(m_context.ActiveSceneAsset));
-
-        m_offeredRecovery.reset();
-    }
-
-    bool ProjectSessionMode::IsSceneChanged()
-    {
-        return m_context.ActiveSceneAsset && CaptureScene(m_scene, m_settings, *m_assetManager) != m_savedScene;
+        return any;
     }
 
     bool ProjectSessionMode::IsEditing() const
@@ -397,76 +155,9 @@ namespace crimson::editor
         return ImGui::IsAnyItemActive() || m_context.GizmoInUse || m_context.Picker.IsOpen();
     }
 
-    void ProjectSessionMode::RecordWatched()
-    {
-        // The Inspector and the gizmo change the selection directly, and Scene Settings the scene's settings
-        m_sceneEdits.Record(m_context.Selected);
-        m_sceneEdits.RecordSettings();
-
-        m_sceneEdits.RecordSelection(m_context.Selected ? m_context.Selected.GetComponent<NameComponent>().Id : AssetID{});
-    }
-
-    void ProjectSessionMode::Undo()
-    {
-        if (IsEditing())
-            return;
-
-        // An edit that wasn't a step yet is the one to undo
-        m_history.Commit();
-        FinishUndoRedo(m_history.Undo());
-    }
-
-    void ProjectSessionMode::Redo()
-    {
-        if (IsEditing())
-            return;
-
-        // An edit since the last undo makes a step, which leaves nothing to redo
-        m_history.Commit();
-        FinishUndoRedo(m_history.Redo());
-    }
-
-    void ProjectSessionMode::FinishUndoRedo(bool applied)
-    {
-        // Taken even when it isn't used, so a step without a scene part can't find an old one
-        const AssetID restored = m_sceneEdits.TakeRestoredSelection();
-
-        // An entity that comes back is a new one, so what was selected is found again by its id
-        if (applied && !m_context.Selected)
-        {
-            if (const Entity entity = FindEntity(m_scene, restored))
-                m_context.SelectEntity(entity);
-        }
-
-        RecordWatched();
-        m_context.SceneChanged = IsSceneChanged();
-    }
-
     bool ProjectSessionMode::SaveAll()
     {
-        bool saved = m_assetEdits->SaveAll();
-
-        if (!m_context.ActiveSceneAsset)
-        {
-            LOG_WARN("[Editor] No scene is open, so no scene was saved");
-            return saved;
-        }
-
-        SceneData current = CaptureScene(m_scene, m_settings, *m_assetManager);
-
-        if (current != m_savedScene)
-        {
-            if (m_assetManager->Save(m_context.ActiveSceneAsset, current))
-            {
-                m_savedScene = std::move(current);
-                m_context.SceneChanged = false;
-                ForgetRecovery();
-            }
-            else
-            {
-                saved = false;
-            }
-        }
+        const bool saved = m_session.SaveAll();
 
         // What went wrong is already in the Console, and on screen, as each failure logs an error
         if (saved)
@@ -477,53 +168,26 @@ namespace crimson::editor
 
     void ProjectSessionMode::RequestClose(std::function<void()> proceed)
     {
-        // Closing normally leaves nothing to recover
-        proceed = [this, proceed = std::move(proceed)]
-        {
-            ForgetRecovery();
-            proceed();
-        };
-
-        if (!m_assetEdits->HasUnsavedChanges() && !IsSceneChanged())
-        {
-            proceed();
-            return;
-        }
-
-        m_closeAction = std::move(proceed);
-        m_openUnsavedChangesDialog = true;
-    }
-
-    void ProjectSessionMode::SaveAllAndClose()
-    {
-        // A file that can't be written is in the console, and it is better to stay than to lose the edit
-        if (SaveAll())
-            std::exchange(m_closeAction, {})();
-    }
-
-    void ProjectSessionMode::DiscardAllAndClose()
-    {
-        m_assetEdits->DiscardAll();
-        std::exchange(m_closeAction, {})();
-    }
-
-    void ProjectSessionMode::CancelClose()
-    {
-        m_closeAction = {};
+        m_session.RequestClose(std::move(proceed));
     }
 
     void ProjectSessionMode::DrawUnsavedChangesDialog()
     {
         static constexpr const char* kPopup = "Unsaved Changes";
 
-        if (m_openUnsavedChangesDialog)
-        {
+        if (m_session.IsClosePending() && !ImGui::IsPopupOpen(kPopup))
             ImGui::OpenPopup(kPopup);
-            m_openUnsavedChangesDialog = false;
-        }
 
         if (!ImGui::BeginPopupModal(kPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
             return;
+
+        // It was answered some other way
+        if (!m_session.IsClosePending())
+        {
+            ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+            return;
+        }
 
         ImGui::TextUnformatted("The scene or some assets have changes that aren't saved.");
         ImGui::Spacing();
@@ -532,21 +196,25 @@ namespace crimson::editor
 
         if (ui::theme::PrimaryButton("Save All"))
         {
-            SaveAllAndClose();
-            close = true;
+            // Stays if something couldn't be saved, as it is better than losing the edit
+            if (m_session.SaveAllAndClose())
+            {
+                m_ui->GetNotifications().Push(ui::Notifications::Kind::Success, "Saved");
+                close = true;
+            }
         }
 
         ImGui::SameLine();
         if (ImGui::Button("Discard"))
         {
-            DiscardAllAndClose();
+            m_session.DiscardAllAndClose();
             close = true;
         }
 
         ImGui::SameLine();
         if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
         {
-            CancelClose();
+            m_session.CancelClose();
             close = true;
         }
 
@@ -560,42 +228,38 @@ namespace crimson::editor
     {
         static constexpr const char* kPopup = "Recover Scene";
 
-        if (m_openRecoveryDialog)
-        {
+        if (m_session.GetOfferedRecovery() && !ImGui::IsPopupOpen(kPopup))
             ImGui::OpenPopup(kPopup);
-            m_openRecoveryDialog = false;
-        }
 
         if (!ImGui::BeginPopupModal(kPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
             return;
 
         // The scene was loaded again while it was showing
-        if (!m_offeredRecovery)
+        if (!m_session.GetOfferedRecovery())
         {
             ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
             return;
         }
 
-        const AssetInfo* info = m_assetManager->GetInfo(m_context.ActiveSceneAsset);
+        const AssetInfo* info = m_session.GetAssets().GetInfo(m_session.GetSceneAsset());
 
         ImGui::Text("The editor didn't close normally after changes to %s that were never saved.", info ? info->Path.c_str() : "this scene");
-        ImGui::Text("A copy of them from %s was kept.", FormatTime(*m_offeredRecovery).c_str());
+        ImGui::Text("A copy of them from %s was kept.", FormatTime(*m_session.GetOfferedRecovery()).c_str());
         ImGui::Spacing();
 
         bool close = false;
 
         if (ui::theme::PrimaryButton("Restore"))
         {
-            // Instantiating loads GPU resources, which can't happen in the middle of a frame
-            m_context.Deferred.emplace_back([this] { RestoreRecovery(); });
+            m_session.RestoreRecovery();
             close = true;
         }
 
         ImGui::SameLine();
         if (ImGui::Button("Discard"))
         {
-            DiscardRecovery();
+            m_session.DiscardRecovery();
             close = true;
         }
 
@@ -607,11 +271,12 @@ namespace crimson::editor
 
     void ProjectSessionMode::Record(FrameRecorder& frame)
     {
-        m_scene.UpdateWorldTransforms();
+        Scene& scene = m_session.GetScene();
+        scene.UpdateWorldTransforms();
 
         FrameLighting& lighting = frame.Lighting();
-        lighting.AmbientColor = m_settings.Ambient;
-        m_sceneRenderer->BuildLighting(m_scene, lighting);
+        lighting.AmbientColor = m_session.GetSettings().Ambient;
+        m_sceneRenderer->BuildLighting(scene, lighting);
 
         const CameraView view = m_sceneView.GetView();
 
@@ -621,7 +286,7 @@ namespace crimson::editor
             .View = { .ViewProj = view.GetViewProj(), .CameraPosition = view.Position }
         };
 
-        m_sceneRenderer->Record(frame, m_scene, info, m_context.Selected);
+        m_sceneRenderer->Record(frame, scene, info, m_session.GetSelected());
     }
 
     void ProjectSessionMode::OnImGui()
@@ -630,56 +295,20 @@ namespace crimson::editor
         m_context.GizmoInUse = false;
 
         m_ui->Draw();
-        m_context.Picker.Draw(m_context.Assets, m_context.Thumbnails);
+        m_context.Picker.Draw(m_session.GetAssets(), m_context.Thumbnails);
         DrawUnsavedChangesDialog();
         DrawRecoveryDialog();
     }
 
     void ProjectSessionMode::Update(float deltaTime)
     {
-        const bool ranDeferred = !m_context.Deferred.empty();
-        RunDeferred();
+        if (RunDeferred())
+            m_session.MarkEdited();
+
+        m_session.Update(deltaTime);
+
         m_sceneView.Update();
         UpdateFrameStats();
-
-        // An edit is a step on the frame after it is done, as fields take what the asset picker chose, and the material
-        // Inspector prunes to a new shader, once the picker is closed. Those that aren't noticed here are by the check below.
-        const bool editing = IsEditing();
-        const bool ended = m_wasEditing && !editing;
-        const bool settled = !editing && !ended;
-        if (settled && (m_editEnded || ranDeferred || m_context.Edited))
-            m_history.Commit();
-
-        m_wasEditing = editing;
-        m_editEnded = ended;
-        m_context.Edited = false;
-
-        constexpr float kSceneCheckSeconds = 0.25f;
-
-        m_sinceSceneCheck += deltaTime;
-        if (m_sinceSceneCheck >= kSceneCheckSeconds)
-        {
-            m_sinceSceneCheck = 0.0f;
-
-            if (settled)
-                m_history.Commit();
-
-            m_context.SceneChanged = IsSceneChanged();
-        }
-
-        // Not too often, as each copy is serialized on this thread
-        constexpr float kRecoverySeconds = 30.0f;
-
-        m_sinceRecovery += deltaTime;
-        if (m_sinceRecovery >= kRecoverySeconds)
-        {
-            m_sinceRecovery = 0.0f;
-            WriteRecovery();
-        }
-
-        // The next edit's state from before it, once nothing is being edited
-        if (settled)
-            RecordWatched();
 
         // Often enough for a shader saved in another program to show up about right away
         constexpr float kShaderCheckSeconds = 0.5f;
@@ -689,7 +318,16 @@ namespace crimson::editor
         {
             m_sinceShaderCheck = 0.0f;
 
-            m_assetManager->ReloadChanged();
+            m_session.GetAssets().ReloadChanged();
+        }
+
+        if (const size_t missing = m_session.TakeMissingAssets())
+        {
+            const std::string text = missing == 1
+                ? "1 asset this scene uses is missing, see the Console"
+                : std::to_string(missing) + " assets this scene uses are missing, see the Console";
+
+            m_ui->GetNotifications().Push(ui::Notifications::Kind::Warning, text);
         }
 
         // The editor camera stays where it is while a scene camera is looked through
@@ -699,6 +337,15 @@ namespace crimson::editor
             m_cameraController->Update(deltaTime);
 
         HandleShortcuts();
+
+        // Last, as undoing and redoing by shortcut can change the settings
+        ApplyToneMapping();
+    }
+
+    void ProjectSessionMode::ApplyToneMapping()
+    {
+        const PostProcessSettings& post = m_session.GetSettings().PostProcessing;
+        m_sceneRenderer->SetToneMapping(post.Exposure, post.Mapper);
     }
 
     void ProjectSessionMode::UpdateFrameStats()
@@ -748,15 +395,15 @@ namespace crimson::editor
         if (io.KeyCtrl && !io.WantTextInput)
         {
             if (ImGui::IsKeyPressed(ImGuiKey_Z) && !io.KeyShift)
-                Undo();
+                m_session.Undo();
             else if (ImGui::IsKeyPressed(ImGuiKey_Y) || (ImGui::IsKeyPressed(ImGuiKey_Z) && io.KeyShift))
-                Redo();
+                m_session.Redo();
         }
 
         if (!ImGui::GetIO().WantTextInput && !m_services.AppInput.IsMouseButtonDown(MouseButton::Right)
-            && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_context.Selected && !m_sceneView.IsLookingThrough())
+            && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_session.GetSelected() && !m_sceneView.IsLookingThrough())
         {
-            m_cameraController->Frame(m_context.Selected, *m_assetManager);
+            m_cameraController->Frame(m_session.GetSelected(), m_session.GetAssets());
         }
     }
 }

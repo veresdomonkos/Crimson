@@ -26,7 +26,7 @@ namespace crimson::editor::ui
     bool AssetField(const char* id, EditorContext& context, AssetType type, AssetID& current, AssetID whenEmpty)
     {
         const ImGuiStyle& style = ImGui::GetStyle();
-        const AssetManager& assets = context.Assets;
+        const AssetManager& assets = context.Session.GetAssets();
 
         const ImGuiID owner = ImGui::GetID(id);
         const float height = ImGui::GetFrameHeight();

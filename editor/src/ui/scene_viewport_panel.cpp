@@ -56,7 +56,7 @@ namespace crimson::editor::ui
             return;
 
         // These clicks belong to the toolbar and the gizmo. A viewport image doesn't count as a hovered item.
-        if (ImGui::IsAnyItemHovered() || (m_context.Selected && ImGuizmo::IsOver()))
+        if (ImGui::IsAnyItemHovered() || (m_context.Session.GetSelected() && ImGuizmo::IsOver()))
             return;
 
         glm::vec3 origin;
@@ -64,14 +64,14 @@ namespace crimson::editor::ui
         if (!GetRayUnderMouse(position, size, origin, direction))
             return;
 
-        Scene& scene = m_context.ActiveScene;
-        Entity entity = scene.Raycast(origin, direction, m_context.Assets);
+        Scene& scene = m_context.Session.GetScene();
+        Entity entity = scene.Raycast(origin, direction, m_context.Session.GetAssets());
 
         // What is inside an instance can't be changed here, so a click means the instance
         while (entity && entity.HasComponent<InstancedComponent>())
             entity = scene.GetEntity(entity.GetComponent<RelationshipComponent>().Parent);
 
-        m_context.SelectEntity(entity);
+        m_context.Session.SelectEntity(entity);
     }
 
     bool SceneViewportPanel::GetRayUnderMouse(const ImVec2& position, const ImVec2& size, glm::vec3& origin, glm::vec3& direction) const
@@ -98,17 +98,17 @@ namespace crimson::editor::ui
 
     void SceneViewportPanel::HandleAssetDrop(const ImVec2& position, const ImVec2& size)
     {
-        const ComponentRegistry& components = m_context.Assets.Components();
+        const ComponentRegistry& components = m_context.Session.GetAssets().Components();
 
         AssetID dropped;
         AssetType droppedType;
 
-        for (const AssetType type : m_context.Assets.Types())
+        for (const AssetType type : m_context.Session.GetAssets().Types())
         {
             if (!CanDrop(components, type))
                 continue;
 
-            if (const AssetID id = asset_drag::AcceptOnLastItem(m_context.Assets, type))
+            if (const AssetID id = asset_drag::AcceptOnLastItem(m_context.Session.GetAssets(), type))
             {
                 dropped = id;
                 droppedType = type;
@@ -126,8 +126,8 @@ namespace crimson::editor::ui
         m_context.Deferred.emplace_back([this, dropped, droppedType, origin, direction]
         {
             if (droppedType.Is<SceneAsset>())
-                CreateInstanceOfScene(m_context.Assets.As<SceneAsset>(dropped), origin, direction);
-            else if (const FieldRef spawn = FindSpawnField(m_context.Assets.Components(), droppedType))
+                CreateInstanceOfScene(m_context.Session.GetAssets().As<SceneAsset>(dropped), origin, direction);
+            else if (const FieldRef spawn = FindSpawnField(m_context.Session.GetAssets().Components(), droppedType))
                 CreateEntityFromAsset(spawn, dropped, origin, direction);
             else
                 AssignAssetToEntity(dropped, droppedType, origin, direction);
@@ -136,42 +136,42 @@ namespace crimson::editor::ui
 
     void SceneViewportPanel::CreateEntityFromAsset(FieldRef spawn, AssetID asset, const glm::vec3& origin, const glm::vec3& direction)
     {
-        const AssetInfo* info = m_context.Assets.GetInfo(asset);
+        const AssetInfo* info = m_context.Session.GetAssets().GetInfo(asset);
         if (!info)
             return;
 
-        const Entity entity = m_context.ActiveScene.CreateEntity(std::filesystem::path(info->Path).stem().string());
+        const Entity entity = m_context.Session.GetScene().CreateEntity(std::filesystem::path(info->Path).stem().string());
         entity.GetComponent<TransformComponent>().Position = GetDropPosition(origin, direction);
 
         spawn.Type->Add(entity);
-        AssignAsset(*spawn.Type, spawn.Field, entity, asset, m_context.Assets);
+        AssignAsset(*spawn.Type, spawn.Field, entity, asset, m_context.Session.GetAssets());
 
-        m_context.SceneUndo.RecordCreated(entity);
-        m_context.SelectEntity(entity);
+        m_context.Session.GetSceneEdits().RecordCreated(entity);
+        m_context.Session.SelectEntity(entity);
     }
 
     void SceneViewportPanel::CreateInstanceOfScene(SceneID scene, const glm::vec3& origin, const glm::vec3& direction)
     {
-        const Entity entity = CreateSceneInstance(scene, m_context.ActiveScene, {}, m_context.Assets, m_context.ActiveSceneAsset);
+        const Entity entity = CreateSceneInstance(scene, m_context.Session.GetScene(), {}, m_context.Session.GetAssets(), m_context.Session.GetSceneAsset());
         if (!entity)
             return;
 
         entity.GetComponent<TransformComponent>().Position = GetDropPosition(origin, direction);
 
-        m_context.SceneUndo.RecordCreated(entity);
-        m_context.SelectEntity(entity);
+        m_context.Session.GetSceneEdits().RecordCreated(entity);
+        m_context.Session.SelectEntity(entity);
     }
 
     void SceneViewportPanel::AssignAssetToEntity(AssetID asset, AssetType type, const glm::vec3& origin, const glm::vec3& direction)
     {
-        const Entity entity = m_context.ActiveScene.Raycast(origin, direction, m_context.Assets);
+        const Entity entity = m_context.Session.GetScene().Raycast(origin, direction, m_context.Session.GetAssets());
         if (!entity || entity.HasComponent<InstancedComponent>())
             return;
 
-        if (const FieldRef target = FindDropField(m_context.Assets.Components(), entity, type))
+        if (const FieldRef target = FindDropField(m_context.Session.GetAssets().Components(), entity, type))
         {
-            m_context.SceneUndo.Record(entity);
-            AssignAsset(*target.Type, target.Field, entity, asset, m_context.Assets);
+            m_context.Session.GetSceneEdits().Record(entity);
+            AssignAsset(*target.Type, target.Field, entity, asset, m_context.Session.GetAssets());
         }
     }
 
@@ -191,13 +191,13 @@ namespace crimson::editor::ui
         }
 
         // What is inside an instance can't be changed here
-        const Entity selected = m_context.Selected;
+        const Entity selected = m_context.Session.GetSelected();
         if (IsFocused() && selected && !selected.HasComponent<InstancedComponent>() && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
         {
             m_context.Deferred.emplace_back([this, selected]
             {
-                m_context.SceneUndo.RecordDestroy(selected);
-                m_context.ActiveScene.DestroyEntity(selected);
+                m_context.Session.GetSceneEdits().RecordDestroy(selected);
+                m_context.Session.GetScene().DestroyEntity(selected);
             });
         }
     }
@@ -234,7 +234,7 @@ namespace crimson::editor::ui
 
         ImGui::SameLine();
 
-        const Entity selected = m_context.Selected;
+        const Entity selected = m_context.Session.GetSelected();
         const Entity looked = m_view.GetLookThrough();
         const bool looking = m_view.IsLookingThrough();
 
@@ -260,7 +260,7 @@ namespace crimson::editor::ui
 
     void SceneViewportPanel::DrawGizmo(const ImVec2& position, const ImVec2& size)
     {
-        const Entity entity = m_context.Selected;
+        const Entity entity = m_context.Session.GetSelected();
         if (!entity || entity.HasComponent<InstancedComponent>())
             return;
 
@@ -287,7 +287,7 @@ namespace crimson::editor::ui
         const glm::vec3 snap(snapValue);
         const bool snapping = ImGui::GetIO().KeyCtrl;
 
-        Scene& scene = m_context.ActiveScene;
+        Scene& scene = m_context.Session.GetScene();
 
         const CameraView view = m_view.GetView();
         glm::mat4 world = scene.ComputeWorldMatrix(entity);

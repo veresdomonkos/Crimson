@@ -1,6 +1,5 @@
 #pragma once
 #include <cstddef>
-#include <functional>
 #include <optional>
 #include <utility>
 #include <vector>
@@ -42,8 +41,8 @@ namespace crimson::editor
     class SceneEdits final : public EditSource
     {
     public:
-        // The settings are the scene's, which a step puts back and then calls back about
-        SceneEdits(Scene& scene, AssetManager& assets, SceneSettings& settings, std::function<void()> onSettingsChanged);
+        // The settings are the scene's, which a step puts back
+        SceneEdits(Scene& scene, AssetManager& assets, SceneSettings& settings);
 
         // Before changing an entity. Only its first state in a step counts, so recording it again is cheap.
         // Entities inside instances are left out, as they can't be changed.
@@ -83,7 +82,6 @@ namespace crimson::editor
         Scene& m_scene;
         AssetManager& m_assets;
         SceneSettings& m_settings;
-        std::function<void()> m_onSettingsChanged;
 
         std::vector<Pending> m_pending;
         std::optional<SceneSettings> m_settingsBefore;

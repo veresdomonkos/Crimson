@@ -78,7 +78,7 @@ namespace
     {
         Scene World;
         SceneSettings Settings;
-        SceneEdits SceneUndo{ World, Assets, Settings, [] {} };
+        SceneEdits SceneUndo{ World, Assets, Settings };
 
         SceneFixture()
         {

@@ -13,6 +13,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/frame_stats.hpp
     include/crimson_editor/platform.hpp
     include/crimson_editor/project_manager_mode.hpp
+    include/crimson_editor/project_session.hpp
     include/crimson_editor/project_session_mode.hpp
     include/crimson_editor/recent_projects.hpp
     include/crimson_editor/recovery_files.hpp
@@ -56,6 +57,7 @@ set(EDITOR_SOURCES
     src/editor_settings.cpp
     src/file_dialog.cpp
     src/project_manager_mode.cpp
+    src/project_session.cpp
     src/project_session_mode.cpp
     src/recent_projects.cpp
     src/recovery_files.cpp

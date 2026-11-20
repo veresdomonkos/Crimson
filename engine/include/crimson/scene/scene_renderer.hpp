@@ -40,7 +40,7 @@ namespace crimson
         // The material samples the scene from its SceneColor texture. The main pass's target then needs no depth buffer.
         void SetToneMapMaterial(MaterialID material, uint32_t width, uint32_t height);
 
-        // Changes a material, so this has to run between frames
+        // Changes a material, so this has to run between frames. It does nothing when the values are the same, so it is cheap to call every frame.
         void SetToneMapping(float exposure, ToneMapper mapper);
 
         [[nodiscard]] TextureHandle GetShadowAtlas() const { return m_shadowAtlas; }

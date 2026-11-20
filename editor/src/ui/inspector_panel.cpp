@@ -19,18 +19,23 @@ namespace crimson::editor::ui
     {
         ImGui::Begin("Inspector");
 
-        if (m_context.SelectedAsset)
+        // Each selection's fields have ids of their own, so what the asset picker chose for one can't reach another's
+        if (m_context.Session.GetSelectedAsset())
         {
-            m_assetInspector.Draw(m_context.SelectedAsset);
+            ImGui::PushID(m_context.Session.GetSelectedAsset().ToString().c_str());
+            m_assetInspector.Draw(m_context.Session.GetSelectedAsset());
+            ImGui::PopID();
         }
-        else if (const Entity entity = m_context.Selected)
+        else if (const Entity entity = m_context.Session.GetSelected())
         {
+            ImGui::PushID(entity.GetComponent<NameComponent>().Id.ToString().c_str());
+
             // What comes from an instance's scene is only changed by opening that scene
             ImGui::BeginDisabled(entity.HasComponent<InstancedComponent>());
 
             DrawHeader(entity);
 
-            for (const ComponentType& type : m_context.Assets.Components().Types())
+            for (const ComponentType& type : m_context.Session.GetAssets().Components().Types())
                 DrawComponent(entity, type);
 
             DrawUnknownComponents(entity);
@@ -42,6 +47,8 @@ namespace crimson::editor::ui
             ImGui::EndDisabled();
 
             DrawSceneInstance(entity);
+
+            ImGui::PopID();
         }
         else
         {
@@ -56,7 +63,7 @@ namespace crimson::editor::ui
         auto& name = entity.GetComponent<NameComponent>();
 
         if (theme::Checkbox("##Active", name.Active))
-            m_context.Edited = true;
+            m_context.Session.MarkEdited();
         ImGui::SameLine();
 
         std::array<char, 256> buffer{};
@@ -66,7 +73,7 @@ namespace crimson::editor::ui
         if (ImGui::InputText("##Name", buffer.data(), buffer.size()))
         {
             name.Name = buffer.data();
-            m_context.Edited = true;
+            m_context.Session.MarkEdited();
         }
     }
 
@@ -95,7 +102,7 @@ namespace crimson::editor::ui
             if (props::BeginTable(type.Id.c_str()))
             {
                 if (DrawComponentFields(type, component, m_context))
-                    m_context.Edited = true;
+                    m_context.Session.MarkEdited();
 
                 props::EndTable();
             }
@@ -106,7 +113,7 @@ namespace crimson::editor::ui
         if (removed)
         {
             type.Remove(entity);
-            m_context.Edited = true;
+            m_context.Session.MarkEdited();
         }
     }
 
@@ -132,17 +139,17 @@ namespace crimson::editor::ui
 
         ImGui::Spacing();
 
-        if (m_context.Assets.IsMissing(instance->Scene))
+        if (m_context.Session.GetAssets().IsMissing(instance->Scene))
         {
-            ImGui::TextColored(theme::Warning, "Instance of %s", AssetLabel(m_context.Assets, instance->Scene).c_str());
+            ImGui::TextColored(theme::Warning, "Instance of %s", AssetLabel(m_context.Session.GetAssets(), instance->Scene).c_str());
             ImGui::TextDisabled("It shows again once the file is back and the scene is opened again");
             return;
         }
 
-        ImGui::TextDisabled("Instance of %s", AssetLabel(m_context.Assets, instance->Scene).c_str());
+        ImGui::TextDisabled("Instance of %s", AssetLabel(m_context.Session.GetAssets(), instance->Scene).c_str());
 
         if (ImGui::Button("Open Source", ImVec2(-1.0f, 0.0f)))
-            m_context.OpenScene(instance->Scene);
+            m_context.Session.OpenScene(instance->Scene);
     }
 
     void InspectorPanel::DrawAddComponent(Entity entity)
@@ -154,7 +161,7 @@ namespace crimson::editor::ui
 
         if (ImGui::BeginPopup("AddComponent"))
         {
-            for (const ComponentType& type : m_context.Assets.Components().Types())
+            for (const ComponentType& type : m_context.Session.GetAssets().Components().Types())
             {
                 if (!type.Addable)
                     continue;

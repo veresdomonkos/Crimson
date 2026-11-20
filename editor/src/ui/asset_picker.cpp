@@ -84,6 +84,7 @@ namespace crimson::editor::ui
         m_changed = false;
         m_search = {};
         m_open = true;
+        m_fieldDrawn = true;
         m_justOpened = true;
         m_scrollToSelected = true;
         m_position = below;
@@ -107,7 +108,7 @@ namespace crimson::editor::ui
         Close();
     }
 
-    void AssetPicker::Reset()
+    void AssetPicker::Drop()
     {
         Close();
         m_pending.reset();
@@ -136,7 +137,13 @@ namespace crimson::editor::ui
 
     std::optional<AssetID> AssetPicker::TakeChoice(ImGuiID owner)
     {
-        if (!m_pending || m_owner != owner)
+        if (m_owner != owner)
+            return std::nullopt;
+
+        // Asked by every field each frame it is drawn, which is how the picker knows its field is still there
+        m_fieldDrawn = true;
+
+        if (!m_pending)
             return std::nullopt;
 
         const std::optional<AssetID> choice = m_pending;
@@ -144,8 +151,19 @@ namespace crimson::editor::ui
         return choice;
     }
 
+    void AssetPicker::EndFrame()
+    {
+        // The field that opened it isn't drawn any more, so nothing is left to choose for
+        if (!m_fieldDrawn && (m_open || m_pending))
+            Drop();
+
+        m_fieldDrawn = false;
+    }
+
     void AssetPicker::Draw(const AssetManager& assets, AssetThumbnails& thumbnails)
     {
+        EndFrame();
+
         // Before the popup, as ImGui closes it on Escape by itself
         if (m_open && !m_justOpened && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
             Cancel();

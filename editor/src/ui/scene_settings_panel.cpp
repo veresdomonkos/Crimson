@@ -40,7 +40,7 @@ namespace crimson::editor::ui
         ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 15.0f, 0.0f), ImGuiCond_FirstUseEver);
         ImGui::Begin(kSceneSettingsWindow);
 
-        linear_color::Edit("Ambient", &m_settings.Ambient.x, 3);
+        linear_color::Edit("Ambient", &m_context.Session.GetSettings().Ambient.x, 3);
         DrawMainCamera();
         DrawPostProcessing();
 
@@ -49,17 +49,18 @@ namespace crimson::editor::ui
 
     void SceneSettingsPanel::DrawMainCamera()
     {
-        Scene& scene = m_context.ActiveScene;
+        Scene& scene = m_context.Session.GetScene();
+        SceneSettings& settings = m_context.Session.GetSettings();
 
         const auto nameOf = [](Entity entity) { return entity.GetComponent<NameComponent>().Name; };
 
         std::string preview;
-        if (!m_settings.MainCamera)
+        if (!settings.MainCamera)
         {
             const Entity first = FindMainCamera(scene, {});
             preview = "Automatic (" + (first ? nameOf(first) : std::string("no cameras")) + ")";
         }
-        else if (const Entity referenced = FindEntity(scene, m_settings.MainCamera); referenced && referenced.HasComponent<CameraComponent>())
+        else if (const Entity referenced = FindEntity(scene, settings.MainCamera); referenced && referenced.HasComponent<CameraComponent>())
         {
             preview = nameOf(referenced);
         }
@@ -71,9 +72,9 @@ namespace crimson::editor::ui
         if (!ImGui::BeginCombo("Main Camera", preview.c_str()))
             return;
 
-        AssetID chosen = m_settings.MainCamera;
+        AssetID chosen = settings.MainCamera;
 
-        if (ImGui::Selectable("Automatic", !m_settings.MainCamera))
+        if (ImGui::Selectable("Automatic", !settings.MainCamera))
             chosen = {};
 
         std::vector<Entity> cameras;
@@ -85,19 +86,19 @@ namespace crimson::editor::ui
             const AssetID id = camera.GetComponent<NameComponent>().Id;
 
             ImGui::PushID(id.ToString().c_str());
-            if (ImGui::Selectable(nameOf(camera).c_str(), id == m_settings.MainCamera))
+            if (ImGui::Selectable(nameOf(camera).c_str(), id == settings.MainCamera))
                 chosen = id;
             ImGui::PopID();
         }
 
         ImGui::EndCombo();
 
-        if (chosen != m_settings.MainCamera)
+        if (chosen != settings.MainCamera)
         {
-            m_settings.MainCamera = chosen;
+            settings.MainCamera = chosen;
 
             // A step at once, the state from before it is already recorded
-            m_context.Edited = true;
+            m_context.Session.MarkEdited();
         }
     }
 
@@ -105,7 +106,7 @@ namespace crimson::editor::ui
     {
         theme::SectionTitle("Post-processing");
 
-        PostProcessSettings& post = m_settings.PostProcessing;
+        PostProcessSettings& post = m_context.Session.GetSettings().PostProcessing;
 
         constexpr std::array kToneMapperNames = { "ACES", "None" };
 
@@ -126,11 +127,6 @@ namespace crimson::editor::ui
         }
 
         if (changed)
-        {
-            m_context.Deferred.emplace_back([this, exposure = post.Exposure, mapper = post.Mapper]
-            {
-                m_renderer.SetToneMapping(exposure, mapper);
-            });
-        }
+            m_context.Session.MarkEdited();
     }
 }

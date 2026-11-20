@@ -76,7 +76,7 @@ This needs no GPU or window. It covers everything above the graphics APIs:
 - **Assets and projects:** scanning, metas, loading and its failures, shader reloading, and the built-in meshes, using real files in a temporary folder (`tests/support/temp_folder.hpp`).
 - **Shaders:** every engine shader goes through what the backends do before reaching the GPU: HLSL to SPIR-V, reflection, and translation to GLSL.
 - **Frames:** pass recording, draw sorting, shadow views, the frame clock and `SceneRenderer`.
-- **The editor's logic:** asset edits, recovery copies, texture previews, recent projects, settings, the script editor's arguments, and file URIs.
+- **The editor's logic:** asset edits, recovery files, texture previews, recent projects, settings, the script editor's arguments, and file URIs. `ProjectSession` holds an open project's document, so its selection, saving, closing, opening and deleting scenes, undo and recovery copies are tested without a window.
 
 Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are already interfaces, so `tests/support/fake_gpu.hpp` stands in for them. Testability shouldn't cost anything per frame, so nothing gains a virtual function just to be faked: `BuildDrawOrder` takes its materials as a template parameter, and `Scene`, `Entity` and `Input` stay concrete.
 
@@ -85,7 +85,7 @@ Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are alr
 This runs the real backends, once with `--backend gl` and once with `--backend vk`, and opens a window to do it. `ctest --label-exclude gpu` skips it. The whole run shares one import cache folder, so no editor test imports the built-in assets again. It is the one `CRIMSON_CACHE` names, or else a folder of the run's own, and never the user's real cache.
 
 - **Rendering:** renders into a target and checks the pixels with `ReadColorPixels`. It covers placement, depth, materials, textures, blending, lights, all three kinds of shadow, outlines, shader time and the space helpers.
-- **The editor:** drives the real `EditorApplication` frame by frame. It covers the project manager, opening and closing projects, projects with problems, and shaders reloading while a material is selected. The panels draw, but nothing clicks on them. It also opens the asset picker, in both views, and pings an asset.
+- **The editor:** smoke tests that drive the real `EditorApplication` frame by frame. They cover the project manager, opening and closing projects, projects with problems, every kind of asset and entity in the panels, the asset picker in both views, and a scene that wasn't closed normally. The panels draw, but nothing clicks on them. What the editor does with a project is tested in `CrimsonTests`.
 - **Input:** a locked cursor staying in place.
 
 ## CI

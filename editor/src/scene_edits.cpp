@@ -17,8 +17,8 @@ namespace crimson::editor
             CollectIds(child, ids);
     }
 
-    SceneEdits::SceneEdits(Scene& scene, AssetManager& assets, SceneSettings& settings, std::function<void()> onSettingsChanged)
-        : m_scene(scene), m_assets(assets), m_settings(settings), m_onSettingsChanged(std::move(onSettingsChanged))
+    SceneEdits::SceneEdits(Scene& scene, AssetManager& assets, SceneSettings& settings)
+        : m_scene(scene), m_assets(assets), m_settings(settings)
     {
     }
 
@@ -108,7 +108,6 @@ namespace crimson::editor
             if (m_settings)
             {
                 m_edits.m_settings = m_settings->first;
-                m_edits.m_onSettingsChanged();
             }
         }
 
@@ -122,7 +121,6 @@ namespace crimson::editor
             if (m_settings)
             {
                 m_edits.m_settings = m_settings->second;
-                m_edits.m_onSettingsChanged();
             }
         }
     private:

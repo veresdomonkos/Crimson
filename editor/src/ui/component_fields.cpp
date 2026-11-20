@@ -21,7 +21,7 @@ namespace crimson::editor::ui
 
         if (field.Items)
         {
-            items = field.Items(component, context.Assets);
+            items = field.Items(component, context.Session.GetAssets());
         }
         else
         {

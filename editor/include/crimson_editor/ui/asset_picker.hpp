@@ -52,9 +52,6 @@ namespace crimson::editor::ui
         // Escape: closes, and chooses what the field had when the picker opened, if anything was chosen since
         void Cancel();
 
-        // Closes and drops a choice, as the field it was for is gone
-        void Reset();
-
         [[nodiscard]] bool IsOpen() const { return m_open; }
         [[nodiscard]] bool IsOpenFor(ImGuiID owner) const { return m_open && m_owner == owner; }
 
@@ -70,12 +67,20 @@ namespace crimson::editor::ui
         [[nodiscard]] View GetView() const { return m_view; }
         [[nodiscard]] AssetID Selected() const { return m_selected; }
 
-        // What was chosen since the last call, once, and only for the field that opened the picker
+        // What was chosen since the last call, once, and only for the field that opened the picker, and only while that
+        // field is drawn. Every field calls it each frame it is drawn, and the picker closes once its field doesn't.
         [[nodiscard]] std::optional<AssetID> TakeChoice(ImGuiID owner);
+
+        // Closes the picker and drops a choice if the field that opened it wasn't drawn since the last call. Draw does
+        // this first, so it only needs calling by itself without drawing.
+        void EndFrame();
 
         // Call once a frame, after the panels
         void Draw(const AssetManager& assets, AssetThumbnails& thumbnails);
     private:
+        // Closes and drops a choice, as the field it was for is gone
+        void Drop();
+
         void DrawEntries(const AssetManager& assets, AssetThumbnails& thumbnails, const std::vector<PickerEntry>& entries, int selectedIndex);
 
         ImGuiID m_owner = 0;
@@ -87,6 +92,7 @@ namespace crimson::editor::ui
         std::array<char, 128> m_search{};
         View m_view = View::List;
         bool m_open = false;
+        bool m_fieldDrawn = false; // the field that opened it was drawn since the last EndFrame
         bool m_justOpened = false;
         bool m_scrollToSelected = false;
         ImVec2 m_position;
