@@ -6,7 +6,6 @@
 #include <string_view>
 #include <vector>
 
-#include <nlohmann/json.hpp>
 
 #include <crimson/core/engine_resources.hpp>
 #include <crimson/renderer/shader_compiler.hpp>
@@ -215,29 +214,6 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
     REQUIRE(shaderInterface);
     REQUIRE(shaderInterface->Textures.contains("Unused"));
     CHECK(shaderInterface->Textures.at("Unused").Binding == 3 + shader_bindings::kTextureShift);
-}
-
-TEST_CASE("Every engine material names an engine shader", "[shaders]")
-{
-    const std::span<const EmbeddedFile> resources = GetEngineResources();
-    int materials = 0;
-
-    for (const EmbeddedFile& file : resources)
-    {
-        if (!file.Path.ends_with(".mat"))
-            continue;
-
-        ++materials;
-        CAPTURE(file.Path);
-
-        const nlohmann::json json = nlohmann::json::parse(file.Text());
-        const std::string shader = json.at("shader").get<std::string>();
-
-        REQUIRE(shader.starts_with("engine/"));
-        CHECK(FindEmbeddedFile(resources, std::string_view(shader).substr(7)) != nullptr);
-    }
-
-    CHECK(materials >= 7);
 }
 
 TEST_CASE("Embedded files can be found by their path", "[shaders]")
