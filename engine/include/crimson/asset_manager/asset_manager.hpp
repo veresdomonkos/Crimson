@@ -264,7 +264,11 @@ namespace crimson
     template <LoadableAsset T>
     const LoadedAsset<T>* AssetManager::Get(TypedAssetID<T> id)
     {
-        // Without a hash of anything but the id, nor any file access, as drawing looks up every frame
+        // Without a hash of anything but the id, nor any file access, as drawing looks up every frame. A removed one is
+        // gone, even while it is still loaded for what used it to move off it.
+        if (!m_assets.contains(id))
+            return nullptr;
+
         const AssetStoreBase* base = StoreOf(AssetType::Of<T>());
         if (!base)
             return nullptr;

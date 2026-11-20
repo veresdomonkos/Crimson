@@ -1,6 +1,7 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include <filesystem>
 #include <optional>
 #include <string_view>
 #include <vector>
@@ -40,9 +41,8 @@ namespace
 
     struct BoxFixture
     {
-        BoxFixture() { Temp.Write("box.obj", kBoxObj); }
-
         TempFolder Temp;
+        std::filesystem::path BoxFile = Temp.Write("box.obj", kBoxObj); // before the manager, for it to find the file
         FakeGpuResourceManager Gpu;
         AssetManager Assets{ Gpu, Temp.Path() };
     };
