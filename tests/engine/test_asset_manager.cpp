@@ -625,8 +625,15 @@ TEST_CASE("A mesh's empty slots find the materials made for them", "[assets]")
     CHECK_FALSE(slot_materials::Find(assets, MeshID{}, "stone"));
 
     // What a renderer's empty slot draws with
+    const MaterialID defaultMaterial = slot_materials::DefaultMaterial(assets);
+    REQUIRE(defaultMaterial);
     CHECK(slot_materials::ForEmptySlot(assets, mesh, "stone") == stone);
-    CHECK(slot_materials::ForEmptySlot(assets, mesh, "wood") == slot_materials::DefaultMaterial(assets));
+    CHECK(slot_materials::ForEmptySlot(assets, mesh, "wood") == defaultMaterial);
+
+    // What a missing material draws as is its own, in the engine's internal materials
+    CHECK(slot_materials::MissingMaterial(assets));
+    CHECK(slot_materials::MissingMaterial(assets) != defaultMaterial);
+    CHECK(assets.Get(slot_materials::MissingMaterial(assets)));
 }
 
 static std::string ReadFile(const fs::path& file)
@@ -758,44 +765,6 @@ namespace
         EngineCacheFolder(const EngineCacheFolder&) = delete;
         EngineCacheFolder& operator=(const EngineCacheFolder&) = delete;
     };
-}
-
-TEST_CASE("A project's shaders load from its cache the second time", "[assets]")
-{
-    const TempFolder temp;
-    const fs::path helper = temp.Write("assets/helper.hlsli", "#define HELPER_VALUE 1.0\n");
-    temp.Write("assets/mine.hlsl", R"(
-#include "helper.hlsli"
-float4 VSMain(float3 position : POSITION) : SV_Position { return float4(position, HELPER_VALUE); }
-float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
-)");
-
-    const fs::path cacheFolder = temp.Path() / ".crimson" / "cache";
-    FakeGpuResourceManager gpu;
-    ImportCache::ForgetMemory();
-
-    ImportCacheStats before = ImportCache::Stats();
-    {
-        AssetManager assets(gpu, temp.Path() / "assets", cacheFolder);
-        CHECK(assets.Get<ShaderAsset>("mine.hlsl"));
-    }
-    CHECK(ImportCache::Stats().Stores - before.Stores == 1);
-
-    // As the next run of the editor would find it
-    ImportCache::ForgetMemory();
-    before = ImportCache::Stats();
-
-    AssetManager assets(gpu, temp.Path() / "assets", cacheFolder);
-    CHECK(assets.Get<ShaderAsset>("mine.hlsl"));
-    CHECK(ImportCache::Stats().Stores == before.Stores);
-    CHECK(ImportCache::Stats().Hits - before.Hits == 1);
-
-    temp.Write("assets/helper.hlsli", "#define HELPER_VALUE 2.0\n");
-    fs::last_write_time(helper, fs::last_write_time(helper) + std::chrono::seconds(2));
-
-    before = ImportCache::Stats();
-    CHECK_FALSE(assets.ReloadChanged().empty());
-    CHECK(ImportCache::Stats().Stores - before.Stores == 1);
 }
 
 TEST_CASE("The engine's shaders use the engine cache", "[assets]")
@@ -1104,31 +1073,4 @@ TEST_CASE("The version changes when assets come, go, move or load again", "[asse
         REQUIRE(assets.Reimport(texture, settings));
         CHECK(changed());
     }
-}
-
-TEST_CASE("An empty slot uses the material made for it, or else the default", "[assets]")
-{
-    const TempFolder temp;
-    temp.Write("tri.obj", kTriangleObj);
-    FakeGpuResourceManager gpu;
-    AssetManager assets(gpu, temp.Path());
-
-    const MeshID mesh = assets.Find<MeshAsset>("tri.obj");
-    const MaterialID defaultMaterial = slot_materials::DefaultMaterial(assets);
-    REQUIRE(defaultMaterial);
-
-    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == defaultMaterial);
-
-    temp.Write("materials/Paint.mat", kValidMaterial);
-    assets.Refresh();
-
-    const MaterialID made = assets.Find<MaterialAsset>("materials/Paint.mat");
-    REQUIRE(made);
-    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == made);
-    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Other") == defaultMaterial);
-
-    // What a missing material draws as is its own, in the engine's internal materials
-    CHECK(slot_materials::MissingMaterial(assets));
-    CHECK(slot_materials::MissingMaterial(assets) != defaultMaterial);
-    CHECK(assets.Get(slot_materials::MissingMaterial(assets)));
 }

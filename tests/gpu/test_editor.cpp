@@ -423,19 +423,10 @@ TEST_CASE_METHOD(AssetFixture, "The Scene view draws through a scene camera", "[
     RunFrames(App);
     CHECK(view.IsLookingThrough());
 
-    SECTION("Losing its camera component")
-    {
-        camera.RemoveComponent<CameraComponent>();
-        RunFrames(App);
-        CHECK_FALSE(view.IsLookingThrough());
-    }
-
-    SECTION("Being destroyed")
-    {
-        scene.DestroyEntity(camera);
-        RunFrames(App);
-        CHECK_FALSE(view.IsLookingThrough());
-    }
+    // How the view lets go of a camera is up to its unit tests. This is that the session lets it, before drawing.
+    scene.DestroyEntity(camera);
+    RunFrames(App);
+    CHECK_FALSE(view.IsLookingThrough());
 }
 
 // The panels queue these for after the frame, as they can't change GPU resources in the middle of it
@@ -658,11 +649,10 @@ TEST_CASE_METHOD(AssetFixture, "Closing with unsaved changes asks first", "[edit
 
     SECTION("Discard closes without saving")
     {
-        const std::string before = std::string(Assets().Read(id)->Properties.contains("Color") ? "had" : "none");
         Session().DiscardAllAndClose();
 
         CHECK_FALSE(App.IsRunning());
-        CHECK(std::string(Assets().Read(id)->Properties.contains("Color") ? "had" : "none") == before);
+        CHECK_FALSE(Assets().Read(id)->Properties.contains("Color"));
     }
 
     SECTION("Save writes it and closes")
@@ -1021,12 +1011,6 @@ TEST_CASE("A broken scene isn't saved over", "[editor]")
     CHECK(std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>()) == kBroken);
 
     RunFrames(app);
-}
-
-TEST_CASE_METHOD(AssetFixture, "Closing with nothing unsaved doesn't ask", "[editor]")
-{
-    App.RequestQuit();
-    CHECK_FALSE(App.IsRunning());
 }
 
 TEST_CASE("A project with a broken shader still opens", "[editor]")

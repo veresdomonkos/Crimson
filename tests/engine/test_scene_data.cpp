@@ -9,7 +9,6 @@
 #include <vector>
 
 #include <crimson/asset_manager/asset_manager.hpp>
-#include <crimson/asset_manager/slot_materials.hpp>
 #include <crimson/asset_manager/meta_file.hpp>
 #include <crimson/asset_manager/importers/material_asset.hpp>
 #include <crimson/asset_manager/importers/mesh_asset.hpp>
@@ -159,51 +158,17 @@ TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[sc
 
     Scene scene;
     auto& renderer = scene.CreateEntity("Mesh").AddComponent<MeshRendererComponent>();
-    const MeshID mesh = assets.Find<MeshAsset>("thing.obj");
-    renderer.MeshAsset = mesh;
+    renderer.MeshAsset = assets.Find<MeshAsset>("thing.obj");
 
+    // Not the material it draws with, so one made for the slot later gets used
     const SceneData data = CaptureScene(scene, {}, assets);
     CHECK(FieldOf<std::vector<AssetID>>(assets, data.Roots[0], "meshRenderer", "materials").empty());
-
-    // So a material made for the slot afterwards gets used
-    Temp.Write("materials/Paint.mat", kMaterial);
-    assets.Refresh();
 
     Scene loaded;
     InstantiateScene(*scene_data::Parse(scene_data::Write(data, assets), assets, "test"), loaded, {}, assets, {});
 
     const Entity entity = loaded.GetEntity(loaded.GetRoots()[0]);
     CHECK(entity.GetComponent<MeshRendererComponent>().MaterialAssets.empty());
-    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == assets.Find<MaterialAsset>("materials/Paint.mat"));
-}
-
-TEST_CASE_METHOD(Fixture, "An empty slot finds a material made for it later, and a chosen one stays", "[scene data]")
-{
-    Temp.Write("thing.obj", "mtllib thing.mtl\nusemtl Paint\nv 0 0 0\nv 1 0 0\nv 0 2 0\nf 1 2 3\n");
-    Temp.Write("thing.mtl", "newmtl Paint\n");
-    Temp.Write("other.mat", kMaterial);
-    AssetManager assets(Gpu, Temp.Path());
-
-    const MeshID mesh = assets.Find<MeshAsset>("thing.obj");
-    const MaterialID other = assets.Find<MaterialAsset>("other.mat");
-
-    Scene scene;
-    auto& empty = scene.CreateEntity("Empty").AddComponent<MeshRendererComponent>();
-    empty.MeshAsset = mesh;
-
-    auto& chosen = scene.CreateEntity("Chosen").AddComponent<MeshRendererComponent>();
-    chosen.MeshAsset = mesh;
-    chosen.MaterialAssets = { other };
-
-    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == slot_materials::DefaultMaterial(assets));
-
-    // As the editor's Create Materials from .mtl does
-    Temp.Write("materials/Paint.mat", kMaterial);
-    assets.Refresh();
-
-    CHECK(slot_materials::ForEmptySlot(assets, mesh, "Paint") == assets.Find<MaterialAsset>("materials/Paint.mat"));
-    CHECK(empty.MaterialAssets.empty());
-    CHECK(chosen.MaterialAssets == std::vector{ other });
 }
 
 TEST_CASE_METHOD(Fixture, "An instance's entities come from its scene", "[scene data]")

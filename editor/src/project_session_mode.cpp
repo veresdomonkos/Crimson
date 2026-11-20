@@ -308,8 +308,9 @@ namespace crimson::editor
         std::error_code error;
         const std::filesystem::file_time_type saved = std::filesystem::last_write_time(m_assetManager->GetFilePath(id), error);
 
-        // A copy that isn't newer than the file has nothing the file doesn't
-        if (error || *copied <= saved)
+        // A copy older than the file has nothing the file doesn't, as saving removes it. One with the same time is kept, as
+        // some file systems only keep whole seconds, which a copy written right after the file shares.
+        if (error || *copied < saved)
         {
             m_recovery.Remove(name);
             return;
