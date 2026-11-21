@@ -330,7 +330,7 @@ A project is a folder with a `project.crimson` file and an `assets/` folder. It 
 - **`ImGuiRenderer`** records ImGui's draw data as an `Overlay` pass, through `GpuResourceManager` and `FrameRecorder` like any other code. It has one material, made from `editor/ui/resources/shaders/S_ImGui.hlsl`, for all of the UI, and each draw sets its texture with `MaterialProperties`, so there is no material for each texture. Its vertices and indices go into Stream buffers updated every frame, and each ImGui clip rect is the draw's `Scissor`. ImGui's own textures, the fonts, are kept as engine textures: it makes and updates them from the requests ImGui puts in its draw data (`ImGuiBackendFlags_RendererHasTextures`).
 - **An `ImTextureID` is a `TextureHandle`.** The layer converts between them (`imgui_convert.hpp`), so showing a render target or a texture asset needs no registering, and a texture can be destroyed without telling ImGui first.
 
-A frame is `Host::BeginFrame`, the mode's `Record`, its `DrawUI`, and `Host::EndFrame`, which records the UI pass.
+A frame is the mode's `Record`, then `Host::Build`, which starts the UI frame, calls the mode's `DrawUI` and renders it to draw data, and then `Host::RecordPass`, which records that draw data as the UI pass.
 
 ### The UI layer
 

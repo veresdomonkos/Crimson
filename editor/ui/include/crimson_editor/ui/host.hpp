@@ -1,5 +1,6 @@
 #pragma once
 #include <filesystem>
+#include <functional>
 #include <memory>
 
 #include <crimson/core/events.hpp>
@@ -24,11 +25,11 @@ namespace crimson::editor::ui
         // Doesn't mark the event handled, as the rest of the editor wants the same events
         void OnEvent(Event& event);
 
-        // Starts the frame the UI is drawn in
-        void BeginFrame(float deltaTime);
+        // Builds the UI of a frame: draw is called once, and everything it draws is kept for RecordPass
+        void Build(float deltaTime, const std::function<void()>& draw);
 
-        // Ends it, and records what was drawn as a pass of the frame, over what is there
-        void EndFrame(FrameRecorder& frame);
+        // Records what the last Build drew as a pass of the frame, over what is there
+        void RecordPass(FrameRecorder& frame);
     private:
         struct Impl;
         std::unique_ptr<Impl> m_impl;

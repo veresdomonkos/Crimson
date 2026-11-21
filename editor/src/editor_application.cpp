@@ -184,14 +184,12 @@ namespace crimson::editor
         if (!renderer.CanRender())
             return;
 
-        m_ui->BeginFrame(deltaTime);
-
         FrameRecorder frame = renderer.BeginRecording();
         m_mode->Record(frame);
 
         // After the passes, so the UI sees the world transforms they updated
-        m_mode->DrawUI();
-        m_ui->EndFrame(frame);
+        m_ui->Build(deltaTime, [&] { m_mode->DrawUI(); });
+        m_ui->RecordPass(frame);
 
         renderer.Submit(std::move(frame));
     }

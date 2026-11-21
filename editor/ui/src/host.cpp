@@ -56,17 +56,17 @@ namespace crimson::editor::ui
         m_impl->Platform.OnEvent(event);
     }
 
-    void Host::BeginFrame(float deltaTime)
+    void Host::Build(float deltaTime, const std::function<void()>& draw)
     {
         m_impl->Platform.NewFrame(deltaTime);
         ImGui::NewFrame();
         ImGuizmo::BeginFrame();
+        draw();
+        ImGui::Render();
     }
 
-    void Host::EndFrame(FrameRecorder& frame)
+    void Host::RecordPass(FrameRecorder& frame)
     {
-        ImGui::Render();
-
         // Everything the draw data holds is copied while recording
         m_impl->Renderer.Record(frame, *ImGui::GetDrawData(), PassInfo{
             .Name = "UI",
