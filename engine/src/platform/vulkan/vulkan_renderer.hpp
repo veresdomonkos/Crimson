@@ -116,7 +116,6 @@ namespace crimson::vulkan
 
         // passArea is where a draw lands when its view has no viewport of its own
         void ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, const FramePacket& packet, const RenderRect& passArea, PassKind kind);
-        void ExecuteNativePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, VulkanRenderTarget& rt);
 
         void BeginRendering(const vk::raii::CommandBuffer& cmd, VulkanRenderTarget& rt, const ClearInfo& clear, const std::optional<RenderRect>& area);
 

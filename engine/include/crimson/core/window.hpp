@@ -75,9 +75,6 @@ namespace crimson
         // and the window has to outlive the backend. Not const, as the OpenGL context is made current through the window.
         [[nodiscard]] virtual std::unique_ptr<GraphicsBackend> CreateGraphicsBackend() = 0;
 
-        // The old ImGui backends are the last users of this, and go with them
-	    virtual void* GetNativeHandle() const = 0;
-
 	    static Unique<Window> Create(GraphicsApi rendererAPI, WindowData data);
 	};
 }

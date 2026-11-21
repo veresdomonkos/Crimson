@@ -16,7 +16,6 @@
 #include "frame_table.hpp"
 #include "material_properties.hpp"
 #include "mesh.hpp"
-#include "native_context.hpp"
 #include "shader_variant.hpp"
 
 namespace crimson
@@ -115,7 +114,7 @@ namespace crimson
         PassKind Kind = PassKind::Scene;
     };
 
-    // One pass of a recorded frame: draws, or a native callback in their place
+    // One pass of a recorded frame: its info and its draws
     class PassRecord
     {
     public:
@@ -124,9 +123,6 @@ namespace crimson
 
         // Where the pass's own view is among the frame's views
         [[nodiscard]] ViewId GetView() const { return m_view; }
-
-        [[nodiscard]] bool IsNative() const { return static_cast<bool>(m_native); }
-        [[nodiscard]] const NativePassFn& GetNativeFn() const { return m_native; }
     private:
         friend class FramePacket;
         friend class FrameRecorder;
@@ -135,7 +131,6 @@ namespace crimson
         PassInfo m_info;
         ViewId m_view;
         std::vector<DrawItem> m_draws;
-        NativePassFn m_native;
     };
 
     // Everything recorded for one frame. The backends keep one per frame in flight and reuse their memory.
@@ -171,10 +166,7 @@ namespace crimson
         // Keeps the capacity of the lists, so a frame like the last one doesn't allocate
         void Reset()
         {
-            // The draws are cleared when a record is reused, the callbacks are released now
-            for (uint32_t i = 0; i < m_passCount; ++i)
-                m_passes[i].m_native = nullptr;
-
+            // The draws are cleared when a record is reused
             m_passCount = 0;
 
             m_objects.Clear();
@@ -296,12 +288,6 @@ namespace crimson
             return PassBuilder(*m_packet, m_packet->m_passCount - 1);
         }
 
-        // The callback runs during Renderer::Submit, so it captures by value, or references what lives longer than a frame
-        void AddNativePass(const PassInfo& info, NativePassFn fn)
-        {
-            NextRecord(info).m_native = std::move(fn);
-        }
-
         // The id stays valid for this frame and can be drawn in any of its passes
         ObjectId AddObject(const glm::mat4& transform)
         {
@@ -347,7 +333,6 @@ namespace crimson
             record.m_info = info;
             record.m_view = AddView(info.View);
             record.m_draws.clear();
-            record.m_native = nullptr;
             return record;
         }
 

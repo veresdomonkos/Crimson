@@ -196,8 +196,8 @@ namespace crimson::tests
 
             record(frame);
 
-            // Something has to present the back buffer, and a native pass is what leaves it ready for that
-            frame.AddNativePass({ .Name = "Present", .Clear = { .Flags = ClearFlags::Color } }, [](const NativeContext&) {});
+            // Something has to present the back buffer, and a pass without draws is what leaves it ready for that
+            frame.AddPass({ .Name = "Present", .Clear = { .Flags = ClearFlags::Color } });
 
             if (renderer.Submit(std::move(frame)))
                 return;

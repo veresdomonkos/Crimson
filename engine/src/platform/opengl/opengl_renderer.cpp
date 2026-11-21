@@ -80,7 +80,7 @@ namespace crimson::opengl
 
         const FramePacket& packet = frame.GetPacket();
 
-        // ImGui and resource creation may have touched GL state since the last frame
+        // Resource creation may have touched GL state since the last frame
         ResetBoundState();
 
         // Replacing the buffers' storage, so the frame before isn't waited on
@@ -141,12 +141,6 @@ namespace crimson::opengl
         CRIMSON_PROFILE_SCOPE_DYNAMIC(info.Name);
         TracyGpuZoneTransient(passZone, info.Name, true);
 
-        if (pass.IsNative())
-        {
-            ExecuteNativePass(pass);
-            return;
-        }
-
         const RenderRect passArea = BindTarget(info);
 
         // BindTarget set the viewport to the pass's area, which the first draw's view may not have
@@ -157,17 +151,6 @@ namespace crimson::opengl
         BuildDrawOrder(draws, m_resourceManager, m_drawOrder, info.Kind);
         for (const DrawSortEntry& sorted : m_drawOrder)
             ExecuteDraw(draws[sorted.Index], packet, passArea, info.Kind);
-    }
-
-    void OpenGLRenderer::ExecuteNativePass(const PassRecord& pass)
-    {
-        BindTarget(pass.GetInfo());
-
-        const NativeContext context{};
-        pass.GetNativeFn()(context);
-
-        // The callback runs code that changes GL state without going through m_state
-        ResetBoundState();
     }
 
     // Returns the part of the target the pass draws to

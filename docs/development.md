@@ -75,18 +75,22 @@ This needs no GPU or window. It covers everything above the graphics APIs:
 - **Scene:** hierarchy, transforms and raycasts.
 - **Assets and projects:** scanning, metas, loading and its failures, shader reloading, and the built-in meshes, using real files in a temporary folder (`tests/support/temp_folder.hpp`).
 - **Shaders:** every engine shader goes through what the backends do before reaching the GPU: HLSL to SPIR-V, reflection, and translation to GLSL.
-- **Frames:** pass recording, draw sorting, shadow views, the frame clock and `SceneRenderer`.
-- **The editor's logic:** asset edits, recovery files, texture previews, recent projects, settings, the script editor's arguments, and file URIs. `ProjectSession` holds an open project's document, so its selection, saving, closing, opening and deleting scenes, undo and recovery copies are tested without a window.
+- **Frames:** pass recording, draw sorting (and an overlay pass keeping its order), frame ids and tables, material properties and the rules both backends share for them, shadow views, the frame clock and `SceneRenderer`.
+- **Input:** `Input` is fed events and derives its state from them, and a locked cursor's position (`CursorTracker`) is checked, all without a window.
+- **The editor's logic:** how ImGui is fed from a window's events, its clipboard and cursor (with `tests/support/fake_window.hpp`), asset edits, recovery files, texture previews, recent projects, settings, the script editor's arguments, and file URIs. `ProjectSession` holds an open project's document, so its selection, saving, closing, opening and deleting scenes, undo and recovery copies are tested without a window.
 
-Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are already interfaces, so `tests/support/fake_gpu.hpp` stands in for them. Testability shouldn't cost anything per frame, so nothing gains a virtual function just to be faked: `BuildDrawOrder` takes its materials as a template parameter, and `Scene`, `Entity` and `Input` stay concrete.
+Code talks to the GPU through `GpuResourceManager` and `Renderer`, which are already interfaces, so `tests/support/fake_gpu.hpp` stands in for them. Testability shouldn't cost anything per frame, so nothing gains a virtual function just to be faked: `BuildDrawOrder` takes its materials as a template parameter, and `Scene`, `Entity` and `Input` stay concrete. `Input` is fed events, so it is tested without a window.
 
 ### `CrimsonGpuTests`
 
 This runs the real backends, once with `--backend gl` and once with `--backend vk`, and opens a window to do it. `ctest --label-exclude gpu` skips it. The whole run shares one import cache folder, so no editor test imports the built-in assets again. It is the one `CRIMSON_CACHE` names, or else a folder of the run's own, and never the user's real cache.
 
-- **Rendering:** renders into a target and checks the pixels with `ReadColorPixels`. It covers placement, depth, materials, textures, blending, lights, all three kinds of shadow, outlines, shader time and the space helpers.
+- **Rendering:** renders into a target and checks the pixels with `ReadColorPixels`. It covers placement, depth, materials, textures, blending, lights, all three kinds of shadow, outlines, shader time and the space helpers. It also covers updating buffers every frame and updating a region of a texture, a draw's scissor and base vertex, the overlay pass, and material properties changing one draw and not its material.
+- **ImGui:** the editor's `ImGuiRenderer` draws a rect and some text into a target, with ImGui's font as an engine texture.
 - **The editor:** smoke tests that drive the real `EditorApplication` frame by frame. They cover the project manager, opening and closing projects, projects with problems, every kind of asset and entity in the panels, the asset picker in both views, and a scene that wasn't closed normally. The panels draw, but nothing clicks on them. What the editor does with a project is tested in `CrimsonTests`.
-- **Input:** a locked cursor staying in place.
+- **The window:** locking the cursor of a real window, its clipboard, every cursor shape and its OS handle. Where a locked cursor stays is checked by the `CursorTracker` unit tests, as a real cursor can't be moved from a test.
+
+Neither test program includes or links GLFW. The tests that drive the cursor or the keys do it through events, or through the `Window` interface.
 
 ## CI
 

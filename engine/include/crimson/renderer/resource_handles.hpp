@@ -25,6 +25,14 @@ namespace crimson
         constexpr bool operator==(const Handle& other) const = default;
 
         static constexpr Handle Invalid() { return Handle{}; }
+
+        // From what GetRaw gave, for a place that can only keep a number, such as a UI library's texture id
+        static constexpr Handle FromRaw(std::uint64_t raw)
+        {
+            Handle handle;
+            handle.m_packed = raw;
+            return handle;
+        }
     private:
         std::uint64_t m_packed = 0;
     };

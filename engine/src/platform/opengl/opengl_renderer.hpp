@@ -24,7 +24,6 @@ namespace crimson::opengl
         void SetShadowAtlas(TextureHandle shadowAtlas) override;
     private:
         void ExecutePass(const PassRecord& pass, const FramePacket& packet);
-        void ExecuteNativePass(const PassRecord& pass);
         RenderRect BindTarget(const PassInfo& info);
         void ClearTarget(const ClearInfo& clear);
         // passArea is where a draw lands when its view has no viewport of its own

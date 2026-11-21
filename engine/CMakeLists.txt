@@ -32,7 +32,6 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/renderer/material_properties.hpp
     include/crimson/renderer/material_settings.hpp
     include/crimson/renderer/mesh.hpp
-    include/crimson/renderer/native_context.hpp
     include/crimson/renderer/property_id.hpp
     include/crimson/renderer/render_stats.hpp
     include/crimson/renderer/renderer.hpp
@@ -80,8 +79,6 @@ set(ENGINE_PUBLIC_HEADERS
 
     include/crimson/project/project.hpp
     include/crimson/project/shader_includes.hpp
-
-    include/crimson/ui/imgui_backend.hpp
 )
 
 set(ENGINE_SOURCES
@@ -128,8 +125,6 @@ set(ENGINE_SOURCES
 
     src/platform/opengl/opengl_device.cpp
     src/platform/opengl/opengl_device.hpp
-    src/platform/opengl/opengl_imgui_backend.cpp
-    src/platform/opengl/opengl_imgui_backend.hpp
     src/platform/opengl/opengl_renderer.cpp
     src/platform/opengl/opengl_renderer.hpp
     src/platform/opengl/opengl_resource_manager.cpp
@@ -146,8 +141,6 @@ set(ENGINE_SOURCES
     src/platform/vulkan/vulkan_allocator.hpp
     src/platform/vulkan/vulkan_device.cpp
     src/platform/vulkan/vulkan_device.hpp
-    src/platform/vulkan/vulkan_imgui_backend.cpp
-    src/platform/vulkan/vulkan_imgui_backend.hpp
     src/platform/vulkan/vulkan_include.hpp
     src/platform/vulkan/vulkan_pipeline_cache.hpp
     src/platform/vulkan/vulkan_renderer.cpp
@@ -202,7 +195,6 @@ crimson_precompile_headers(Engine ${CRIMSON_PRECOMPILED_ENGINE_DEPS} src/platfor
 target_link_libraries(Engine
     PUBLIC
         glm::glm-header-only
-        imgui
         fmt::fmt
         nlohmann_json::nlohmann_json
         EnTT::EnTT

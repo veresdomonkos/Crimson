@@ -56,8 +56,12 @@ namespace crimson::editor
             createGraphics(rendererType);
         }
 
+        // After the graphics backend is final, as the fallback above makes a new window and backend
+        m_imguiPlatform   = std::make_unique<ui::ImGuiPlatform>(*m_window);
+        m_imguiRenderer   = std::make_unique<ui::ImGuiRenderer>(*m_graphicsBackend->GPUResources);
+
         m_input           = std::make_unique<Input>();
-        m_icons           = std::make_unique<EditorIcons>(*m_graphicsBackend->GPUResources, *m_graphicsBackend->Imgui);
+        m_icons           = std::make_unique<EditorIcons>(*m_graphicsBackend->GPUResources);
         m_recentProjects  = std::make_unique<RecentProjects>(configFolder / "recent_projects.json");
         m_settings        = std::make_unique<EditorSettings>(configFolder / "settings.json");
 
@@ -88,6 +92,17 @@ namespace crimson::editor
             ShowProject(std::move(*project));
         else
             ShowProjectManager(std::move(project.error()));
+    }
+
+    EditorApplication::ImGuiContextOwner::ImGuiContextOwner()
+    {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+    }
+
+    EditorApplication::ImGuiContextOwner::~ImGuiContextOwner()
+    {
+        ImGui::DestroyContext();
     }
 
     EditorApplication::~EditorApplication()
@@ -166,7 +181,7 @@ namespace crimson::editor
             CRIMSON_PROFILE_SCOPE("Poll Events");
             m_window->PollEvents();
         }
-        RenderFrame();
+        RenderFrame(deltaTime);
 
         m_input->Update();
         m_mode->Update(deltaTime);
@@ -176,7 +191,7 @@ namespace crimson::editor
         CRIMSON_PROFILE_FRAME();
     }
 
-    void EditorApplication::RenderFrame()
+    void EditorApplication::RenderFrame(float deltaTime)
     {
         CRIMSON_PROFILE_FUNCTION();
 
@@ -185,7 +200,8 @@ namespace crimson::editor
         if (!renderer.CanRender())
             return;
 
-	    m_graphicsBackend->Imgui->NewFrame();
+        m_imguiPlatform->NewFrame(deltaTime);
+        ImGui::NewFrame();
 
         FrameRecorder frame = renderer.BeginRecording();
         m_mode->Record(frame);
@@ -200,22 +216,17 @@ namespace crimson::editor
 
     void EditorApplication::RecordUIPass(FrameRecorder& frame)
     {
-        const PassInfo info{
+        // Everything the draw data holds is copied while recording
+        m_imguiRenderer->Record(frame, *ImGui::GetDrawData(), PassInfo{
             .Name = "UI",
             .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(ui::theme::AppBackground.x, ui::theme::AppBackground.y, ui::theme::AppBackground.z, 1.0f) }
-        };
-
-        // The draw data stays valid until the next ImGui frame starts, which is after Submit.
-        // TODO: snapshot it once rendering moves to its own thread.
-        frame.AddNativePass(info, [&imgui = *m_graphicsBackend->Imgui](const NativeContext& context)
-        {
-            imgui.RenderDrawData(ImGui::GetDrawData(), context);
         });
     }
 
 	void EditorApplication::OnEvent(Event& event)
 	{
         m_input->OnEvent(event);
+        m_imguiPlatform->OnEvent(event);
 
 		EventDispatcher dispatcher(event);
 

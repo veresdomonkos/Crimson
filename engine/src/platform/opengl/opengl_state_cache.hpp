@@ -11,7 +11,7 @@
 namespace crimson::opengl
 {
     // Remembers what is bound so nothing gets set to the value it already has.
-    // Call Reset() whenever other code may have changed GL state, such as ImGui.
+    // Call Reset() whenever other code may have changed GL state, such as the creation of resources.
     class OpenGLStateCache
     {
     public:

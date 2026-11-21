@@ -419,12 +419,6 @@ namespace crimson::vulkan
                 TransitionImage(cmdBuffer, m_resourceManager.GetTexture(read), vk::ImageLayout::eShaderReadOnlyOptimal);
         }
 
-        if (pass.IsNative())
-        {
-            ExecuteNativePass(cmdBuffer, pass, rt);
-            return;
-        }
-
         // What the draws' properties sample has to be readable too, and can't change inside rendering. A texture the UI shows can
         // be one that a pass of this frame rendered to.
         for (const DrawItem& draw : pass.GetDraws())
@@ -470,22 +464,6 @@ namespace crimson::vulkan
             VulkanTexture& depth = m_resourceManager.GetTexture(rt.DepthAttachment);
             TransitionImage(cmdBuffer, depth, vk::ImageLayout::eShaderReadOnlyOptimal);
         }
-    }
-
-    void VulkanRenderer::ExecuteNativePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, VulkanRenderTarget& rt)
-    {
-        BeginRendering(cmdBuffer, rt, pass.GetInfo().Clear, pass.GetInfo().Viewport);
-
-        NativeContext context{};
-        context.Device = static_cast<VkDevice>(*m_device.GetDevice());
-        context.CommandBuffer = static_cast<VkCommandBuffer>(*cmdBuffer);
-        context.ColorFormat = static_cast<uint32_t>(m_resourceManager.GetTexture(rt.ColorAttachments[0]).Format);
-        pass.GetNativeFn()(context);
-
-        // The callback records its own pipeline, buffer and descriptor set binds
-        m_bound = {};
-
-        EndPass(cmdBuffer, rt);
     }
 
     void VulkanRenderer::BeginRendering(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt, const ClearInfo& clear, const std::optional<RenderRect>& area)

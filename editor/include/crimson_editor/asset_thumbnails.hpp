@@ -3,7 +3,6 @@
 
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/asset_manager/importers/texture_asset.hpp>
-#include <crimson/ui/imgui_backend.hpp>
 
 namespace crimson::editor
 {
@@ -11,32 +10,23 @@ namespace crimson::editor
     // texture too dark. The caller owns it, and destroys it with GpuResourceManager::DestroyTexture.
     [[nodiscard]] TextureHandle CreateTexturePreview(GpuResourceManager& gpu, const AssetManager& assets, TextureID id);
 
-    // The ImGui ids of texture assets, loaded the first time one is drawn. A texture's id stops
-    // working when it is replaced or removed, so Release has to come first, between frames.
+    // The previews of texture assets, loaded the first time one is drawn. A texture goes when its asset is replaced or
+    // removed, which is between frames, as nothing that draws it is recorded then. There is no ImGui id to release first.
     class AssetThumbnails
     {
     public:
-        AssetThumbnails(AssetManager& assets, GpuResourceManager& gpu, ImGuiBackend& imgui) : m_assets(assets), m_gpu(gpu), m_imgui(imgui) {}
+        AssetThumbnails(AssetManager& assets, GpuResourceManager& gpu) : m_assets(assets), m_gpu(gpu) {}
         ~AssetThumbnails();
 
         AssetThumbnails(const AssetThumbnails&) = delete;
         AssetThumbnails& operator=(const AssetThumbnails&) = delete;
 
-        // Gives 0 if the texture can't be loaded
-        [[nodiscard]] ImTextureID Get(TextureID id);
+        // Gives the invalid handle if the texture can't be loaded
+        [[nodiscard]] TextureHandle Get(TextureID id);
         void Release(AssetID id);
     private:
-        struct Thumbnail
-        {
-            TextureHandle Texture;
-            ImTextureID Id = 0;
-        };
-
-        void Destroy(const Thumbnail& thumbnail);
-
         AssetManager& m_assets;
         GpuResourceManager& m_gpu;
-        ImGuiBackend& m_imgui;
-        std::unordered_map<AssetID, Thumbnail> m_thumbnails;
+        std::unordered_map<AssetID, TextureHandle> m_thumbnails;
     };
 }

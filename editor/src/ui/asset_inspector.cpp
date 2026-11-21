@@ -19,6 +19,7 @@
 #include "crimson_editor/ui/asset_field.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/imgui_renderer.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
 
 namespace crimson::editor::ui
@@ -397,8 +398,8 @@ namespace crimson::editor::ui
             ? static_cast<float>(m_textureSize->first) / static_cast<float>(m_textureSize->second)
             : 1.0f;
 
-        if (const ImTextureID preview = m_context.Thumbnails.Get(m_context.Session.GetAssets().As<TextureAsset>(info.Id)))
-            ImGui::Image(preview, ImVec2(available, available / aspect));
+        if (const TextureHandle preview = m_context.Thumbnails.Get(m_context.Session.GetAssets().As<TextureAsset>(info.Id)))
+            ImGui::Image(ToImTextureID(preview), ImVec2(available, available / aspect));
         else
             ImGui::TextDisabled("This image can't be read, see the console");
 

@@ -45,7 +45,6 @@ namespace crimson::glfw
 
         [[nodiscard]] OSWindowHandle GetOSHandle() const override;
         [[nodiscard]] std::unique_ptr<GraphicsBackend> CreateGraphicsBackend() override;
-	    void* GetNativeHandle() const override { return m_handle; }
 
         // WindowGraphics
         [[nodiscard]] std::vector<const char*> GetVulkanInstanceExtensions() const override;

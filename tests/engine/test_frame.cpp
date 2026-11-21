@@ -165,23 +165,6 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
     }
 }
 
-TEST_CASE("A native pass keeps its callback and has no draws", "[frame]")
-{
-    FramePacket packet;
-    FrameRecorder frame(packet);
-
-    bool called = false;
-    frame.AddNativePass({ .Name = "UI" }, [&called](const NativeContext&) { called = true; });
-
-    REQUIRE(packet.GetPasses().size() == 1);
-    const PassRecord& pass = packet.GetPasses()[0];
-    REQUIRE(pass.IsNative());
-    CHECK(pass.GetDraws().empty());
-
-    pass.GetNativeFn()(NativeContext{});
-    CHECK(called);
-}
-
 TEST_CASE("Frame ids are none by default, and each kind is its own type", "[frame]")
 {
     static_assert(!std::is_convertible_v<ObjectId, ViewId>);
@@ -256,7 +239,6 @@ TEST_CASE("Resetting a packet leaves it empty for the next frame", "[frame]")
     {
         FrameRecorder frame(packet);
         frame.AddPass({}).Draw(DrawItem{ .Material = kMaterial });
-        frame.AddNativePass({}, [](const NativeContext&) {});
         frame.AddObject(glm::mat4(1.0f));
         frame.Lighting().Lights.push_back({});
     }
@@ -267,13 +249,10 @@ TEST_CASE("Resetting a packet leaves it empty for the next frame", "[frame]")
     CHECK(packet.GetObjects().size() == 1);
     CHECK(packet.GetLighting().Lights.empty());
 
-    SECTION("A reused pass doesn't keep the last frame's draws or callback")
+    SECTION("A reused pass doesn't keep the last frame's draws")
     {
         FrameRecorder frame(packet);
         CHECK(frame.AddPass({}).GetDraws().empty());
-
-        frame.AddPass({});
-        CHECK_FALSE(packet.GetPasses()[1].IsNative());
     }
 }
 

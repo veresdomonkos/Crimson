@@ -64,6 +64,8 @@ The comment after a declaration says what materials start with:
 
 A material property that's back at its `@default` isn't written to the `.mat` file, and **Reset to default** in the Inspector puts it there.
 
+A draw can also carry `MaterialProperties`, which set values and textures for that one draw, on top of its material's, without making a material. They are named by the property's name or by a `PropertyId`, and a name the draw's shader doesn't declare is ignored. The editor's UI draws every image this way, with one material and a texture for each draw.
+
 ## The headers
 
 Includes resolve relative to the shader's folder, then to the engine's shaders.
