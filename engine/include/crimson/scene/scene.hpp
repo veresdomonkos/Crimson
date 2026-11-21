@@ -27,7 +27,8 @@ namespace crimson
         void Clear();
 
         // An invalid parent makes the entity a root. It stays where it is in the world.
-        // Returns false without changing anything if the parent is the entity or one of its children.
+        // Returns false without changing anything if the parent is the entity or one of its children, or if the entity,
+        // or the parent it was given, is gone.
         bool SetParent(Entity entity, Entity parent);
 
         // Moves it among its siblings, to the end if the index is past it

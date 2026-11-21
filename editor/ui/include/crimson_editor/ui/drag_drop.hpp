@@ -22,8 +22,9 @@ namespace crimson::editor::ui::drag_drop
     {
         void Source(std::string_view type, const void* data, std::size_t size, std::string_view label);
 
-        // The data of what is dropped, on the frame it is dropped. A drop that accepts is told by the function.
-        const void* Accept(std::string_view type, std::size_t size, DropLook look, const std::function<bool(const void*)>& accepts);
+        // Copies what is dropped into out, on the frame it is dropped, if the function takes it. ImGui clears its copy as
+        // the target ends, so nothing may point into it afterwards.
+        bool Accept(std::string_view type, void* out, std::size_t size, DropLook look, const std::function<bool(const void*)>& accepts);
 
         // What is being dragged, if it is of the type
         const void* Peek(std::string_view type, std::size_t size);
@@ -43,18 +44,17 @@ namespace crimson::editor::ui::drag_drop
     {
         static_assert(std::is_trivially_copyable_v<T>);
 
-        const void* data = detail::Accept(type, sizeof(T), look, [&accepts](const void* payload)
+        T value;
+        const bool dropped = detail::Accept(type, &value, sizeof(T), look, [&accepts](const void* payload)
         {
-            T value;
-            std::memcpy(&value, payload, sizeof(T));
-            return accepts(value);
+            T candidate;
+            std::memcpy(&candidate, payload, sizeof(T));
+            return accepts(candidate);
         });
 
-        if (!data)
+        if (!dropped)
             return std::nullopt;
 
-        T value;
-        std::memcpy(&value, data, sizeof(T));
         return value;
     }
 

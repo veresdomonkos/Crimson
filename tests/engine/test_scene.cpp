@@ -139,6 +139,47 @@ TEST_CASE("Reparenting refuses to make a loop", "[scene]")
     CHECK(c.GetComponent<RelationshipComponent>().Parent == b.GetHandle());
 }
 
+TEST_CASE("An entity that is gone can't be reparented", "[scene]")
+{
+    Scene scene;
+    const Entity a = scene.CreateEntity("A");
+    const Entity b = scene.CreateEntity("B");
+
+    scene.DestroyEntity(a);
+
+    CHECK_FALSE(scene.SetParent(a, b));
+    CHECK(b.GetComponent<RelationshipComponent>().Children.empty());
+    CHECK(scene.GetRoots().size() == 1);
+}
+
+TEST_CASE("Nothing goes under a parent that is gone", "[scene]")
+{
+    Scene scene;
+    const Entity a = scene.CreateEntity("A");
+    const Entity p = scene.CreateEntity("P");
+    a.GetComponent<TransformComponent>().Position = glm::vec3(1.0f, 2.0f, 3.0f);
+
+    scene.DestroyEntity(p);
+
+    CHECK_FALSE(scene.SetParent(a, p));
+    CHECK((a.GetComponent<RelationshipComponent>().Parent == entt::null));
+    CheckNear(a.GetComponent<TransformComponent>().Position, glm::vec3(1.0f, 2.0f, 3.0f));
+}
+
+TEST_CASE("A stale handle doesn't move the entity that reused its slot", "[scene]")
+{
+    Scene scene;
+    const Entity a = scene.CreateEntity("A");
+    const Entity other = scene.CreateEntity("Other");
+    const entt::entity old = a.GetHandle();
+
+    scene.DestroyEntity(a);
+    const Entity c = scene.CreateEntity("C");
+
+    CHECK_FALSE(scene.SetParent(scene.GetEntity(old), other));
+    CHECK((c.GetComponent<RelationshipComponent>().Parent == entt::null));
+}
+
 TEST_CASE("Reparenting keeps the entity where it is in the world", "[scene]")
 {
     Scene scene;

@@ -31,6 +31,7 @@ add_executable(CrimsonTests
     editor/test_asset_thumbnails.cpp
     editor/test_command_menu.cpp
     editor/test_component_fields.cpp
+    editor/test_drag_drop.cpp
     editor/test_edit_history.cpp
     editor/test_editor_theme.cpp
     editor/test_imgui_platform.cpp

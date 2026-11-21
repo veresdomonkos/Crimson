@@ -88,6 +88,10 @@ namespace crimson
 
     bool Scene::SetParent(Entity entity, Entity parent)
     {
+        // A stale handle must not reach the registry, where it would act on whatever entity now holds its slot
+        if (!entity || (parent.GetScene() && !parent))
+            return false;
+
         const entt::entity newParent = parent ? parent.GetHandle() : entt::null;
 
         for (entt::entity ancestor = newParent; ancestor != entt::null; ancestor = m_registry.get<RelationshipComponent>(ancestor).Parent)
