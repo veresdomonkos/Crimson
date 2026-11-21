@@ -40,7 +40,6 @@ TEST_CASE("The window gives its OS handle", "[window]")
 #elif defined(__APPLE__)
     CHECK(handle.Type == OSWindowHandle::Kind::Cocoa);
 #else
-    // CI has no Wayland
     CHECK(handle.Type == OSWindowHandle::Kind::X11);
 #endif
     CHECK(handle.Value != 0);

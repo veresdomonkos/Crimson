@@ -120,7 +120,6 @@ set(ENGINE_SOURCES
 
     src/platform/glfw/glfw_input.cpp
     src/platform/glfw/glfw_input.hpp
-    src/platform/glfw/glfw_os_handle.cpp
     src/platform/glfw/glfw_window.cpp
     src/platform/glfw/glfw_window.hpp
 
@@ -187,9 +186,13 @@ else()
     target_sources(Engine PRIVATE src/platform/posix/posix_files.cpp)
 endif()
 
-# The Wayland window handle exists only when GLFW was built with Wayland, which having its headers doesn't tell
-if(GLFW_BUILD_WAYLAND)
-    set_source_files_properties(src/platform/glfw/glfw_os_handle.cpp PROPERTIES COMPILE_DEFINITIONS GLFW_EXPOSE_NATIVE_WAYLAND)
+# The OS handle of the GLFW window, from the one file for the platform
+if(WIN32)
+    target_sources(Engine PRIVATE src/platform/glfw/glfw_os_handle_win32.cpp)
+elseif(APPLE)
+    target_sources(Engine PRIVATE src/platform/glfw/glfw_os_handle_cocoa.cpp)
+else()
+    target_sources(Engine PRIVATE src/platform/glfw/glfw_os_handle_x11.cpp)
 endif()
 
 crimson_embed_resources(Engine DIRECTORY resources NAMESPACE crimson FUNCTION GetEngineResources)

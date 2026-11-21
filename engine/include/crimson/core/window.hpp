@@ -28,10 +28,10 @@ namespace crimson
     };
 
     // The operating system's own window, for what has to name it outside the engine, such as the parent of a native
-    // dialog. Value holds an HWND, an X11 Window, a wl_surface* or an NSWindow*.
+    // dialog. Value holds an HWND, an X11 Window or an NSWindow*.
     struct OSWindowHandle
     {
-        enum class Kind { Win32, X11, Wayland, Cocoa };
+        enum class Kind { Win32, X11, Cocoa };
 
         Kind Type;
         std::uintptr_t Value;

@@ -55,7 +55,8 @@ function(crimson_add_external dir)
     add_subdirectory(${dir} ${ARGN})
 endfunction()
 
-# GLFW
+# GLFW, on Linux with X11 only: the editor runs on Wayland desktops through XWayland
+set(GLFW_BUILD_WAYLAND OFF CACHE BOOL "" FORCE)
 crimson_add_external(external/glfw)
 
 # imgui, without its backends: the editor draws it and feeds it through the engine's own API

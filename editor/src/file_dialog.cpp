@@ -18,10 +18,9 @@ namespace crimson::editor
         nfdwindowhandle_t parent{};
         switch (handle.Type)
         {
-            case OSWindowHandle::Kind::Win32:   parent.type = NFD_WINDOW_HANDLE_TYPE_WINDOWS; break;
-            case OSWindowHandle::Kind::X11:     parent.type = NFD_WINDOW_HANDLE_TYPE_X11; break;
-            case OSWindowHandle::Kind::Wayland: parent.type = NFD_WINDOW_HANDLE_TYPE_WAYLAND; break;
-            case OSWindowHandle::Kind::Cocoa:   parent.type = NFD_WINDOW_HANDLE_TYPE_COCOA; break;
+            case OSWindowHandle::Kind::Win32: parent.type = NFD_WINDOW_HANDLE_TYPE_WINDOWS; break;
+            case OSWindowHandle::Kind::X11:   parent.type = NFD_WINDOW_HANDLE_TYPE_X11; break;
+            case OSWindowHandle::Kind::Cocoa: parent.type = NFD_WINDOW_HANDLE_TYPE_COCOA; break;
         }
         parent.handle = reinterpret_cast<void*>(handle.Value);
         return parent;
