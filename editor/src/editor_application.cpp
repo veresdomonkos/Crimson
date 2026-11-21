@@ -56,7 +56,7 @@ namespace crimson::editor
             createGraphics(rendererType);
         }
 
-        m_input           = std::make_unique<Input>(*m_window);
+        m_input           = std::make_unique<Input>();
         m_icons           = std::make_unique<EditorIcons>(*m_graphicsBackend->GPUResources, *m_graphicsBackend->Imgui);
         m_recentProjects  = std::make_unique<RecentProjects>(configFolder / "recent_projects.json");
         m_settings        = std::make_unique<EditorSettings>(configFolder / "settings.json");
@@ -215,6 +215,8 @@ namespace crimson::editor
 
 	void EditorApplication::OnEvent(Event& event)
 	{
+        m_input->OnEvent(event);
+
 		EventDispatcher dispatcher(event);
 
 		dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& event) {

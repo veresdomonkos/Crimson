@@ -8,6 +8,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/core/file_write.hpp
     include/crimson/core/hash.hpp
     include/crimson/core/input.hpp
+    include/crimson/core/keys.hpp
     include/crimson/core/log.hpp
     include/crimson/core/profiler.hpp
     include/crimson/core/window.hpp
@@ -111,9 +112,13 @@ set(ENGINE_SOURCES
     src/graphics/create_graphics_backend.hpp
     src/graphics/graphics_backend.cpp
 
+    src/platform/cursor_tracker.cpp
+    src/platform/cursor_tracker.hpp
     src/platform/files.hpp
     src/platform/window_graphics.hpp
 
+    src/platform/glfw/glfw_input.cpp
+    src/platform/glfw/glfw_input.hpp
     src/platform/glfw/glfw_window.cpp
     src/platform/glfw/glfw_window.hpp
 

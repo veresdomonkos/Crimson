@@ -1,6 +1,9 @@
 #pragma once
 
+#include <array>
+
 #include "crimson/core/window.hpp"
+#include "../cursor_tracker.hpp"
 #include "../window_graphics.hpp"
 
 // Glad provides the OpenGL declarations
@@ -32,6 +35,14 @@ namespace crimson::glfw
 	        return x > 0.0f ? x : 1.0f;
 	    }
 
+        void SetCursorShape(CursorShape shape) override;
+
+        [[nodiscard]] std::string GetClipboardText() const override;
+        void SetClipboardText(const std::string& text) override;
+
+        void SetCursorLocked(bool locked) override;
+        [[nodiscard]] bool IsCursorLocked() const override { return m_cursor.IsLocked(); }
+
         [[nodiscard]] OSWindowHandle GetOSHandle() const override;
         [[nodiscard]] std::unique_ptr<GraphicsBackend> CreateGraphicsBackend() override;
 	    void* GetNativeHandle() const override { return m_handle; }
@@ -47,5 +58,12 @@ namespace crimson::glfw
         GraphicsApi m_api;
 	    WindowData m_data;
 		GLFWwindow* m_handle;
+        CursorTracker m_cursor;
+
+        static constexpr std::size_t kCursorShapeCount = static_cast<std::size_t>(CursorShape::NotAllowed) + 1;
+
+        // A shape the platform has no cursor for stays null, which GLFW takes as the default arrow
+        std::array<GLFWcursor*, kCursorShapeCount> m_shapes{};
+        CursorShape m_shape = CursorShape::Arrow;
 	};
 }

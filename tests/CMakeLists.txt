@@ -10,6 +10,7 @@ add_executable(CrimsonTests
     engine/test_frame.cpp
     engine/test_handle_registry.cpp
     engine/test_import_cache.cpp
+    engine/test_input.cpp
     engine/test_log.cpp
     engine/test_mesh_tangents.cpp
     engine/test_project.cpp

@@ -78,7 +78,7 @@ namespace crimson::editor
         ApplyToneMapping();
         SetupUI();
 
-        m_cameraController = std::make_unique<SceneCameraController>(m_camera, m_services.AppInput, *m_sceneViewport);
+        m_cameraController = std::make_unique<SceneCameraController>(m_camera, m_services.AppInput, m_services.AppWindow, *m_sceneViewport);
 
         m_camera.SetPosition(glm::vec3(0.0f, 3.5f, 7.0f));
         m_cameraController->SetPivot(glm::vec3(0.0f));

@@ -20,6 +20,13 @@ namespace crimson
 		EventCallback EventCallbackFn;
 	};
 
+    // What the mouse cursor looks like over the window. The diagonals are named by where they point to, up being the top
+    // of the screen: ResizeDiagonalUp runs from bottom left to top right, ResizeDiagonalDown from top left to bottom right.
+    enum class CursorShape
+    {
+        Arrow, TextInput, ResizeAll, ResizeVertical, ResizeHorizontal, ResizeDiagonalUp, ResizeDiagonalDown, Hand, NotAllowed
+    };
+
     // The operating system's own window, for what has to name it outside the engine, such as the parent of a native
     // dialog. Value holds an HWND, an X11 Window, a wl_surface* or an NSWindow*.
     struct OSWindowHandle
@@ -50,6 +57,17 @@ namespace crimson
 
 	    // How much bigger than at 100% things should be drawn, from the monitor's scaling, such as 1.5 at 150%
 	    [[nodiscard]] virtual float GetContentScale() const = 0;
+
+        // A locked cursor is hidden and stays where it was locked, while the mouse can keep moving forever without
+        // stopping at the edge of the screen. The mouse move events keep reporting how far it moved.
+        virtual void SetCursorLocked(bool locked) = 0;
+        [[nodiscard]] virtual bool IsCursorLocked() const = 0;
+
+        // Does nothing while the cursor is locked, as it is hidden then
+        virtual void SetCursorShape(CursorShape shape) = 0;
+
+        [[nodiscard]] virtual std::string GetClipboardText() const = 0;
+        virtual void SetClipboardText(const std::string& text) = 0;
 
         [[nodiscard]] virtual OSWindowHandle GetOSHandle() const = 0;
 
