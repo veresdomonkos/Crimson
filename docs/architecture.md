@@ -324,11 +324,26 @@ A project is a folder with a `project.crimson` file and an `assets/` folder. It 
 
 ### How the UI is drawn and fed
 
-**The engine doesn't link ImGui and has no UI concepts.** The editor owns the ImGui context (in `EditorApplication`, which also makes sure the window, the backend and the context go in the right order) and two classes in `editor/src/ui/`:
+**The engine doesn't link ImGui and has no UI concepts.** The editor's UI layer (below) owns the ImGui context, and `EditorApplication` holds it as one `ui::Host`, made once the window and the backend are final. It is destroyed before them, with the context last. Inside the layer there are two classes of glue, which nothing outside it can see:
 
 - **`ImGuiPlatform`** turns the window's events into ImGui's input events, and keeps the display's size, the time of the frame and the mouse cursor ImGui wants up to date before each `ImGui::NewFrame()`. ImGui's clipboard is the window's. Nothing in the editor reaches into GLFW.
 - **`ImGuiRenderer`** records ImGui's draw data as an `Overlay` pass, through `GpuResourceManager` and `FrameRecorder` like any other code. It has one material, made from `editor/ui/resources/shaders/S_ImGui.hlsl`, for all of the UI, and each draw sets its texture with `MaterialProperties`, so there is no material for each texture. Its vertices and indices go into Stream buffers updated every frame, and each ImGui clip rect is the draw's `Scissor`. ImGui's own textures, the fonts, are kept as engine textures: it makes and updates them from the requests ImGui puts in its draw data (`ImGuiBackendFlags_RendererHasTextures`).
-- **An `ImTextureID` is a `TextureHandle`.** `ui::ToImTextureID` and `ui::FromImTextureID` convert between them, so showing a render target or a texture asset needs no registering, and a texture can be destroyed without telling ImGui first.
+- **An `ImTextureID` is a `TextureHandle`.** The layer converts between them (`imgui_convert.hpp`), so showing a render target or a texture asset needs no registering, and a texture can be destroyed without telling ImGui first.
+
+A frame is `Host::BeginFrame`, the mode's `Record`, its `DrawUI`, and `Host::EndFrame`, which records the UI pass.
+
+### The UI layer
+
+`EditorUI` (`editor/ui/`, headers under `crimson_editor/ui/`) is a static library, and the only code in the editor that knows ImGui and ImGuizmo. They are `PRIVATE` to it, so a panel or a mode that includes `<imgui.h>` doesn't compile, and neither precompiles it. Tests may link ImGui, as they test the layer and its glue. This is how Unreal keeps Slate in modules of their own, and Godot's `editor/` is apart from `scene/gui`. Its parts:
+
+- **Panel framework:** `Panel`, `PanelInfo`, `Workspace` and `Command`, below.
+- **Vocabulary:** what panels and modes draw with, in the layer's own types (`ui::Color`, `ui::Rect`, `glm` vectors) and none of ImGui's. `widgets.hpp` (text, buttons, fields, a search box, combos, selectables, tree rows, tiles), `layout.hpp` (`Row`, `TileGrid`, `Region`, `Table`, ids, disabling, fonts, sections, metrics), `menus.hpp` (menus, context menus, popups, modals), `painter.hpp` (shapes, text, icons and images by hand), `drag_drop.hpp`, `gizmo.hpp` (ImGuizmo as one call), `input.hpp` (keys, the mouse and the last item), `window.hpp` and the Inspector's rows in `property_fields.hpp`.
+- **Theme, fonts and icons:** the tokens in `editor_theme.hpp`, the fonts and shader in `editor/ui/resources/`, and `icons.hpp`.
+- **Host:** `ui::Host` owns the context, the platform glue and the renderer, and applies the theme.
+
+Items drawn in a `Row` share a line. A row only places the items of the window it was started in, so a tooltip or a popup drawn in the middle of it isn't pulled onto its line.
+
+The panels are in the editor, not in the layer, and only use it.
 
 ### Panels and menus
 

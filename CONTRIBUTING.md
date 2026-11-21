@@ -65,7 +65,8 @@ C++23, in the style the code already has:
 - **GPU resources** only change between frames. Panels queue such changes in `EditorContext::Deferred`.
 - **Editor UI:**
   - Colors, spacing, radii and font sizes come from `crimson_editor/ui/editor_theme.hpp`, never written out in a panel. [docs/ui.md](docs/ui.md) has the rules.
-  - The main action of a dialog is a `theme::PrimaryButton`.
+  - Panels and modes use only `crimson_editor/ui/`, never ImGui: it is private to the `EditorUI` library, so including it fails to build. A widget a panel needs goes into the layer.
+  - The main action of a dialog is a `ui::PrimaryButton`.
   - Icons come from `crimson_editor/ui/icons.hpp`.
   - Inspector fields go through `crimson_editor/ui/property_fields.hpp`.
 - **Errors** are logged with `LOG_ERROR`. That puts them in the Console and in the corner of the window, and makes a test fail unless it expected them.

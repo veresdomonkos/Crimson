@@ -11,6 +11,8 @@
 
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/linear_color.hpp"
+#include "crimson_editor/ui/widgets.hpp"
+#include "imgui_convert.hpp"
 
 namespace crimson::editor::ui::props
 {
@@ -140,7 +142,7 @@ namespace crimson::editor::ui::props
 
     // A thin track with the part up to the value filled and a round handle, without the value as text, as the field next
     // to it shows that. It moves as ImGui's slider does: dragging, clicking to jump, the arrow keys and logarithmic ranges.
-    static bool SliderTrack(float& value, float min, float max, ImGuiSliderFlags flags)
+    static bool SliderTrack(float& value, float min, float max, SliderScale scale)
     {
         ImGuiWindow* window = ImGui::GetCurrentWindow();
         if (window->SkipItems)
@@ -175,7 +177,7 @@ namespace crimson::editor::ui::props
 
         ImRect grab;
         ImGui::PushStyleVar(ImGuiStyleVar_GrabMinSize, handleRadius * 2.0f);
-        const bool changed = ImGui::SliderBehavior(bb, id, ImGuiDataType_Float, &value, &min, &max, "%.3f", flags | ImGuiSliderFlags_NoInput, &grab);
+        const bool changed = ImGui::SliderBehavior(bb, id, ImGuiDataType_Float, &value, &min, &max, "%.3f", (scale == SliderScale::Logarithmic ? ImGuiSliderFlags_Logarithmic : 0) | ImGuiSliderFlags_NoInput, &grab);
         ImGui::PopStyleVar();
 
         if (changed)
@@ -193,23 +195,23 @@ namespace crimson::editor::ui::props
         ImDrawList* drawList = window->DrawList;
         ImGui::RenderNavCursor(bb, id);
         drawList->AddRectFilled(ImVec2(trackLeft, centerY - trackHalf), ImVec2(bb.Max.x - kGrabPadding, centerY + trackHalf),
-            ImGui::GetColorU32(theme::FrameBackground), trackHalf);
+            ToImU32(theme::FrameBackground), trackHalf);
         drawList->AddRectFilled(ImVec2(trackLeft, centerY - trackHalf), ImVec2(handleX, centerY + trackHalf),
-            ImGui::GetColorU32(theme::TextMuted), trackHalf);
+            ToImU32(theme::TextMuted), trackHalf);
         drawList->AddCircleFilled(ImVec2(handleX, centerY), handleRadius,
-            ImGui::GetColorU32(lit ? theme::Text : theme::WithAlpha(theme::Text, 0.8f)));
+            ToImU32(lit ? theme::Text : WithAlpha(theme::Text, 0.8f)));
 
         return changed;
     }
 
-    bool SliderField(float& value, float min, float max, const char* format, ImGuiSliderFlags flags)
+    bool SliderField(float& value, float min, float max, const char* format, SliderScale scale)
     {
         const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
         const float fieldWidth = ImGui::GetFontSize() * 4.5f;
         const float sliderWidth = std::max(1.0f, ImGui::CalcItemWidth() - fieldWidth - spacing);
 
         ImGui::SetNextItemWidth(sliderWidth);
-        bool changed = SliderTrack(value, min, max, flags);
+        bool changed = SliderTrack(value, min, max, scale);
         ResetTarget();
 
         ImGui::SameLine(0.0f, spacing);
@@ -226,10 +228,10 @@ namespace crimson::editor::ui::props
         return changed;
     }
 
-    bool Slider(const char* label, float& value, float min, float max, const float* reset, ImGuiSliderFlags flags)
+    bool Slider(const char* label, float& value, float min, float max, const float* reset, SliderScale scale)
     {
         BeginRow(label);
-        bool changed = SliderField(value, min, max, "%.3f", flags);
+        bool changed = SliderField(value, min, max, "%.3f", scale);
 
         changed |= ApplyReset(EndRow(reset != nullptr), value, reset);
         return changed;
@@ -261,7 +263,7 @@ namespace crimson::editor::ui::props
             // a long number never runs under it, and it is only drawn, so it can't be clicked by accident.
             const ImVec2 stripeMin = ImGui::GetCursorScreenPos();
             const ImVec2 stripeMax(stripeMin.x + stripeWidth, stripeMin.y + ImGui::GetFrameHeight());
-            ImGui::GetWindowDrawList()->AddRectFilled(stripeMin, stripeMax, ImGui::GetColorU32(kColors[i]),
+            ImGui::GetWindowDrawList()->AddRectFilled(stripeMin, stripeMax, ToImU32(kColors[i]),
                 ImGui::GetStyle().FrameRounding, ImDrawFlags_RoundCornersLeft);
 
             ImGui::Dummy(ImVec2(stripeWidth, ImGui::GetFrameHeight()));
@@ -313,7 +315,7 @@ namespace crimson::editor::ui::props
     bool Checkbox(const char* label, bool& value, const bool* reset)
     {
         BeginRow(label);
-        bool changed = theme::Checkbox("##Value", value);
+        bool changed = ui::Checkbox("##Value", value);
         ResetTarget();
 
         changed |= ApplyReset(EndRow(reset != nullptr), value, reset);

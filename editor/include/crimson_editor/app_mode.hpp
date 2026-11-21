@@ -41,7 +41,7 @@ namespace crimson::editor
         virtual void Record(FrameRecorder& frame) {}
 
         // Builds the UI, after Record, while the frame is still being recorded
-        virtual void OnImGui() = 0;
+        virtual void DrawUI() = 0;
 
         // After the frame
         virtual void Update(float deltaTime) {}

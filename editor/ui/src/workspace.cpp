@@ -6,7 +6,6 @@
 
 #include <imgui.h>
 #include <imgui_internal.h>
-#include <ImGuizmo.h>
 
 #include "command_menu.hpp"
 #include "imgui_convert.hpp"
@@ -135,8 +134,6 @@ namespace crimson::editor::ui
 
     void Workspace::Draw()
     {
-        ImGuizmo::BeginFrame();
-
         for (const Command& command : m_commands)
             RunIfPressed(command, false);
 

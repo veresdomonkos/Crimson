@@ -1,4 +1,4 @@
-#include "crimson_editor/ui/imgui_renderer.hpp"
+#include "imgui_renderer.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -14,6 +14,7 @@
 #include <crimson/core/log.hpp>
 #include <crimson/renderer/shader_compiler.hpp>
 
+#include "imgui_convert.hpp"
 #include "ui_resources.hpp"
 
 namespace crimson::editor::ui

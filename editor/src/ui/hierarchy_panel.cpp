@@ -1,15 +1,17 @@
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 
 #include <algorithm>
-#include <cfloat>
 #include <filesystem>
 #include <string>
 
-#include <imgui.h>
-
 #include "crimson_editor/ui/component_fields.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
+#include "crimson_editor/ui/drag_drop.hpp"
 #include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/input.hpp"
+#include "crimson_editor/ui/layout.hpp"
+#include "crimson_editor/ui/menus.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 
 namespace crimson::editor::ui
 {
@@ -28,7 +30,7 @@ namespace crimson::editor::ui
     static const char* EntityIcon(Entity entity, const ComponentRegistry& components)
     {
         if (entity.HasComponent<SceneInstanceComponent>())
-            return icons::kSceneInstance;
+            return ui::icons::kSceneInstance;
 
         // The first component with an icon, in the order they were registered, which puts a light before a mesh
         for (const ComponentType& type : components.Types())
@@ -43,11 +45,11 @@ namespace crimson::editor::ui
             }
         }
 
-        return icons::kEntity;
+        return ui::icons::kEntity;
     }
 
     HierarchyPanel::HierarchyPanel(EditorContext& context)
-        : Panel({ .Title = "Hierarchy", .Icon = icons::kEntity, .Slot = DockSlot::Left }),
+        : Panel({ .Title = "Hierarchy", .Icon = ui::icons::kEntity, .Slot = DockSlot::Left }),
           m_context(context)
     {
         AddCommand({ .MenuPath = "Edit/Rename", .Priority = kRenamePriority, .Shortcuts = { kRename },
@@ -83,16 +85,16 @@ namespace crimson::editor::ui
         if (const AssetInfo* info = m_context.Session.GetAssets().GetInfo(m_context.Session.GetSceneAsset()))
         {
             const std::string name = std::filesystem::path(info->Path).stem().string();
-            ImGui::TextDisabled("%s%s", m_context.Session.IsSceneChanged() ? "* " : "", name.c_str());
-            ImGui::SetItemTooltip("%s", info->Path.c_str());
+            ui::Text((m_context.Session.IsSceneChanged() ? "* " : "") + name, ui::TextStyle::Muted);
+            ui::Tooltip(info->Path);
         }
         else
         {
-            ImGui::TextDisabled("No scene is open, this won't be saved");
+            ui::Text("No scene is open, this won't be saved", ui::TextStyle::Muted);
         }
 
         DrawSearch();
-        ImGui::Separator();
+        ui::Separator();
 
         const bool searching = m_filter.IsActive();
         m_shown.clear();
@@ -107,38 +109,29 @@ namespace crimson::editor::ui
             DrawEntity(root);
 
         if (scene.GetRoots().empty())
-            theme::EmptyHint("Right-click to create an entity, or drop a mesh into the Scene view");
+            ui::EmptyHint("Right-click to create an entity, or drop a mesh into the Scene view");
         else if (searching && m_shown.empty())
-            theme::EmptyHint("No entity has that in its name");
+            ui::EmptyHint("No entity has that in its name");
 
         // The rest of the panel: clicking clears the selection, dropping makes a root
-        const ImVec2 available = ImGui::GetContentRegionAvail();
-        ImGui::InvisibleButton("##HierarchyBackground", ImVec2(std::max(available.x, 1.0f), std::max(available.y, 1.0f)));
+        const glm::vec2 available = ui::Available();
+        ui::HitArea("##HierarchyBackground", glm::vec2(std::max(available.x, 1.0f), std::max(available.y, 1.0f)));
 
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+        if (ui::item::Clicked())
             m_context.Session.SelectEntity({});
 
-        if (ImGui::BeginDragDropTarget())
+        if (const auto dropped = ui::drag_drop::Accept<entt::entity>(kEntityPayload))
         {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kEntityPayload))
+            m_deferred.emplace_back([this, dropped = *dropped]
             {
-                const entt::entity dropped = *static_cast<const entt::entity*>(payload->Data);
-                m_deferred.emplace_back([this, dropped]
-                {
-                    const Entity moved = m_context.Session.GetScene().GetEntity(dropped);
-                    m_context.Session.GetSceneEdits().Record(moved);
-                    m_context.Session.GetScene().SetParent(moved, {});
-                });
-            }
-
-            ImGui::EndDragDropTarget();
+                const Entity moved = m_context.Session.GetScene().GetEntity(dropped);
+                m_context.Session.GetSceneEdits().Record(moved);
+                m_context.Session.GetScene().SetParent(moved, {});
+            });
         }
 
-        if (ImGui::BeginPopupContextItem("##HierarchyContext"))
-        {
+        if (const ui::ContextMenu menu("##HierarchyContext"); menu)
             DrawCreateMenu({});
-            ImGui::EndPopup();
-        }
 
         // The entity may have gone while its name was being edited
         if (m_renaming != entt::null && !scene.GetRegistry().valid(m_renaming))
@@ -165,15 +158,8 @@ namespace crimson::editor::ui
 
     void HierarchyPanel::DrawSearch()
     {
-        ImGui::SetNextItemWidth(-FLT_MIN);
-
-        const std::string hint = std::string(icons::kSearch) + "  Search";
-        if (ImGui::InputTextWithHint("##Search", hint.c_str(), m_filter.InputBuf, IM_ARRAYSIZE(m_filter.InputBuf)))
-            m_filter.Build();
-
-        // Escape leaves the box, and clears it too, as it does in most search boxes
-        if (ImGui::IsItemDeactivated() && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
-            m_filter.Clear();
+        ui::NextItemFills();
+        ui::SearchBox("##Search", m_filter, std::string(ui::icons::kSearch) + "  Search");
     }
 
     // Marks an entity to be shown when its name matches or something under it does, and says whether it is
@@ -181,7 +167,7 @@ namespace crimson::editor::ui
     {
         const Entity entity = m_context.Session.GetScene().GetEntity(handle);
 
-        bool shown = m_filter.PassFilter(entity.GetComponent<NameComponent>().Name.c_str());
+        bool shown = m_filter.Matches(entity.GetComponent<NameComponent>().Name);
 
         // Every child, not only up to the first match, as each one can be shown on its own
         for (const entt::entity child : entity.GetComponent<RelationshipComponent>().Children)
@@ -206,101 +192,78 @@ namespace crimson::editor::ui
         const auto& relationship = entity.GetComponent<RelationshipComponent>();
         const auto& name = entity.GetComponent<NameComponent>();
 
-        if (searching)
-            ImGui::SetNextItemOpen(true);
-
         // What comes from an instance's scene can only be looked at
         const bool readOnly = entity.HasComponent<InstancedComponent>();
         const bool isInstance = entity.HasComponent<SceneInstanceComponent>();
 
-        // Double-clicking renames, so only the arrow opens and closes
-        ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
-
-        if (relationship.Children.empty())
-            flags |= ImGuiTreeNodeFlags_Leaf;
-
-        if (m_context.Session.GetSelected() == entity)
-            flags |= ImGuiTreeNodeFlags_Selected;
-
-        const bool dimmed = readOnly || !entity.GetComponent<TransformComponent>().ActiveInHierarchy;
-        if (dimmed)
-            ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-
-        ImGui::PushID(static_cast<int>(entt::to_integral(handle)));
+        const ui::IdScope scope(static_cast<int>(entt::to_integral(handle)));
         const bool renaming = handle == m_renaming;
-        const std::string label = renaming ? std::string() : isInstance ? name.Name + " [scene]" : name.Name;
-        const bool open = theme::IconTreeNode("##Entity", flags, EntityIcon(entity, m_context.Session.GetAssets().Components()), theme::TextMuted, label.c_str());
 
-        if (dimmed)
-            ImGui::PopStyleColor();
+        // Double-clicking renames, so only the arrow opens and closes
+        const ui::TreeRow row("##Entity", ui::TreeRowOptions{
+            .Icon = EntityIcon(entity, m_context.Session.GetAssets().Components()),
+            .IconColor = ui::theme::TextMuted,
+            .Label = renaming ? std::string() : isInstance ? name.Name + " [scene]" : name.Name,
+            .Selected = m_context.Session.GetSelected() == entity,
+            .Leaf = relationship.Children.empty(),
+            .DefaultOpen = true,
+            .ForceOpen = searching,
+            .Muted = readOnly || !entity.GetComponent<TransformComponent>().ActiveInHierarchy
+        });
 
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+        if (row.Clicked())
             m_context.Session.SelectEntity(entity);
 
-        if (!readOnly && !renaming && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+        if (!readOnly && !renaming && ui::item::DoubleClicked() && !ui::item::ToggledOpen())
             BeginRename(entity);
 
-        if (!readOnly && ImGui::BeginDragDropSource())
-        {
-            ImGui::SetDragDropPayload(kEntityPayload, &handle, sizeof(handle));
-            ImGui::TextUnformatted(name.Name.c_str());
-            ImGui::EndDragDropSource();
-        }
+        if (!readOnly)
+            ui::drag_drop::Source(kEntityPayload, handle, name.Name);
 
-        if (!readOnly && !isInstance && ImGui::BeginDragDropTarget())
+        if (!readOnly && !isInstance)
         {
-            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kEntityPayload))
+            if (const auto dropped = ui::drag_drop::Accept<entt::entity>(kEntityPayload))
             {
-                const entt::entity dropped = *static_cast<const entt::entity*>(payload->Data);
-                m_deferred.emplace_back([this, dropped, entity]
+                m_deferred.emplace_back([this, dropped = *dropped, entity]
                 {
                     const Entity moved = m_context.Session.GetScene().GetEntity(dropped);
                     m_context.Session.GetSceneEdits().Record(moved);
                     m_context.Session.GetScene().SetParent(moved, entity);
                 });
             }
-
-            ImGui::EndDragDropTarget();
         }
 
-        if (!readOnly && ImGui::BeginPopupContextItem("##EntityContext"))
+        if (!readOnly)
         {
-            if (!isInstance)
+            if (const ui::ContextMenu menu("##EntityContext"); menu)
             {
-                DrawCreateMenu(entity);
-                ImGui::Separator();
+                if (!isInstance)
+                {
+                    DrawCreateMenu(entity);
+                    ui::Separator();
+                }
+
+                if (ui::MenuItem("Rename", ToText(kRename)))
+                    BeginRename(entity);
+
+                if (ui::MenuItem("Delete", ToText(kDelete)))
+                    DeleteEntity(entity);
             }
-
-            if (ImGui::MenuItem("Rename", ToText(kRename).c_str()))
-                BeginRename(entity);
-
-            if (ImGui::MenuItem("Delete", ToText(kDelete).c_str()))
-                DeleteEntity(entity);
-
-            ImGui::EndPopup();
         }
 
         if (renaming)
             DrawRenameField(entity);
 
-        if (open)
+        if (row.IsOpen())
         {
             for (const entt::entity child : relationship.Children)
                 DrawEntity(child);
-
-            ImGui::TreePop();
         }
-
-        ImGui::PopID();
     }
 
     void HierarchyPanel::BeginRename(Entity entity)
     {
-        const std::string& name = entity.GetComponent<NameComponent>().Name;
-
-        m_renameBuffer.fill('\0');
-        std::copy_n(name.begin(), std::min(name.size(), m_renameBuffer.size() - 1), m_renameBuffer.begin());
-
+        m_renameName = entity.GetComponent<NameComponent>().Name;
         m_renaming = entity.GetHandle();
         m_focusRename = true;
     }
@@ -310,28 +273,24 @@ namespace crimson::editor::ui
     {
         // The icon is drawn over the node and takes no room, so the field starts after it
         const char* icon = EntityIcon(entity, m_context.Session.GetAssets().Components());
-        ImGui::SameLine(0.0f, ImGui::CalcTextSize(icon).x + ImGui::GetStyle().ItemInnerSpacing.x * 2.0f);
-        ImGui::SetNextItemWidth(-FLT_MIN);
 
-        if (m_focusRename)
-        {
-            ImGui::SetKeyboardFocusHere();
-            m_focusRename = false;
-        }
+        ui::Row row(true);
+        row.Gap(ui::TextSize(icon).x + ui::InnerSpacing().x * 2.0f);
+        ui::NextItemFills();
 
-        const bool entered = ImGui::InputText("##Rename", m_renameBuffer.data(), m_renameBuffer.size(),
-            ImGuiInputTextFlags_AutoSelectAll | ImGuiInputTextFlags_EnterReturnsTrue);
+        const bool entered = ui::InputText("##Rename", m_renameName, ui::InputOptions{ .AutoSelectAll = true, .EnterConfirms = true, .Focus = m_focusRename });
+        m_focusRename = false;
 
-        if (!entered && !ImGui::IsItemDeactivated())
+        if (!entered && !ui::item::Deactivated())
             return;
 
         m_renaming = entt::null;
 
-        if (!entered && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        if (!entered && ui::input::KeyPressed(Key::Escape))
             return;
 
         // A name of only spaces would leave nothing to click in the tree
-        std::string name(m_renameBuffer.data());
+        std::string name = m_renameName;
         name.erase(0, name.find_first_not_of(" \t"));
         name.erase(name.find_last_not_of(" \t") + 1);
 
@@ -396,7 +355,7 @@ namespace crimson::editor::ui
         {
             if (options[i].Menu.empty())
             {
-                if (ImGui::MenuItem(options[i].Name.c_str()))
+                if (ui::MenuItem(options[i].Name))
                     Create(options[i], parent);
 
                 ++i;
@@ -408,15 +367,13 @@ namespace crimson::editor::ui
             while (end < options.size() && options[end].Menu == options[i].Menu)
                 ++end;
 
-            if (ImGui::BeginMenu(("Create " + options[i].Menu).c_str()))
+            if (const ui::Menu menu("Create " + options[i].Menu); menu)
             {
                 for (size_t j = i; j < end; ++j)
                 {
-                    if (ImGui::MenuItem(options[j].Name.c_str()))
+                    if (ui::MenuItem(options[j].Name))
                         Create(options[j], parent);
                 }
-
-                ImGui::EndMenu();
             }
 
             i = end;

@@ -14,7 +14,7 @@
 #include "crimson_editor/editor_paths.hpp"
 #include "crimson_editor/project_manager_mode.hpp"
 #include "crimson_editor/project_session_mode.hpp"
-#include "crimson_editor/ui/editor_theme.hpp"
+#include "crimson_editor/ui/host.hpp"
 
 namespace crimson::editor
 {
@@ -32,7 +32,6 @@ namespace crimson::editor
         ImportCache::Engine().SetFolder(paths::EngineCacheFolder());
 
         const std::filesystem::path configFolder = paths::UserConfigFolder();
-        m_imguiIniPath = (configFolder / "imgui.ini").string();
 
         // The window is made for its API, as OpenGL needs a context and Vulkan has none, so a fallback makes a new one
         const auto createGraphics = [this](GraphicsApi api)
@@ -57,8 +56,7 @@ namespace crimson::editor
         }
 
         // After the graphics backend is final, as the fallback above makes a new window and backend
-        m_imguiPlatform   = std::make_unique<ui::ImGuiPlatform>(*m_window);
-        m_imguiRenderer   = std::make_unique<ui::ImGuiRenderer>(*m_graphicsBackend->GPUResources);
+        m_ui              = std::make_unique<ui::Host>(*m_window, *m_graphicsBackend->GPUResources, configFolder / "imgui.ini");
 
         m_input           = std::make_unique<Input>();
         m_icons           = std::make_unique<EditorIcons>(*m_graphicsBackend->GPUResources);
@@ -77,9 +75,6 @@ namespace crimson::editor
             .CloseProject = [this] { m_closeProjectRequested = true; }
         });
 
-        ImGui::GetIO().IniFilename = m_imguiIniPath.c_str();
-        ui::theme::Apply(m_window->GetContentScale());
-
         m_lastTime = std::chrono::steady_clock::now();
 
         if (projectPath.empty())
@@ -92,17 +87,6 @@ namespace crimson::editor
             ShowProject(std::move(*project));
         else
             ShowProjectManager(std::move(project.error()));
-    }
-
-    EditorApplication::ImGuiContextOwner::ImGuiContextOwner()
-    {
-        IMGUI_CHECKVERSION();
-        ImGui::CreateContext();
-    }
-
-    EditorApplication::ImGuiContextOwner::~ImGuiContextOwner()
-    {
-        ImGui::DestroyContext();
     }
 
     EditorApplication::~EditorApplication()
@@ -200,33 +184,22 @@ namespace crimson::editor
         if (!renderer.CanRender())
             return;
 
-        m_imguiPlatform->NewFrame(deltaTime);
-        ImGui::NewFrame();
+        m_ui->BeginFrame(deltaTime);
 
         FrameRecorder frame = renderer.BeginRecording();
         m_mode->Record(frame);
 
         // After the passes, so the UI sees the world transforms they updated
-        m_mode->OnImGui();
-        ImGui::Render();
-        RecordUIPass(frame);
+        m_mode->DrawUI();
+        m_ui->EndFrame(frame);
 
         renderer.Submit(std::move(frame));
-    }
-
-    void EditorApplication::RecordUIPass(FrameRecorder& frame)
-    {
-        // Everything the draw data holds is copied while recording
-        m_imguiRenderer->Record(frame, *ImGui::GetDrawData(), PassInfo{
-            .Name = "UI",
-            .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(ui::theme::AppBackground.x, ui::theme::AppBackground.y, ui::theme::AppBackground.z, 1.0f) }
-        });
     }
 
 	void EditorApplication::OnEvent(Event& event)
 	{
         m_input->OnEvent(event);
-        m_imguiPlatform->OnEvent(event);
+        m_ui->OnEvent(event);
 
 		EventDispatcher dispatcher(event);
 

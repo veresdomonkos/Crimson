@@ -3,13 +3,15 @@
 #include <algorithm>
 #include <cmath>
 
-#include <imgui.h>
-
+#include "crimson_editor/panels/asset_look.hpp"
 #include "crimson_editor/ui/asset_drag.hpp"
 #include "crimson_editor/ui/asset_tiles.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
-#include "crimson_editor/ui/imgui_renderer.hpp"
+#include "crimson_editor/ui/input.hpp"
+#include "crimson_editor/ui/layout.hpp"
+#include "crimson_editor/ui/painter.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 
 namespace crimson::editor::ui
 {
@@ -26,24 +28,22 @@ namespace crimson::editor::ui
 
     bool AssetField(const char* id, EditorContext& context, AssetType type, AssetID& current, AssetID whenEmpty)
     {
-        const ImGuiStyle& style = ImGui::GetStyle();
         const AssetManager& assets = context.Session.GetAssets();
 
-        const ImGuiID owner = ImGui::GetID(id);
-        const float height = ImGui::GetFrameHeight();
+        const ui::WidgetId owner = ui::IdOf(id);
+        const float height = ui::FrameHeight();
+        const float rounding = ui::FrameRounding();
 
         // One frame holds the icon, the name and the picker button, which is drawn over its right end. The frame is the
         // drop target, so its highlight covers all of it.
-        ImGui::SetNextItemAllowOverlap();
-        const bool frameClicked = ImGui::InvisibleButton(id, ImVec2(std::max(ImGui::CalcItemWidth(), height * 2.0f), height));
-        const bool frameHovered = ImGui::IsItemHovered();
-        const ImVec2 min = ImGui::GetItemRectMin();
-        const ImVec2 max = ImGui::GetItemRectMax();
+        const bool frameClicked = ui::HitArea(id, glm::vec2(std::max(ui::ItemWidth(), height * 2.0f), height), true);
+        const bool frameHovered = ui::item::Hovered();
+        const ui::Rect frame = ui::item::Bounds();
 
-        const AssetID dropped = asset_drag::AcceptOnLastItem(assets, type, ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+        const AssetID dropped = asset_drag::AcceptOnLastItem(assets, type, ui::drag_drop::DropLook::None);
 
-        const float nameRight = max.x - height;
-        const bool overName = ImGui::GetIO().MousePos.x < nameRight;
+        const float nameRight = frame.Max.x - height;
+        const bool overName = ui::input::MousePosition().x < nameRight;
         const bool hovered = frameHovered && overName;
 
         // What it shows, which is what an empty one uses if it says so. Choices are compared with what is stored.
@@ -59,66 +59,68 @@ namespace crimson::editor::ui
         if (hovered)
         {
             if (missing)
-                ImGui::SetTooltip("The file isn't there. The reference is kept, and works again once it is back.");
+                ui::Tooltip("The file isn't there. The reference is kept, and works again once it is back.", ui::TooltipDelay::None);
             else if (showsFallback)
-                ImGui::SetTooltip("Empty, so it uses %s", info ? info->Path.c_str() : "nothing");
+                ui::Tooltip("Empty, so it uses " + (info ? info->Path : std::string("nothing")), ui::TooltipDelay::None);
             else if (info)
-                ImGui::SetTooltip("%s", info->Path.c_str());
+                ui::Tooltip(info->Path, ui::TooltipDelay::None);
         }
 
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        drawList->AddRectFilled(min, max, ImGui::GetColorU32(hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg), style.FrameRounding);
+        ui::Painter painter;
+        painter.FillRect(frame, hovered ? ui::theme::Hover : ui::theme::FrameBackground, rounding);
 
         if (context.Picker.IsOpenFor(owner))
-            drawList->AddRect(min, max, ImGui::GetColorU32(theme::Accent), style.FrameRounding, 0, theme::Scaled(theme::BorderSize));
+            painter.StrokeRect(frame, ui::theme::Accent, rounding, ui::theme::Scaled(ui::theme::BorderSize));
 
         // The picker button, a square at the right end whose icon is centered by what it draws
-        ImGui::SetCursorScreenPos(ImVec2(nameRight, min.y));
-        ImGui::PushID(id);
-        const bool pickerClicked = ImGui::InvisibleButton("##Pick", ImVec2(height, height));
-        ImGui::PopID();
+        const ui::Rect button{ glm::vec2(nameRight, frame.Min.y), frame.Max };
+
+        ui::SetCursor(button.Min);
+        const bool pickerClicked = [&]
+        {
+            const ui::IdScope scope(id);
+            return ui::HitArea("##Pick", glm::vec2(height, height));
+        }();
 
         if (pickerClicked)
-            context.Picker.Open(owner, type, shown, ImVec2(min.x, max.y));
+            context.Picker.Open(owner, type, shown, glm::vec2(frame.Min.x, frame.Max.y));
 
-        if (ImGui::IsItemHovered())
-        {
-            const ImGuiCol color = ImGui::IsItemActive() ? ImGuiCol_ButtonActive : ImGuiCol_ButtonHovered;
-            drawList->AddRectFilled(ImVec2(nameRight, min.y), max, ImGui::GetColorU32(color), style.FrameRounding, ImDrawFlags_RoundCornersRight);
-        }
+        if (ui::item::Hovered())
+            painter.FillRect(button, ui::item::Active() ? ui::theme::Pressed : ui::theme::Hover, rounding, ui::Corners::Right);
 
         // Icons are as big as the text, in a box of that size at the middle of their square
-        const float iconSize = ImGui::GetFontSize();
-        const auto drawIcon = [&](float left, const char* icon, const ImVec4& color)
+        const float iconSize = ui::FontSize();
+        const auto drawIcon = [&](float left, const char* icon, ui::Color color)
         {
-            const ImVec2 center(left + height * 0.5f, min.y + height * 0.5f);
-            tiles::DrawIcon(drawList, ImVec2(center.x - iconSize * 0.5f, center.y - iconSize * 0.5f), ImVec2(center.x + iconSize * 0.5f, center.y + iconSize * 0.5f), icon, color);
+            const glm::vec2 center(left + height * 0.5f, frame.Min.y + height * 0.5f);
+            painter.Icon(ui::Rect{ center - glm::vec2(iconSize * 0.5f), center + glm::vec2(iconSize * 0.5f) }, icon, color);
         };
 
-        drawIcon(nameRight, icons::kPicker, style.Colors[ImGuiCol_Text]);
+        drawIcon(nameRight, ui::icons::kPicker, ui::theme::Text);
 
         // Not for a missing one, as the empty thumbnail would be kept after the file is back
         const TextureHandle picture = type.Is<TextureAsset>() && info ? context.Thumbnails.Get(assets.As<TextureAsset>(shown)) : TextureHandle{};
 
         if (picture)
         {
-            const float inset = std::round(style.FramePadding.y * 0.5f);
+            const float inset = std::round(ui::FramePadding().y * 0.5f);
             const float side = height - inset * 2.0f;
-            drawList->AddImage(ToImTextureID(picture), ImVec2(min.x + inset, min.y + inset), ImVec2(min.x + inset + side, min.y + inset + side));
+            painter.Image(picture, ui::Rect{ frame.Min + glm::vec2(inset), frame.Min + glm::vec2(inset + side) });
         }
         else
         {
-            drawIcon(min.x, icons::ForAsset(type), theme::AssetColor(type));
+            drawIcon(frame.Min.x, AssetIcon(type), AssetColor(type));
         }
 
-        const ImVec4 textColor = missing ? theme::Warning : showsFallback || (info && info->ReadOnly) ? theme::TextMuted : style.Colors[ImGuiCol_Text];
+        const ui::Color textColor = missing ? ui::theme::Warning : showsFallback || (info && info->ReadOnly) ? ui::theme::TextMuted : ui::theme::Text;
         const std::string text = AssetFieldText(assets, shown, type);
 
-        drawList->PushClipRect(ImVec2(min.x, min.y), ImVec2(nameRight, max.y), true);
-        drawList->AddText(ImVec2(min.x + height, min.y + style.FramePadding.y), ImGui::GetColorU32(textColor), text.c_str());
-        drawList->PopClipRect();
+        {
+            const ui::ClipScope clip(ui::Rect{ frame.Min, glm::vec2(nameRight, frame.Max.y) });
+            painter.Text(glm::vec2(frame.Min.x + height, frame.Min.y + ui::FramePadding().y), textColor, text);
+        }
 
-        asset_drag::DrawDropHighlight(assets, type, min, max, style.FrameRounding);
+        asset_drag::DrawDropHighlight(assets, type, frame, rounding);
 
         bool changed = false;
 

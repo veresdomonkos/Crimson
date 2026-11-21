@@ -15,8 +15,7 @@
 #include "crimson_editor/editor_icons.hpp"
 #include "crimson_editor/editor_settings.hpp"
 #include "crimson_editor/recent_projects.hpp"
-#include "crimson_editor/ui/imgui_platform.hpp"
-#include "crimson_editor/ui/imgui_renderer.hpp"
+#include "crimson_editor/ui/host.hpp"
 
 namespace crimson::editor
 {
@@ -41,7 +40,6 @@ namespace crimson::editor
 	private:
 	    // --- Frame ---
         void RenderFrame(float deltaTime);
-	    void RecordUIPass(FrameRecorder& frame);
 
 	    // --- Modes ---
 	    void ShowProjectManager(std::string error = {});
@@ -54,25 +52,11 @@ namespace crimson::editor
 	    bool m_running;
         std::chrono::steady_clock::time_point m_lastTime;
 
-        // ImGui only keeps a pointer to this, so it has to outlive the context
-        std::string m_imguiIniPath;
-
-        // Owns the ImGui context
-        struct ImGuiContextOwner
-        {
-            ImGuiContextOwner();
-            ~ImGuiContextOwner();
-            ImGuiContextOwner(const ImGuiContextOwner&) = delete;
-            ImGuiContextOwner& operator=(const ImGuiContextOwner&) = delete;
-        };
-
         std::unique_ptr<Window>          m_window;
         std::unique_ptr<GraphicsBackend> m_graphicsBackend;
 
-        // After the backend, so the ImGui textures are destroyed while it is there, and the context goes after them
-        ImGuiContextOwner                   m_imguiContext;
-        std::unique_ptr<ui::ImGuiPlatform>  m_imguiPlatform;
-        std::unique_ptr<ui::ImGuiRenderer>  m_imguiRenderer;
+        // After the backend, so what the UI made on the GPU is destroyed while it is there
+        std::unique_ptr<ui::Host>        m_ui;
 
 	    std::unique_ptr<Input>           m_input;
 	    std::unique_ptr<EditorIcons>     m_icons;

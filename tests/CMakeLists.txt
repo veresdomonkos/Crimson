@@ -57,6 +57,7 @@ target_link_libraries(CrimsonTests
     PRIVATE
         Engine
         EditorCore
+        imgui
         Catch2::Catch2WithMain
 )
 
@@ -79,12 +80,14 @@ add_executable(CrimsonGpuTests
     gpu/test_rendering.cpp
 )
 
-target_include_directories(CrimsonGpuTests PRIVATE .)
+# The UI layer's private headers, for the tests of its glue
+target_include_directories(CrimsonGpuTests PRIVATE . ${PROJECT_SOURCE_DIR}/editor/ui/src)
 
 target_link_libraries(CrimsonGpuTests
     PRIVATE
         Engine
         EditorCore
+        imgui
         Catch2::Catch2
 )
 

@@ -1,15 +1,13 @@
 #pragma once
-#include <array>
 #include <functional>
 #include <string>
 #include <unordered_set>
 #include <vector>
 
-#include <imgui.h>
-
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/panel.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 
 namespace crimson::editor::ui
 {
@@ -51,11 +49,11 @@ namespace crimson::editor::ui
 
         // The entity whose name is being edited in place, if any
         entt::entity m_renaming = entt::null;
-        std::array<char, 256> m_renameBuffer{};
+        std::string m_renameName;
         bool m_focusRename = false;
 
         // While searching, what matches and what has a match under it, as only those are shown
-        ImGuiTextFilter m_filter;
+        ui::SearchFilter m_filter;
         std::unordered_set<entt::entity> m_shown;
     };
 }

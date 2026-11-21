@@ -1,7 +1,6 @@
 #include "crimson_editor/project_manager_mode.hpp"
 
 #include <algorithm>
-#include <cstring>
 #include <system_error>
 #include <utility>
 
@@ -12,13 +11,17 @@
 #include "crimson_editor/file_dialog.hpp"
 #include "crimson_editor/recent_projects.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
-#include "crimson_editor/ui/imgui_renderer.hpp"
+#include "crimson_editor/ui/input.hpp"
+#include "crimson_editor/ui/layout.hpp"
+#include "crimson_editor/ui/menus.hpp"
+#include "crimson_editor/ui/painter.hpp"
+#include "crimson_editor/ui/widgets.hpp"
+#include "crimson_editor/ui/window.hpp"
 
 namespace fs = std::filesystem;
 
 namespace crimson::editor
 {
-    constexpr const char* kNewProjectPopup = "New Project";
     constexpr const char* kLogoIcon = "icons/crimson.png";
 
     ProjectManagerMode::ProjectManagerMode(EditorServices& services, std::string error)
@@ -45,132 +48,104 @@ namespace crimson::editor
             m_selected = m_projects.empty() ? fs::path() : m_projects.front().Path;
     }
 
-    void ProjectManagerMode::OnImGui()
+    void ProjectManagerMode::DrawUI()
     {
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->Pos);
-        ImGui::SetNextWindowSize(viewport->Size);
-
-        // No saved settings, so that the editor's layout stays untouched
-        constexpr ImGuiWindowFlags kFlags =
-            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
-            ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoDocking;
-
-        ImGui::Begin("Project Manager", nullptr, kFlags);
+        const ui::WindowScope window("Project Manager", ui::WindowKind::Fullscreen);
 
         DrawHeader();
         DrawToolbar();
         DrawProjectList();
         DrawNewProjectPopup();
-
-        ImGui::End();
     }
 
     void ProjectManagerMode::DrawHeader()
     {
         const float logoSize = ui::theme::Scaled(ui::theme::SpaceXL + ui::theme::SpaceM);
 
-        if (const TextureHandle logo = m_services.Icons.Get(kLogoIcon))
         {
-            ImGui::Image(ui::ToImTextureID(logo), ImVec2(logoSize, logoSize));
-            ImGui::SameLine();
+            ui::Row row;
+
+            if (const TextureHandle logo = m_services.Icons.Get(kLogoIcon))
+                ui::Image(logo, glm::vec2(logoSize));
+
+            const ui::FontScope heading(ui::Font::Bold, ui::theme::FontHeading);
+            row.Offset((logoSize - ui::LineHeight()) * 0.5f);
+            ui::Text("Crimson Projects");
         }
 
-        {
-            const ui::theme::ScopedFont heading(ui::theme::BoldFont(), ui::theme::FontHeading);
-            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + (logoSize - ImGui::GetTextLineHeight()) * 0.5f);
-            ImGui::TextUnformatted("Crimson Projects");
-        }
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + ui::theme::Scaled(ui::theme::SpaceXS));
-        ImGui::Separator();
+        ui::SetCursor(ui::Cursor() + glm::vec2(0.0f, ui::theme::Scaled(ui::theme::SpaceXS)));
+        ui::Separator();
     }
 
     void ProjectManagerMode::DrawToolbar()
     {
-        if (ImGui::Button("New Project"))
-            BeginNewProject();
-
-        ImGui::SameLine();
-        if (ImGui::Button("Import"))
-            Import();
-
-        const bool hasSelection = !m_selected.empty();
-        ImGui::BeginDisabled(!hasSelection);
-
-        ImGui::SameLine();
-        if (ui::theme::PrimaryButton("Open"))
-            OpenSelected();
-
-        ImGui::SameLine();
-        if (ImGui::Button("Remove from List"))
-            RemoveSelected();
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-            ImGui::SetTooltip("The project's files stay on disk");
-
-        ImGui::EndDisabled();
-
-        ImGui::SameLine();
-        m_filter.Draw("##Search", -FLT_MIN);
-        if (!m_filter.IsActive() && !ImGui::IsItemActive())
         {
-            const ImVec2 min = ImGui::GetItemRectMin();
-            ImGui::GetWindowDrawList()->AddText(ImVec2(min.x + ImGui::GetStyle().FramePadding.x, min.y + ImGui::GetStyle().FramePadding.y),
-                ImGui::GetColorU32(ImGuiCol_TextDisabled), "Search");
+            ui::Row row;
+
+            if (ui::Button("New Project"))
+                BeginNewProject();
+
+            if (ui::Button("Import"))
+                Import();
+
+            {
+                const ui::Disabled disabled(m_selected.empty());
+
+                if (ui::PrimaryButton("Open"))
+                    OpenSelected();
+
+                if (ui::Button("Remove from List"))
+                    RemoveSelected();
+                ui::Tooltip("The project's files stay on disk");
+            }
+
+            ui::NextItemFills();
+            ui::SearchBox("##Search", m_filter, "Search");
         }
 
         if (!m_error.empty())
-        {
-            ImGui::PushStyleColor(ImGuiCol_Text, ui::theme::Error);
-            ImGui::TextWrapped("%s", m_error.c_str());
-            ImGui::PopStyleColor();
-        }
+            ui::WrappedText(m_error, ui::theme::Error);
     }
 
     void ProjectManagerMode::DrawProjectList()
     {
-        if (!ImGui::BeginChild("Projects", ImVec2(0, 0), ImGuiChildFlags_Borders))
-        {
-            ImGui::EndChild();
-            return;
-        }
-
-        if (m_projects.empty())
-            ImGui::TextDisabled("No projects yet. Create a new one, or import an existing one.");
-
-        const float rowHeight = ImGui::GetTextLineHeightWithSpacing() * 2.0f + ImGui::GetStyle().ItemSpacing.y;
         bool open = false;
 
-        for (const ListedProject& project : m_projects)
+        if (const ui::Region region("Projects", {}, true); region)
         {
-            if (!m_filter.PassFilter(project.Name.c_str()) && !m_filter.PassFilter(project.PathText.c_str()))
-                continue;
+            if (m_projects.empty())
+                ui::Text("No projects yet. Create a new one, or import an existing one.", ui::TextStyle::Muted);
 
-            ImGui::PushID(project.PathText.c_str());
+            const float rowHeight = ui::LineHeightWithSpacing() * 2.0f + ui::ItemSpacing().y;
 
-            if (ImGui::Selectable("##Row", project.Path == m_selected, ImGuiSelectableFlags_AllowDoubleClick, ImVec2(0, rowHeight)))
+            for (const ListedProject& project : m_projects)
             {
-                m_selected = project.Path;
-                open = ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+                if (!m_filter.Matches(project.Name) && !m_filter.Matches(project.PathText))
+                    continue;
+
+                const ui::IdScope scope(project.PathText);
+
+                if (ui::Selectable("##Row", project.Path == m_selected, ui::SelectableOptions{ .Height = rowHeight, .DoubleClick = true }))
+                {
+                    m_selected = project.Path;
+                    open = ui::input::MouseDoubleClicked(MouseButton::Left);
+                }
+
+                // Drawn on top of the row, so the two lines stay part of one clickable item
+                const ui::Rect row = ui::item::Bounds();
+                const glm::vec2 spacing = ui::ItemSpacing();
+                const glm::vec2 namePosition(row.Min.x + spacing.x, row.Min.y + spacing.y * 0.5f);
+                const glm::vec2 pathPosition(namePosition.x, namePosition.y + ui::LineHeightWithSpacing());
+
+                ui::Painter painter;
+                painter.Text(namePosition, ui::theme::Text, project.Name);
+
+                if (project.Missing)
+                    painter.Text(pathPosition, ui::theme::Error, "Missing: " + project.PathText);
+                else
+                    painter.Text(pathPosition, ui::theme::TextMuted, project.PathText);
             }
-
-            // Drawn on top of the row, so the two lines stay part of one clickable item
-            const ImGuiStyle& style = ImGui::GetStyle();
-            const ImVec2 rowMin = ImGui::GetItemRectMin();
-            const ImVec2 namePosition(rowMin.x + style.ItemSpacing.x, rowMin.y + style.ItemSpacing.y * 0.5f);
-            const ImVec2 pathPosition(namePosition.x, namePosition.y + ImGui::GetTextLineHeightWithSpacing());
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-
-            drawList->AddText(namePosition, ImGui::GetColorU32(ImGuiCol_Text), project.Name.c_str());
-
-            if (project.Missing)
-                drawList->AddText(pathPosition, ImGui::GetColorU32(ui::theme::Error), ("Missing: " + project.PathText).c_str());
-            else
-                drawList->AddText(pathPosition, ImGui::GetColorU32(ImGuiCol_TextDisabled), project.PathText.c_str());
-
-            ImGui::PopID();
         }
-
-        ImGui::EndChild();
 
         if (open)
             OpenSelected();
@@ -180,109 +155,99 @@ namespace crimson::editor
     {
         const auto recents = m_services.Recents.GetEntries();
         const fs::path parent = recents.empty() ? paths::DefaultProjectsFolder() : recents.front().Path.parent_path();
-        const std::string parentText = parent.string();
 
-        m_newName = {};
-        m_newParent = {};
-        std::strncpy(m_newParent.data(), parentText.c_str(), m_newParent.size() - 1);
+        m_newName.clear();
+        m_newParent = parent.string();
 
         UpdateNewProjectProblem();
-        m_openNewProjectPopup = true;
+        m_creating = true;
     }
 
     void ProjectManagerMode::UpdateNewProjectProblem()
     {
-        m_newProblem = Project::ValidateName(m_newName.data());
+        m_newProblem = Project::ValidateName(m_newName);
 
         if (!m_newProblem.empty())
             return;
 
-        if (m_newParent[0] == '\0')
+        if (m_newParent.empty())
         {
             m_newProblem = "Choose a location";
             return;
         }
 
         std::error_code error;
-        const fs::path target = fs::path(m_newParent.data()) / fs::path(m_newName.data());
+        const fs::path target = fs::path(m_newParent) / fs::path(m_newName);
         if (fs::exists(target, error) && !fs::is_empty(target, error))
             m_newProblem = "That folder already exists and isn't empty";
     }
 
     void ProjectManagerMode::DrawNewProjectPopup()
     {
-        if (m_openNewProjectPopup)
-        {
-            ImGui::OpenPopup(kNewProjectPopup);
-            m_openNewProjectPopup = false;
-        }
-
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(viewport->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
-        ImGui::SetNextWindowSize(ImVec2(viewport->Size.x * 0.7f, 0.0f), ImGuiCond_Appearing);
-
-        if (!ImGui::BeginPopupModal(kNewProjectPopup, nullptr, ImGuiWindowFlags_NoSavedSettings))
+        const ui::Modal modal("New Project", "NewProject", [this] { return m_creating; }, ui::ModalOptions{ .ScreenWidth = 0.7f });
+        if (!modal)
             return;
 
-        if (ImGui::IsWindowAppearing())
-            ImGui::SetKeyboardFocusHere();
-
-        ImGui::TextUnformatted("Name");
-        ImGui::SetNextItemWidth(-FLT_MIN);
-        if (ImGui::InputText("##Name", m_newName.data(), m_newName.size()))
+        ui::Text("Name");
+        ui::NextItemFills();
+        if (ui::InputText("##Name", m_newName, ui::InputOptions{ .Focus = modal.IsAppearing() }))
             UpdateNewProjectProblem();
 
-        ImGui::TextUnformatted("Location");
-        const float browseWidth = ImGui::CalcTextSize("Browse").x + ImGui::GetStyle().FramePadding.x * 2.0f;
-        ImGui::SetNextItemWidth(-(browseWidth + ImGui::GetStyle().ItemSpacing.x));
-        if (ImGui::InputText("##Location", m_newParent.data(), m_newParent.size()))
-            UpdateNewProjectProblem();
+        ui::Text("Location");
+        ui::NextItemFills(ui::ButtonWidth("Browse") + ui::ItemSpacing().x);
 
-        ImGui::SameLine();
-        if (ImGui::Button("Browse"))
         {
-            if (const auto folder = PickFolder(m_services.AppWindow, fs::path(m_newParent.data())))
-            {
-                const std::string text = folder->string();
-                std::strncpy(m_newParent.data(), text.c_str(), m_newParent.size() - 1);
-                m_newParent.back() = '\0';
+            const ui::Row row;
+
+            if (ui::InputText("##Location", m_newParent))
                 UpdateNewProjectProblem();
+
+            if (ui::Button("Browse"))
+            {
+                if (const auto folder = PickFolder(m_services.AppWindow, fs::path(m_newParent)))
+                {
+                    m_newParent = folder->string();
+                    UpdateNewProjectProblem();
+                }
             }
         }
 
-        ImGui::Spacing();
+        ui::Spacing();
 
         if (m_newProblem.empty())
-        {
-            const std::string target = (fs::path(m_newParent.data()) / fs::path(m_newName.data())).string();
-            ImGui::TextDisabled("Creates %s", target.c_str());
-        }
+            ui::Text("Creates " + (fs::path(m_newParent) / fs::path(m_newName)).string(), ui::TextStyle::Muted);
         else
+            ui::Text(m_newProblem, ui::theme::Error);
+
+        ui::Spacing();
+
+        bool create = false;
+        bool cancel = false;
+
         {
-            ImGui::TextColored(ui::theme::Error, "%s", m_newProblem.c_str());
+            const ui::Row row;
+
+            {
+                const ui::Disabled disabled(!m_newProblem.empty());
+                create = ui::PrimaryButton("Create and Open");
+            }
+
+            cancel = ui::Button("Cancel") || ui::input::KeyPressed(Key::Escape);
         }
 
-        ImGui::Spacing();
-        ImGui::BeginDisabled(!m_newProblem.empty());
-        const bool create = ui::theme::PrimaryButton("Create and Open");
-        ImGui::EndDisabled();
+        if (cancel)
+            m_creating = false;
 
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
-            ImGui::CloseCurrentPopup();
-
-        if (create || (m_newProblem.empty() && ImGui::IsKeyPressed(ImGuiKey_Enter, false)))
+        if (create || (m_newProblem.empty() && ui::input::KeyPressed(Key::Enter)))
         {
             CreateNewProject();
-            ImGui::CloseCurrentPopup();
+            m_creating = false;
         }
-
-        ImGui::EndPopup();
     }
 
     void ProjectManagerMode::CreateNewProject()
     {
-        auto project = Project::Create(fs::path(m_newParent.data()), m_newName.data());
+        auto project = Project::Create(fs::path(m_newParent), m_newName);
         if (!project)
         {
             m_error = project.error();

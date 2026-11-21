@@ -1,15 +1,8 @@
 #pragma once
 #include <string_view>
 
-#include <crimson/asset_manager/asset_types.hpp>
-#include <crimson/asset_manager/importers/material_asset.hpp>
-#include <crimson/asset_manager/importers/mesh_asset.hpp>
-#include <crimson/asset_manager/importers/scene_asset.hpp>
-#include <crimson/asset_manager/importers/shader_asset.hpp>
-#include <crimson/asset_manager/importers/texture_asset.hpp>
-
 // Icons from the Lucide font (editor/ui/resources/fonts/lucide.ttf, version 1.61.0), merged into the editor's fonts, so they
-// can go straight into a label: ImGui::Button(icons::kMove). Only the icons the editor uses are here. To add one, find its
+// can go straight into a label: ui::Button(icons::kMove). Only the icons the editor uses are here. To add one, find its
 // codepoint in the codepoints.json of the same Lucide release, and write it as UTF-8.
 
 namespace crimson::editor::ui::icons
@@ -40,17 +33,6 @@ namespace crimson::editor::ui::icons
     inline constexpr const char* kSuccess = "\xEE\x88\xA6"; // circle-check, U+E226
     inline constexpr const char* kInfo = "\xEE\x83\xB9"; // info, U+E0F9
     inline constexpr const char* kPicker = "\xEE\x8D\x85"; // circle-dot, U+E345
-
-    inline const char* ForAsset(AssetType type)
-    {
-        if (type.Is<MeshAsset>())     return kMesh;
-        if (type.Is<MaterialAsset>()) return kMaterial;
-        if (type.Is<ShaderAsset>())   return kShader;
-        if (type.Is<TextureAsset>())  return kTexture;
-        if (type.Is<SceneAsset>())    return kScene;
-
-        return kFile;
-    }
 
     // An icon by its Lucide name, which is how a component registers its own. Null for a name that isn't here.
     inline const char* Named(std::string_view name)

@@ -9,11 +9,6 @@
 
 namespace crimson::editor::ui
 {
-    // An ImGui texture id holds the engine's texture handle, so drawing an image takes no registering and a texture can be
-    // destroyed without telling ImGui first. The invalid handle is ImGui's no texture, as both are 0.
-    [[nodiscard]] inline ImTextureID ToImTextureID(TextureHandle texture) { return static_cast<ImTextureID>(texture.GetRaw()); }
-    [[nodiscard]] inline TextureHandle FromImTextureID(ImTextureID id) { return TextureHandle::FromRaw(id); }
-
     // Draws ImGui's draw data through the engine's own API: one shared material, a texture for each draw by its
     // properties, and ImGui's own textures (the fonts) kept as engine textures. It needs an ImGui context for as long as
     // it lives.

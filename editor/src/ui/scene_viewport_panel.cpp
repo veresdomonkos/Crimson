@@ -3,12 +3,17 @@
 #include <algorithm>
 #include <filesystem>
 
-#include <glm/gtc/type_ptr.hpp>
-
 #include <crimson/scene/scene_serializer.hpp>
 
+#include <format>
+#include <optional>
+
 #include "crimson_editor/ui/asset_drag.hpp"
+#include "crimson_editor/ui/gizmo.hpp"
 #include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/input.hpp"
+#include "crimson_editor/ui/layout.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 
 namespace crimson::editor::ui
 {
@@ -35,15 +40,15 @@ namespace crimson::editor::ui
     }
 
     SceneViewportPanel::SceneViewportPanel(TextureHandle texture, float aspect, EditorContext& context, SceneView& view)
-        : ViewportPanel({ .Title = "Scene", .Icon = icons::kScene, .Slot = DockSlot::Center, .Closable = false, .FillsWindow = true }, texture, aspect),
+        : ViewportPanel({ .Title = "Scene", .Icon = ui::icons::kScene, .Slot = DockSlot::Center, .Closable = false, .FillsWindow = true }, texture, aspect),
           m_context(context), m_view(view)
     {
         // While flying, the same keys move the camera
-        const auto notFlying = [] { return !ImGui::IsMouseDown(ImGuiMouseButton_Right); };
+        const auto notFlying = [] { return !ui::input::MouseDown(MouseButton::Right); };
 
-        AddCommand({ .Shortcuts = { { Key::W } }, .Enabled = notFlying, .Run = [this] { m_operation = ImGuizmo::TRANSLATE; } });
-        AddCommand({ .Shortcuts = { { Key::E } }, .Enabled = notFlying, .Run = [this] { m_operation = ImGuizmo::ROTATE; } });
-        AddCommand({ .Shortcuts = { { Key::R } }, .Enabled = notFlying, .Run = [this] { m_operation = ImGuizmo::SCALE; } });
+        AddCommand({ .Shortcuts = { { Key::W } }, .Enabled = notFlying, .Run = [this] { m_tool = ui::GizmoTool::Move; } });
+        AddCommand({ .Shortcuts = { { Key::E } }, .Enabled = notFlying, .Run = [this] { m_tool = ui::GizmoTool::Rotate; } });
+        AddCommand({ .Shortcuts = { { Key::R } }, .Enabled = notFlying, .Run = [this] { m_tool = ui::GizmoTool::Scale; } });
 
         // What is inside an instance can't be changed here
         AddCommand({ .Shortcuts = { { Key::Delete } },
@@ -63,12 +68,12 @@ namespace crimson::editor::ui
                      } });
     }
 
-    void SceneViewportPanel::OnImageDrawn(const ImVec2& position, const ImVec2& size)
+    void SceneViewportPanel::OnImageDrawn(glm::vec2 position, glm::vec2 size)
     {
         HandleAssetDrop(position, size);
 
         // Left clicks focus a window by themselves, but flying starts with a right click
-        if (IsHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        if (IsHovered() && ui::input::MouseClicked(MouseButton::Right))
             Show();
 
         DrawGizmo(position, size);
@@ -76,15 +81,13 @@ namespace crimson::editor::ui
         HandlePicking(position, size);
     }
 
-    void SceneViewportPanel::HandlePicking(const ImVec2& position, const ImVec2& size)
+    void SceneViewportPanel::HandlePicking(glm::vec2 position, glm::vec2 size)
     {
-        const ImGuiIO& io = ImGui::GetIO();
-
-        if (!IsHovered() || !ImGui::IsMouseClicked(ImGuiMouseButton_Left) || io.KeyAlt)
+        if (!IsHovered() || !ui::input::MouseClicked(MouseButton::Left) || HasModifier(ui::input::Modifiers(), KeyModifiers::Alt))
             return;
 
         // These clicks belong to the toolbar and the gizmo. A viewport image doesn't count as a hovered item.
-        if (ImGui::IsAnyItemHovered() || (m_context.Session.GetSelected() && ImGuizmo::IsOver()))
+        if (ui::input::IsAnyItemHovered() || (m_context.Session.GetSelected() && ui::IsOverGizmo()))
             return;
 
         glm::vec3 origin;
@@ -102,10 +105,9 @@ namespace crimson::editor::ui
         m_context.Session.SelectEntity(entity);
     }
 
-    bool SceneViewportPanel::GetRayUnderMouse(const ImVec2& position, const ImVec2& size, glm::vec3& origin, glm::vec3& direction) const
+    bool SceneViewportPanel::GetRayUnderMouse(glm::vec2 position, glm::vec2 size, glm::vec3& origin, glm::vec3& direction) const
     {
-        const ImGuiIO& io = ImGui::GetIO();
-        const glm::vec2 uv((io.MousePos.x - position.x) / size.x, (io.MousePos.y - position.y) / size.y);
+        const glm::vec2 uv = (ui::input::MousePosition() - position) / size;
 
         // The bars around the image aren't part of the scene
         if (uv.x < 0.0f || uv.x > 1.0f || uv.y < 0.0f || uv.y > 1.0f)
@@ -124,7 +126,7 @@ namespace crimson::editor::ui
         return true;
     }
 
-    void SceneViewportPanel::HandleAssetDrop(const ImVec2& position, const ImVec2& size)
+    void SceneViewportPanel::HandleAssetDrop(glm::vec2 position, glm::vec2 size)
     {
         const ComponentRegistry& components = m_context.Session.GetAssets().Components();
 
@@ -203,63 +205,57 @@ namespace crimson::editor::ui
         }
     }
 
-    void SceneViewportPanel::DrawToolbar(const ImVec2& position)
+    void SceneViewportPanel::DrawToolbar(glm::vec2 position)
     {
-        const float margin = theme::Scaled(theme::SpaceS);
+        const float margin = ui::theme::Scaled(ui::theme::SpaceS);
 
-        ImGui::SetCursorScreenPos(ImVec2(position.x + margin, position.y + margin));
+        ui::SetCursor(position + glm::vec2(margin));
 
-        const auto operationButton = [this](const char* icon, const char* name, const char* shortcut, ImGuizmo::OPERATION operation)
+        ui::Row row;
+
+        const auto toolButton = [this](const char* icon, const char* name, const char* shortcut, ui::GizmoTool tool)
         {
-            const bool active = m_operation == operation;
+            const ui::IdScope scope(name);
+            if (ui::ToggleButton(icon, m_tool == tool))
+                m_tool = tool;
 
-            ImGui::PushID(name);
-            if (theme::ToggleButton(icon, active))
-                m_operation = operation;
-            ImGui::PopID();
-
-            ImGui::SetItemTooltip("%s (%s)", name, shortcut);
-
-            ImGui::SameLine();
+            ui::Tooltip(std::format("{} ({})", name, shortcut));
         };
 
-        operationButton(icons::kMove, "Move", "W", ImGuizmo::TRANSLATE);
-        operationButton(icons::kRotate, "Rotate", "E", ImGuizmo::ROTATE);
-        operationButton(icons::kScale, "Scale", "R", ImGuizmo::SCALE);
+        toolButton(ui::icons::kMove, "Move", "W", ui::GizmoTool::Move);
+        toolButton(ui::icons::kRotate, "Rotate", "E", ui::GizmoTool::Rotate);
+        toolButton(ui::icons::kScale, "Scale", "R", ui::GizmoTool::Scale);
 
-        const bool local = m_mode == ImGuizmo::LOCAL;
-        if (ImGui::Button(local ? icons::kLocalSpace : icons::kWorldSpace))
-            m_mode = local ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+        const bool local = m_space == ui::GizmoSpace::Local;
+        if (ui::Button(local ? ui::icons::kLocalSpace : ui::icons::kWorldSpace))
+            m_space = local ? ui::GizmoSpace::World : ui::GizmoSpace::Local;
 
-        ImGui::SetItemTooltip(local ? "Local axes, click for world axes" : "World axes, click for local axes");
-
-        ImGui::SameLine();
+        ui::Tooltip(local ? "Local axes, click for world axes" : "World axes, click for local axes");
 
         const Entity selected = m_context.Session.GetSelected();
         const Entity looked = m_view.GetLookThrough();
         const bool looking = m_view.IsLookingThrough();
 
-        ImGui::BeginDisabled(!looking && !(selected && selected.HasComponent<CameraComponent>()));
-
-        ImGui::PushID("LookThrough");
-        if (theme::ToggleButton(icons::kCamera, looking))
         {
-            if (looking)
-                m_view.StopLookingThrough();
-            else
-                m_view.LookThrough(selected);
-        }
-        ImGui::PopID();
+            const ui::Disabled disabled(!looking && !(selected && selected.HasComponent<CameraComponent>()));
 
-        ImGui::EndDisabled();
+            const ui::IdScope scope("LookThrough");
+            if (ui::ToggleButton(ui::icons::kCamera, looking))
+            {
+                if (looking)
+                    m_view.StopLookingThrough();
+                else
+                    m_view.LookThrough(selected);
+            }
+        }
 
         if (looking)
-            ImGui::SetItemTooltip("Stop looking through %s", looked.GetComponent<NameComponent>().Name.c_str());
+            ui::Tooltip("Stop looking through " + looked.GetComponent<NameComponent>().Name);
         else
-            ImGui::SetItemTooltip("Look through the selected camera");
+            ui::Tooltip("Look through the selected camera");
     }
 
-    void SceneViewportPanel::DrawGizmo(const ImVec2& position, const ImVec2& size)
+    void SceneViewportPanel::DrawGizmo(glm::vec2 position, glm::vec2 size)
     {
         const Entity entity = m_context.Session.GetSelected();
         if (!entity || entity.HasComponent<InstancedComponent>())
@@ -269,37 +265,27 @@ namespace crimson::editor::ui
         if (entity == m_view.GetLookThrough())
             return;
 
-        // Holding alt is for moving the camera
-        ImGuizmo::Enable(!ImGui::GetIO().KeyAlt);
+        constexpr float translateSnap = 0.5f;
+        constexpr float rotateSnap = 15.0f;
+        constexpr float scaleSnap = 0.1f;
 
-        // The handles always point along the positive axes, as in Unity, rather than turning to face the camera
-        ImGuizmo::AllowAxisFlip(false);
+        const float snapValue = m_tool == ui::GizmoTool::Move ? translateSnap
+            : m_tool == ui::GizmoTool::Rotate ? rotateSnap : scaleSnap;
 
-        ImGuizmo::SetDrawlist();
-        ImGuizmo::SetRect(position.x, position.y, size.x, size.y);
-
-        const float translateSnap = 0.5f;
-        const float rotateSnap = 15.0f;
-        const float scaleSnap = 0.1f;
-
-        const float snapValue = m_operation == ImGuizmo::TRANSLATE ? translateSnap
-            : m_operation == ImGuizmo::ROTATE ? rotateSnap : scaleSnap;
-
-        const glm::vec3 snap(snapValue);
-        const bool snapping = ImGui::GetIO().KeyCtrl;
+        const KeyModifiers modifiers = ui::input::Modifiers();
 
         Scene& scene = m_context.Session.GetScene();
 
         const CameraView view = m_view.GetView();
         glm::mat4 world = scene.ComputeWorldMatrix(entity);
 
-        // Only an orthographic projection has a 1 there
-        ImGuizmo::SetOrthographic(view.Projection[3][3] == 1.0f);
-
-        ImGuizmo::Manipulate(glm::value_ptr(view.View), glm::value_ptr(view.Projection), m_operation, m_mode,
-            glm::value_ptr(world), nullptr, snapping ? glm::value_ptr(snap) : nullptr);
-
-        m_context.GizmoInUse = ImGuizmo::IsUsing();
+        m_context.GizmoInUse = ui::Gizmo(ui::Rect{ position, position + size }, view.View, view.Projection, world, ui::GizmoOptions{
+            .Tool = m_tool,
+            .Space = m_space,
+            // Holding alt is for moving the camera
+            .Enabled = !HasModifier(modifiers, KeyModifiers::Alt),
+            .Snap = HasModifier(modifiers, KeyModifiers::Control) ? std::optional<float>(snapValue) : std::nullopt
+        });
 
         if (m_context.GizmoInUse)
         {

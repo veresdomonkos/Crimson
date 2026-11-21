@@ -11,6 +11,8 @@
 #include <imgui.h>
 
 #include "crimson_editor/ui/editor_theme.hpp"
+#include "imgui_convert.hpp"
+#include "theme_style.hpp"
 
 using namespace crimson::editor::ui;
 
@@ -67,7 +69,7 @@ TEST_CASE("The accent appears only on selection, focus, the active tab line and 
         ImGuiCol_DragDropTarget, ImGuiCol_DragDropTargetBg, ImGuiCol_DockingPreview
     };
 
-    const ImVec4 accents[] = { theme::Accent, theme::AccentHover, theme::AccentPressed, theme::Selection, theme::TextSelection };
+    const ImVec4 accents[] = { ToImVec4(theme::Accent), ToImVec4(theme::AccentHover), ToImVec4(theme::AccentPressed), ToImVec4(theme::Selection), ToImVec4(theme::TextSelection) };
 
     for (int slot = 0; slot < ImGuiCol_COUNT; ++slot)
     {
@@ -92,9 +94,9 @@ TEST_CASE("Body text is 13 to 14 px and follows the monitor's scale", "[editor][
         CHECK(style.FontSizeBase <= 14.0f);
         CHECK(style.FontScaleDpi == 1.0f);
 
-        REQUIRE(theme::RegularFont() != nullptr);
-        REQUIRE(theme::BoldFont() != nullptr);
-        CHECK(theme::RegularFont() != theme::BoldFont());
+        REQUIRE(theme::FontOf(Font::Regular) != nullptr);
+        REQUIRE(theme::FontOf(Font::Bold) != nullptr);
+        CHECK(theme::FontOf(Font::Regular) != theme::FontOf(Font::Bold));
     }
 
     SECTION("At 200% the text is drawn larger rather than stretched")
@@ -152,12 +154,12 @@ TEST_CASE("Panels write out no colors, radii or font sizes", "[editor][theme]")
     REQUIRE(std::filesystem::is_directory(folder));
 
     const std::regex forbidden(
-        R"(ImVec4\s*\(\s*-?[0-9.]|IM_COL32|ImColor\s*\(|PushStyleVar\s*\(\s*ImGuiStyleVar_\w*Rounding|Rounding\s*\*|PushFont\s*\([^,)]*,\s*-?[0-9.])");
+        R"(\bColor\s*[({]\s*-?[0-9.]|\.(FillRect|StrokeRect)\s*\([^;]*,\s*[0-9.]+f?\s*[,)]|FontScope\s*\([^;]*,\s*-?[0-9.])");
 
     int checked = 0;
     for (const auto& entry : std::filesystem::directory_iterator(folder))
     {
-        if (entry.path().extension() != ".cpp" || entry.path().filename() == "editor_theme.cpp")
+        if (entry.path().extension() != ".cpp")
             continue;
 
         std::ifstream stream(entry.path(), std::ios::binary);

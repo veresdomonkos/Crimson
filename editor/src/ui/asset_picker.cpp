@@ -5,10 +5,16 @@
 #include <cmath>
 
 #include "crimson_editor/asset_thumbnails.hpp"
+#include "crimson_editor/panels/asset_look.hpp"
 #include "crimson_editor/ui/asset_tiles.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
-#include "crimson_editor/ui/imgui_renderer.hpp"
+#include "crimson_editor/ui/input.hpp"
+#include "crimson_editor/ui/layout.hpp"
+#include "crimson_editor/ui/menus.hpp"
+#include "crimson_editor/ui/painter.hpp"
+#include "crimson_editor/ui/widgets.hpp"
+#include "crimson_editor/ui/window.hpp"
 
 namespace crimson::editor::ui
 {
@@ -75,7 +81,7 @@ namespace crimson::editor::ui
         }
     }
 
-    void AssetPicker::Open(ImGuiID owner, AssetType type, AssetID current, ImVec2 below)
+    void AssetPicker::Open(ui::WidgetId owner, AssetType type, AssetID current, glm::vec2 below)
     {
         m_owner = owner;
         m_type = type;
@@ -83,7 +89,7 @@ namespace crimson::editor::ui
         m_original = current;
         m_pending.reset();
         m_changed = false;
-        m_search = {};
+        m_search.clear();
         m_open = true;
         m_fieldDrawn = true;
         m_justOpened = true;
@@ -132,11 +138,10 @@ namespace crimson::editor::ui
 
     void AssetPicker::SetSearch(std::string_view search)
     {
-        m_search = {};
-        search.copy(m_search.data(), m_search.size() - 1);
+        m_search = search;
     }
 
-    std::optional<AssetID> AssetPicker::TakeChoice(ImGuiID owner)
+    std::optional<AssetID> AssetPicker::TakeChoice(ui::WidgetId owner)
     {
         if (m_owner != owner)
             return std::nullopt;
@@ -165,32 +170,33 @@ namespace crimson::editor::ui
     {
         EndFrame();
 
-        // Before the popup, as ImGui closes it on Escape by itself
-        if (m_open && !m_justOpened && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+        // Before the popup, as it closes on Escape by itself
+        if (m_open && !m_justOpened && ui::input::KeyPressed(Key::Escape))
             Cancel();
 
         if (m_justOpened)
         {
-            ImGui::OpenPopup(kPopupId);
+            ui::Popup::Open(kPopupId);
             m_justOpened = false;
         }
 
-        if (!m_open && !ImGui::IsPopupOpen(kPopupId))
+        if (!m_open && !ui::Popup::IsOpen(kPopupId))
             return;
 
-        const ImGuiStyle& style = ImGui::GetStyle();
-        const float bodyWidth = std::round(ImGui::GetFontSize() * kBodyWidthEms);
-        const float bodyHeight = std::round(ImGui::GetFontSize() * kBodyHeightEms);
+        const float bodyWidth = std::round(ui::FontSize() * kBodyWidthEms);
+        const float bodyHeight = std::round(ui::FontSize() * kBodyHeightEms);
+        const glm::vec2 padding = ui::WindowPadding();
+        const glm::vec2 spacing = ui::ItemSpacing();
 
         // Kept on screen by what the window takes: the body, the search row, the title and the padding
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        const ImVec2 size(bodyWidth + style.WindowPadding.x * 2.0f, bodyHeight + ImGui::GetFrameHeight() + ImGui::GetTextLineHeight() + style.ItemSpacing.y * 2.0f + style.WindowPadding.y * 2.0f);
-        const ImVec2 position(std::clamp(m_position.x, viewport->WorkPos.x, std::max(viewport->WorkPos.x, viewport->WorkPos.x + viewport->WorkSize.x - size.x)),
-                              std::clamp(m_position.y, viewport->WorkPos.y, std::max(viewport->WorkPos.y, viewport->WorkPos.y + viewport->WorkSize.y - size.y)));
-        ImGui::SetNextWindowPos(position, ImGuiCond_Appearing);
+        const ui::Rect work = ui::WorkArea();
+        const glm::vec2 size(bodyWidth + padding.x * 2.0f, bodyHeight + ui::FrameHeight() + ui::LineHeight() + spacing.y * 2.0f + padding.y * 2.0f);
+        const glm::vec2 position(std::clamp(m_position.x, work.Min.x, std::max(work.Min.x, work.Max.x - size.x)),
+                                 std::clamp(m_position.y, work.Min.y, std::max(work.Min.y, work.Max.y - size.y)));
 
         // Without navigation, as the arrow keys are the picker's own and would move off the search box
-        if (!ImGui::BeginPopup(kPopupId, ImGuiWindowFlags_NoNavInputs))
+        ui::Popup popup(kPopupId, ui::PopupOptions{ .Position = position, .NoNavigation = true });
+        if (!popup)
         {
             m_open = false;
             return;
@@ -198,37 +204,34 @@ namespace crimson::editor::ui
 
         if (!m_open)
         {
-            ImGui::CloseCurrentPopup();
-            ImGui::EndPopup();
+            popup.Close();
             return;
         }
 
         {
-            const theme::ScopedBold bold;
-            ImGui::Text("Select %.*s", static_cast<int>(m_type.Name().size()), m_type.Name().data());
+            const ui::BoldScope bold;
+            ui::Text("Select " + std::string(m_type.Name()));
         }
 
-        const bool appearing = ImGui::IsWindowAppearing();
-        const float buttonWidth = ImGui::CalcTextSize("Grid").x + style.FramePadding.x * 2.0f;
+        const float buttonWidth = ui::TextSize("Grid").x + ui::FramePadding().x * 2.0f;
 
-        if (appearing)
-            ImGui::SetKeyboardFocusHere();
+        const std::string hint = std::string(ui::icons::kSearch) + " Search";
+        ui::NextItemWidth(bodyWidth - buttonWidth * 2.0f - spacing.x * 2.0f);
+        ui::InputText("##Search", m_search, ui::InputOptions{ .Hint = hint, .Focus = popup.IsAppearing() });
+        const bool typing = ui::item::Active() && !m_search.empty();
 
-        const std::string hint = std::string(icons::kSearch) + " Search";
-        ImGui::SetNextItemWidth(bodyWidth - buttonWidth * 2.0f - style.ItemSpacing.x * 2.0f);
-        ImGui::InputTextWithHint("##Search", hint.c_str(), m_search.data(), m_search.size());
-        const bool typing = ImGui::IsItemActive() && m_search[0] != '\0';
+        {
+            const ui::Row row(true);
 
-        ImGui::SameLine();
-        if (theme::ToggleButton("List", m_view == View::List, ImVec2(buttonWidth, 0.0f)))
-            m_view = View::List;
+            if (ui::ToggleButton("List", m_view == View::List, glm::vec2(buttonWidth, 0.0f)))
+                m_view = View::List;
 
-        ImGui::SameLine();
-        if (theme::ToggleButton("Grid", m_view == View::Grid, ImVec2(buttonWidth, 0.0f)))
-            m_view = View::Grid;
+            if (ui::ToggleButton("Grid", m_view == View::Grid, glm::vec2(buttonWidth, 0.0f)))
+                m_view = View::Grid;
+        }
 
         const std::vector<const AssetInfo*> listed = assets.List(m_type);
-        const std::vector<PickerEntry> entries = asset_picker::Entries(listed, m_search.data());
+        const std::vector<PickerEntry> entries = asset_picker::Entries(listed, m_search);
         int selectedIndex = IndexOf(entries, m_selected);
 
         const bool grid = m_view == View::Grid;
@@ -237,10 +240,10 @@ namespace crimson::editor::ui
         // The left and right arrows move the cursor in the search box while there is something to move through
         int dx = 0;
         int dy = 0;
-        if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) dy = -1;
-        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) dy = 1;
-        if (grid && !typing && ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) dx = -1;
-        if (grid && !typing && ImGui::IsKeyPressed(ImGuiKey_RightArrow)) dx = 1;
+        if (ui::input::KeyPressed(Key::Up, true)) dy = -1;
+        if (ui::input::KeyPressed(Key::Down, true)) dy = 1;
+        if (grid && !typing && ui::input::KeyPressed(Key::Left, true)) dx = -1;
+        if (grid && !typing && ui::input::KeyPressed(Key::Right, true)) dx = 1;
 
         if (dx != 0 || dy != 0)
         {
@@ -252,125 +255,105 @@ namespace crimson::editor::ui
             }
         }
 
-        if (ImGui::IsKeyPressed(ImGuiKey_Enter, false) || ImGui::IsKeyPressed(ImGuiKey_KeypadEnter, false))
+        if (ui::input::KeyPressed(Key::Enter) || ui::input::KeyPressed(Key::KeypadEnter))
             Confirm();
 
         if (m_open)
             DrawEntries(assets, thumbnails, entries, selectedIndex);
 
         if (!m_open)
-            ImGui::CloseCurrentPopup();
-
-        ImGui::EndPopup();
+            popup.Close();
     }
 
     void AssetPicker::DrawEntries(const AssetManager& assets, AssetThumbnails& thumbnails, const std::vector<PickerEntry>& entries, int selectedIndex)
     {
-        const ImGuiStyle& style = ImGui::GetStyle();
-        const float width = std::round(ImGui::GetFontSize() * kBodyWidthEms);
-        const float height = std::round(ImGui::GetFontSize() * kBodyHeightEms);
+        const float width = std::round(ui::FontSize() * kBodyWidthEms);
+        const float height = std::round(ui::FontSize() * kBodyHeightEms);
         const bool grid = m_view == View::Grid;
 
-        const float tileSize = std::floor((width - style.ScrollbarSize - style.ItemSpacing.x * (kGridColumns - 1)) / kGridColumns);
+        const float tileSize = std::floor((width - ui::ScrollbarSize() - ui::ItemSpacing().x * (kGridColumns - 1)) / kGridColumns);
 
-        ImGui::BeginChild("##Entries", ImVec2(width, height));
+        const ui::Region region("##Entries", glm::vec2(width, height));
+        const ui::TileGrid tiles(tileSize);
 
         for (int index = 0; index < static_cast<int>(entries.size()); ++index)
         {
             const PickerEntry& entry = entries[index];
             const bool selected = index == selectedIndex;
-            const ImVec4 nameColor = entry.Engine ? theme::TextMuted : style.Colors[ImGuiCol_Text];
-            const char* icon = entry.Id ? icons::ForAsset(m_type) : nullptr; // None has none
+            const ui::Color nameColor = entry.Engine ? ui::theme::TextMuted : ui::theme::Text;
+            const char* icon = entry.Id ? AssetIcon(m_type) : nullptr; // None has none
 
-            ImGui::PushID(index);
+            const ui::IdScope scope(index);
+            ui::Painter painter;
 
             if (grid)
             {
-                const TileLayout tile = tiles::DrawFrame("##Tile", tileSize, selected);
+                const ui::TileLayout tile = ui::Tile("##Tile", tileSize, selected);
                 if (tile.Clicked)
                     Choose(entry.Id);
 
-                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                if (ui::item::DoubleClicked())
                     Confirm();
 
-                if (ImGui::IsItemHovered() && !entry.Path.empty())
-                    ImGui::SetTooltip("%s", entry.Path.c_str());
-
-                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                if (!entry.Path.empty())
+                    ui::Tooltip(entry.Path, ui::TooltipDelay::None);
 
                 // Only pictures that are on screen get loaded
                 TextureHandle picture;
-                if (m_type.Is<TextureAsset>() && entry.Id && ImGui::IsItemVisible())
+                if (m_type.Is<TextureAsset>() && entry.Id && ui::item::Visible())
                     picture = thumbnails.Get(assets.As<TextureAsset>(entry.Id));
 
-                if (picture)
-                {
-                    const float side = std::min(tile.IconMax.x - tile.IconMin.x, tile.IconMax.y - tile.IconMin.y);
-                    const ImVec2 center((tile.IconMin.x + tile.IconMax.x) * 0.5f, (tile.IconMin.y + tile.IconMax.y) * 0.5f);
-                    drawList->AddImage(ToImTextureID(picture), ImVec2(center.x - side * 0.5f, center.y - side * 0.5f), ImVec2(center.x + side * 0.5f, center.y + side * 0.5f));
-                }
-                else if (icon)
-                {
-                    tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, icon, theme::AssetColor(m_type));
-                }
+                if (icon)
+                    DrawAssetPicture(painter, tile.Icon, m_type, picture);
 
-                tiles::DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, entry.Name.c_str(), ImGui::GetColorU32(nameColor));
-
-                if ((index + 1) % kGridColumns != 0 && index + 1 < static_cast<int>(entries.size()))
-                    ImGui::SameLine();
+                painter.ClippedText(tile.LabelPosition, tile.LabelWidth, entry.Name, nameColor);
             }
             else
             {
                 // Drawn rather than a Selectable, whose highlight is square and reaches past the row into the spacing, where
                 // the child cuts it off at the top and on the left
-                const float rowHeight = ImGui::GetTextLineHeight() + style.FramePadding.y * 2.0f;
-                const bool clicked = ImGui::InvisibleButton("##Row", ImVec2(width - style.ScrollbarSize, rowHeight));
-                const ImVec2 min = ImGui::GetItemRectMin();
-                const ImVec2 max = ImGui::GetItemRectMax();
+                const float rowHeight = ui::LineHeight() + ui::FramePadding().y * 2.0f;
+                const bool clicked = ui::HitArea("##Row", glm::vec2(width - ui::ScrollbarSize(), rowHeight));
+                const ui::Rect row = ui::item::Bounds();
 
                 if (clicked)
                     Choose(entry.Id);
 
-                if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+                if (ui::item::DoubleClicked())
                     Confirm();
 
-                if (ImGui::IsItemHovered() && !entry.Path.empty())
-                    ImGui::SetTooltip("%s", entry.Path.c_str());
+                if (!entry.Path.empty())
+                    ui::Tooltip(entry.Path, ui::TooltipDelay::None);
 
-                ImDrawList* drawList = ImGui::GetWindowDrawList();
+                if (selected)
+                    painter.FillRect(row, ui::theme::Selection, ui::FrameRounding());
+                else if (ui::item::Hovered())
+                    painter.FillRect(row, ui::theme::Hover, ui::FrameRounding());
 
-                const ImGuiCol background = selected ? ImGuiCol_Header : ImGui::IsItemHovered() ? ImGuiCol_HeaderHovered : ImGuiCol_COUNT;
-                if (background != ImGuiCol_COUNT)
-                    drawList->AddRectFilled(min, max, ImGui::GetColorU32(background), style.FrameRounding);
-
-                float x = min.x + style.FramePadding.x;
-                const float y = min.y + style.FramePadding.y;
+                float x = row.Min.x + ui::FramePadding().x;
+                const float y = row.Min.y + ui::FramePadding().y;
 
                 if (icon)
                 {
-                    drawList->AddText(ImVec2(x, y), ImGui::GetColorU32(theme::AssetColor(m_type)), icon);
-                    x += ImGui::CalcTextSize(icon).x + style.ItemInnerSpacing.x;
+                    painter.Text(glm::vec2(x, y), AssetColor(m_type), icon);
+                    x += ui::TextSize(icon).x + ui::InnerSpacing().x;
                 }
 
-                drawList->AddText(ImVec2(x, y), ImGui::GetColorU32(nameColor), entry.Name.c_str());
+                painter.Text(glm::vec2(x, y), nameColor, entry.Name);
 
                 if (entry.Engine)
                 {
-                    x += ImGui::CalcTextSize(entry.Name.c_str()).x + style.ItemInnerSpacing.x;
+                    x += ui::TextSize(entry.Name).x + ui::InnerSpacing().x;
 
-                    ImFont* font = theme::RegularFont();
-                    const float size = theme::Scaled(theme::FontSmall);
-                    drawList->AddText(font, size, ImVec2(x, min.y + (rowHeight - size) * 0.5f), ImGui::GetColorU32(theme::TextMuted), "Engine");
+                    const float size = ui::theme::Scaled(ui::theme::FontSmall);
+                    painter.Text(glm::vec2(x, row.Min.y + (rowHeight - size) * 0.5f), ui::theme::TextMuted, "Engine", ui::Font::Regular, size);
                 }
             }
 
             if (selected && m_scrollToSelected)
-                ImGui::SetScrollHereY(0.5f);
-
-            ImGui::PopID();
+                ui::ScrollHere(0.5f);
         }
 
         m_scrollToSelected = false;
-        ImGui::EndChild();
     }
 }

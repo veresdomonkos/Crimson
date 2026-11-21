@@ -4,10 +4,12 @@
 #include <string>
 #include <utility>
 
-#include <imgui.h>
-
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/input.hpp"
+#include "crimson_editor/ui/layout.hpp"
+#include "crimson_editor/ui/widgets.hpp"
+#include "crimson_editor/ui/window.hpp"
 
 namespace crimson::editor::ui
 {
@@ -29,21 +31,21 @@ namespace crimson::editor::ui
     {
         switch (kind)
         {
-            case Notifications::Kind::Error:   return icons::kError;
-            case Notifications::Kind::Warning: return icons::kWarning;
-            case Notifications::Kind::Success: return icons::kSuccess;
-            default:                           return icons::kInfo;
+            case Notifications::Kind::Error:   return ui::icons::kError;
+            case Notifications::Kind::Warning: return ui::icons::kWarning;
+            case Notifications::Kind::Success: return ui::icons::kSuccess;
+            default:                           return ui::icons::kInfo;
         }
     }
 
-    static ImVec4 Color(Notifications::Kind kind)
+    static ui::Color KindColor(Notifications::Kind kind)
     {
         switch (kind)
         {
-            case Notifications::Kind::Error:   return theme::Error;
-            case Notifications::Kind::Warning: return theme::Warning;
-            case Notifications::Kind::Success: return theme::Success;
-            default:                           return theme::Text;
+            case Notifications::Kind::Error:   return ui::theme::Error;
+            case Notifications::Kind::Warning: return ui::theme::Warning;
+            case Notifications::Kind::Success: return ui::theme::Success;
+            default:                           return ui::theme::Text;
         }
     }
 
@@ -98,17 +100,13 @@ namespace crimson::editor::ui
         while (m_shown.size() > kMaxShown)
             m_shown.erase(m_shown.begin());
 
-        const ImGuiViewport* viewport = ImGui::GetMainViewport();
-        const ImGuiStyle& style = ImGui::GetStyle();
-        const float margin = theme::Scaled(theme::SpaceL);
-        const float deltaTime = ImGui::GetIO().DeltaTime;
-
-        constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings
-            | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoMove;
+        const ui::Rect work = ui::WorkArea();
+        const float margin = ui::theme::Scaled(ui::theme::SpaceL);
+        const float deltaTime = ui::input::DeltaTime();
 
         // The newest at the bottom right, older ones stacked above it
-        float bottom = viewport->WorkPos.y + viewport->WorkSize.y - margin;
-        const float right = viewport->WorkPos.x + viewport->WorkSize.x - margin;
+        float bottom = work.Max.y - margin;
+        const float right = work.Max.x - margin;
 
         std::vector<uint64_t> dismissed;
         int slot = 0;
@@ -120,31 +118,24 @@ namespace crimson::editor::ui
             const float remaining = Lifetime(message.Type) - message.Age;
             const float alpha = std::clamp(remaining / kFadeSeconds, 0.0f, 1.0f);
 
-            ImGui::SetNextWindowPos(ImVec2(right, bottom), ImGuiCond_Always, ImVec2(1.0f, 1.0f));
-            ImGui::SetNextWindowViewport(viewport->ID);
-            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
-            ImGui::PushStyleColor(ImGuiCol_WindowBg, theme::PopupBackground);
+            // Named by place rather than by message, so the UI keeps a few windows instead of one for each message ever shown
+            const ui::OverlayWindow overlay("##Notification" + std::to_string(slot), glm::vec2(right, bottom), glm::vec2(1.0f, 1.0f), alpha);
 
-            // Named by place rather than by message, so ImGui keeps a few windows instead of one for each message ever shown
-            const std::string window = "##Notification" + std::to_string(slot);
-            if (ImGui::Begin(window.c_str(), nullptr, flags))
+            if (overlay)
             {
-                ImGui::TextColored(Color(message.Type), "%s", Icon(message.Type));
-                ImGui::SameLine();
+                {
+                    ui::Row row;
+                    ui::Text(Icon(message.Type), KindColor(message.Type));
 
-                ImGui::PushTextWrapPos(ImGui::GetCursorPosX() + ImGui::GetFontSize() * 22.0f);
-                if (message.Count > 1)
-                    ImGui::Text("%s  (x%d)", message.Text.c_str(), message.Count);
-                else
-                    ImGui::TextUnformatted(message.Text.c_str());
-                ImGui::PopTextWrapPos();
+                    ui::WrappedText(message.Count > 1 ? message.Text + "  (x" + std::to_string(message.Count) + ")" : message.Text, ui::theme::Text, ui::FontSize() * 22.0f);
+                }
 
                 const bool problem = message.Type == Kind::Error || message.Type == Kind::Warning;
                 if (problem)
-                    ImGui::TextDisabled("Click to open the Console");
+                    ui::Text("Click to open the Console", ui::TextStyle::Muted);
 
-                const bool hovered = ImGui::IsWindowHovered();
-                if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+                const bool hovered = overlay.Hovered();
+                if (hovered && ui::input::MouseClicked(MouseButton::Left))
                 {
                     if (problem)
                         m_showDetails();
@@ -156,12 +147,8 @@ namespace crimson::editor::ui
                 if (!hovered)
                     message.Age += deltaTime;
 
-                bottom -= ImGui::GetWindowHeight() + style.ItemSpacing.y;
+                bottom -= overlay.Height() + ui::ItemSpacing().y;
             }
-
-            ImGui::End();
-            ImGui::PopStyleColor();
-            ImGui::PopStyleVar();
         }
 
         std::erase_if(m_shown, [&](const Message& message)

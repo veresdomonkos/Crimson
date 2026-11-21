@@ -1,18 +1,18 @@
 #include "crimson_editor/ui/preferences_panel.hpp"
 
 #include <algorithm>
-#include <cstdio>
 #include <optional>
 #include <string>
-
-#include <imgui.h>
 
 #include <crimson/core/window.hpp>
 
 #include "crimson_editor/file_dialog.hpp"
 #include "crimson_editor/system_shell.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
+#include "crimson_editor/ui/input.hpp"
+#include "crimson_editor/ui/layout.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 
 namespace fs = std::filesystem;
 
@@ -27,7 +27,7 @@ namespace crimson::editor::ui
 
     void PreferencesPanel::Draw()
     {
-        theme::SectionTitle("External Tools");
+        ui::SectionTitle("External Tools");
         DrawScriptEditor();
     }
 
@@ -45,75 +45,72 @@ namespace crimson::editor::ui
 
         bool browse = false;
 
-        if (props::BeginTable("##ExternalTools"))
+        if (ui::props::BeginTable("##ExternalTools"))
         {
-            props::BeginRow("Script Editor");
+            ui::props::BeginRow("Script Editor");
 
-            if (ImGui::BeginCombo("##ScriptEditor", currentName.c_str()))
             {
-                if (ImGui::Selectable(kSystemDefault, current.Program.empty()))
-                    m_settings.SetScriptEditor({});
+                const ui::Combo combo("##ScriptEditor", currentName);
 
-                for (const CodeEditor& editor : m_found)
+                if (combo)
                 {
-                    ImGui::PushID(PathToUtf8(editor.Program).c_str());
-                    if (ImGui::Selectable(editor.Name.c_str(), editor.Program == current.Program))
-                        m_settings.SetScriptEditor({ .Program = editor.Program, .Arguments = editor.Arguments });
+                    if (ui::Selectable(kSystemDefault, current.Program.empty()))
+                        m_settings.SetScriptEditor({});
 
-                    ImGui::SetItemTooltip("%s", PathToUtf8(editor.Program).c_str());
-                    ImGui::PopID();
+                    for (const CodeEditor& editor : m_found)
+                    {
+                        const ui::IdScope scope(PathToUtf8(editor.Program));
+                        if (ui::Selectable(editor.Name, editor.Program == current.Program))
+                            m_settings.SetScriptEditor({ .Program = editor.Program, .Arguments = editor.Arguments });
+
+                        ui::Tooltip(PathToUtf8(editor.Program));
+                    }
+
+                    ui::Separator();
+                    browse = ui::Selectable("Browse...", false);
                 }
-
-                ImGui::Separator();
-                browse = ImGui::Selectable("Browse...");
-
-                ImGui::EndCombo();
             }
 
-            ImGui::SetItemTooltip("What shaders open in, and code files later. %s is the program the system has for the file's type.", kSystemDefault);
-            props::ResetTarget();
+            ui::Tooltip(std::string("What shaders open in, and code files later. ") + kSystemDefault + " is the program the system has for the file's type.");
+            ui::props::ResetTarget();
 
-            if (props::EndRow(!current.Program.empty()))
+            if (ui::props::EndRow(!current.Program.empty()))
                 m_settings.SetScriptEditor({});
 
             if (!current.Program.empty())
             {
                 const std::string program = PathToUtf8(current.Program);
-                props::Text("Program", program.c_str());
-                ImGui::SetItemTooltip("%s", program.c_str());
+                ui::props::Text("Program", program.c_str());
+                ui::Tooltip(program);
 
                 // What is being typed stays as it is until it's done, then it is saved
                 if (!m_editingArguments)
-                    std::snprintf(m_arguments.data(), m_arguments.size(), "%s", current.Arguments.c_str());
+                    m_arguments = current.Arguments;
 
-                props::BeginRow("Arguments");
-                ImGui::InputText("##Arguments", m_arguments.data(), m_arguments.size());
-                m_editingArguments = ImGui::IsItemActive();
+                ui::props::BeginRow("Arguments");
+                ui::InputText("##Arguments", m_arguments);
+                m_editingArguments = ui::item::Active();
 
-                if (ImGui::IsItemDeactivatedAfterEdit())
-                    m_settings.SetScriptEditor({ .Program = current.Program, .Arguments = m_arguments.data() });
+                if (ui::item::DeactivatedAfterEdit())
+                    m_settings.SetScriptEditor({ .Program = current.Program, .Arguments = m_arguments });
 
-                props::ResetTarget();
+                ui::props::ResetTarget();
 
-                if (props::EndRow(true))
+                if (ui::props::EndRow(true))
                     m_settings.SetScriptEditor({ .Program = current.Program, .Arguments = script_editor::DefaultArguments(current.Program) });
             }
 
-            props::EndTable();
+            ui::props::EndTable();
         }
 
         if (!current.Program.empty())
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, theme::TextMuted);
-            ImGui::TextWrapped("$(File) is the file, $(Line) the line it opens at, and $(ProjectPath) the project's folder.");
-            ImGui::PopStyleColor();
+            ui::WrappedText("$(File) is the file, $(Line) the line it opens at, and $(ProjectPath) the project's folder.", ui::theme::TextMuted);
         }
 
         if (m_found.empty())
         {
-            ImGui::PushStyleColor(ImGuiCol_Text, theme::TextMuted);
-            ImGui::TextWrapped("No code editor was found where they are usually installed. Browse... picks any program.");
-            ImGui::PopStyleColor();
+            ui::WrappedText("No code editor was found where they are usually installed. Browse... picks any program.", ui::theme::TextMuted);
         }
 
         // After the combo has closed, as the picker blocks until it does

@@ -1,7 +1,7 @@
 #include "crimson_editor/ui/asset_browser_panel.hpp"
 
 #include <algorithm>
-#include <cfloat>
+#include <array>
 #include <cmath>
 #include <filesystem>
 #include <set>
@@ -12,11 +12,16 @@
 #include <crimson/project/project.hpp>
 
 #include "crimson_editor/system_shell.hpp"
+#include "crimson_editor/panels/asset_look.hpp"
 #include "crimson_editor/ui/asset_drag.hpp"
 #include "crimson_editor/ui/asset_tiles.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
-#include "crimson_editor/ui/imgui_renderer.hpp"
+#include "crimson_editor/ui/input.hpp"
+#include "crimson_editor/ui/layout.hpp"
+#include "crimson_editor/ui/menus.hpp"
+#include "crimson_editor/ui/painter.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 
 namespace fs = std::filesystem;
 
@@ -138,12 +143,12 @@ namespace crimson::editor::ui
         if (info->ReadOnly && !m_settings.GetShowEngineContent())
             m_settings.SetShowEngineContent(true);
 
-        if (m_filter.IsActive() && !m_filter.PassFilter(info->Path.c_str()))
+        if (m_filter.IsActive() && !m_filter.Matches(info->Path))
             m_filter.Clear();
 
         m_currentFolder = ParentOf(info->Path);
         m_pinged = asset;
-        m_pingStart = ImGui::GetTime();
+        m_pingStart = ui::input::Time();
         m_scrollToPinged = true;
 
         // Opens the panel if it is closed, and brings its tab to the front
@@ -159,25 +164,19 @@ namespace crimson::editor::ui
 
         DrawToolbar();
 
-        constexpr ImGuiTableFlags kTableFlags = ImGuiTableFlags_Resizable | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_NoSavedSettings;
+        const std::array columns = { ui::Column{ "Folders", ui::FontSize() * 11.0f }, ui::Column{ "Assets", 0.0f, true } };
 
-        if (ImGui::BeginTable("##AssetLayout", 2, kTableFlags))
+        if (ui::Table table("##AssetLayout", columns, ui::TableOptions{ .Resizable = true, .InnerBorders = true }); table)
         {
-            ImGui::TableSetupColumn("Folders", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 11.0f);
-            ImGui::TableSetupColumn("Assets", ImGuiTableColumnFlags_WidthStretch);
-            ImGui::TableNextRow();
+            table.NextRow();
 
-            ImGui::TableNextColumn();
-            if (ImGui::BeginChild("##Folders"))
+            table.NextColumn();
+            if (const ui::Region folders("##Folders"); folders)
                 DrawFolderRoots();
-            ImGui::EndChild();
 
-            ImGui::TableNextColumn();
-            if (ImGui::BeginChild("##Grid"))
+            table.NextColumn();
+            if (const ui::Region grid("##Grid"); grid)
                 DrawGrid();
-            ImGui::EndChild();
-
-            ImGui::EndTable();
         }
 
         DrawDialogs();
@@ -185,107 +184,106 @@ namespace crimson::editor::ui
 
     void AssetBrowserPanel::DrawToolbar()
     {
-        if (ImGui::Button("Refresh"))
-            RefreshFromDisk();
-
-        ImGui::SameLine();
-        m_filter.Draw("##Search", ImGui::GetFontSize() * 12.0f);
-
-        if (!m_filter.IsActive() && !ImGui::IsItemActive())
         {
-            const ImGuiStyle& style = ImGui::GetStyle();
-            const ImVec2 min = ImGui::GetItemRectMin();
-            ImGui::GetWindowDrawList()->AddText(ImVec2(min.x + style.FramePadding.x, min.y + style.FramePadding.y), ImGui::GetColorU32(ImGuiCol_TextDisabled), "Search");
-        }
+            ui::Row row;
 
-        ImGui::SameLine();
-        if (bool show = m_settings.GetShowEngineContent(); theme::Checkbox("Show Engine Content", show))
-            m_settings.SetShowEngineContent(show);
+            if (ui::Button("Refresh"))
+                RefreshFromDisk();
 
-        // The path to the current folder, each part leading back to it. The engine's start at a root of their own.
-        const bool inEngine = IsEngineFolder(m_currentFolder);
+            ui::NextItemWidth(ui::FontSize() * 12.0f);
+            ui::SearchBox("##Search", m_filter, "Search");
 
-        ImGui::SameLine();
-        if (ImGui::SmallButton(inEngine ? "Engine" : "Assets"))
-            m_currentFolder = inEngine ? std::string(kEngineFolder) : std::string();
+            if (bool show = m_settings.GetShowEngineContent(); ui::Checkbox("Show Engine Content", show))
+                m_settings.SetShowEngineContent(show);
 
-        size_t start = inEngine ? std::min(kEngineFolder.size() + 1, m_currentFolder.size()) : 0;
-        while (start < m_currentFolder.size())
-        {
-            const size_t slash = m_currentFolder.find('/', start);
-            const size_t end = slash == std::string::npos ? m_currentFolder.size() : slash;
+            // The path to the current folder, each part leading back to it. The engine's start at a root of their own.
+            const bool inEngine = IsEngineFolder(m_currentFolder);
 
-            ImGui::SameLine();
-            ImGui::TextDisabled("/");
-            ImGui::SameLine();
+            if (ui::SmallButton(inEngine ? "Engine" : "Assets"))
+                m_currentFolder = inEngine ? std::string(kEngineFolder) : std::string();
 
-            const std::string part = m_currentFolder.substr(start, end - start);
+            size_t start = inEngine ? std::min(kEngineFolder.size() + 1, m_currentFolder.size()) : 0;
+            while (start < m_currentFolder.size())
+            {
+                const size_t slash = m_currentFolder.find('/', start);
+                const size_t end = slash == std::string::npos ? m_currentFolder.size() : slash;
 
-            ImGui::PushID(static_cast<int>(start));
-            if (ImGui::SmallButton(part.c_str()))
-                m_currentFolder.resize(end);
-            ImGui::PopID();
+                ui::Text("/", ui::TextStyle::Muted);
 
-            if (m_currentFolder.size() <= end)
-                break;
+                const std::string part = m_currentFolder.substr(start, end - start);
 
-            start = end + 1;
+                {
+                    const ui::IdScope scope(static_cast<int>(start));
+                    if (ui::SmallButton(part))
+                        m_currentFolder.resize(end);
+                }
+
+                if (m_currentFolder.size() <= end)
+                    break;
+
+                start = end + 1;
+            }
         }
 
         if (m_reservedFolderFound)
-            ImGui::TextColored(theme::Warning, "The project's engine folder is reserved for the engine's assets, so what's in it doesn't show. Rename it.");
+            ui::Text("The project's engine folder is reserved for the engine's assets, so what's in it doesn't show. Rename it.", ui::theme::Warning);
+    }
+
+    // Dropping an asset on the last item moves it to the folder. A target with rounded corners draws its own highlight.
+    void AssetBrowserPanel::AcceptMovedAsset(const std::string& folder, ui::drag_drop::DropLook look)
+    {
+        const AssetManager& assets = m_context.Session.GetAssets();
+
+        for (const AssetType type : { AssetType::Of<MaterialAsset>(), AssetType::Of<MeshAsset>(), AssetType::Of<ShaderAsset>(), AssetType::Of<TextureAsset>(), AssetType::Of<SceneAsset>() })
+        {
+            if (const AssetID dropped = asset_drag::AcceptOnLastItem(assets, type, look))
+                MoveAssetToFolder(dropped, folder);
+
+            if (look == ui::drag_drop::DropLook::None)
+                asset_drag::DrawDropHighlight(assets, type, ui::item::Bounds(), ui::theme::Scaled(ui::theme::Radius));
+        }
     }
 
     void AssetBrowserPanel::DrawFolderRoots()
     {
-        constexpr ImGuiTreeNodeFlags kRootFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen;
-
         // The project's folders, without the engine's
         {
             const bool selected = m_currentFolder.empty();
-            const bool open = theme::IconTreeNode("##AssetsRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), selected ? icons::kFolderOpen : icons::kFolder, theme::Folder, "Assets");
+            const ui::TreeRow root("##AssetsRoot", ui::TreeRowOptions{
+                .Icon = selected ? ui::icons::kFolderOpen : ui::icons::kFolder, .IconColor = ui::theme::Folder,
+                .Label = "Assets", .Selected = selected, .DefaultOpen = true });
 
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+            if (root.Clicked())
                 m_currentFolder.clear();
 
-            for (const AssetType type : { AssetType::Of<MaterialAsset>(), AssetType::Of<MeshAsset>(), AssetType::Of<ShaderAsset>(), AssetType::Of<TextureAsset>(), AssetType::Of<SceneAsset>() })
-            {
-                if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Session.GetAssets(), type))
-                    MoveAssetToFolder(dropped, {});
-            }
+            AcceptMovedAsset({}, ui::drag_drop::DropLook::Default);
 
-            if (open)
-            {
+            if (root.IsOpen())
                 DrawFolderTree({});
-                ImGui::TreePop();
-            }
         }
 
         if (!m_settings.GetShowEngineContent())
             return;
 
         // The engine's, which can be looked at and used but not changed
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Spacing();
+        ui::Spacing();
+        ui::Separator();
+        ui::Spacing();
 
         const std::string engine(kEngineFolder);
         const bool selected = m_currentFolder == engine;
 
-        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
-        const bool open = theme::IconTreeNode("##EngineRoot", kRootFlags | (selected ? ImGuiTreeNodeFlags_Selected : 0), selected ? icons::kFolderOpen : icons::kFolder, theme::Folder, "Engine");
-        ImGui::PopStyleColor();
+        const ui::TreeRow root("##EngineRoot", ui::TreeRowOptions{
+            .Icon = selected ? ui::icons::kFolderOpen : ui::icons::kFolder, .IconColor = ui::theme::Folder,
+            .Label = "Engine", .Selected = selected, .DefaultOpen = true, .Muted = true });
 
-        ImGui::SetItemTooltip("The engine's built-in assets, which can be used but not changed");
+        ui::Tooltip("The engine's built-in assets, which can be used but not changed");
 
-        if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+        if (root.Clicked())
             m_currentFolder = engine;
 
-        if (open)
-        {
+        if (root.IsOpen())
             DrawFolderTree(engine);
-            ImGui::TreePop();
-        }
     }
 
     void AssetBrowserPanel::DrawFolderTree(const std::string& parent)
@@ -296,48 +294,30 @@ namespace crimson::editor::ui
                 continue;
 
             const bool hasChildren = std::ranges::any_of(m_folders, [&folder](const std::string& other) { return ParentOf(other) == folder; });
+            const bool current = folder == m_currentFolder;
 
-            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_SpanAvailWidth;
-            if (!hasChildren)
-                flags |= ImGuiTreeNodeFlags_Leaf;
-            if (folder == m_currentFolder)
-                flags |= ImGuiTreeNodeFlags_Selected;
+            const ui::TreeRow row(folder, ui::TreeRowOptions{
+                .Icon = current ? ui::icons::kFolderOpen : ui::icons::kFolder, .IconColor = ui::theme::Folder,
+                .Label = AssetFileName(folder), .Selected = current, .Leaf = !hasChildren });
 
-            const bool open = theme::IconTreeNode(folder.c_str(), flags, folder == m_currentFolder ? icons::kFolderOpen : icons::kFolder, theme::Folder, AssetFileName(folder).c_str());
-
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
+            if (row.Clicked())
                 m_currentFolder = folder;
 
             if (!IsEngineFolder(folder))
             {
-                for (const AssetType type : { AssetType::Of<MaterialAsset>(), AssetType::Of<MeshAsset>(), AssetType::Of<ShaderAsset>(), AssetType::Of<TextureAsset>(), AssetType::Of<SceneAsset>() })
-                {
-                    if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Session.GetAssets(), type))
-                        MoveAssetToFolder(dropped, folder);
-                }
-
+                AcceptMovedAsset(folder, ui::drag_drop::DropLook::Default);
                 DrawFolderMenu(folder);
             }
 
-            if (open)
-            {
+            if (row.IsOpen())
                 DrawFolderTree(folder);
-                ImGui::TreePop();
-            }
         }
     }
 
     void AssetBrowserPanel::DrawGrid()
     {
-        const float tileSize = ImGui::GetFontSize() * 5.5f;
-        const float right = ImGui::GetWindowPos().x + ImGui::GetContentRegionMax().x;
-        const float spacing = ImGui::GetStyle().ItemSpacing.x;
-
-        const auto continueRow = [&]
-        {
-            if (ImGui::GetItemRectMax().x + spacing + tileSize < right)
-                ImGui::SameLine();
-        };
+        const float tileSize = ui::FontSize() * 5.5f;
+        const ui::TileGrid grid(tileSize);
 
         // Searching looks through every folder
         const bool searching = m_filter.IsActive();
@@ -347,26 +327,20 @@ namespace crimson::editor::ui
             for (const std::string& folder : m_folders)
             {
                 if (ParentOf(folder) == m_currentFolder && !(m_currentFolder.empty() && IsEngineFolder(folder)))
-                {
                     DrawFolderTile(folder, tileSize);
-                    continueRow();
-                }
             }
         }
 
         for (const Item& item : m_items)
         {
-            if (searching ? !m_filter.PassFilter(item.Path.c_str()) : item.Folder != m_currentFolder)
+            if (searching ? !m_filter.Matches(item.Path) : item.Folder != m_currentFolder)
                 continue;
 
             DrawAssetTile(item, tileSize);
-            continueRow();
         }
 
-        ImGui::NewLine();
-
         // Anywhere in the grid that isn't a tile: clicking clears the selection
-        if (ImGui::IsWindowHovered() && !ImGui::IsAnyItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        if (ui::BackgroundClicked())
             m_context.Session.SelectAsset({});
 
         DrawBackgroundMenu();
@@ -374,60 +348,45 @@ namespace crimson::editor::ui
 
     void AssetBrowserPanel::DrawFolderTile(const std::string& folder, float tileSize)
     {
-        ImGui::PushID(folder.c_str());
+        const ui::IdScope scope(folder);
 
-        const TileLayout tile = tiles::DrawFrame("##Folder", tileSize, false);
+        const ui::TileLayout tile = ui::Tile("##Folder", tileSize, false);
 
-        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        if (ui::item::DoubleClicked())
             m_currentFolder = folder;
 
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-        tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, icons::kFolder, theme::Folder);
-
-        const std::string name = AssetFileName(folder);
-        tiles::DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(ImGuiCol_Text));
+        ui::Painter painter;
+        painter.Icon(tile.Icon, ui::icons::kFolder, ui::theme::Folder);
+        painter.ClippedText(tile.LabelPosition, tile.LabelWidth, AssetFileName(folder), ui::theme::Text);
 
         if (!IsEngineFolder(folder))
         {
-            for (const AssetType type : { AssetType::Of<MaterialAsset>(), AssetType::Of<MeshAsset>(), AssetType::Of<ShaderAsset>(), AssetType::Of<TextureAsset>(), AssetType::Of<SceneAsset>() })
-            {
-                const ImVec2 min = ImGui::GetItemRectMin();
-                const ImVec2 max = ImGui::GetItemRectMax();
-
-                if (const AssetID dropped = asset_drag::AcceptOnLastItem(m_context.Session.GetAssets(), type, ImGuiDragDropFlags_AcceptNoDrawDefaultRect))
-                    MoveAssetToFolder(dropped, folder);
-
-                asset_drag::DrawDropHighlight(m_context.Session.GetAssets(), type, min, max, theme::Scaled(theme::Radius));
-            }
-
+            AcceptMovedAsset(folder, ui::drag_drop::DropLook::None);
             DrawFolderMenu(folder);
         }
-
-        ImGui::PopID();
     }
 
     void AssetBrowserPanel::DrawAssetTile(const Item& item, float tileSize)
     {
-        ImGui::PushID(static_cast<int>(std::hash<AssetID>{}(item.Id)));
+        const ui::IdScope scope(std::hash<AssetID>{}(item.Id));
 
         const bool selected = m_context.Session.GetSelectedAsset() == item.Id;
 
-        const TileLayout tile = tiles::DrawFrame("##Asset", tileSize, selected);
+        const ui::TileLayout tile = ui::Tile("##Asset", tileSize, selected);
         if (tile.Clicked)
             m_context.Session.SelectAsset(item.Id);
 
+        ui::Painter painter;
+
         if (item.Id == m_pinged)
         {
-            const float left = 1.0f - static_cast<float>(ImGui::GetTime() - m_pingStart) / kPingSeconds;
+            const float left = 1.0f - static_cast<float>(ui::input::Time() - m_pingStart) / kPingSeconds;
             if (left > 0.0f)
-            {
-                ImGui::GetWindowDrawList()->AddRectFilled(ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
-                    ImGui::GetColorU32(theme::WithAlpha(theme::Accent, theme::TintHoverAlpha * left)), theme::Scaled(theme::Radius));
-            }
+                painter.FillRect(ui::item::Bounds(), ui::WithAlpha(ui::theme::Accent, ui::theme::TintHoverAlpha * left), ui::theme::Scaled(ui::theme::Radius));
 
             if (m_scrollToPinged)
             {
-                ImGui::SetScrollHereY(0.5f);
+                ui::ScrollHere(0.5f);
                 m_scrollToPinged = false;
             }
         }
@@ -445,7 +404,7 @@ namespace crimson::editor::ui
                 shell::OpenInDefaultApp(file);
         };
 
-        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+        if (ui::item::DoubleClicked())
         {
             if (const SceneID scene = m_context.Session.GetAssets().As<SceneAsset>(item.Id))
                 m_context.Session.OpenScene(scene);
@@ -453,218 +412,187 @@ namespace crimson::editor::ui
                 openOutside();
         }
 
-        if (ImGui::IsItemHovered())
-            ImGui::SetTooltip("%s", item.Path.c_str());
+        ui::Tooltip(item.Path, ui::TooltipDelay::None);
 
         if (const AssetInfo* info = m_context.Session.GetAssets().GetInfo(item.Id))
             asset_drag::DragFromLastItem(*info);
 
-        ImDrawList* drawList = ImGui::GetWindowDrawList();
-
         // Only pictures that are on screen get loaded
         TextureHandle picture;
-        if (item.Type.Is<TextureAsset>() && ImGui::IsItemVisible())
+        if (item.Type.Is<TextureAsset>() && ui::item::Visible())
             picture = m_context.Thumbnails.Get(m_context.Session.GetAssets().As<TextureAsset>(item.Id));
 
-        if (picture)
-        {
-            // A square picture, centered in the icon's box
-            const float side = std::min(tile.IconMax.x - tile.IconMin.x, tile.IconMax.y - tile.IconMin.y);
-            const ImVec2 center((tile.IconMin.x + tile.IconMax.x) * 0.5f, (tile.IconMin.y + tile.IconMax.y) * 0.5f);
-            drawList->AddImage(ToImTextureID(picture), ImVec2(center.x - side * 0.5f, center.y - side * 0.5f), ImVec2(center.x + side * 0.5f, center.y + side * 0.5f));
-        }
-        else
-        {
-            tiles::DrawIcon(drawList, tile.IconMin, tile.IconMax, icons::ForAsset(item.Type), theme::AssetColor(item.Type));
-        }
+        DrawAssetPicture(painter, tile.Icon, item.Type, picture);
 
         const bool dirty = m_context.Session.GetAssetEdits().IsDirty(item.Id);
         const std::string name = dirty ? "* " + item.Name : item.Name;
-        tiles::DrawClippedText(drawList, tile.LabelPosition, tile.LabelWidth, name.c_str(), ImGui::GetColorU32(item.ReadOnly ? ImGuiCol_TextDisabled : ImGuiCol_Text));
+        painter.ClippedText(tile.LabelPosition, tile.LabelWidth, name, item.ReadOnly ? ui::theme::TextMuted : ui::theme::Text);
 
-        if (ImGui::BeginPopupContextItem("##AssetMenu"))
+        const ui::ContextMenu menu("##AssetMenu");
+        if (!menu)
+            return;
+
+        // An engine asset is built into the editor, so there is no file to open or show
+        const bool onDisk = !file.empty();
+        const auto explainIfBuiltIn = [onDisk]
         {
-            // An engine asset is built into the editor, so there is no file to open or show
-            const bool onDisk = !file.empty();
-            const auto explainIfBuiltIn = [onDisk]
-            {
-                if (!onDisk && ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
-                    ImGui::SetTooltip("Built into the editor, so there is no file");
-            };
+            if (!onDisk)
+                ui::Tooltip("Built into the editor, so there is no file");
+        };
 
-            if (editedOutside)
-            {
-                if (ImGui::MenuItem("Open", nullptr, false, onDisk))
-                    openOutside();
-
-                explainIfBuiltIn();
-            }
-
-            if (ImGui::MenuItem(shell::RevealInFileManagerLabel(), nullptr, false, onDisk))
-                shell::RevealInFileManager(file);
+        if (editedOutside)
+        {
+            if (ui::MenuItem("Open", {}, onDisk))
+                openOutside();
 
             explainIfBuiltIn();
-
-            if (item.ReadOnly)
-            {
-                ImGui::EndPopup();
-                ImGui::PopID();
-                return;
-            }
-
-            ImGui::Separator();
-
-            // The materials its .mtl describes, one for each slot that has none
-            if (item.Type.Is<MeshAsset>() && file.extension() == ".obj")
-            {
-                if (ImGui::MenuItem("Create Materials from .mtl"))
-                {
-                    m_context.Deferred.emplace_back([this, id = item.Id]
-                    {
-                        slot_materials::Create(m_context.Session.GetAssets(), m_context.Session.GetAssets().As<MeshAsset>(id));
-                    });
-                }
-
-                ImGui::SetItemTooltip("Makes materials/<slot>.mat next to it for each slot, and leaves the ones that are there");
-                ImGui::Separator();
-            }
-
-            if (ImGui::MenuItem("Rename"))
-            {
-                m_dialogAsset = item.Id;
-                OpenDialog(Dialog::RenameAsset, fs::path(item.Name).stem().string());
-            }
-
-            if (ImGui::MenuItem("Delete"))
-            {
-                m_dialogAsset = item.Id;
-                OpenDialog(Dialog::DeleteAsset, item.Name);
-            }
-
-            ImGui::EndPopup();
         }
 
-        ImGui::PopID();
+        if (ui::MenuItem(shell::RevealInFileManagerLabel(), {}, onDisk))
+            shell::RevealInFileManager(file);
+
+        explainIfBuiltIn();
+
+        if (item.ReadOnly)
+            return;
+
+        ui::Separator();
+
+        // The materials its .mtl describes, one for each slot that has none
+        if (item.Type.Is<MeshAsset>() && file.extension() == ".obj")
+        {
+            if (ui::MenuItem("Create Materials from .mtl"))
+            {
+                m_context.Deferred.emplace_back([this, id = item.Id]
+                {
+                    slot_materials::Create(m_context.Session.GetAssets(), m_context.Session.GetAssets().As<MeshAsset>(id));
+                });
+            }
+
+            ui::Tooltip("Makes materials/<slot>.mat next to it for each slot, and leaves the ones that are there");
+            ui::Separator();
+        }
+
+        if (ui::MenuItem("Rename"))
+        {
+            m_dialogAsset = item.Id;
+            OpenDialog(Dialog::RenameAsset, fs::path(item.Name).stem().string());
+        }
+
+        if (ui::MenuItem("Delete"))
+        {
+            m_dialogAsset = item.Id;
+            OpenDialog(Dialog::DeleteAsset, item.Name);
+        }
     }
 
     void AssetBrowserPanel::DrawFolderMenu(const std::string& folder)
     {
-        if (!ImGui::BeginPopupContextItem("##FolderMenu"))
+        const ui::ContextMenu menu("##FolderMenu");
+        if (!menu)
             return;
 
-        if (ImGui::MenuItem(shell::RevealInFileManagerLabel()))
+        if (ui::MenuItem(shell::RevealInFileManagerLabel()))
             shell::RevealInFileManager(m_context.Session.GetAssets().GetRoot() / fs::path(folder));
 
-        ImGui::Separator();
+        ui::Separator();
 
         // New things go where the folder is, so that is where the grid shows them
-        if (ImGui::MenuItem("New Material"))
+        if (ui::MenuItem("New Material"))
         {
             m_currentFolder = folder;
             OpenDialog(Dialog::NewMaterial, "New Material");
         }
 
-        if (ImGui::MenuItem("New Scene"))
+        if (ui::MenuItem("New Scene"))
         {
             m_currentFolder = folder;
             OpenDialog(Dialog::NewScene, "New Scene");
         }
 
-        if (ImGui::MenuItem("New Shader"))
+        if (ui::MenuItem("New Shader"))
         {
             m_currentFolder = folder;
             OpenDialog(Dialog::NewShader, "New Shader");
         }
 
-        if (ImGui::MenuItem("New Folder"))
+        if (ui::MenuItem("New Folder"))
         {
             m_currentFolder = folder;
             OpenDialog(Dialog::NewFolder, "New Folder");
         }
 
-        ImGui::Separator();
+        ui::Separator();
 
-        if (ImGui::MenuItem("Rename"))
+        if (ui::MenuItem("Rename"))
         {
             m_dialogFolder = folder;
             OpenDialog(Dialog::RenameFolder, AssetFileName(folder));
         }
 
-        if (ImGui::MenuItem("Delete"))
+        if (ui::MenuItem("Delete"))
         {
             m_dialogFolder = folder;
             OpenDialog(Dialog::DeleteFolder, AssetFileName(folder));
         }
-
-        ImGui::EndPopup();
     }
 
     void AssetBrowserPanel::DrawBackgroundMenu()
     {
-        constexpr ImGuiPopupFlags kFlags = ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems;
+        if (IsEngineFolder(m_currentFolder))
+            return;
 
-        if (IsEngineFolder(m_currentFolder) || !ImGui::BeginPopupContextWindow("##BackgroundMenu", kFlags))
+        const ui::BackgroundContextMenu menu("##BackgroundMenu");
+        if (!menu)
             return;
 
         // The folder being shown, opened in the file manager
-        if (ImGui::MenuItem(shell::RevealInFileManagerLabel()))
+        if (ui::MenuItem(shell::RevealInFileManagerLabel()))
             shell::OpenInDefaultApp(m_context.Session.GetAssets().GetRoot() / fs::path(m_currentFolder));
 
-        ImGui::Separator();
+        ui::Separator();
 
-        if (ImGui::MenuItem("New Material"))
+        if (ui::MenuItem("New Material"))
             OpenDialog(Dialog::NewMaterial, "New Material");
 
-        if (ImGui::MenuItem("New Scene"))
+        if (ui::MenuItem("New Scene"))
             OpenDialog(Dialog::NewScene, "New Scene");
 
-        if (ImGui::MenuItem("New Shader"))
+        if (ui::MenuItem("New Shader"))
             OpenDialog(Dialog::NewShader, "New Shader");
 
-        if (ImGui::MenuItem("New Folder"))
+        if (ui::MenuItem("New Folder"))
             OpenDialog(Dialog::NewFolder, "New Folder");
-
-        ImGui::EndPopup();
     }
 
     void AssetBrowserPanel::OpenDialog(Dialog dialog, std::string name)
     {
         m_dialog = dialog;
-        m_openDialog = true;
-        m_dialogName = {};
-        name.copy(m_dialogName.data(), m_dialogName.size() - 1);
+        m_dialogName = std::move(name);
     }
 
     void AssetBrowserPanel::DrawDialogs()
     {
-        // The part after ### is the popup's id, so the title can say what it is doing
-        static constexpr const char* kPopupId = "###AssetDialog";
-
-        if (m_openDialog)
-        {
-            ImGui::OpenPopup(kPopupId);
-            m_openDialog = false;
-        }
-
         const auto getTitle = [this]
         {
             switch (m_dialog)
             {
-                case Dialog::NewFolder:    return "New Folder###AssetDialog";
-                case Dialog::NewMaterial:  return "New Material###AssetDialog";
-                case Dialog::NewScene:     return "New Scene###AssetDialog";
-                case Dialog::NewShader:    return "New Shader###AssetDialog";
+                case Dialog::NewFolder:    return "New Folder";
+                case Dialog::NewMaterial:  return "New Material";
+                case Dialog::NewScene:     return "New Scene";
+                case Dialog::NewShader:    return "New Shader";
                 case Dialog::RenameAsset:
-                case Dialog::RenameFolder: return "Rename###AssetDialog";
+                case Dialog::RenameFolder: return "Rename";
                 case Dialog::DeleteAsset:
-                case Dialog::DeleteFolder: return "Delete###AssetDialog";
+                case Dialog::DeleteFolder: return "Delete";
                 case Dialog::None:         break;
             }
 
-            return kPopupId;
+            return "";
         };
 
-        if (!ImGui::BeginPopupModal(getTitle(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        const ui::Modal modal(getTitle(), "AssetDialog", [this] { return m_dialog != Dialog::None; });
+        if (!modal)
             return;
 
         const bool deleting = m_dialog == Dialog::DeleteAsset || m_dialog == Dialog::DeleteFolder;
@@ -672,44 +600,43 @@ namespace crimson::editor::ui
 
         if (deleting)
         {
-            ImGui::Text("Delete %s?", m_dialogName.data());
-            ImGui::TextDisabled(m_dialog == Dialog::DeleteFolder ? "Everything in it goes too. This can't be undone." : "This can't be undone.");
+            ui::Text("Delete " + m_dialogName + "?");
+            ui::Text(m_dialog == Dialog::DeleteFolder ? "Everything in it goes too. This can't be undone." : "This can't be undone.", ui::TextStyle::Muted);
         }
         else
         {
-            if (ImGui::IsWindowAppearing())
-                ImGui::SetKeyboardFocusHere();
+            ui::NextItemWidth(ui::FontSize() * 18.0f);
+            ui::InputText("##Name", m_dialogName, ui::InputOptions{ .Focus = modal.IsAppearing() });
 
-            ImGui::SetNextItemWidth(ImGui::GetFontSize() * 18.0f);
-            ImGui::InputText("##Name", m_dialogName.data(), m_dialogName.size());
-
-            problem = Project::ValidateName(m_dialogName.data());
+            problem = Project::ValidateName(m_dialogName);
             if (!problem.empty())
-                ImGui::TextDisabled("%s", problem.c_str());
+                ui::Text(problem, ui::TextStyle::Muted);
         }
 
-        ImGui::BeginDisabled(!problem.empty());
-        const bool accepted = (deleting ? ImGui::Button("Delete") : theme::PrimaryButton("OK")) || (!deleting && problem.empty() && ImGui::IsKeyPressed(ImGuiKey_Enter, false));
-        ImGui::EndDisabled();
+        bool accepted = false;
+        bool cancelled = false;
 
-        ImGui::SameLine();
-        const bool cancelled = ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false);
+        {
+            const ui::Row row;
+
+            {
+                const ui::Disabled disabled(!problem.empty());
+                accepted = (deleting ? ui::Button("Delete") : ui::PrimaryButton("OK")) || (!deleting && problem.empty() && ui::input::KeyPressed(Key::Enter));
+            }
+
+            cancelled = ui::Button("Cancel") || ui::input::KeyPressed(Key::Escape);
+        }
 
         if (accepted)
             Confirm();
 
         if (accepted || cancelled)
-        {
             m_dialog = Dialog::None;
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
     }
 
     void AssetBrowserPanel::Confirm()
     {
-        const std::string name = m_dialogName.data();
+        const std::string name = m_dialogName;
         const fs::path root = m_context.Session.GetAssets().GetRoot();
 
         const auto refreshAfter = [this](std::function<void()> action)

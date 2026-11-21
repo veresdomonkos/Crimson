@@ -1,11 +1,9 @@
 #pragma once
 #include <string>
 
-#include <imgui.h>
-
 #include <crimson/asset_manager/asset_manager.hpp>
 
-#include "crimson_editor/ui/editor_theme.hpp"
+#include "crimson_editor/ui/drag_drop.hpp"
 
 namespace crimson::editor::ui
 {
@@ -28,53 +26,33 @@ namespace crimson::editor::ui
         // Makes the last item a drag source for the asset
         inline void DragFromLastItem(const AssetInfo& info)
         {
-            if (ImGui::BeginDragDropSource())
-            {
-                ImGui::SetDragDropPayload(kPayload, &info.Id, sizeof(AssetID));
-                ImGui::TextUnformatted(info.Path.c_str());
-                ImGui::EndDragDropSource();
-            }
+            ui::drag_drop::Source(kPayload, info.Id, info.Path);
         }
 
         // Makes the last item accept dropped assets of a type. Returns the asset on the frame it is dropped. A caller that
-        // draws the highlight itself passes ImGuiDragDropFlags_AcceptNoDrawDefaultRect.
-        inline AssetID AcceptOnLastItem(const AssetManager& assets, AssetType type, ImGuiDragDropFlags flags = 0)
+        // draws the highlight itself passes DropLook::None.
+        inline AssetID AcceptOnLastItem(const AssetManager& assets, AssetType type, ui::drag_drop::DropLook look = ui::drag_drop::DropLook::Default)
         {
-            AssetID dropped;
-
-            if (ImGui::BeginDragDropTarget())
+            const auto dropped = ui::drag_drop::Accept<AssetID>(kPayload, [&](const AssetID& id)
             {
-                if (const ImGuiPayload* payload = ImGui::GetDragDropPayload(); payload && payload->IsDataType(kPayload))
-                {
-                    const AssetID id = *static_cast<const AssetID*>(payload->Data);
-                    const AssetInfo* info = assets.GetInfo(id);
+                const AssetInfo* info = assets.GetInfo(id);
+                return info && info->Type == type;
+            }, look);
 
-                    if (info && info->Type == type && ImGui::AcceptDragDropPayload(kPayload, flags))
-                        dropped = id;
-                }
-
-                ImGui::EndDragDropTarget();
-            }
-
-            return dropped;
+            return dropped.value_or(AssetID{});
         }
 
-        // The highlight of a drop target with rounded corners, while an asset of the type is dragged over it. ImGui's own is
-        // square, which suits windows and rows, so a rounded target accepts with ImGuiDragDropFlags_AcceptNoDrawDefaultRect
-        // and draws this.
-        inline void DrawDropHighlight(const AssetManager& assets, AssetType type, const ImVec2& min, const ImVec2& max, float rounding)
+        // The highlight of a drop target with rounded corners, while an asset of the type is dragged over it. The default one is
+        // square, which suits windows and rows, so a rounded target accepts with DropLook::None and draws this.
+        inline void DrawDropHighlight(const AssetManager& assets, AssetType type, const ui::Rect& rect, float rounding)
         {
-            const ImGuiPayload* payload = ImGui::GetDragDropPayload();
-            if (!payload || !payload->IsDataType(kPayload) || !ImGui::IsMouseHoveringRect(min, max))
+            const auto dragged = ui::drag_drop::Dragged<AssetID>(kPayload);
+            if (!dragged)
                 return;
 
-            const AssetInfo* dragged = assets.GetInfo(*static_cast<const AssetID*>(payload->Data));
-            if (!dragged || dragged->Type != type)
-                return;
-
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            drawList->AddRectFilled(min, max, ImGui::GetColorU32(ImGuiCol_DragDropTargetBg), rounding);
-            drawList->AddRect(min, max, ImGui::GetColorU32(ImGuiCol_DragDropTarget), rounding, 0, ImGui::GetStyle().DragDropTargetBorderSize);
+            const AssetInfo* info = assets.GetInfo(*dragged);
+            if (info && info->Type == type)
+                ui::drag_drop::Highlight(rect, rounding);
         }
 
         // The same, for when the type is known when compiling

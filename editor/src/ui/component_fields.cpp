@@ -4,10 +4,9 @@
 #include <string>
 #include <vector>
 
-#include <imgui.h>
-
 #include "crimson_editor/ui/asset_field.hpp"
 #include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/layout.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
 
 namespace crimson::editor::ui
@@ -35,22 +34,21 @@ namespace crimson::editor::ui
 
         for (size_t index = 0; index < items.size(); ++index)
         {
-            ImGui::PushID(static_cast<int>(index));
-            props::BeginRow(items[index].Label.c_str());
+            const ui::IdScope scope(static_cast<int>(index));
+            ui::props::BeginRow(items[index].Label.c_str());
 
             // The stored id is compared with the pick, so choosing what an empty entry shows stores it
             if (AssetField("##Asset", context, field.Asset, ids[index], items[index].Empty))
                 changed = true;
 
-            props::ResetTarget();
+            ui::props::ResetTarget();
 
-            if (props::EndRow(true) && ids[index])
+            if (ui::props::EndRow(true) && ids[index])
             {
                 ids[index] = {};
                 changed = true;
             }
 
-            ImGui::PopID();
         }
 
         return changed;
@@ -58,7 +56,7 @@ namespace crimson::editor::ui
 
     const char* ComponentIcon(const ComponentType& type, const void* component)
     {
-        return icons::Named(type.Icon ? type.Icon(component) : std::string_view());
+        return ui::icons::Named(type.Icon ? type.Icon(component) : std::string_view());
     }
 
     glm::vec3 ScaleUniformly(glm::vec3 previous, glm::vec3 edited, glm::vec3 shape)
@@ -84,30 +82,28 @@ namespace crimson::editor::ui
         switch (field.Type)
         {
             case FieldType::Bool:
-                return props::Checkbox(label, std::get<bool>(value), &std::get<bool>(field.Default));
+                return ui::props::Checkbox(label, std::get<bool>(value), &std::get<bool>(field.Default));
             case FieldType::Int:
-                return props::Int(label, std::get<int32_t>(value), field.Speed, static_cast<int>(min), static_cast<int>(max), &std::get<int32_t>(field.Default));
+                return ui::props::Int(label, std::get<int32_t>(value), field.Speed, static_cast<int>(min), static_cast<int>(max), &std::get<int32_t>(field.Default));
             case FieldType::Float:
-                return props::Float(label, std::get<float>(value), field.Speed, min, max, &std::get<float>(field.Default));
+                return ui::props::Float(label, std::get<float>(value), field.Speed, min, max, &std::get<float>(field.Default));
             case FieldType::Vec3:
             {
                 glm::vec3& vector = std::get<glm::vec3>(value);
                 const glm::vec3 previous = vector;
 
-                const bool changed = props::Vec3(label, vector, field.Speed, &std::get<glm::vec3>(field.Default));
+                const bool changed = ui::props::Vec3(label, vector, field.Speed, &std::get<glm::vec3>(field.Default));
                 if (!field.UniformToggle)
                     return changed;
 
                 // Kept by the window, as it belongs to the editor rather than the component
-                ImGuiStorage* storage = ImGui::GetStateStorage();
-                const ImGuiID toggle = ImGui::GetID("##Uniform");
-                bool uniform = storage->GetBool(toggle);
+                bool uniform = ui::stored::GetBool("##Uniform");
 
                 // The last proportions that weren't all zero, for growing back from zero
-                const std::array shapeIds = { ImGui::GetID("##ShapeX"), ImGui::GetID("##ShapeY"), ImGui::GetID("##ShapeZ") };
+                static constexpr std::array kShapeIds = { "##ShapeX", "##ShapeY", "##ShapeZ" };
                 glm::vec3 shape;
                 for (int axis = 0; axis < 3; ++axis)
-                    shape[axis] = storage->GetFloat(shapeIds[axis], 1.0f);
+                    shape[axis] = ui::stored::GetFloat(kShapeIds[axis], 1.0f);
 
                 if (changed && uniform)
                     vector = ScaleUniformly(previous, vector, shape);
@@ -115,35 +111,35 @@ namespace crimson::editor::ui
                 if (vector != glm::vec3(0.0f))
                 {
                     for (int axis = 0; axis < 3; ++axis)
-                        storage->SetFloat(shapeIds[axis], vector[axis]);
+                        ui::stored::SetFloat(kShapeIds[axis], vector[axis]);
                 }
 
-                props::Checkbox(("Uniform " + field.Label).c_str(), uniform);
-                storage->SetBool(toggle, uniform);
+                ui::props::Checkbox(("Uniform " + field.Label).c_str(), uniform);
+                ui::stored::SetBool("##Uniform", uniform);
                 return changed;
             }
             case FieldType::Color:
-                return props::Color(label, &std::get<glm::vec3>(value).x, 3, &std::get<glm::vec3>(field.Default).x);
+                return ui::props::Color(label, &std::get<glm::vec3>(value).x, 3, &std::get<glm::vec3>(field.Default).x);
             case FieldType::String:
-                return props::String(label, std::get<std::string>(value), &std::get<std::string>(field.Default));
+                return ui::props::String(label, std::get<std::string>(value), &std::get<std::string>(field.Default));
             case FieldType::Enum:
             {
                 std::vector<const char*> labels;
                 for (const EnumOption& option : field.EnumOptions)
                     labels.push_back(option.Label.c_str());
 
-                return props::Combo(label, std::get<int32_t>(value), labels.data(), static_cast<int>(labels.size()), &std::get<int32_t>(field.Default));
+                return ui::props::Combo(label, std::get<int32_t>(value), labels.data(), static_cast<int>(labels.size()), &std::get<int32_t>(field.Default));
             }
             case FieldType::Asset:
             {
                 AssetID& id = std::get<AssetID>(value);
 
-                props::BeginRow(label);
+                ui::props::BeginRow(label);
                 bool changed = AssetField("##Asset", context, field.Asset, id);
-                props::ResetTarget();
+                ui::props::ResetTarget();
 
                 const AssetID reset = std::get<AssetID>(field.Default);
-                if (props::EndRow(true) && id != reset)
+                if (ui::props::EndRow(true) && id != reset)
                 {
                     id = reset;
                     changed = true;

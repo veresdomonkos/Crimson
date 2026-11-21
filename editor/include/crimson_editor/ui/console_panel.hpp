@@ -3,9 +3,9 @@
 #include <vector>
 #include <string>
 
-#include <imgui.h>
 #include "crimson/core/log.hpp"
 #include "crimson_editor/ui/panel.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 
 namespace crimson::editor::ui
 {
@@ -43,7 +43,7 @@ namespace crimson::editor::ui
         std::vector<LogEntry> m_RawLogs;
         std::vector<LogEntry> m_CollapsedLogs;
 
-        ImGuiTextFilter m_Filter;
+        ui::SearchFilter m_Filter;
         int m_SelectedIndex = -1;
 
         bool m_Collapse = false;

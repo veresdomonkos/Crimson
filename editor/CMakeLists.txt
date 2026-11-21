@@ -25,6 +25,8 @@ set(EDITOR_HEADERS
     include/crimson_editor/script_editor.hpp
     include/crimson_editor/system_shell.hpp
 
+    include/crimson_editor/panels/asset_look.hpp
+
     include/crimson_editor/ui/asset_browser_panel.hpp
     include/crimson_editor/ui/asset_drag.hpp
     include/crimson_editor/ui/asset_field.hpp
@@ -62,6 +64,8 @@ set(EDITOR_SOURCES
     src/scene_camera_controller.cpp
     src/script_editor.cpp
     src/system_shell.cpp
+
+    src/panels/asset_look.cpp
 
     src/ui/asset_browser_panel.cpp
     src/ui/asset_field.cpp
@@ -110,7 +114,7 @@ else()
     )
 endif()
 
-crimson_precompile_headers(EditorCore ${CRIMSON_PRECOMPILED_ENGINE_DEPS} <imgui.h>)
+crimson_precompile_headers(EditorCore ${CRIMSON_PRECOMPILED_ENGINE_DEPS})
 
 add_executable(Editor src/main.cpp)
 

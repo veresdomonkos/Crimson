@@ -1,14 +1,15 @@
 #pragma once
-#include <array>
 #include <optional>
 #include <span>
 #include <string>
 #include <string_view>
 #include <vector>
 
-#include <imgui.h>
+#include <glm/vec2.hpp>
 
 #include <crimson/asset_manager/asset_manager.hpp>
+
+#include "crimson_editor/ui/types.hpp"
 
 namespace crimson::editor
 {
@@ -43,8 +44,8 @@ namespace crimson::editor::ui
     public:
         enum class View { List, Grid };
 
-        // Clears the search and any choice. The owner is the field's ImGui id, and below is where its window goes.
-        void Open(ImGuiID owner, AssetType type, AssetID current, ImVec2 below);
+        // Clears the search and any choice. The owner is the field's id, and below is where its window goes.
+        void Open(ui::WidgetId owner, AssetType type, AssetID current, glm::vec2 below);
 
         // Keeps a choice that wasn't taken yet, so a double-click's choice still reaches its field
         void Close();
@@ -53,7 +54,7 @@ namespace crimson::editor::ui
         void Cancel();
 
         [[nodiscard]] bool IsOpen() const { return m_open; }
-        [[nodiscard]] bool IsOpenFor(ImGuiID owner) const { return m_open && m_owner == owner; }
+        [[nodiscard]] bool IsOpenFor(ui::WidgetId owner) const { return m_open && m_owner == owner; }
 
         // Selects and applies (a click, the arrow keys)
         void Choose(AssetID id);
@@ -69,7 +70,7 @@ namespace crimson::editor::ui
 
         // What was chosen since the last call, once, and only for the field that opened the picker, and only while that
         // field is drawn. Every field calls it each frame it is drawn, and the picker closes once its field doesn't.
-        [[nodiscard]] std::optional<AssetID> TakeChoice(ImGuiID owner);
+        [[nodiscard]] std::optional<AssetID> TakeChoice(ui::WidgetId owner);
 
         // Closes the picker and drops a choice if the field that opened it wasn't drawn since the last call. Draw does
         // this first, so it only needs calling by itself without drawing.
@@ -83,18 +84,18 @@ namespace crimson::editor::ui
 
         void DrawEntries(const AssetManager& assets, AssetThumbnails& thumbnails, const std::vector<PickerEntry>& entries, int selectedIndex);
 
-        ImGuiID m_owner = 0;
+        ui::WidgetId m_owner = 0;
         AssetType m_type;
         AssetID m_selected;
         AssetID m_original; // what the field had when the picker opened
         std::optional<AssetID> m_pending;
         bool m_changed = false; // something was applied since it opened
-        std::array<char, 128> m_search{};
+        std::string m_search;
         View m_view = View::List;
         bool m_open = false;
         bool m_fieldDrawn = false; // the field that opened it was drawn since the last EndFrame
         bool m_justOpened = false;
         bool m_scrollToSelected = false;
-        ImVec2 m_position;
+        glm::vec2 m_position{ 0.0f };
     };
 }

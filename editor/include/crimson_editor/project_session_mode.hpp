@@ -30,7 +30,7 @@ namespace crimson::editor
         ~ProjectSessionMode() override;
 
         void Record(FrameRecorder& frame) override;
-        void OnImGui() override;
+        void DrawUI() override;
         void Update(float deltaTime) override;
         void RequestClose(std::function<void()> proceed) override;
 

@@ -27,6 +27,7 @@
 #include <crimson_editor/project_manager_mode.hpp>
 #include <crimson_editor/project_session_mode.hpp>
 #include <crimson_editor/ui/asset_field.hpp>
+#include <crimson_editor/ui/window.hpp>
 
 #include "gpu/gpu_test.hpp"
 #include "support/temp_folder.hpp"
@@ -336,14 +337,13 @@ TEST_CASE_METHOD(AssetFixture, "The asset picker opens from a field and draws bo
 
     AssetPicker& picker = Context().Picker;
     AssetID texture;
-    ImGuiID owner = 0;
+    crimson::editor::ui::WidgetId owner = 0;
 
     const FrameDraw field([&]
     {
-        ImGui::Begin("Picker Field");
-        owner = ImGui::GetID("##Asset");
+        const crimson::editor::ui::WindowScope window("Picker Field");
+        owner = crimson::editor::ui::IdOf("##Asset");
         AssetField("##Asset", Context(), AssetType::Of<TextureAsset>(), texture);
-        ImGui::End();
     });
 
     RunFrames(App, 1);

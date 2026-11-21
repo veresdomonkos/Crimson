@@ -11,7 +11,7 @@ namespace crimson::editor::ui
     {
     public:
         StatsPanel(const FrameStats& stats, GraphicsApi api)
-            : Panel({ .Title = "Stats", .Icon = icons::kInfo, .Slot = DockSlot::RightBottom, .TabOrder = 1, .DefaultSize = { 15.0f, 0.0f } }),
+            : Panel({ .Title = "Stats", .Icon = ui::icons::kInfo, .Slot = DockSlot::RightBottom, .TabOrder = 1, .DefaultSize = { 15.0f, 0.0f } }),
               m_stats(stats), m_api(api) {}
     protected:
         void Draw() override;

@@ -5,14 +5,14 @@
 #include <string_view>
 #include <vector>
 
-#include <imgui.h>
-
 #include <crimson/core/window.hpp>
 
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/editor_settings.hpp"
+#include "crimson_editor/ui/drag_drop.hpp"
 #include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/panel.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 
 namespace crimson::editor::ui
 {
@@ -27,7 +27,7 @@ namespace crimson::editor::ui
     {
     public:
         AssetBrowserPanel(EditorContext& context, EditorSettings& settings, const Window& window)
-            : Panel({ .Title = "Assets", .Icon = icons::kFolder, .Slot = DockSlot::Bottom }),
+            : Panel({ .Title = "Assets", .Icon = ui::icons::kFolder, .Slot = DockSlot::Bottom }),
               m_context(context), m_settings(settings), m_window(window) {}
 
         // Shows an asset in the grid, and flashes it, as when a field points at it. Opens the panel if it is closed.
@@ -71,6 +71,7 @@ namespace crimson::editor::ui
         void DrawFolderMenu(const std::string& folder);
         void DrawBackgroundMenu();
         void DrawDialogs();
+        void AcceptMovedAsset(const std::string& folder, ui::drag_drop::DropLook look);
 
         void OpenDialog(Dialog dialog, std::string name);
         void Confirm();
@@ -91,15 +92,14 @@ namespace crimson::editor::ui
         std::vector<std::string> m_folders;
         std::string m_currentFolder; // empty for the top
 
-        ImGuiTextFilter m_filter;
+        ui::SearchFilter m_filter;
 
         AssetID m_pinged; // flashes in the grid for a moment, after a field pointed at it
         double m_pingStart = 0.0;
         bool m_scrollToPinged = false;
 
         Dialog m_dialog = Dialog::None;
-        bool m_openDialog = false;
-        std::array<char, 256> m_dialogName{};
+        std::string m_dialogName;
         AssetID m_dialogAsset;
         std::string m_dialogFolder;
     };

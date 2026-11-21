@@ -1,5 +1,5 @@
 #pragma once
-#include <array>
+#include <string>
 #include <vector>
 
 #include "crimson_editor/editor_settings.hpp"
@@ -32,7 +32,7 @@ namespace crimson::editor::ui
         // Looked for each time the window opens, as editors get installed while the editor runs
         std::vector<CodeEditor> m_found;
 
-        std::array<char, 1024> m_arguments{};
+        std::string m_arguments;
         bool m_editingArguments = false;
     };
 }

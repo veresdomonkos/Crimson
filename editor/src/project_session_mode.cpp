@@ -7,6 +7,7 @@
 #include <chrono>
 #include <ctime>
 #include <filesystem>
+#include <format>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -21,6 +22,10 @@
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
 #include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/input.hpp"
+#include "crimson_editor/ui/layout.hpp"
+#include "crimson_editor/ui/menus.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 #include "crimson_editor/ui/inspector_panel.hpp"
 #include "crimson_editor/ui/preferences_panel.hpp"
 #include "crimson_editor/ui/scene_settings_panel.hpp"
@@ -168,7 +173,7 @@ namespace crimson::editor
 
     bool ProjectSessionMode::IsEditing() const
     {
-        return ImGui::IsAnyItemActive() || m_context.GizmoInUse || m_context.Picker.IsOpen();
+        return ui::input::IsEditingItem() || m_context.GizmoInUse || m_context.Picker.IsOpen();
     }
 
     bool ProjectSessionMode::SaveAll()
@@ -189,100 +194,48 @@ namespace crimson::editor
 
     void ProjectSessionMode::DrawUnsavedChangesDialog()
     {
-        static constexpr const char* kPopup = "Unsaved Changes";
-
-        if (m_session.IsClosePending() && !ImGui::IsPopupOpen(kPopup))
-            ImGui::OpenPopup(kPopup);
-
-        if (!ImGui::BeginPopupModal(kPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        const ui::Modal modal("Unsaved Changes", "UnsavedChanges", [this] { return m_session.IsClosePending(); });
+        if (!modal)
             return;
 
-        // It was answered some other way
-        if (!m_session.IsClosePending())
-        {
-            ImGui::CloseCurrentPopup();
-            ImGui::EndPopup();
-            return;
-        }
+        ui::Text("The scene or some assets have changes that aren't saved.");
+        ui::Spacing();
 
-        ImGui::TextUnformatted("The scene or some assets have changes that aren't saved.");
-        ImGui::Spacing();
+        const ui::Row row;
 
-        bool close = false;
-
-        if (ui::theme::PrimaryButton("Save All"))
+        if (ui::PrimaryButton("Save All"))
         {
             // Stays if something couldn't be saved, as it is better than losing the edit
             if (m_session.SaveAllAndClose())
-            {
                 m_notifications.Push(ui::Notifications::Kind::Success, "Saved");
-                close = true;
-            }
         }
 
-        ImGui::SameLine();
-        if (ImGui::Button("Discard"))
-        {
+        if (ui::Button("Discard"))
             m_session.DiscardAllAndClose();
-            close = true;
-        }
 
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel") || ImGui::IsKeyPressed(ImGuiKey_Escape, false))
-        {
+        if (ui::Button("Cancel") || ui::input::KeyPressed(Key::Escape))
             m_session.CancelClose();
-            close = true;
-        }
-
-        if (close)
-            ImGui::CloseCurrentPopup();
-
-        ImGui::EndPopup();
     }
 
     void ProjectSessionMode::DrawRecoveryDialog()
     {
-        static constexpr const char* kPopup = "Recover Scene";
-
-        if (m_session.GetOfferedRecovery() && !ImGui::IsPopupOpen(kPopup))
-            ImGui::OpenPopup(kPopup);
-
-        if (!ImGui::BeginPopupModal(kPopup, nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        const ui::Modal modal("Recover Scene", "RecoverScene", [this] { return m_session.GetOfferedRecovery().has_value(); });
+        if (!modal)
             return;
-
-        // The scene was loaded again while it was showing
-        if (!m_session.GetOfferedRecovery())
-        {
-            ImGui::CloseCurrentPopup();
-            ImGui::EndPopup();
-            return;
-        }
 
         const AssetInfo* info = m_session.GetAssets().GetInfo(m_session.GetSceneAsset());
 
-        ImGui::Text("The editor didn't close normally after changes to %s that were never saved.", info ? info->Path.c_str() : "this scene");
-        ImGui::Text("A copy of them from %s was kept.", FormatTime(*m_session.GetOfferedRecovery()).c_str());
-        ImGui::Spacing();
+        ui::Text(std::format("The editor didn't close normally after changes to {} that were never saved.", info ? info->Path : "this scene"));
+        ui::Text(std::format("A copy of them from {} was kept.", FormatTime(*m_session.GetOfferedRecovery())));
+        ui::Spacing();
 
-        bool close = false;
+        const ui::Row row;
 
-        if (ui::theme::PrimaryButton("Restore"))
-        {
+        if (ui::PrimaryButton("Restore"))
             m_session.RestoreRecovery();
-            close = true;
-        }
 
-        ImGui::SameLine();
-        if (ImGui::Button("Discard"))
-        {
+        if (ui::Button("Discard"))
             m_session.DiscardRecovery();
-            close = true;
-        }
-
-        if (close)
-            ImGui::CloseCurrentPopup();
-
-        ImGui::EndPopup();
     }
 
     void ProjectSessionMode::Record(FrameRecorder& frame)
@@ -305,7 +258,7 @@ namespace crimson::editor
         m_sceneRenderer->Record(frame, scene, info, m_session.GetSelected());
     }
 
-    void ProjectSessionMode::OnImGui()
+    void ProjectSessionMode::DrawUI()
     {
         // The Scene view sets it again while the gizmo is dragged, and may not draw the gizmo at all
         m_context.GizmoInUse = false;

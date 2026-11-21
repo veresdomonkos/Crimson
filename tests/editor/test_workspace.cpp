@@ -4,7 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <imgui.h>
 
-#include "crimson_editor/ui/imgui_platform.hpp"
+#include "imgui_platform.hpp"
 #include "crimson_editor/ui/workspace.hpp"
 #include "support/fake_window.hpp"
 #include "support/imgui_context.hpp"

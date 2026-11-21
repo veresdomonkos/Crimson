@@ -11,7 +11,7 @@ namespace crimson::editor::ui
     {
     public:
         explicit SceneSettingsPanel(EditorContext& context)
-            : Panel({ .Title = "Scene Settings", .Icon = icons::kScene, .Slot = DockSlot::RightBottom, .TabOrder = 2, .DefaultSize = { 15.0f, 0.0f } }),
+            : Panel({ .Title = "Scene Settings", .Icon = ui::icons::kScene, .Slot = DockSlot::RightBottom, .TabOrder = 2, .DefaultSize = { 15.0f, 0.0f } }),
               m_context(context) {}
     protected:
         void Draw() override;

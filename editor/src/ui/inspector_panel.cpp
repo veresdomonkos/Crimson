@@ -1,17 +1,16 @@
 #include "crimson_editor/ui/inspector_panel.hpp"
 
 #include <algorithm>
-#include <array>
-#include <cstdio>
 #include <string>
-
-#include <imgui.h>
 
 #include "crimson_editor/ui/asset_drag.hpp"
 #include "crimson_editor/ui/component_fields.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/layout.hpp"
+#include "crimson_editor/ui/menus.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 
 namespace crimson::editor::ui
 {
@@ -20,37 +19,34 @@ namespace crimson::editor::ui
         // Each selection's fields have ids of their own, so what the asset picker chose for one can't reach another's
         if (m_context.Session.GetSelectedAsset())
         {
-            ImGui::PushID(m_context.Session.GetSelectedAsset().ToString().c_str());
+            const ui::IdScope scope(m_context.Session.GetSelectedAsset().ToString());
             m_assetInspector.Draw(m_context.Session.GetSelectedAsset());
-            ImGui::PopID();
         }
         else if (const Entity entity = m_context.Session.GetSelected())
         {
-            ImGui::PushID(entity.GetComponent<NameComponent>().Id.ToString().c_str());
+            const ui::IdScope scope(entity.GetComponent<NameComponent>().Id.ToString());
 
-            // What comes from an instance's scene is only changed by opening that scene
-            ImGui::BeginDisabled(entity.HasComponent<InstancedComponent>());
+            {
+                // What comes from an instance's scene is only changed by opening that scene
+                const ui::Disabled disabled(entity.HasComponent<InstancedComponent>());
 
-            DrawHeader(entity);
+                DrawHeader(entity);
 
-            for (const ComponentType& type : m_context.Session.GetAssets().Components().Types())
-                DrawComponent(entity, type);
+                for (const ComponentType& type : m_context.Session.GetAssets().Components().Types())
+                    DrawComponent(entity, type);
 
-            DrawUnknownComponents(entity);
+                DrawUnknownComponents(entity);
 
-            // An instance's own components wouldn't be saved
-            if (!entity.HasComponent<SceneInstanceComponent>())
-                DrawAddComponent(entity);
-
-            ImGui::EndDisabled();
+                // An instance's own components wouldn't be saved
+                if (!entity.HasComponent<SceneInstanceComponent>())
+                    DrawAddComponent(entity);
+            }
 
             DrawSceneInstance(entity);
-
-            ImGui::PopID();
         }
         else
         {
-            theme::EmptyHint("Select an entity in the Hierarchy or the Scene view, or an asset in the Assets panel");
+            ui::EmptyHint("Select an entity in the Hierarchy or the Scene view, or an asset in the Assets panel");
         }
     }
 
@@ -58,19 +54,14 @@ namespace crimson::editor::ui
     {
         auto& name = entity.GetComponent<NameComponent>();
 
-        if (theme::Checkbox("##Active", name.Active))
-            m_context.Session.MarkEdited();
-        ImGui::SameLine();
+        const ui::Row row;
 
-        std::array<char, 256> buffer{};
-        std::snprintf(buffer.data(), buffer.size(), "%s", name.Name.c_str());
-
-        ImGui::SetNextItemWidth(-1.0f);
-        if (ImGui::InputText("##Name", buffer.data(), buffer.size()))
-        {
-            name.Name = buffer.data();
+        if (ui::Checkbox("##Active", name.Active))
             m_context.Session.MarkEdited();
-        }
+
+        ui::NextItemFills();
+        if (ui::InputText("##Name", name.Name))
+            m_context.Session.MarkEdited();
     }
 
     void InspectorPanel::DrawComponent(Entity entity, const ComponentType& type)
@@ -83,27 +74,23 @@ namespace crimson::editor::ui
 
         // What can be added can be removed, which every entity's own, like the transform, can't
         bool removed = false;
-        const bool open = theme::BeginSection(type.Name.c_str(), icon ? icon : icons::kEntity);
 
-        if (type.Addable && ImGui::BeginPopupContextItem())
         {
-            if (ImGui::MenuItem("Remove Component"))
-                removed = true;
+            const ui::Section section(type.Name, icon ? icon : ui::icons::kEntity);
 
-            ImGui::EndPopup();
-        }
+            if (type.Addable)
+            {
+                if (const ui::ContextMenu menu; menu && ui::MenuItem("Remove Component"))
+                    removed = true;
+            }
 
-        if (open)
-        {
-            if (props::BeginTable(type.Id.c_str()))
+            if (section && ui::props::BeginTable(type.Id.c_str()))
             {
                 if (DrawComponentFields(type, component, m_context))
                     m_context.Session.MarkEdited();
 
-                props::EndTable();
+                ui::props::EndTable();
             }
-
-            theme::EndSection();
         }
 
         if (removed)
@@ -122,8 +109,8 @@ namespace crimson::editor::ui
         // Like one from a script that isn't loaded. It can't be shown, but the scene keeps it.
         for (const SceneComponent& component : unknown->Components)
         {
-            ImGui::TextDisabled("%s  %s", icons::kWarning, component.Type.c_str());
-            ImGui::SetItemTooltip("A component this editor doesn't know. It stays as it is when the scene is saved.");
+            ui::Text(std::string(ui::icons::kWarning) + "  " + component.Type, ui::TextStyle::Muted);
+            ui::Tooltip("A component this editor doesn't know. It stays as it is when the scene is saved.");
         }
     }
 
@@ -133,29 +120,31 @@ namespace crimson::editor::ui
         if (!instance)
             return;
 
-        ImGui::Spacing();
+        ui::Spacing();
+
+        const std::string label = "Instance of " + AssetLabel(m_context.Session.GetAssets(), instance->Scene);
 
         if (m_context.Session.GetAssets().IsMissing(instance->Scene))
         {
-            ImGui::TextColored(theme::Warning, "Instance of %s", AssetLabel(m_context.Session.GetAssets(), instance->Scene).c_str());
-            ImGui::TextDisabled("It shows again once the file is back and the scene is opened again");
+            ui::Text(label, ui::theme::Warning);
+            ui::Text("It shows again once the file is back and the scene is opened again", ui::TextStyle::Muted);
             return;
         }
 
-        ImGui::TextDisabled("Instance of %s", AssetLabel(m_context.Session.GetAssets(), instance->Scene).c_str());
+        ui::Text(label, ui::TextStyle::Muted);
 
-        if (ImGui::Button("Open Source", ImVec2(-1.0f, 0.0f)))
+        if (ui::Button("Open Source", ui::ButtonSize::Fill))
             m_context.Session.OpenScene(instance->Scene);
     }
 
     void InspectorPanel::DrawAddComponent(Entity entity)
     {
-        ImGui::Spacing();
+        ui::Spacing();
 
-        if (ImGui::Button("Add Component", ImVec2(-1.0f, 0.0f)))
-            ImGui::OpenPopup("AddComponent");
+        if (ui::Button("Add Component", ui::ButtonSize::Fill))
+            ui::Popup::Open("AddComponent");
 
-        if (ImGui::BeginPopup("AddComponent"))
+        if (const ui::Popup popup("AddComponent"); popup)
         {
             for (const ComponentType& type : m_context.Session.GetAssets().Components().Types())
             {
@@ -163,7 +152,7 @@ namespace crimson::editor::ui
                     continue;
 
                 // Between frames, as adding a component can move the others, which this frame's panels still point to
-                if (ImGui::MenuItem(type.Name.c_str(), nullptr, false, !type.Has(entity)))
+                if (ui::MenuItem(type.Name, {}, !type.Has(entity)))
                 {
                     m_context.Deferred.emplace_back([this, &type, entity]
                     {
@@ -174,8 +163,6 @@ namespace crimson::editor::ui
                     });
                 }
             }
-
-            ImGui::EndPopup();
         }
     }
 }

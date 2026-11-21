@@ -1,4 +1,4 @@
-#include "crimson_editor/ui/imgui_platform.hpp"
+#include "imgui_platform.hpp"
 
 #include <algorithm>
 #include <cfloat>

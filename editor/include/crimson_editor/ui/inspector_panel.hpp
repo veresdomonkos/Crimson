@@ -10,7 +10,7 @@ namespace crimson::editor::ui
     {
     public:
         explicit InspectorPanel(EditorContext& context)
-            : Panel({ .Title = "Inspector", .Icon = icons::kTransform, .Slot = DockSlot::Right }),
+            : Panel({ .Title = "Inspector", .Icon = ui::icons::kTransform, .Slot = DockSlot::Right }),
               m_context(context), m_assetInspector(context) {}
     protected:
         void Draw() override;
