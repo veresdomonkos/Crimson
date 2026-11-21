@@ -1,47 +1,69 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <GLFW/glfw3.h>
-
-#include <crimson/core/input.hpp>
+#include <crimson/core/window.hpp>
 
 #include "gpu/gpu_test.hpp"
 
 using namespace crimson;
 using namespace crimson::tests;
 
-static glm::dvec2 CursorPosition(GLFWwindow* window)
+// A hidden cursor that wandered off would hover and click the panels it ended up over. Where it stays is checked by the
+// CursorTracker unit tests, as a real cursor can't be moved from here.
+TEST_CASE("Locking the cursor of a real window", "[input]")
 {
-    glm::dvec2 position;
-    glfwGetCursorPos(window, &position.x, &position.y);
-    return position;
+    Window& window = GpuWindow();
+    REQUIRE_FALSE(window.IsCursorLocked());
+
+    window.SetCursorLocked(true);
+    CHECK(window.IsCursorLocked());
+
+    // The cursor is hidden then, so a shape is ignored
+    window.SetCursorShape(CursorShape::Hand);
+
+    // Locking again, or unlocking twice, changes nothing and logs no error
+    window.SetCursorLocked(true);
+    CHECK(window.IsCursorLocked());
+
+    window.SetCursorLocked(false);
+    CHECK_FALSE(window.IsCursorLocked());
+
+    window.SetCursorLocked(false);
+    CHECK_FALSE(window.IsCursorLocked());
 }
 
-// A hidden cursor that wandered off would hover and click the panels it ended up over
-TEST_CASE("A locked cursor stays where it was locked, and its movement still counts", "[input]")
+TEST_CASE("The window gives its OS handle", "[window]")
 {
-    auto* window = static_cast<GLFWwindow*>(GpuWindow().GetNativeHandle());
-    Input input(GpuWindow());
+    const OSWindowHandle handle = GpuWindow().GetOSHandle();
 
-    glfwSetCursorPos(window, 100.0, 80.0);
-    input.Update();
+#ifdef _WIN32
+    CHECK(handle.Type == OSWindowHandle::Kind::Win32);
+#elif defined(__APPLE__)
+    CHECK(handle.Type == OSWindowHandle::Kind::Cocoa);
+#else
+    CHECK(handle.Type == OSWindowHandle::Kind::X11);
+#endif
+    CHECK(handle.Value != 0);
+}
 
-    input.SetCursorLocked(true);
-    REQUIRE(input.IsCursorLocked());
-    input.Update();
-    const glm::dvec2 lockedAt = CursorPosition(window);
+TEST_CASE("The window's clipboard keeps text, and every cursor shape can be set", "[window]")
+{
+    Window& window = GpuWindow();
 
-    glfwSetCursorPos(window, lockedAt.x + 40.0, lockedAt.y - 25.0);
-    input.Update();
+    // A check mark, in UTF-8
+    const std::string text = "Crimson \xE2\x9C\x93";
+    window.SetClipboardText(text);
+    CHECK(window.GetClipboardText() == text);
 
-    CHECK(input.GetMouseDelta() == glm::vec2(40.0f, -25.0f));
-    CHECK(CursorPosition(window) == lockedAt);
+    window.SetClipboardText("");
+    CHECK(window.GetClipboardText().empty());
 
-    // Moving again counts from where it was put back
-    glfwSetCursorPos(window, lockedAt.x + 5.0, lockedAt.y);
-    input.Update();
-    CHECK(input.GetMouseDelta() == glm::vec2(5.0f, 0.0f));
+    for (const CursorShape shape : { CursorShape::Arrow, CursorShape::TextInput, CursorShape::ResizeAll,
+                                     CursorShape::ResizeVertical, CursorShape::ResizeHorizontal,
+                                     CursorShape::ResizeDiagonalUp, CursorShape::ResizeDiagonalDown,
+                                     CursorShape::Hand, CursorShape::NotAllowed })
+    {
+        window.SetCursorShape(shape);
+    }
 
-    input.SetCursorLocked(false);
-    CHECK_FALSE(input.IsCursorLocked());
-    CHECK(glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL);
+    window.SetCursorShape(CursorShape::Arrow);
 }

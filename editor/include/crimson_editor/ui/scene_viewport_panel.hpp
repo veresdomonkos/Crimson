@@ -14,7 +14,7 @@ namespace crimson::editor::ui
     class SceneViewportPanel : public ViewportPanel
     {
     public:
-        SceneViewportPanel(std::string_view name, ImTextureID texture, float aspect, EditorContext& context, SceneView& view)
+        SceneViewportPanel(std::string_view name, TextureHandle texture, float aspect, EditorContext& context, SceneView& view)
             : ViewportPanel(name, texture, aspect), m_context(context), m_view(view) {}
     protected:
         void OnImageDrawn(const ImVec2& position, const ImVec2& size) override;

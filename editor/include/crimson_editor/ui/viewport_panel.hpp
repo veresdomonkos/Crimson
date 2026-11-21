@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <string_view>
+#include <crimson/renderer/resource_handles.hpp>
 #include <imgui.h>
 
 #include "crimson_editor/ui/panel.hpp"
@@ -10,12 +11,12 @@ namespace crimson::editor::ui
     class ViewportPanel : public Panel
     {
     public:
-        ViewportPanel(std::string_view name, ImTextureID texture, float aspect)
+        ViewportPanel(std::string_view name, TextureHandle texture, float aspect)
             : m_name(name), m_texture(texture), m_aspect(aspect) {}
 
         void OnImGui() override;
 
-        void SetTexture(ImTextureID texture) { m_texture = texture; }
+        void SetTexture(TextureHandle texture) { m_texture = texture; }
         void SetAspect(float aspect)           { m_aspect = aspect; }
 
         [[nodiscard]] ImVec2 GetContentSize() const { return m_contentSize; }
@@ -29,7 +30,7 @@ namespace crimson::editor::ui
 
     private:
         std::string   m_name;
-        ImTextureID m_texture;
+        TextureHandle m_texture;
         float         m_aspect;
 
         ImVec2 m_contentSize{0, 0};

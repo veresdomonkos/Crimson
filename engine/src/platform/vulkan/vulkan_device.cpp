@@ -1,7 +1,5 @@
 #include "vulkan_device.hpp"
 
-#include <GLFW/glfw3.h>
-
 #include <cstdlib>
 #include <cstring>
 #include <stdexcept>
@@ -35,14 +33,14 @@ namespace crimson::vulkan
         return false;
     }
 
-    VulkanDevice::VulkanDevice(const Window& window)
-        : m_primaryWindow(window)
+    VulkanDevice::VulkanDevice(const Window& window, WindowGraphics& windowGraphics)
+        : m_primaryWindow(window), m_windowGraphics(windowGraphics)
     {
         m_validationEnabled = EnableValidation && CheckValidationLayerSupport(m_context);
 
         CreateInstance();
         SetupDebugMessenger();
-        CreateSurface(window);
+        CreateSurface();
         PickPhysicalDevice();
         CreateLogicalDevice();
         CreateImmediateCommandPool();
@@ -66,13 +64,7 @@ namespace crimson::vulkan
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.apiVersion = VK_API_VERSION_1_3;
 
-        uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-        if (!glfwExtensions)
-            throw std::runtime_error("Failed to get GLFW Vulkan extensions.");
-
-        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+        std::vector<const char*> extensions = m_windowGraphics.GetVulkanInstanceExtensions();
 
         const bool syncValidation = m_validationEnabled && std::getenv("CRIMSON_VK_SYNC_VALIDATION") != nullptr;
 
@@ -119,15 +111,11 @@ namespace crimson::vulkan
         m_debugMessenger = m_instance.createDebugUtilsMessengerEXT(MakeDebugMessengerCreateInfo());
     }
 
-    void VulkanDevice::CreateSurface(const Window& window)
+    void VulkanDevice::CreateSurface()
     {
         VkSurfaceKHR surface = VK_NULL_HANDLE;
 
-        if (glfwCreateWindowSurface(
-                static_cast<VkInstance>(*m_instance),
-                static_cast<GLFWwindow*>(window.GetNativeHandle()),
-                nullptr,
-                &surface) != VK_SUCCESS)
+        if (m_windowGraphics.CreateVulkanSurface(static_cast<VkInstance>(*m_instance), &surface) != VK_SUCCESS)
         {
             throw std::runtime_error("Failed to create Vulkan surface.");
         }

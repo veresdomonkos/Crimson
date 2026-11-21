@@ -12,7 +12,6 @@
 #include <string>
 #include <utility>
 #include <glm/gtc/matrix_transform.hpp>
-#include <GLFW/glfw3.h>
 
 #include "crimson_editor/editor_settings.hpp"
 #include "crimson_editor/recent_projects.hpp"
@@ -46,7 +45,7 @@ namespace crimson::editor
     ProjectSessionMode::ProjectSessionMode(EditorServices& services, Project project)
         : m_services(services),
           m_session(std::move(project), GpuResources(), m_services.Recents, [this] { return IsEditing(); }),
-          m_assetThumbnails(std::make_unique<AssetThumbnails>(m_session.GetAssets(), GpuResources(), *m_services.Graphics.Imgui)),
+          m_assetThumbnails(std::make_unique<AssetThumbnails>(m_session.GetAssets(), GpuResources())),
           m_sceneView(m_session.GetScene(), m_camera, static_cast<float>(kMainTargetWidth) / kMainTargetHeight),
           m_context{ .Session = m_session, .Thumbnails = *m_assetThumbnails,
                      .OnAssetsRemoved = [this](std::span<const AssetID> removed)
@@ -79,7 +78,7 @@ namespace crimson::editor
         ApplyToneMapping();
         SetupUI();
 
-        m_cameraController = std::make_unique<SceneCameraController>(m_camera, m_services.AppInput, *m_sceneViewport);
+        m_cameraController = std::make_unique<SceneCameraController>(m_camera, m_services.AppInput, m_services.AppWindow, *m_sceneViewport);
 
         m_camera.SetPosition(glm::vec3(0.0f, 3.5f, 7.0f));
         m_cameraController->SetPivot(glm::vec3(0.0f));
@@ -89,11 +88,6 @@ namespace crimson::editor
     {
         // Frames still in flight are using all of this
         m_services.Graphics.Device->WaitIdle();
-
-        auto& imgui = *m_services.Graphics.Imgui;
-
-        imgui.ReleaseTexture(m_mainColor);
-        imgui.ReleaseTexture(m_sceneRenderer->GetShadowAtlas());
 
         GpuResources().DestroyRenderTarget(m_mainTarget);
     }
@@ -119,10 +113,8 @@ namespace crimson::editor
 
     void ProjectSessionMode::SetupUI()
     {
-        auto& imgui = *m_services.Graphics.Imgui;
-
-        m_sceneViewport = &m_ui->AddPanel<ui::SceneViewportPanel>("Scene", imgui.GetOrCreateTextureId(m_mainColor), 16.0f / 9.0f, m_context, m_sceneView);
-        m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", imgui.GetOrCreateTextureId(m_sceneRenderer->GetShadowAtlas()), 1.0f);
+        m_sceneViewport = &m_ui->AddPanel<ui::SceneViewportPanel>("Scene", m_mainColor, 16.0f / 9.0f, m_context, m_sceneView);
+        m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", m_sceneRenderer->GetShadowAtlas(), 1.0f);
         m_ui->AddPanel<ui::AssetBrowserPanel>(m_context, m_services.Settings, m_services.AppWindow); // before the console, for its tab to be in front
         m_ui->AddPanel<ui::ConsolePanel>();
         m_ui->AddPanel<ui::HierarchyPanel>(m_context);
@@ -350,14 +342,14 @@ namespace crimson::editor
 
     void ProjectSessionMode::UpdateFrameStats()
     {
-        const double now = glfwGetTime();
+        const auto now = std::chrono::steady_clock::now();
         FrameStats& stats = m_frameStats;
 
         stats.Render = m_services.Graphics.Renderer->GetStats();
 
-        if (stats.LastFrameTime > 0.0)
+        if (stats.LastFrameTime)
         {
-            const double frameSeconds = now - stats.LastFrameTime;
+            const double frameSeconds = std::chrono::duration<double>(now - *stats.LastFrameTime).count();
 
             stats.WindowSeconds += frameSeconds;
             stats.WindowWaitSeconds += stats.Render.WaitSeconds;

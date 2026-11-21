@@ -1,5 +1,6 @@
 #pragma once
 #include <crimson/core/input.hpp>
+#include <crimson/core/window.hpp>
 #include <crimson/renderer/camera_data.hpp>
 #include <crimson/scene/entity.hpp>
 
@@ -11,7 +12,7 @@ namespace crimson::editor
     class SceneCameraController
     {
     public:
-        SceneCameraController(PerspectiveCamera& camera, Input& input, const ui::ViewportPanel& viewport);
+        SceneCameraController(PerspectiveCamera& camera, Input& input, Window& window, const ui::ViewportPanel& viewport);
 
         // Sets the point that orbiting goes around and zooming goes towards
         void SetPivot(const glm::vec3& pivot);
@@ -43,6 +44,7 @@ namespace crimson::editor
     private:
         PerspectiveCamera& m_camera;
         Input& m_input;
+        Window& m_window;
         const ui::ViewportPanel& m_viewport;
 
         Gesture m_gesture = Gesture::None;

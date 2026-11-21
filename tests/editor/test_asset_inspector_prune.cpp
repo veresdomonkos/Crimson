@@ -8,8 +8,8 @@ using crimson::editor::ui::PruneToShader;
 TEST_CASE("A material keeps what its shader has and drops the rest", "[asset inspector]")
 {
     ShaderInterface shader;
-    shader.Properties["Color"] = {};
-    shader.Textures["ColorMap"] = {};
+    shader.Properties[PropertyId("Color")] = {};
+    shader.Textures[PropertyId("ColorMap")] = {};
 
     MaterialData data;
     data.Properties["Color"] = { 1.0f, 0.0f, 0.0f, 1.0f };

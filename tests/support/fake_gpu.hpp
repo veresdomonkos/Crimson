@@ -26,9 +26,11 @@ namespace crimson::tests
         };
 
         VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo&, const void*) override { ++LiveVertexBuffers; return VertexBufferHandle{ m_nextId++, 1 }; }
+        void UpdateVertexBuffer(VertexBufferHandle, std::span<const std::byte>) override { ++BufferUpdates; }
         void DestroyVertexBuffer(VertexBufferHandle) override { --LiveVertexBuffers; }
 
         IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo&, const void*) override { ++LiveIndexBuffers; return IndexBufferHandle{ m_nextId++, 1 }; }
+        void UpdateIndexBuffer(IndexBufferHandle, std::span<const std::byte>) override { ++BufferUpdates; }
         void DestroyIndexBuffer(IndexBufferHandle) override { --LiveIndexBuffers; }
 
         ShaderHandle CreateShader(const ShaderBinary& binary) override
@@ -93,6 +95,7 @@ namespace crimson::tests
             return TextureHandle{ m_nextId++, 1 };
         }
 
+        void UpdateTexture(TextureHandle, const TextureRegion&, const void*) override {}
         void DestroyTexture(TextureHandle texture) override
         {
             --LiveTextures;
@@ -125,6 +128,7 @@ namespace crimson::tests
 
         int LiveVertexBuffers = 0;
         int LiveIndexBuffers = 0;
+        int BufferUpdates = 0;
         int LiveShaders = 0;
         int LiveMaterials = 0;
         int LiveTextures = 0;

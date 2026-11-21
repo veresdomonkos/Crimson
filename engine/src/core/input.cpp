@@ -1,107 +1,57 @@
 #include "crimson/core/input.hpp"
 
-#include <GLFW/glfw3.h>
-
 namespace crimson
 {
-    static int ToGlfwKey(Key key)
+    // Nothing here marks an event handled, as whatever else wants it should still see it
+    void Input::OnEvent(Event& event)
     {
-        switch (key)
+        EventDispatcher dispatcher(event);
+
+        dispatcher.Dispatch<KeyPressEvent>([this](KeyPressEvent& press)
         {
-            case Key::A:          return GLFW_KEY_A;
-            case Key::D:          return GLFW_KEY_D;
-            case Key::E:          return GLFW_KEY_E;
-            case Key::F:          return GLFW_KEY_F;
-            case Key::Q:          return GLFW_KEY_Q;
-            case Key::S:          return GLFW_KEY_S;
-            case Key::W:          return GLFW_KEY_W;
-            case Key::Up:         return GLFW_KEY_UP;
-            case Key::Down:       return GLFW_KEY_DOWN;
-            case Key::Left:       return GLFW_KEY_LEFT;
-            case Key::Right:      return GLFW_KEY_RIGHT;
-            case Key::LeftShift:  return GLFW_KEY_LEFT_SHIFT;
-            case Key::RightShift: return GLFW_KEY_RIGHT_SHIFT;
-            case Key::LeftAlt:    return GLFW_KEY_LEFT_ALT;
-            case Key::RightAlt:   return GLFW_KEY_RIGHT_ALT;
-        }
+            m_keys.set(static_cast<std::size_t>(press.GetKey()));
+            return false;
+        });
 
-        return GLFW_KEY_UNKNOWN;
-    }
-
-    static int ToGlfwButton(MouseButton button)
-    {
-        switch (button)
+        dispatcher.Dispatch<KeyReleaseEvent>([this](KeyReleaseEvent& release)
         {
-            case MouseButton::Left:   return GLFW_MOUSE_BUTTON_LEFT;
-            case MouseButton::Right:  return GLFW_MOUSE_BUTTON_RIGHT;
-            case MouseButton::Middle: return GLFW_MOUSE_BUTTON_MIDDLE;
-        }
+            m_keys.reset(static_cast<std::size_t>(release.GetKey()));
+            return false;
+        });
 
-        return GLFW_MOUSE_BUTTON_LEFT;
-    }
+        dispatcher.Dispatch<MouseButtonPressEvent>([this](MouseButtonPressEvent& press)
+        {
+            m_buttons.set(static_cast<std::size_t>(press.GetButton()));
+            return false;
+        });
 
-    Input::Input(const Window& window)
-        : m_window(window.GetNativeHandle())
-    {
+        dispatcher.Dispatch<MouseButtonReleaseEvent>([this](MouseButtonReleaseEvent& release)
+        {
+            m_buttons.reset(static_cast<std::size_t>(release.GetButton()));
+            return false;
+        });
+
+        dispatcher.Dispatch<MouseMoveEvent>([this](MouseMoveEvent& move)
+        {
+            m_mousePosition = move.GetPosition();
+            m_pendingDelta += move.GetDelta();
+            return false;
+        });
     }
 
     void Input::Update()
     {
-        glm::dvec2 position;
-        glfwGetCursorPos(static_cast<GLFWwindow*>(m_window), &position.x, &position.y);
-
-        m_mouseDelta = m_skipNextDelta ? glm::vec2(0.0f) : glm::vec2(position - m_mousePosition);
-        m_mousePosition = position;
-        m_skipNextDelta = false;
-
-        // A hidden cursor still moves, and the UI would see it hovering and clicking whatever it went over.
-        // Putting it back each frame keeps it where it was locked, while the movement still counts.
-        if (m_locked)
-        {
-            glfwSetCursorPos(static_cast<GLFWwindow*>(m_window), m_lockedAt.x, m_lockedAt.y);
-            m_mousePosition = m_lockedAt;
-        }
+        m_mouseDelta = m_pendingDelta;
+        m_pendingDelta = glm::vec2(0.0f);
     }
 
     bool Input::IsKeyDown(Key key) const
     {
-        return glfwGetKey(static_cast<GLFWwindow*>(m_window), ToGlfwKey(key)) == GLFW_PRESS;
+        return m_keys.test(static_cast<std::size_t>(key));
     }
 
     bool Input::IsMouseButtonDown(MouseButton button) const
     {
-        return glfwGetMouseButton(static_cast<GLFWwindow*>(m_window), ToGlfwButton(button)) == GLFW_PRESS;
-    }
-
-    void Input::SetCursorLocked(bool locked)
-    {
-        auto* window = static_cast<GLFWwindow*>(m_window);
-
-        if (locked == m_locked)
-            return;
-
-        m_locked = locked;
-
-        if (locked)
-        {
-            glfwGetCursorPos(window, &m_lockedAt.x, &m_lockedAt.y);
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-            if (glfwRawMouseMotionSupported())
-                glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
-        }
-        else
-        {
-            if (glfwRawMouseMotionSupported())
-                glfwSetInputMode(window, GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
-
-            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-
-            // Back where the gesture started, which the mode change alone doesn't do on every platform
-            glfwSetCursorPos(window, m_lockedAt.x, m_lockedAt.y);
-        }
-
-        // The cursor position jumps when the mode changes, which isn't the mouse moving
-        m_skipNextDelta = true;
+        return m_buttons.test(static_cast<std::size_t>(button));
     }
 }

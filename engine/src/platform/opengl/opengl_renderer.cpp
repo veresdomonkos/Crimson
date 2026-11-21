@@ -3,15 +3,21 @@
 #include "utils.hpp"
 #include "crimson/core/log.hpp"
 #include "crimson/core/profiler.hpp"
+#include "crimson/renderer/draw_state.hpp"
 
 #include <tracy/TracyOpenGL.hpp>
 
 namespace crimson::opengl
 {
+    static void SetViewport(const RenderRect& rect)
+    {
+        glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
+    }
+
     // The scissor is only left off when the rect is the whole target
     static void SetViewportAndScissor(OpenGLStateCache& state, const RenderRect& rect, bool scissor)
     {
-        glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
+        SetViewport(rect);
         state.SetScissor(scissor ? &rect : nullptr);
     }
 
@@ -26,6 +32,9 @@ namespace crimson::opengl
         glCreateBuffers(1, &m_shadowsBuffer);
         glCreateBuffers(1, &m_objectsBuffer);
         glCreateBuffers(1, &m_viewsBuffer);
+        glCreateBuffers(1, &m_propertyBlocks);
+
+        glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &m_uniformOffsetAlignment);
 
         TracyGpuContext;
     }
@@ -33,6 +42,7 @@ namespace crimson::opengl
     OpenGLRenderer::~OpenGLRenderer()
     {
         if (m_frameUBO != 0) { glDeleteBuffers(1, &m_frameUBO); m_frameUBO = 0; }
+        if (m_propertyBlocks != 0) { glDeleteBuffers(1, &m_propertyBlocks); m_propertyBlocks = 0; }
         if (m_viewsBuffer != 0) { glDeleteBuffers(1, &m_viewsBuffer); m_viewsBuffer = 0; }
         if (m_lightsBuffer != 0) { glDeleteBuffers(1, &m_lightsBuffer); m_lightsBuffer = 0; }
         if (m_shadowsBuffer != 0) { glDeleteBuffers(1, &m_shadowsBuffer); m_shadowsBuffer = 0; }
@@ -69,9 +79,8 @@ namespace crimson::opengl
             return false;
 
         const FramePacket& packet = frame.GetPacket();
-        auto* window = m_device.GetPrimaryWindow();
 
-        // ImGui and resource creation may have touched GL state since the last frame
+        // Resource creation may have touched GL state since the last frame
         ResetBoundState();
 
         // Replacing the buffers' storage, so the frame before isn't waited on
@@ -84,6 +93,13 @@ namespace crimson::opengl
         const std::span<const GpuObject> objects = packet.GetObjects();
         UploadStorageBuffer(m_objectsBuffer, objects.data(), objects.size_bytes(), sizeof(GpuObject));
         UploadStorageBuffer(m_viewsBuffer, m_gpuData.Views.data(), std::span(m_gpuData.Views).size_bytes(), sizeof(GpuView));
+
+        // Replacing the storage, so a frame the GPU is still reading isn't waited on. The blocks of this frame's draws with
+        // properties are written into it as they are drawn.
+        const auto alignment = static_cast<std::size_t>(m_uniformOffsetAlignment);
+        const MaterialPropertiesBudget budget = CountMaterialProperties(packet, m_resourceManager, alignment);
+        glNamedBufferData(m_propertyBlocks, static_cast<GLsizeiptr>(std::max(budget.BlockBytes, alignment)), nullptr, GL_STREAM_DRAW);
+        m_propertyCursor = 0;
 
         BindFrameResources();
 
@@ -102,14 +118,14 @@ namespace crimson::opengl
         m_stats.Passes = static_cast<uint32_t>(passes.size());
 
         for (const PassRecord& pass : passes)
-            ExecutePass(pass, packet.GetViews());
+            ExecutePass(pass, packet);
 
         CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
 
         {
             CRIMSON_PROFILE_SCOPE("Swap Buffers");
             ScopedWaitTimer waitTimer(m_stats);
-            glfwSwapBuffers(window);
+            m_device.GetWindowGraphics().SwapBuffers();
         }
 
         TracyGpuCollect;
@@ -118,52 +134,43 @@ namespace crimson::opengl
         return true;
     }
 
-    void OpenGLRenderer::ExecutePass(const PassRecord& pass, std::span<const FrameView> views)
+    void OpenGLRenderer::ExecutePass(const PassRecord& pass, const FramePacket& packet)
     {
         const PassInfo& info = pass.GetInfo();
 
         CRIMSON_PROFILE_SCOPE_DYNAMIC(info.Name);
         TracyGpuZoneTransient(passZone, info.Name, true);
 
-        if (pass.IsNative())
-        {
-            ExecuteNativePass(pass);
-            return;
-        }
-
         const RenderRect passArea = BindTarget(info);
 
-        m_state.SetDepthTest(true);
-
         // BindTarget set the viewport to the pass's area, which the first draw's view may not have
-        m_boundView = kPassView;
+        m_boundView = {};
 
         const std::span<const DrawItem> draws = pass.GetDraws();
 
-        BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
+        BuildDrawOrder(draws, m_resourceManager, m_drawOrder, info.Kind);
         for (const DrawSortEntry& sorted : m_drawOrder)
-            ExecuteDraw(draws[sorted.Index], views, passArea);
-    }
-
-    void OpenGLRenderer::ExecuteNativePass(const PassRecord& pass)
-    {
-        BindTarget(pass.GetInfo());
-
-        const NativeContext context{};
-        pass.GetNativeFn()(context);
-
-        // The callback runs code that changes GL state without going through m_state
-        ResetBoundState();
+            ExecuteDraw(draws[sorted.Index], packet, passArea, info.Kind);
     }
 
     // Returns the part of the target the pass draws to
     RenderRect OpenGLRenderer::BindTarget(const PassInfo& info)
     {
-        // A pass without a target draws to the back buffer
-        const auto& target = m_resourceManager.GetRenderTarget(info.Target ? info.Target : m_resourceManager.GetBackBufferHandle());
-        m_state.BindFramebuffer(target.FrameBufferHandle);
+        // A pass without a target draws to the window's default framebuffer, whose size is the window's as it is now
+        glm::uvec2 size{};
+        if (info.Target)
+        {
+            const OpenGLRenderTarget& target = m_resourceManager.GetRenderTarget(info.Target);
+            m_state.BindFramebuffer(target.FrameBufferHandle);
+            size = { target.Width, target.Height };
+        }
+        else
+        {
+            m_state.BindFramebuffer(0);
+            size = m_device.GetWindowGraphics().GetFramebufferSize();
+        }
 
-        const RenderRect rect = info.Viewport.value_or(RenderRect{ 0, 0, target.Width, target.Height });
+        const RenderRect rect = info.Viewport.value_or(RenderRect{ 0, 0, size.x, size.y });
         SetViewportAndScissor(m_state, rect, info.Viewport.has_value());
 
         ClearTarget(info.Clear);
@@ -199,6 +206,7 @@ namespace crimson::opengl
         m_boundMaterial = MaterialHandle::Invalid();
         m_boundVertexBuffer = VertexBufferHandle::Invalid();
         m_boundIndexBuffer = IndexBufferHandle::Invalid();
+        m_boundProperties = {};
     }
 
     void OpenGLRenderer::BindFrameResources()
@@ -210,13 +218,19 @@ namespace crimson::opengl
         m_state.BindStorageBuffer(kViewsSlot, m_viewsBuffer);
     }
 
-    void OpenGLRenderer::ExecuteDraw(const DrawItem& info, std::span<const FrameView> views, const RenderRect& passArea)
+    void OpenGLRenderer::ExecuteDraw(const DrawItem& info, const FramePacket& packet, const RenderRect& passArea, PassKind kind)
     {
         CRIMSON_PROFILE_FUNCTION();
 
+        const std::span<const FrameView> views = packet.GetViews();
+
         // A view whose part of the target is outside the pass's draws nothing
-        const RenderRect viewArea = ViewArea(views[info.View], passArea);
+        const RenderRect viewArea = ViewArea(views[info.View.Index()], passArea);
         if (IsEmpty(viewArea)) return;
+
+        // A draw can limit itself further, to a part of what its view shows
+        const RenderRect scissor = info.Scissor ? Intersect(viewArea, *info.Scissor) : viewArea;
+        if (IsEmpty(scissor)) return;
 
         OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(info.IndexBuffer);
         OpenGLMaterial& material = m_resourceManager.GetMaterial(info.Material);
@@ -228,20 +242,42 @@ namespace crimson::opengl
             material.IsDirty = false;
         }
 
-        // Applied on every draw because clearing depth between passes can change depth write. A depth pass draws
-        // everything as opaque, so a transparent mesh still casts its shadow.
-        const bool transparent = info.Variant == ShaderVariant::Main && material.Settings.RenderMode == MaterialRenderMode::Transparent;
+        // Applied on every draw because clearing depth between passes can change depth write
+        const DrawState state = ResolveDrawState(kind, material.Settings, info.Variant);
 
-        m_state.SetBlend(transparent);
-        m_state.SetDepthWrite(!transparent);
+        m_state.SetBlend(state.Blend);
+        m_state.SetDepthTest(state.DepthTest);
+        m_state.SetDepthWrite(state.DepthWrite);
         m_state.SetCull(material.Settings.Cull);
 
         bool programChanged = false;
 
-        if (info.Material != m_boundMaterial || info.Variant != m_boundVariant)
+        // What is bound is for the pair of the material and its properties, so the draw after one with properties binds its
+        // material's own block and textures again
+        if (info.Material != m_boundMaterial || info.Properties != m_boundProperties || info.Variant != m_boundVariant)
         {
+            const OpenGLShader& shader = m_resourceManager.GetShader(material.Shader);
+            const std::span<const MaterialPropertyEntry> entries = info.Properties ? packet.GetPropertyEntries(info.Properties) : std::span<const MaterialPropertyEntry>{};
+
             if (material.GLBufferHandle != 0)
-                m_state.BindUniformBuffer(kMaterialBlockSlot, material.GLBufferHandle);
+            {
+                if (SetsValues(entries, shader.Interface))
+                {
+                    const std::size_t size = material.UniformDataSize;
+                    const auto alignment = static_cast<std::size_t>(m_uniformOffsetAlignment);
+
+                    m_blockScratch.resize(size);
+                    WriteMaterialBlock(m_blockScratch, { material.UniformData.get(), size }, shader.Interface, entries, packet.GetPropertyBytes(info.Properties));
+
+                    glNamedBufferSubData(m_propertyBlocks, m_propertyCursor, static_cast<GLsizeiptr>(size), m_blockScratch.data());
+                    m_state.BindUniformBufferRange(kMaterialBlockSlot, m_propertyBlocks, m_propertyCursor, static_cast<GLsizeiptr>(size));
+                    m_propertyCursor += static_cast<GLintptr>((size + alignment - 1) / alignment * alignment);
+                }
+                else
+                {
+                    m_state.BindUniformBuffer(kMaterialBlockSlot, material.GLBufferHandle);
+                }
+            }
 
             for (const OpenGLShaderTextureUnit& unit : program.TextureUnits)
             {
@@ -249,8 +285,8 @@ namespace crimson::opengl
 
                 if (!unit.IsShadowAtlas)
                 {
-                    const auto it = material.Textures.find(unit.Texture);
-                    texture = it != material.Textures.end() ? it->second : m_resourceManager.GetDefaultTexture();
+                    const TextureHandle drawTexture = DrawTexture(unit.Texture, material.Textures, entries);
+                    texture = drawTexture ? m_resourceManager.GetTexture(drawTexture).GLHandle : m_resourceManager.GetDefaultTexture();
                 }
 
                 m_state.BindTexture(unit.Unit, texture);
@@ -262,6 +298,7 @@ namespace crimson::opengl
                 ++m_stats.PipelineBinds;
 
             m_boundMaterial = info.Material;
+            m_boundProperties = info.Properties;
             m_boundVariant = info.Variant;
             ++m_stats.MaterialBinds;
         }
@@ -270,18 +307,20 @@ namespace crimson::opengl
         const bool viewChanged = info.View != m_boundView;
 
         if (viewChanged)
-            SetViewportAndScissor(m_state, viewArea, true);
+            SetViewport(viewArea);
+
+        m_state.SetScissor(&scissor);
 
         // Each program has its own copy of the uniforms
         if (programChanged || info.Object != m_boundObject)
         {
-            glUniform1ui(program.ObjectIndexLocation, info.Object);
+            glUniform1ui(program.ObjectIndexLocation, info.Object.Index());
             m_boundObject = info.Object;
         }
 
         if (programChanged || viewChanged)
         {
-            glUniform1ui(program.ViewIndexLocation, info.View);
+            glUniform1ui(program.ViewIndexLocation, info.View.Index());
             m_boundView = info.View;
         }
 
@@ -298,7 +337,7 @@ namespace crimson::opengl
         const GLsizei count = info.IndexCount ? info.IndexCount : total;
         const auto offset = reinterpret_cast<const void*>(static_cast<uintptr_t>(info.FirstIndex) * Index::Size(indexBuffer.Type));
 
-        glDrawElements(GL_TRIANGLES, count, utils::GetGLIndexType(indexBuffer.Type), offset);
+        glDrawElementsBaseVertex(GL_TRIANGLES, count, utils::GetGLIndexType(indexBuffer.Type), offset, info.BaseVertex);
 
         ++m_stats.DrawCalls;
         m_stats.Triangles += count / 3;

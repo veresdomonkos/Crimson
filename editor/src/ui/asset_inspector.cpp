@@ -19,6 +19,7 @@
 #include "crimson_editor/ui/asset_field.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/imgui_renderer.hpp"
 #include "crimson_editor/ui/property_fields.hpp"
 
 namespace crimson::editor::ui
@@ -45,10 +46,15 @@ namespace crimson::editor::ui
     }
 
     template <typename T>
-    static std::vector<std::pair<std::string, T>> SortedByName(const std::unordered_map<std::string, T>& map)
+    static std::vector<const T*> SortedByName(const std::unordered_map<PropertyId, T, PropertyIdHash>& map)
     {
-        std::vector<std::pair<std::string, T>> items(map.begin(), map.end());
-        std::ranges::sort(items, {}, [](const auto& item) { return item.first; });
+        std::vector<const T*> items;
+        items.reserve(map.size());
+
+        for (const auto& [id, item] : map)
+            items.push_back(&item);
+
+        std::ranges::sort(items, {}, [](const T* item) { return item->Name; });
         return items;
     }
 
@@ -67,8 +73,8 @@ namespace crimson::editor::ui
     {
         const std::size_t before = data.Properties.size() + data.Textures.size();
 
-        std::erase_if(data.Properties, [&](const auto& item) { return !shader.Properties.contains(item.first); });
-        std::erase_if(data.Textures, [&](const auto& item) { return !shader.Textures.contains(item.first); });
+        std::erase_if(data.Properties, [&](const auto& item) { return !shader.Properties.contains(PropertyId(item.first)); });
+        std::erase_if(data.Textures, [&](const auto& item) { return !shader.Textures.contains(PropertyId(item.first)); });
 
         return data.Properties.size() + data.Textures.size() != before;
     }
@@ -257,14 +263,21 @@ namespace crimson::editor::ui
     void AssetInspector::DrawMaterialProperties(const ShaderInterface& shader, MaterialData& data, bool& changed)
     {
         // In the order the shader declares them
-        std::vector<std::pair<std::string, ShaderPropertyInfo>> properties(shader.Properties.begin(), shader.Properties.end());
-        std::ranges::sort(properties, {}, [](const auto& item) { return item.second.Offset; });
+        std::vector<const ShaderPropertyInfo*> properties;
+        properties.reserve(shader.Properties.size());
+
+        for (const auto& [id, info] : shader.Properties)
+            properties.push_back(&info);
+
+        std::ranges::sort(properties, {}, [](const ShaderPropertyInfo* item) { return item->Offset; });
 
         if (!props::BeginTable("##MaterialProperties"))
             return;
 
-        for (const auto& [name, property] : properties)
+        for (const ShaderPropertyInfo* info : properties)
         {
+            const ShaderPropertyInfo& property = *info;
+            const std::string& name = property.Name;
             const std::size_t count = property.Size / sizeof(float);
             if (count < 1 || count > 4)
                 continue;
@@ -320,8 +333,9 @@ namespace crimson::editor::ui
 
         const AssetManager& assets = m_context.Session.GetAssets();
 
-        for (const auto& [name, texture] : SortedByName(shader.Textures))
+        for (const ShaderMaterialTexture* texture : SortedByName(shader.Textures))
         {
+            const std::string& name = texture->Name;
             props::BeginRow(name.c_str());
 
             const auto used = data.Textures.find(name);
@@ -384,8 +398,8 @@ namespace crimson::editor::ui
             ? static_cast<float>(m_textureSize->first) / static_cast<float>(m_textureSize->second)
             : 1.0f;
 
-        if (const ImTextureID preview = m_context.Thumbnails.Get(m_context.Session.GetAssets().As<TextureAsset>(info.Id)))
-            ImGui::Image(preview, ImVec2(available, available / aspect));
+        if (const TextureHandle preview = m_context.Thumbnails.Get(m_context.Session.GetAssets().As<TextureAsset>(info.Id)))
+            ImGui::Image(ToImTextureID(preview), ImVec2(available, available / aspect));
         else
             ImGui::TextDisabled("This image can't be read, see the console");
 
@@ -526,8 +540,8 @@ namespace crimson::editor::ui
         {
             Section("Properties", false, [&]
             {
-                for (const auto& [name, property] : SortedByName(shaderInterface.Properties))
-                    ImGui::BulletText("%s (%zu bytes)", name.c_str(), property.Size);
+                for (const ShaderPropertyInfo* property : SortedByName(shaderInterface.Properties))
+                    ImGui::BulletText("%s (%zu bytes)", property->Name.c_str(), property->Size);
             });
         }
 
@@ -535,8 +549,8 @@ namespace crimson::editor::ui
         {
             Section("Textures", false, [&]
             {
-                for (const auto& [name, texture] : SortedByName(shaderInterface.Textures))
-                    ImGui::BulletText("%s", name.c_str());
+                for (const ShaderMaterialTexture* texture : SortedByName(shaderInterface.Textures))
+                    ImGui::BulletText("%s", texture->Name.c_str());
             });
         }
     }

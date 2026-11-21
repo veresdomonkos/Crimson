@@ -4,6 +4,8 @@
 
 namespace crimson
 {
+    // A Static buffer never changes after it was created. A Dynamic or Stream buffer can be updated, once a frame or more:
+    // Dynamic for what changes now and then, Stream for what is new every frame.
     enum class BufferUsage
     {
         Static,

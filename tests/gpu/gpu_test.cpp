@@ -26,7 +26,7 @@ namespace crimson::tests
             return;
 
         s_window = Window::Create(s_backend, WindowData{ "Crimson GPU tests", 320, 240, [](Event&) {} });
-        s_graphics = GraphicsBackend::Create(s_backend, *s_window);
+        s_graphics = s_window->CreateGraphicsBackend();
     }
 
     GraphicsApi SelectedBackend() { return s_backend; }
@@ -196,8 +196,8 @@ namespace crimson::tests
 
             record(frame);
 
-            // Something has to present the back buffer, and a native pass is what leaves it ready for that
-            frame.AddNativePass({ .Name = "Present", .Clear = { .Flags = ClearFlags::Color } }, [](const NativeContext&) {});
+            // Something has to present the back buffer, and a pass without draws is what leaves it ready for that
+            frame.AddPass({ .Name = "Present", .Clear = { .Flags = ClearFlags::Color } });
 
             if (renderer.Submit(std::move(frame)))
                 return;

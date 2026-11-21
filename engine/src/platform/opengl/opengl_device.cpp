@@ -9,13 +9,13 @@
 
 namespace crimson::opengl
 {
-    OpenGLDevice::OpenGLDevice(const Window &window)
-        : m_primaryWindow(static_cast<GLFWwindow*>(window.GetNativeHandle()))
+    OpenGLDevice::OpenGLDevice(WindowGraphics& windowGraphics)
+        : m_windowGraphics(windowGraphics)
     {
-        glfwMakeContextCurrent(m_primaryWindow);
-        glfwSwapInterval(std::getenv("CRIMSON_VSYNC") ? 1 : 0);
+        m_windowGraphics.MakeContextCurrent();
+        m_windowGraphics.SetSwapInterval(std::getenv("CRIMSON_VSYNC") ? 1 : 0);
 
-        if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(glfwGetProcAddress)))
+        if (!gladLoadGLLoader(reinterpret_cast<GLADloadproc>(m_windowGraphics.GetGLLoader())))
         {
             throw std::runtime_error("Failed to load OpenGL.");
         }

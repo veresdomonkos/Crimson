@@ -81,7 +81,7 @@ namespace crimson
             if (shader)
             {
                 const auto& properties = assets.GetShaderInterface(shader).Properties;
-                if (const auto it = properties.find(name); it != properties.end() && it->second.Default == values)
+                if (const auto it = properties.find(PropertyId(name)); it != properties.end() && it->second.Default == values)
                     return;
             }
 

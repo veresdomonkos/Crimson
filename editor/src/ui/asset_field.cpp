@@ -9,6 +9,7 @@
 #include "crimson_editor/ui/asset_tiles.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/imgui_renderer.hpp"
 
 namespace crimson::editor::ui
 {
@@ -97,13 +98,13 @@ namespace crimson::editor::ui
         drawIcon(nameRight, icons::kPicker, style.Colors[ImGuiCol_Text]);
 
         // Not for a missing one, as the empty thumbnail would be kept after the file is back
-        const ImTextureID picture = type.Is<TextureAsset>() && info ? context.Thumbnails.Get(assets.As<TextureAsset>(shown)) : ImTextureID{ 0 };
+        const TextureHandle picture = type.Is<TextureAsset>() && info ? context.Thumbnails.Get(assets.As<TextureAsset>(shown)) : TextureHandle{};
 
         if (picture)
         {
             const float inset = std::round(style.FramePadding.y * 0.5f);
             const float side = height - inset * 2.0f;
-            drawList->AddImage(picture, ImVec2(min.x + inset, min.y + inset), ImVec2(min.x + inset + side, min.y + inset + side));
+            drawList->AddImage(ToImTextureID(picture), ImVec2(min.x + inset, min.y + inset), ImVec2(min.x + inset + side, min.y + inset + side));
         }
         else
         {
