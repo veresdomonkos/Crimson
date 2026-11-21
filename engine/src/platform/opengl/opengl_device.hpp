@@ -1,20 +1,17 @@
 #pragma once
-#include "crimson/core/window.hpp"
 #include "crimson/graphics/graphics_device.hpp"
-
-#define GLFW_INCLUDE_NONE
-#include <GLFW/glfw3.h>
+#include "../window_graphics.hpp"
 
 namespace crimson::opengl
 {
     class OpenGLDevice : public GraphicsDevice
     {
     public:
-        explicit OpenGLDevice(const Window &window);
+        explicit OpenGLDevice(WindowGraphics& windowGraphics);
         void WaitIdle() const override {}
 
-        [[nodiscard]] GLFWwindow* GetPrimaryWindow() const { return m_primaryWindow; }
+        [[nodiscard]] WindowGraphics& GetWindowGraphics() const { return m_windowGraphics; }
     private:
-        GLFWwindow* m_primaryWindow;
+        WindowGraphics& m_windowGraphics;
     };
 }

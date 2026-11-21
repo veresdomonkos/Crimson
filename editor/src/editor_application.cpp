@@ -6,8 +6,8 @@
 #include <crimson/core/profiler.hpp>
 #include <crimson/project/project.hpp>
 #include <crimson/graphics/graphics_api.hpp>
-#include <GLFW/glfw3.h>
 #include <nfd.h>
+#include <chrono>
 #include <exception>
 #include <utility>
 
@@ -24,7 +24,7 @@ namespace crimson::editor
     constexpr uint32_t kEditorHeight = 720;
 
 	EditorApplication::EditorApplication(GraphicsApi rendererType, const std::filesystem::path& projectPath)
-        : m_running(true), m_lastTime(0.0)
+        : m_running(true), m_lastTime(std::chrono::steady_clock::now())
     {
         if (NFD_Init() != NFD_OKAY)
             LOG_ERROR("[Editor] The folder picker is unavailable: {}", NFD_GetError());
@@ -39,7 +39,7 @@ namespace crimson::editor
         {
             m_graphicsBackend.reset();
             m_window          = Window::Create(api, WindowData{ "Crimson", kProjectManagerWidth, kProjectManagerHeight, BIND_FN(OnEvent) });
-            m_graphicsBackend = GraphicsBackend::Create(api, *m_window);
+            m_graphicsBackend = m_window->CreateGraphicsBackend();
         };
 
         try
@@ -56,8 +56,12 @@ namespace crimson::editor
             createGraphics(rendererType);
         }
 
-        m_input           = std::make_unique<Input>(*m_window);
-        m_icons           = std::make_unique<EditorIcons>(*m_graphicsBackend->GPUResources, *m_graphicsBackend->Imgui);
+        // After the graphics backend is final, as the fallback above makes a new window and backend
+        m_imguiPlatform   = std::make_unique<ui::ImGuiPlatform>(*m_window);
+        m_imguiRenderer   = std::make_unique<ui::ImGuiRenderer>(*m_graphicsBackend->GPUResources);
+
+        m_input           = std::make_unique<Input>();
+        m_icons           = std::make_unique<EditorIcons>(*m_graphicsBackend->GPUResources);
         m_recentProjects  = std::make_unique<RecentProjects>(configFolder / "recent_projects.json");
         m_settings        = std::make_unique<EditorSettings>(configFolder / "settings.json");
 
@@ -76,7 +80,7 @@ namespace crimson::editor
         ImGui::GetIO().IniFilename = m_imguiIniPath.c_str();
         ui::theme::Apply(m_window->GetContentScale());
 
-        m_lastTime = glfwGetTime();
+        m_lastTime = std::chrono::steady_clock::now();
 
         if (projectPath.empty())
         {
@@ -88,6 +92,17 @@ namespace crimson::editor
             ShowProject(std::move(*project));
         else
             ShowProjectManager(std::move(project.error()));
+    }
+
+    EditorApplication::ImGuiContextOwner::ImGuiContextOwner()
+    {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+    }
+
+    EditorApplication::ImGuiContextOwner::~ImGuiContextOwner()
+    {
+        ImGui::DestroyContext();
     }
 
     EditorApplication::~EditorApplication()
@@ -147,7 +162,7 @@ namespace crimson::editor
         m_closeProjectRequested = false;
 
         // Loading isn't part of any frame, so the camera shouldn't see it as one
-        m_lastTime = glfwGetTime();
+        m_lastTime = std::chrono::steady_clock::now();
     }
 
     void EditorApplication::Run()
@@ -158,15 +173,15 @@ namespace crimson::editor
 
     void EditorApplication::RunFrame()
     {
-        const double currentTime = glfwGetTime();
-        const auto deltaTime = static_cast<float>(currentTime - m_lastTime);
+        const auto currentTime = std::chrono::steady_clock::now();
+        const auto deltaTime = std::chrono::duration<float>(currentTime - m_lastTime).count();
         m_lastTime = currentTime;
 
         {
             CRIMSON_PROFILE_SCOPE("Poll Events");
             m_window->PollEvents();
         }
-        RenderFrame();
+        RenderFrame(deltaTime);
 
         m_input->Update();
         m_mode->Update(deltaTime);
@@ -176,7 +191,7 @@ namespace crimson::editor
         CRIMSON_PROFILE_FRAME();
     }
 
-    void EditorApplication::RenderFrame()
+    void EditorApplication::RenderFrame(float deltaTime)
     {
         CRIMSON_PROFILE_FUNCTION();
 
@@ -185,7 +200,8 @@ namespace crimson::editor
         if (!renderer.CanRender())
             return;
 
-	    m_graphicsBackend->Imgui->NewFrame();
+        m_imguiPlatform->NewFrame(deltaTime);
+        ImGui::NewFrame();
 
         FrameRecorder frame = renderer.BeginRecording();
         m_mode->Record(frame);
@@ -200,21 +216,18 @@ namespace crimson::editor
 
     void EditorApplication::RecordUIPass(FrameRecorder& frame)
     {
-        const PassInfo info{
+        // Everything the draw data holds is copied while recording
+        m_imguiRenderer->Record(frame, *ImGui::GetDrawData(), PassInfo{
             .Name = "UI",
             .Clear = { .Flags = ClearFlags::Color | ClearFlags::Depth, .Color = glm::vec4(ui::theme::AppBackground.x, ui::theme::AppBackground.y, ui::theme::AppBackground.z, 1.0f) }
-        };
-
-        // The draw data stays valid until the next ImGui frame starts, which is after Submit.
-        // TODO: snapshot it once rendering moves to its own thread.
-        frame.AddNativePass(info, [&imgui = *m_graphicsBackend->Imgui](const NativeContext& context)
-        {
-            imgui.RenderDrawData(ImGui::GetDrawData(), context);
         });
     }
 
 	void EditorApplication::OnEvent(Event& event)
 	{
+        m_input->OnEvent(event);
+        m_imguiPlatform->OnEvent(event);
+
 		EventDispatcher dispatcher(event);
 
 		dispatcher.Dispatch<WindowCloseEvent>([this](WindowCloseEvent& event) {

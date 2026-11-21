@@ -41,6 +41,17 @@ namespace crimson
         return (usage & flag) != TextureUsage{};
     }
 
+    // A rectangle of a texture in texels, the row 0 being the first row of the data CreateTexture took
+    struct TextureRegion
+    {
+        uint32_t X = 0;
+        uint32_t Y = 0;
+        uint32_t Width = 0;
+        uint32_t Height = 0;
+
+        [[nodiscard]] constexpr bool IsEmpty() const { return Width == 0 || Height == 0; }
+    };
+
     struct TextureInfo
     {
         uint32_t Width  = 0;

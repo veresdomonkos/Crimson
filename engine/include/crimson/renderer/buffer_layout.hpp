@@ -7,6 +7,7 @@ namespace crimson
     enum class ShaderDataType
     {
         Float, Float2, Float3, Float4,
+        UByte4Norm, // four bytes, which a shader reads as floats from 0 to 1
         Int, Int2, Int3, Int4
     };
 
@@ -20,6 +21,8 @@ namespace crimson
                 case ShaderDataType::Float2: return 8;
                 case ShaderDataType::Float3: return 12;
                 case ShaderDataType::Float4: return 16;
+
+                case ShaderDataType::UByte4Norm: return 4;
 
                 case ShaderDataType::Int:  return 4;
                 case ShaderDataType::Int2: return 8;
@@ -38,6 +41,8 @@ namespace crimson
                 case ShaderDataType::Float2: return 2;
                 case ShaderDataType::Float3: return 3;
                 case ShaderDataType::Float4: return 4;
+
+                case ShaderDataType::UByte4Norm: return 4;
 
                 case ShaderDataType::Int:  return 1;
                 case ShaderDataType::Int2: return 2;

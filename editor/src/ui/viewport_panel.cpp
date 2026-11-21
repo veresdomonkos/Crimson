@@ -1,6 +1,7 @@
 // viewport_panel.cpp
 #include "crimson_editor/ui/viewport_panel.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
+#include "crimson_editor/ui/imgui_renderer.hpp"
 
 namespace crimson::editor::ui
 {
@@ -34,7 +35,7 @@ namespace crimson::editor::ui
                 origin.y + (avail.y - size.y) * 0.5f);
 
             ImGui::SetCursorScreenPos(position);
-            ImGui::Image(m_texture, size, ImVec2(0, 1), ImVec2(1, 0));
+            ImGui::Image(ToImTextureID(m_texture), size, ImVec2(0, 1), ImVec2(1, 0));
 
             OnImageDrawn(position, size);
         }

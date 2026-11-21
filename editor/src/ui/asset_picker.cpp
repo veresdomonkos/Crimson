@@ -8,6 +8,7 @@
 #include "crimson_editor/ui/asset_tiles.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/imgui_renderer.hpp"
 
 namespace crimson::editor::ui
 {
@@ -298,7 +299,7 @@ namespace crimson::editor::ui
                 ImDrawList* drawList = ImGui::GetWindowDrawList();
 
                 // Only pictures that are on screen get loaded
-                ImTextureID picture = 0;
+                TextureHandle picture;
                 if (m_type.Is<TextureAsset>() && entry.Id && ImGui::IsItemVisible())
                     picture = thumbnails.Get(assets.As<TextureAsset>(entry.Id));
 
@@ -306,7 +307,7 @@ namespace crimson::editor::ui
                 {
                     const float side = std::min(tile.IconMax.x - tile.IconMin.x, tile.IconMax.y - tile.IconMin.y);
                     const ImVec2 center((tile.IconMin.x + tile.IconMax.x) * 0.5f, (tile.IconMin.y + tile.IconMax.y) * 0.5f);
-                    drawList->AddImage(picture, ImVec2(center.x - side * 0.5f, center.y - side * 0.5f), ImVec2(center.x + side * 0.5f, center.y + side * 0.5f));
+                    drawList->AddImage(ToImTextureID(picture), ImVec2(center.x - side * 0.5f, center.y - side * 0.5f), ImVec2(center.x + side * 0.5f, center.y + side * 0.5f));
                 }
                 else if (icon)
                 {

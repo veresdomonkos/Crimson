@@ -1,5 +1,6 @@
 add_executable(CrimsonTests
     support/fake_gpu.hpp
+    support/fake_window.hpp
     support/log_counter.hpp
     support/scene_fields.hpp
     support/temp_folder.hpp
@@ -10,6 +11,7 @@ add_executable(CrimsonTests
     engine/test_frame.cpp
     engine/test_handle_registry.cpp
     engine/test_import_cache.cpp
+    engine/test_input.cpp
     engine/test_log.cpp
     engine/test_mesh_tangents.cpp
     engine/test_project.cpp
@@ -29,6 +31,7 @@ add_executable(CrimsonTests
     editor/test_component_fields.cpp
     editor/test_edit_history.cpp
     editor/test_editor_theme.cpp
+    editor/test_imgui_platform.cpp
     editor/test_linear_color.cpp
     editor/test_platform.cpp
     editor/test_project_session.cpp
@@ -66,6 +69,7 @@ add_executable(CrimsonGpuTests
     gpu/main.cpp
     gpu/test_asset_editing.cpp
     gpu/test_editor.cpp
+    gpu/test_imgui.cpp
     gpu/test_input.cpp
     gpu/test_lighting.cpp
     gpu/test_rendering.cpp

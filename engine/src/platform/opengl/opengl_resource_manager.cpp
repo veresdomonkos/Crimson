@@ -6,21 +6,42 @@
 #include "spirv_to_glsl.hpp"
 #include "utils.hpp"
 #include "crimson/core/log.hpp"
+#include "renderer/update_validation.hpp"
 
 namespace crimson::opengl
 {
-    OpenGLResourceManager::OpenGLResourceManager(Window& window)
+    // The rows of the data are tightly packed, whatever their width, which the default row alignment of 4 would break
+    static void UploadTexels(const OpenGLTexture& texture, const TextureRegion& region, const void* data)
     {
-        OpenGLRenderTarget rt {
-            .ColorAttachments = {},
-            .DepthAttachment = TextureHandle::Invalid(),
-            .Width = window.Width(),
-            .Height = window.Height(),
-            .FrameBufferHandle = 0
-        };
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
-        m_backBufferHandle = m_renderTargets.Register(rt);
+        glTextureSubImage2D(
+            texture.GLHandle, 0,
+            static_cast<GLint>(region.X), static_cast<GLint>(region.Y),
+            static_cast<GLsizei>(region.Width), static_cast<GLsizei>(region.Height),
+            utils::GetGLUploadFormat(texture.Info.Format),
+            utils::GetGLUploadType(texture.Info.Format),
+            data
+        );
 
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+    }
+
+    // Gives the buffer new storage before writing to it, so a draw that still reads the old one isn't waited for
+    static void ReplaceBufferContents(GLuint buffer, size_t size, BufferUsage usage, std::span<const std::byte> data)
+    {
+        if (const auto error = ValidateBufferUpdate(usage, size, data.size()))
+        {
+            LOG_ERROR("[OpenGL] {}", *error);
+            return;
+        }
+
+        glNamedBufferData(buffer, static_cast<GLsizeiptr>(size), nullptr, utils::GetGLBufferUsage(usage));
+        glNamedBufferSubData(buffer, 0, static_cast<GLsizeiptr>(data.size()), data.data());
+    }
+
+    OpenGLResourceManager::OpenGLResourceManager()
+    {
         const auto createSampler = [](GLint filter, GLint addressMode, bool compare)
         {
             GLuint sampler = 0;
@@ -73,6 +94,19 @@ namespace crimson::opengl
         return m_vertexBuffers.Register(vbo);
     }
 
+    void OpenGLResourceManager::UpdateVertexBuffer(VertexBufferHandle handle, std::span<const std::byte> data)
+    {
+        const OpenGLVertexBuffer* vbo = m_vertexBuffers.Find(handle);
+
+        if (!vbo)
+        {
+            LOG_ERROR("[OpenGL] The vertex buffer to update doesn't exist");
+            return;
+        }
+
+        ReplaceBufferContents(vbo->GLHandle, vbo->Size, vbo->Usage, data);
+    }
+
     void OpenGLResourceManager::DestroyVertexBuffer(VertexBufferHandle handle)
     {
         std::erase_if(m_vertexArrays, [&](const auto& entry)
@@ -101,6 +135,19 @@ namespace crimson::opengl
         glNamedBufferData(ibo.GLHandle, static_cast<GLsizeiptr>(info.Size), data, utils::GetGLBufferUsage(ibo.Usage));
 
         return m_indexBuffers.Register(ibo);
+    }
+
+    void OpenGLResourceManager::UpdateIndexBuffer(IndexBufferHandle handle, std::span<const std::byte> data)
+    {
+        const OpenGLIndexBuffer* ibo = m_indexBuffers.Find(handle);
+
+        if (!ibo)
+        {
+            LOG_ERROR("[OpenGL] The index buffer to update doesn't exist");
+            return;
+        }
+
+        ReplaceBufferContents(ibo->GLHandle, ibo->Size, ibo->Usage, data);
     }
 
     void OpenGLResourceManager::DestroyIndexBuffer(IndexBufferHandle handle)
@@ -141,12 +188,14 @@ namespace crimson::opengl
         {
             glEnableVertexArrayAttrib(vao,location);
 
+            const bool isBytes = element.Type == ShaderDataType::UByte4Norm;
+
             glVertexArrayAttribFormat(
                 vao,
                 location,
                 static_cast<GLint>(element.ComponentCount()),
-                GL_FLOAT,
-                false,//element.Normalized,
+                isBytes ? GL_UNSIGNED_BYTE : GL_FLOAT,
+                isBytes ? GL_TRUE : GL_FALSE,
                 element.Offset
             );
 
@@ -223,7 +272,7 @@ namespace crimson::opengl
         for (const GlslTextureUnit& unit : textureUnits)
         {
             result.TextureUnits.push_back({
-                .Texture = unit.Texture,
+                .Texture = PropertyId(unit.Texture),
                 .Sampler = GetSharedSampler(unit.Sampler),
                 .Unit = unit.Unit,
                 .IsShadowAtlas = unit.Texture == "ShadowAtlas"
@@ -317,14 +366,17 @@ namespace crimson::opengl
         }
 
         const OpenGLShader& shader = m_shaders.Get(mat.Shader);
-        auto it = shader.Interface.Textures.find(std::string(name));
+        auto it = shader.Interface.Textures.find(PropertyId(name));
         if (it == shader.Interface.Textures.end())
         {
             LOG_WARN("Texture property '{}' not found in Shader!", name);
             return;
         }
 
-        mat.Textures[it->first] = m_textures.Get(texture ? texture : m_defaultTexture).GLHandle;
+        if (texture)
+            mat.Textures.insert_or_assign(it->first, texture);
+        else
+            mat.Textures.erase(it->first);
     }
 
     void OpenGLResourceManager::SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data)
@@ -338,7 +390,7 @@ namespace crimson::opengl
 
         const OpenGLShader& shader = m_shaders.Get(mat.Shader);
 
-        auto it = shader.Interface.Properties.find(std::string(name));
+        auto it = shader.Interface.Properties.find(PropertyId(name));
         if (it == shader.Interface.Properties.end())
         {
             LOG_WARN("Uniform property '{}' not found in Shader!", name);
@@ -395,9 +447,8 @@ namespace crimson::opengl
     TextureHandle OpenGLResourceManager::CreateTexture(const TextureInfo& info, const void* data)
     {
         OpenGLTexture tex{};
-        tex.Width  = info.Width;
-        tex.Height = info.Height;
         tex.InternalFormat = utils::GetGLInternalFormat(info.Format);
+        tex.Info = info;
 
         glCreateTextures(GL_TEXTURE_2D, 1, &tex.GLHandle);
 
@@ -406,13 +457,7 @@ namespace crimson::opengl
 
         if (data != nullptr)
         {
-            glTextureSubImage2D(
-                tex.GLHandle, 0, 0, 0,
-                 static_cast<GLsizei>(info.Width), static_cast<GLsizei>(info.Height),
-                 utils::GetGLUploadFormat(info.Format),
-                 utils::GetGLUploadType(info.Format),
-                 data
-            );
+            UploadTexels(tex, TextureRegion{ 0, 0, info.Width, info.Height }, data);
 
             if (mipLevels > 1)
                 glGenerateTextureMipmap(tex.GLHandle);
@@ -424,6 +469,28 @@ namespace crimson::opengl
         glTextureParameteri(tex.GLHandle, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
         return m_textures.Register(tex);
+    }
+
+    void OpenGLResourceManager::UpdateTexture(TextureHandle handle, const TextureRegion& region, const void* data)
+    {
+        const OpenGLTexture* texture = m_textures.Find(handle);
+
+        if (!texture)
+        {
+            LOG_ERROR("[OpenGL] The texture to update doesn't exist");
+            return;
+        }
+
+        if (const auto error = ValidateTextureUpdate(texture->Info, region))
+        {
+            LOG_ERROR("[OpenGL] {}", *error);
+            return;
+        }
+
+        if (region.IsEmpty())
+            return;
+
+        UploadTexels(*texture, region, data);
     }
 
     void OpenGLResourceManager::DestroyTexture(TextureHandle handle)
@@ -445,7 +512,7 @@ namespace crimson::opengl
             return {};
         }
 
-        std::vector<std::byte> pixels(static_cast<size_t>(tex.Width) * tex.Height * 4);
+        std::vector<std::byte> pixels(static_cast<size_t>(tex.Info.Width) * tex.Info.Height * 4);
         glGetTextureImage(tex.GLHandle, 0, GL_RGBA, GL_UNSIGNED_BYTE, static_cast<GLsizei>(pixels.size()), pixels.data());
         return pixels;
     }

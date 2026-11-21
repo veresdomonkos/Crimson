@@ -12,9 +12,11 @@
 
 #include "platform/opengl/spirv_to_glsl.hpp"
 #include "shader/shader_reflection.hpp"
+#include "support/log_counter.hpp"
 #include "support/temp_folder.hpp"
 
 using namespace crimson;
+using crimson::tests::LogCounter;
 using crimson::tests::TempFolder;
 
 constexpr std::string_view kMinimalShader = R"(
@@ -94,8 +96,8 @@ void PSDepth(float4 position : SV_Position) { clip(Mask.Load(int3(0, 0, 0)).a - 
 
         const auto shaderInterface = ReflectShaderInterface(*binary);
         REQUIRE(shaderInterface);
-        CHECK(shaderInterface->Textures.contains("Mask"));
-        CHECK(shaderInterface->Properties.contains("Cutoff"));
+        CHECK(shaderInterface->Textures.contains(PropertyId("Mask")));
+        CHECK(shaderInterface->Properties.contains(PropertyId("Cutoff")));
 
         std::vector<opengl::GlslTextureUnit> units;
         CHECK(opengl::TranslateSpirvToGlsl(binary->PixelDepth, units));
@@ -133,9 +135,9 @@ TEST_CASE("A texture passed to a function keeps its own name and unit on OpenGL"
 
         const auto shaderInterface = ReflectShaderInterface(binary);
         REQUIRE(shaderInterface);
-        REQUIRE(shaderInterface->Textures.contains("HeightMap"));
-        CHECK(shaderInterface->Textures.at("HeightMap").Binding == shader_bindings::kTextureShift);
-        CHECK(shaderInterface->Textures.at("HeightMap").Pixel);
+        REQUIRE(shaderInterface->Textures.contains(PropertyId("HeightMap")));
+        CHECK(shaderInterface->Textures.at(PropertyId("HeightMap")).Binding == shader_bindings::kTextureShift);
+        CHECK(shaderInterface->Textures.at(PropertyId("HeightMap")).Pixel);
     }
 
     SECTION("two call sites with different textures give two units")
@@ -212,8 +214,8 @@ float4 PSMain() : SV_Target { return float4(1.0, 1.0, 1.0, 1.0); }
 
     const auto shaderInterface = ReflectShaderInterface(*binary);
     REQUIRE(shaderInterface);
-    REQUIRE(shaderInterface->Textures.contains("Unused"));
-    CHECK(shaderInterface->Textures.at("Unused").Binding == 3 + shader_bindings::kTextureShift);
+    REQUIRE(shaderInterface->Textures.contains(PropertyId("Unused")));
+    CHECK(shaderInterface->Textures.at(PropertyId("Unused")).Binding == 3 + shader_bindings::kTextureShift);
 }
 
 TEST_CASE("Embedded files can be found by their path", "[shaders]")
@@ -361,14 +363,14 @@ float4 PSMain() : SV_Target
     const auto shader = ReflectShaderInterface(*binary);
     REQUIRE(shader);
 
-    CHECK(shader->Properties.at("Tint").Default.size() == 4);
-    CHECK(shader->Properties.at("Amount").Default == std::vector{ 0.25f });
-    CHECK(shader->Properties.at("Amount").Range == std::pair{ 0.0f, 2.0f });
-    CHECK(shader->Properties.at("Offset").Range == std::pair{ 0.01f, 100.0f });
-    CHECK(shader->Properties.at("Offset").Default.size() == 2);
-    CHECK(shader->Properties.at("WrongSize").Default.empty());
-    CHECK(shader->Textures.at("Plain").Default == ShaderTextureDefault::White);
-    CHECK(shader->Textures.at("Bumps").Default == ShaderTextureDefault::Normal);
+    CHECK(shader->Properties.at(PropertyId("Tint")).Default.size() == 4);
+    CHECK(shader->Properties.at(PropertyId("Amount")).Default == std::vector{ 0.25f });
+    CHECK(shader->Properties.at(PropertyId("Amount")).Range == std::pair{ 0.0f, 2.0f });
+    CHECK(shader->Properties.at(PropertyId("Offset")).Range == std::pair{ 0.01f, 100.0f });
+    CHECK(shader->Properties.at(PropertyId("Offset")).Default.size() == 2);
+    CHECK(shader->Properties.at(PropertyId("WrongSize")).Default.empty());
+    CHECK(shader->Textures.at(PropertyId("Plain")).Default == ShaderTextureDefault::White);
+    CHECK(shader->Textures.at(PropertyId("Bumps")).Default == ShaderTextureDefault::Normal);
 }
 
 TEST_CASE("A shader gets its camera from GetView, in either stage", "[shaders]")
@@ -507,4 +509,27 @@ float4 PSMain(VertexOutput input) : SV_Target
     std::vector<opengl::GlslTextureUnit> units;
     CHECK(opengl::TranslateSpirvToGlsl(binary->Vertex, units));
     CHECK(opengl::TranslateSpirvToGlsl(binary->Pixel, units));
+}
+
+TEST_CASE("Two names of one shader with the same PropertyId are reported", "[shaders]")
+{
+    ShaderNames seen;
+
+    CHECK(AddShaderName(seen, PropertyId("Color"), "Color"));
+
+    // The same name again is the same property, seen in another stage
+    CHECK(AddShaderName(seen, PropertyId("Color"), "Color"));
+
+    // The same id under another name, which no real names do, so it is made up here
+    const LogCounter errors(LogLevel::Error, "have the same property id");
+    CHECK_FALSE(AddShaderName(seen, PropertyId("Color"), "Tint"));
+    CHECK(errors.Count() == 1);
+
+    // The first name keeps the id
+    REQUIRE(seen.size() == 1);
+    CHECK(seen.at(PropertyId("Color")) == "Color");
+
+    // Names that differ have ids that differ
+    CHECK(AddShaderName(seen, PropertyId("Tint"), "Tint"));
+    CHECK(errors.Count() == 1);
 }

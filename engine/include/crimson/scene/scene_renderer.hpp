@@ -62,7 +62,7 @@ namespace crimson
             const crimson::Mesh* Mesh = nullptr;
             uint32_t FirstMaterial = 0;
             uint32_t MaterialCount = 0;
-            ObjectId Object = 0;
+            ObjectId Object;
             bool CastsShadows = false;
             bool Outlined = false;
         };

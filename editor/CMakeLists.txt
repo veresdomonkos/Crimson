@@ -35,6 +35,8 @@ set(EDITOR_HEADERS
     include/crimson_editor/ui/editor_ui.hpp
     include/crimson_editor/ui/hierarchy_panel.hpp
     include/crimson_editor/ui/icons.hpp
+    include/crimson_editor/ui/imgui_platform.hpp
+    include/crimson_editor/ui/imgui_renderer.hpp
     include/crimson_editor/ui/inspector_panel.hpp
     include/crimson_editor/ui/linear_color.hpp
     include/crimson_editor/ui/notifications.hpp
@@ -77,6 +79,8 @@ set(EDITOR_SOURCES
     src/ui/editor_theme.cpp
     src/ui/editor_ui.cpp
     src/ui/hierarchy_panel.cpp
+    src/ui/imgui_platform.cpp
+    src/ui/imgui_renderer.cpp
     src/ui/inspector_panel.cpp
     src/ui/linear_color.cpp
     src/ui/notifications.cpp
@@ -98,6 +102,7 @@ crimson_embed_resources(EditorCore DIRECTORY resources NAMESPACE crimson::editor
 target_link_libraries(EditorCore
     PUBLIC
         Engine
+        imgui
         imguizmo
     PRIVATE
         nfd

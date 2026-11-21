@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <memory>
@@ -7,6 +8,7 @@
 #include "crimson/core/events.hpp"
 #include "core.hpp"
 #include "crimson/graphics/graphics_api.hpp"
+#include "crimson/graphics/graphics_backend.hpp"
 
 namespace crimson
 {
@@ -17,6 +19,23 @@ namespace crimson
 		uint32_t Height;
 		EventCallback EventCallbackFn;
 	};
+
+    // What the mouse cursor looks like over the window. The diagonals are named by where they point to, up being the top
+    // of the screen: ResizeDiagonalUp runs from bottom left to top right, ResizeDiagonalDown from top left to bottom right.
+    enum class CursorShape
+    {
+        Arrow, TextInput, ResizeAll, ResizeVertical, ResizeHorizontal, ResizeDiagonalUp, ResizeDiagonalDown, Hand, NotAllowed
+    };
+
+    // The operating system's own window, for what has to name it outside the engine, such as the parent of a native
+    // dialog. Value holds an HWND, an X11 Window or an NSWindow*.
+    struct OSWindowHandle
+    {
+        enum class Kind { Win32, X11, Cocoa };
+
+        Kind Type;
+        std::uintptr_t Value;
+    };
 
 	class Window
 	{
@@ -39,7 +58,22 @@ namespace crimson
 	    // How much bigger than at 100% things should be drawn, from the monitor's scaling, such as 1.5 at 150%
 	    [[nodiscard]] virtual float GetContentScale() const = 0;
 
-	    virtual void* GetNativeHandle() const = 0;
+        // A locked cursor is hidden and stays where it was locked, while the mouse can keep moving forever without
+        // stopping at the edge of the screen. The mouse move events keep reporting how far it moved.
+        virtual void SetCursorLocked(bool locked) = 0;
+        [[nodiscard]] virtual bool IsCursorLocked() const = 0;
+
+        // Does nothing while the cursor is locked, as it is hidden then
+        virtual void SetCursorShape(CursorShape shape) = 0;
+
+        [[nodiscard]] virtual std::string GetClipboardText() const = 0;
+        virtual void SetClipboardText(const std::string& text) = 0;
+
+        [[nodiscard]] virtual OSWindowHandle GetOSHandle() const = 0;
+
+        // Makes the graphics backend that draws to this window. It throws when the window's graphics API can't start,
+        // and the window has to outlive the backend. Not const, as the OpenGL context is made current through the window.
+        [[nodiscard]] virtual std::unique_ptr<GraphicsBackend> CreateGraphicsBackend() = 0;
 
 	    static Unique<Window> Create(GraphicsApi rendererAPI, WindowData data);
 	};

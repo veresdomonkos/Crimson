@@ -12,6 +12,7 @@
 #include "crimson_editor/file_dialog.hpp"
 #include "crimson_editor/recent_projects.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
+#include "crimson_editor/ui/imgui_renderer.hpp"
 
 namespace fs = std::filesystem;
 
@@ -69,9 +70,9 @@ namespace crimson::editor
     {
         const float logoSize = ui::theme::Scaled(ui::theme::SpaceXL + ui::theme::SpaceM);
 
-        if (const ImTextureID logo = m_services.Icons.Get(kLogoIcon))
+        if (const TextureHandle logo = m_services.Icons.Get(kLogoIcon))
         {
-            ImGui::Image(logo, ImVec2(logoSize, logoSize));
+            ImGui::Image(ui::ToImTextureID(logo), ImVec2(logoSize, logoSize));
             ImGui::SameLine();
         }
 

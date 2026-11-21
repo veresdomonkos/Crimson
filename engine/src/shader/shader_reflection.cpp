@@ -81,7 +81,7 @@ namespace crimson
             return false;
         }
 
-        bool AddMaterialResource(const SpvReflectDescriptorBinding& binding, bool vertex, ShaderInterface& result)
+        bool AddMaterialResource(const SpvReflectDescriptorBinding& binding, bool vertex, ShaderInterface& result, ShaderNames& seen)
         {
             switch (binding.descriptor_type)
             {
@@ -100,14 +100,23 @@ namespace crimson
                     for (uint32_t i = 0; i < binding.block.member_count; ++i)
                     {
                         const SpvReflectBlockVariable& member = binding.block.members[i];
-                        result.Properties[member.name] = ShaderPropertyInfo{ .Offset = member.offset, .Size = member.size };
+                        const PropertyId id(member.name);
+
+                        if (AddShaderName(seen, id, member.name))
+                            result.Properties[id] = ShaderPropertyInfo{ .Offset = member.offset, .Size = member.size, .Name = member.name };
                     }
 
                     return true;
                 }
                 case SPV_REFLECT_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
                 {
-                    ShaderMaterialTexture& texture = result.Textures[binding.name];
+                    const PropertyId id(binding.name);
+
+                    if (!AddShaderName(seen, id, binding.name))
+                        return true;
+
+                    ShaderMaterialTexture& texture = result.Textures[id];
+                    texture.Name = binding.name;
                     texture.Binding = binding.binding;
                     (vertex ? texture.Vertex : texture.Pixel) = true;
                     return true;
@@ -121,7 +130,7 @@ namespace crimson
             }
         }
 
-        bool ReflectStage(std::span<const uint32_t> spirv, bool vertex, ShaderInterface& result)
+        bool ReflectStage(std::span<const uint32_t> spirv, bool vertex, ShaderInterface& result, ShaderNames& seen)
         {
             SpvReflectShaderModule module;
             if (spvReflectCreateShaderModule(spirv.size_bytes(), spirv.data(), &module) != SPV_REFLECT_RESULT_SUCCESS)
@@ -141,7 +150,7 @@ namespace crimson
             {
                 if (binding->set == shader_bindings::kMaterialSpace)
                 {
-                    valid = AddMaterialResource(*binding, vertex, result) && valid;
+                    valid = AddMaterialResource(*binding, vertex, result, seen) && valid;
                 }
                 else if (binding->set == shader_bindings::kFrameSpace)
                 {
@@ -173,26 +182,38 @@ namespace crimson
         }
     }
 
+    bool AddShaderName(ShaderNames& seen, PropertyId id, std::string_view name)
+    {
+        const auto [found, added] = seen.try_emplace(id, name);
+
+        if (added || found->second == name)
+            return true;
+
+        LOG_ERROR("[Shader] '{}' and '{}' have the same property id", found->second, name);
+        return false;
+    }
+
     std::optional<ShaderInterface> ReflectShaderInterface(const ShaderBinary& binary)
     {
         ShaderInterface result;
+        ShaderNames seen;
 
-        if (!ReflectStage(binary.VertexInterface, true, result) || !ReflectStage(binary.PixelInterface, false, result))
+        if (!ReflectStage(binary.VertexInterface, true, result, seen) || !ReflectStage(binary.PixelInterface, false, result, seen))
             return std::nullopt;
 
         // What only PSDepth uses has to be in the material's layout too
-        if (!binary.PixelDepthInterface.empty() && !ReflectStage(binary.PixelDepthInterface, false, result))
+        if (!binary.PixelDepthInterface.empty() && !ReflectStage(binary.PixelDepthInterface, false, result, seen))
             return std::nullopt;
 
         for (const auto& [name, annotation] : binary.Annotations)
         {
-            if (const auto texture = result.Textures.find(name); texture != result.Textures.end())
+            if (const auto texture = result.Textures.find(PropertyId(name)); texture != result.Textures.end())
             {
                 texture->second.Default = annotation.Texture;
                 continue;
             }
 
-            const auto property = result.Properties.find(name);
+            const auto property = result.Properties.find(PropertyId(name));
             if (property == result.Properties.end())
                 continue;
 

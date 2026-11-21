@@ -1,6 +1,6 @@
 # Precompiled headers hold only standard and third-party headers, never crimson/ or crimson_editor/ ones,
 # because an edit to a header in the list rebuilds the whole target. Files keep their own includes.
-# Never add GLFW or glad (opengl_device.hpp defines GLFW_INCLUDE_NONE first), windows.h (only the platform files
+# Never add GLFW (only engine/src/platform/glfw/ includes it) or glad, windows.h (only the platform files
 # include it) or vk_mem_alloc.h (VMA_IMPLEMENTATION).
 
 # The standard headers most files include

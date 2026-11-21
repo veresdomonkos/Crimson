@@ -255,7 +255,6 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
           -DCRIMSON_BUILD_TESTS=OFF
           -DCRIMSON_ENABLE_PROFILER=OFF
-          -DGLFW_BUILD_WAYLAND=OFF
 
       - name: Build
         env:
@@ -387,7 +386,6 @@ jobs:
         run: >-
           cmake -S . -B build -G Ninja
           -DCMAKE_BUILD_TYPE=Debug
-          -DGLFW_BUILD_WAYLAND=OFF
           -DCMAKE_DISABLE_PRECOMPILE_HEADERS=${{ matrix.pch_disabled }}
           "-DCMAKE_CXX_FLAGS=${{ matrix.flags }}"
           "-DCMAKE_C_FLAGS=${{ matrix.flags }}"

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+#include <limits>
 #include <optional>
 #include <vector>
 #include <unordered_map>
@@ -8,8 +10,11 @@
 
 #include "crimson/renderer/buffer_layout.hpp"
 #include "crimson/renderer/buffers.hpp"
+#include "crimson/renderer/frame_recorder.hpp"
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
+#include "crimson/renderer/texture.hpp"
+#include "renderer/draw_material.hpp"
 #include "shader/shader_reflection.hpp"
 #include "vulkan_allocator.hpp"
 
@@ -26,8 +31,8 @@ namespace crimson::vulkan
         vk::ImageLayout Layout = vk::ImageLayout::eUndefined;
         vk::ImageAspectFlags Aspect = vk::ImageAspectFlagBits::eColor;
 
-        uint32_t Width = 0;
-        uint32_t Height = 0;
+        // What it was created with: its size, and the rules of updating it
+        TextureInfo Info;
     };
 
     struct VulkanSurface
@@ -57,9 +62,38 @@ namespace crimson::vulkan
         bool IsSwapchain = false;
     };
 
+    // How many copies of a Dynamic or Stream buffer there are: one for each frame in flight, which may still be reading it,
+    // and one for the frame being recorded
+    constexpr size_t kBufferVersions = kMaxFramesInFlight + 1;
+
+    // The copies of one buffer. A Static buffer has one, and the others one per version.
+    struct VulkanBufferCopies
+    {
+        std::vector<AllocatedBuffer> Versions;
+        uint32_t Current = 0;
+        uint64_t UpdatedFrame = std::numeric_limits<uint64_t>::max();
+
+        // What a draw reads
+        [[nodiscard]] vk::Buffer Get() const { return Versions[Current].Get(); }
+        explicit operator bool() const { return !Versions.empty(); }
+
+        // What an update writes. The first update of a frame moves on to the next copy, which no frame in flight reads:
+        // the frames before this one read at most the two copies before the current one.
+        [[nodiscard]] AllocatedBuffer& ForUpdate(uint64_t frameNumber)
+        {
+            if (UpdatedFrame != frameNumber)
+            {
+                Current = static_cast<uint32_t>((Current + 1) % Versions.size());
+                UpdatedFrame = frameNumber;
+            }
+
+            return Versions[Current];
+        }
+    };
+
     struct VulkanVertexBuffer
     {
-        AllocatedBuffer Buffer;
+        VulkanBufferCopies Buffer;
         vk::DeviceSize Size = 0;
         BufferLayout Layout;
         BufferUsage Usage{};
@@ -67,7 +101,7 @@ namespace crimson::vulkan
 
     struct VulkanIndexBuffer
     {
-        AllocatedBuffer Buffer;
+        VulkanBufferCopies Buffer;
         vk::DeviceSize Size = 0;
         IndexType Type{};
         BufferUsage Usage{};
@@ -98,6 +132,9 @@ namespace crimson::vulkan
         AllocatedBuffer UniformBuffer;
         vk::DeviceSize UniformBufferSize = 0;
         vk::raii::DescriptorSet DescriptorSet{ nullptr };
+
+        // What was set with SetMaterialTexture, by slot, for the draws that have properties
+        MaterialTextures Textures;
     };
 
     struct VulkanResourceTraits

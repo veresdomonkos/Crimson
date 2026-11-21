@@ -8,6 +8,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/core/file_write.hpp
     include/crimson/core/hash.hpp
     include/crimson/core/input.hpp
+    include/crimson/core/keys.hpp
     include/crimson/core/log.hpp
     include/crimson/core/profiler.hpp
     include/crimson/core/window.hpp
@@ -20,15 +21,18 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/renderer/buffers.hpp
     include/crimson/renderer/camera_data.hpp
     include/crimson/renderer/core.hpp
+    include/crimson/renderer/draw_state.hpp
     include/crimson/renderer/draw_sort.hpp
     include/crimson/renderer/frame_gpu_data.hpp
     include/crimson/renderer/frame_recorder.hpp
+    include/crimson/renderer/frame_table.hpp
     include/crimson/renderer/frame_validation.hpp
     include/crimson/renderer/handle_registry.hpp
     include/crimson/renderer/light.hpp
+    include/crimson/renderer/material_properties.hpp
     include/crimson/renderer/material_settings.hpp
     include/crimson/renderer/mesh.hpp
-    include/crimson/renderer/native_context.hpp
+    include/crimson/renderer/property_id.hpp
     include/crimson/renderer/render_stats.hpp
     include/crimson/renderer/renderer.hpp
     include/crimson/renderer/resource_handles.hpp
@@ -75,8 +79,6 @@ set(ENGINE_PUBLIC_HEADERS
 
     include/crimson/project/project.hpp
     include/crimson/project/shader_includes.hpp
-
-    include/crimson/ui/imgui_backend.hpp
 )
 
 set(ENGINE_SOURCES
@@ -108,19 +110,23 @@ set(ENGINE_SOURCES
     src/core/input.cpp
     src/core/log.cpp
 
+    src/graphics/create_graphics_backend.hpp
     src/graphics/graphics_backend.cpp
 
+    src/platform/cursor_tracker.cpp
+    src/platform/cursor_tracker.hpp
     src/platform/files.hpp
+    src/platform/window_graphics.hpp
 
+    src/platform/glfw/glfw_input.cpp
+    src/platform/glfw/glfw_input.hpp
     src/platform/glfw/glfw_window.cpp
     src/platform/glfw/glfw_window.hpp
 
     src/platform/opengl/opengl_device.cpp
     src/platform/opengl/opengl_device.hpp
-    src/platform/opengl/opengl_imgui_backend.cpp
-    src/platform/opengl/opengl_imgui_backend.hpp
+    src/platform/opengl/opengl_renderer.cpp
     src/platform/opengl/opengl_renderer.hpp
-    src/platform/opengl/opengl_renderer_glfw.cpp
     src/platform/opengl/opengl_resource_manager.cpp
     src/platform/opengl/opengl_resource_manager.hpp
     src/platform/opengl/opengl_resources.hpp
@@ -135,8 +141,6 @@ set(ENGINE_SOURCES
     src/platform/vulkan/vulkan_allocator.hpp
     src/platform/vulkan/vulkan_device.cpp
     src/platform/vulkan/vulkan_device.hpp
-    src/platform/vulkan/vulkan_imgui_backend.cpp
-    src/platform/vulkan/vulkan_imgui_backend.hpp
     src/platform/vulkan/vulkan_include.hpp
     src/platform/vulkan/vulkan_pipeline_cache.hpp
     src/platform/vulkan/vulkan_renderer.cpp
@@ -147,6 +151,9 @@ set(ENGINE_SOURCES
 
     src/project/project.cpp
     src/project/shader_includes.cpp
+
+    src/renderer/draw_material.hpp
+    src/renderer/update_validation.hpp
 
     src/scene/component_registry.cpp
     src/scene/native_components.cpp
@@ -179,6 +186,15 @@ else()
     target_sources(Engine PRIVATE src/platform/posix/posix_files.cpp)
 endif()
 
+# The OS handle of the GLFW window, from the one file for the platform
+if(WIN32)
+    target_sources(Engine PRIVATE src/platform/glfw/glfw_os_handle_win32.cpp)
+elseif(APPLE)
+    target_sources(Engine PRIVATE src/platform/glfw/glfw_os_handle_cocoa.cpp)
+else()
+    target_sources(Engine PRIVATE src/platform/glfw/glfw_os_handle_x11.cpp)
+endif()
+
 crimson_embed_resources(Engine DIRECTORY resources NAMESPACE crimson FUNCTION GetEngineResources)
 
 # Every engine file gets the Vulkan headers too. That was measured at about 5% more compile time than a separate
@@ -188,7 +204,6 @@ crimson_precompile_headers(Engine ${CRIMSON_PRECOMPILED_ENGINE_DEPS} src/platfor
 target_link_libraries(Engine
     PUBLIC
         glm::glm-header-only
-        imgui
         fmt::fmt
         nlohmann_json::nlohmann_json
         EnTT::EnTT

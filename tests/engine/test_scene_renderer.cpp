@@ -241,14 +241,14 @@ TEST_CASE("One pass draws every shadow view, then comes the main pass", "[scene 
         CHECK(draw.Material == fixture.Handle(fixture.Mine));
         CHECK(draw.Variant == ShaderVariant::Depth);
 
-        REQUIRE(draw.View < views.size());
+        REQUIRE(draw.View.Index() < views.size());
         CHECK(draw.View != shadows.GetView());
-        CHECK(views[draw.View].View.ViewProj == shadow.Shadow.ViewProj);
+        CHECK(views[draw.View.Index()].View.ViewProj == shadow.Shadow.ViewProj);
 
-        REQUIRE(views[draw.View].Viewport);
-        CHECK(views[draw.View].Viewport->X == shadow.Viewport.X);
-        CHECK(views[draw.View].Viewport->Y == shadow.Viewport.Y);
-        CHECK(views[draw.View].Viewport->Width == shadow.Viewport.Width);
+        REQUIRE(views[draw.View.Index()].Viewport);
+        CHECK(views[draw.View.Index()].Viewport->X == shadow.Viewport.X);
+        CHECK(views[draw.View.Index()].Viewport->Y == shadow.Viewport.Y);
+        CHECK(views[draw.View.Index()].Viewport->Width == shadow.Viewport.Width);
     }
 
     const PassRecord& main = *passes.back();
@@ -378,7 +378,7 @@ TEST_CASE("A draw's object is its world transform", "[scene renderer]")
     REQUIRE(passes.size() == 1);
     REQUIRE(passes[0]->GetDraws().size() == 1);
 
-    const GpuObject& object = fixture.Renderer.Submitted->GetObjects()[passes[0]->GetDraws()[0].Object];
+    const GpuObject& object = fixture.Renderer.Submitted->GetObjects()[passes[0]->GetDraws()[0].Object.Index()];
     CHECK(glm::vec3(object.Transform[3]) == glm::vec3(1.0f, 2.0f, 3.0f));
 }
 

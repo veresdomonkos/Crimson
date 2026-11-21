@@ -539,9 +539,9 @@ TEST_CASE_METHOD(Fixture, "New shaders", "[asset editing]")
         REQUIRE(shader);
 
         const ShaderInterface& shaderInterface = assets.GetShaderInterface(shader);
-        CHECK(shaderInterface.Properties.contains("Color"));
-        CHECK(shaderInterface.Properties.contains("Roughness"));
-        CHECK(shaderInterface.Textures.contains("ColorMap"));
+        CHECK(shaderInterface.Properties.contains(PropertyId("Color")));
+        CHECK(shaderInterface.Properties.contains(PropertyId("Roughness")));
+        CHECK(shaderInterface.Textures.contains(PropertyId("ColorMap")));
     }
 
     SECTION("Refuse bad places")
@@ -969,7 +969,7 @@ TEST_CASE_METHOD(Fixture, "Changed shaders are reloaded along with their materia
             CHECK(shaderAfter != shaderBefore);
             CHECK(after != before);
             CHECK(Gpu.Materials.at(after.GetRaw()).Shader == shaderAfter);
-            CHECK(assets.GetShaderInterface(shaderAfter).Properties.contains("Extra"));
+            CHECK(assets.GetShaderInterface(shaderAfter).Properties.contains(PropertyId("Extra")));
             CHECK(Gpu.ShadersFreedWhileUsed == 0);
             CHECK(Gpu.LiveShaders == 1);
             CHECK(Gpu.LiveMaterials == 1);

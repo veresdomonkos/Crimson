@@ -8,7 +8,11 @@ flowchart TD
     GB --> Dev[GraphicsDevice]
     GB --> Res[GpuResourceManager]
     GB --> Ren[Renderer]
-    GB --> Im[ImGuiBackend]
+    App --> Win[Window]
+    Win --> GB
+    App --> UI[ImGuiPlatform and ImGuiRenderer]
+    UI --> Win
+    UI --> Res
     App --> Mode[ProjectSessionMode]
     Mode --> Session[ProjectSession] --> AM[AssetManager]
     AM --> Res
@@ -38,14 +42,24 @@ Vulkan 1.3 (dynamic rendering, synchronization2) and OpenGL 4.5 implement the sa
 
 ### GraphicsBackend
 
-A single factory call creates the whole graphics subsystem and hands over ownership:
+The window makes the graphics backend for its own API, with one call that hands over ownership:
 
 ```cpp
-auto backend = GraphicsBackend::Create(GraphicsApi::Vulkan, *window);
-// backend->Device, ->GPUResources, ->Renderer, ->Imgui
+auto window = Window::Create(GraphicsApi::Vulkan, data);
+auto backend = window->CreateGraphicsBackend();
+// backend->Device, ->GPUResources, ->Renderer
 ```
 
-Members are declared so that destruction order is correct (ImGui, renderer, resources, device). The renderer only holds references; it does not own the device or the resource manager.
+The window has to outlive the backend. Members are declared so that destruction order is correct (renderer, resources, device). The renderer only holds references; it does not own the device or the resource manager.
+
+### The platform layer and GLFW
+
+**GLFW lives only in `engine/src/platform/glfw/`.** No public engine header mentions it, the graphics devices don't call it, and the editor and the tests neither include nor link it. What the rest of the engine needs from the OS comes through the engine's own types, so another platform layer, such as SDL, can replace the folder:
+
+- **`Window`** (`crimson/core/window.hpp`) is the public interface: size, title, focus, the events below, the cursor, the clipboard, and `CreateGraphicsBackend()`.
+- **`WindowGraphics`** (`engine/src/platform/window_graphics.hpp`) is what a graphics device needs from the window it draws to: the Vulkan instance extensions and surface, and for OpenGL making the context current, the swap interval, swapping buffers and the function loader. The GLFW window implements it next to `Window`, and passes itself to the devices. It exists only in `engine/src`.
+- **One helper chooses the API.** `CreateGraphicsBackend(GraphicsApi, Window&, WindowGraphics&)` (`engine/src/graphics/create_graphics_backend.hpp`) holds the one `switch` over the APIs, and the window's own `CreateGraphicsBackend()` calls it. An SDL window would call it the same way.
+- **`OSWindowHandle`** names the operating system's own window (an HWND, an X11 `Window`, a `wl_surface*` or an `NSWindow*`), for what has to refer to it outside the engine. The file dialogs use it as the parent of the native dialog.
 
 ### Resource management
 
@@ -78,23 +92,44 @@ for (const ShadowView& shadow : frame.Lighting().Shadows)
 
 frame.AddPass({ .Name = "Scene", .Target = sceneTarget, .View = camera, .Reads = { shadowAtlas } }).DrawMesh(mesh, materials, object);
 
-frame.AddNativePass({ .Name = "UI", .Clear = { .Flags = ClearFlags::Color } },
-                    [](const NativeContext& context) { /* ImGui, debug draw, ... */ });
+// What is drawn on top of the scene, in the order it was recorded
+frame.AddPass({ .Name = "UI", .Kind = PassKind::Overlay }).Draw({ .VertexBuffer = vertices, .IndexBuffer = indices, .Material = material, .Scissor = clip });
 
 renderer.Submit(std::move(frame)); // false when the frame was dropped, like for an out of date swapchain
 ```
 
-- A pass is a `PassRecord`: its `PassInfo` and either draws or a native callback. Passes run in the order they are added.
+- A pass is a `PassRecord`: its `PassInfo` and its draws. Passes run in the order they are added.
 - `PassInfo` holds the pass's `Name` (shown in Tracy), its `Target` (the back buffer when empty), what to `Clear` it to, an optional `Viewport` to limit drawing and clearing to part of it, the `View` (camera) and the textures the pass samples in `Reads`.
-- A draw is a `DrawItem`: vertex buffer, index buffer, material, object, view and `ShaderVariant`. `PassBuilder::Draw` adds one, `DrawMesh(mesh, materials, object, options)` one per submesh, each with the material at its slot in `materials`. A `PassBuilder` refers to its pass by index, so it stays valid while more passes are added.
+- A draw is a `DrawItem`: vertex buffer, index buffer, material, its properties, object, view, `ShaderVariant`, an optional `Scissor` and a `BaseVertex`. `PassBuilder::Draw` adds one, `DrawMesh(mesh, materials, object, options)` one per submesh, each with the material at its slot in `materials`. A `PassBuilder` refers to its pass by index, so it stays valid while more passes are added.
 - The frame's views are a list like its objects. Every pass adds its `View` to it, and a draw uses that one unless it names another (`DrawItem::View`, `DrawOptions::View`) from `FrameRecorder::AddView(view, viewport)`. A view added with a viewport draws only to that part of the pass's target, clipped to the pass's own area, and a view outside that area draws nothing. That is how one pass draws many cameras, like the shadows. The pass's `Clear` is still for the pass's whole area.
 - The renderers sort each pass's draws: opaque ones first, grouped by shader, material and buffers to rebind as little as possible, then transparent ones from the farthest to the nearest. `DrawMesh` sets a draw's `SortDepth` to the squared distance from its view's camera to the center of the mesh's bounds. Meshes that cross each other can still blend in the wrong order, as each sorts as a whole.
-- A native pass runs a callback with `NativeContext` (device, command buffer, color format) between engine-managed layout transitions. ImGui is rendered this way, so the engine itself has no UI concepts. The callback runs inside `Submit`, so it captures by value or references what outlives the frame.
+- **A pass has a kind.** A `Scene` pass sorts as above, and tests and writes depth. An `Overlay` pass keeps its draws in the order they were recorded, blends every one, and has no depth test or write, with its material deciding the culling. That is for what is drawn on top of a scene, like the editor's UI and later gizmos. It is a setting of the pass rather than a render mode, as a render mode is saved in `.mat` files and offered in the Inspector.
+- **A draw can be cut and offset.** `Scissor`, in the same space as the pass's `Viewport`, limits it to a rect of the target, cut to its view's area. `BaseVertex` is added to each index, so many meshes can share one vertex buffer. `ShaderDataType::UByte4Norm` reads four bytes as floats from 0 to 1, for colors packed into a vertex.
+- **Frame ids and tables.** Objects, views and material properties are each kept in a `FrameTable<Tag, T>` of the frame, and named by a `FrameId<Tag>`, which is an index into one frame's table. They are distinct types, so mixing them doesn't compile, and a default id is none, which each kind gives its own meaning: the identity transform for an object, the pass's view for a view, and the material as it is for properties. They have no generations and no free list, as the tables start empty every frame.
+- **Material properties for one draw.** `FrameRecorder::AddProperties(MaterialProperties)` returns an id that `DrawItem::Properties` or `DrawOptions::Properties` names, like `{ .MaterialOverride = red, .Properties = tint }`. A `MaterialProperties` is a set of values and textures, each named by a `PropertyId` (the hash of its name, as `Shader.PropertyToID` is in Unity), applied on top of what the draw's material has, without making a material. A property the draw's shader doesn't have is skipped. It is not `DrawOptions::MaterialOverride`, which replaces the whole material. The rules for what a property changes are in one header shared by both backends (`engine/src/renderer/draw_material.hpp`): a draw that sets values gets its own copy of its material's uniform block with the values written over it, and a draw with properties binds its own textures. Vulkan allocates one descriptor set for it from a pool, and OpenGL binds the textures to units. Both are sized from the frame before it is drawn, so there is one pool and one buffer for each frame in flight on Vulkan, and one buffer on OpenGL.
+- **Buffers and textures can change.** Dynamic and Stream buffers are updated with `UpdateVertexBuffer` and `UpdateIndexBuffer`, as often as every frame, and what a frame draws is what the buffer held when it was submitted. Vulkan keeps `kMaxFramesInFlight + 1` copies of such a buffer for that, and OpenGL orphans the storage. A Static buffer can't be updated. `UpdateTexture` replaces a `TextureRegion` of a texture without mips, and can also be called while recording.
 - Each draw indexes a per-frame buffer of object transforms, filled by `AddObject`, and one of views. Both indices reach the shader in the draw's push constant.
 - In debug builds `Submit` checks the passes' `Reads`, and logs once when a pass samples its own target or a texture that a later pass writes.
 - Vulkan layout transitions and barriers are handled by the renderer, a pass's `Reads` are made readable before it starts; OpenGL needs none.
 - The renderer keeps one `FramePacket` per frame in flight (`kMaxFramesInFlight`), and reuses their memory. Frame-in-flight synchronisation (fences, semaphores, per-frame buffers) is internal to the Vulkan renderer.
 - The frame's time, `Time` and `DeltaTime`, comes from a `FrameClock` each renderer owns, and reaches shaders through the frame block.
+
+## Window and input
+
+There is one path from the OS into the engine: the window sends events, and everything else is derived from them. `Window::PollEvents` calls the callback the window was created with, once for each event:
+
+| Event | When |
+|:------|:-----|
+| `KeyPressEvent`, `KeyReleaseEvent` | a key changes, with its `Key`, the `KeyModifiers` held, and for a press whether it is a repeat |
+| `TextInputEvent` | a character was typed, which the keyboard layout and the modifiers decided |
+| `MouseButtonPressEvent`, `MouseButtonReleaseEvent` | a `MouseButton` changes |
+| `MouseMoveEvent` | the mouse moved: its position in window coordinates, and how far it moved since the event before |
+| `MouseLeaveEvent`, `MouseScrollEvent` | the cursor left the window, or the wheel turned |
+| `WindowFocusEvent`, `WindowResizeEvent`, `WindowCloseEvent` | the window's own changes |
+
+- **One `Key` enum** (`crimson/core/keys.hpp`) names the whole keyboard by what is printed on its keys in a US layout, whatever the layout in use is. The window drops a key it can't name.
+- **`Input` is derived from the events.** `Input::OnEvent` keeps which keys and mouse buttons are down and where the mouse is, and `Update()`, called once a frame after the window polled, turns the movement of that frame into `GetMouseDelta()`. It uses no GLFW and no window, so the tests feed it events directly.
+- **The cursor.** `Window::SetCursorLocked` hides the cursor and keeps it where it was locked, while the mouse moves on without stopping at the edge of the screen. The mouse move events then report the locked position with the real delta, so a UI never sees the hidden cursor wander (`CursorTracker`, which has no GLFW and is the same for every platform layer). `SetCursorShape` sets what the cursor looks like, and `GetClipboardText` and `SetClipboardText` read and write the clipboard.
 
 ## Rendering
 
@@ -287,9 +322,17 @@ The embedded files are kept in Git LFS, like the editor's, and CI pulls `engine/
 
 A project is a folder with a `project.crimson` file and an `assets/` folder. It opens on the scene that was last open, or on its first one, and one with no scenes gets a new `scenes/main.scene`. Opening a project also copies the engine's shader headers into its data folder and lists them in `shadertoolsconfig.json`, so code editors with HLSL Tools find them. The data folder also holds `cache/`, what importing the project's files made, and `recovery/`, copies of unsaved scenes.
 
+### How the UI is drawn and fed
+
+**The engine doesn't link ImGui and has no UI concepts.** The editor owns the ImGui context (in `EditorApplication`, which also makes sure the window, the backend and the context go in the right order) and two classes in `editor/src/ui/`:
+
+- **`ImGuiPlatform`** turns the window's events into ImGui's input events, and keeps the display's size, the time of the frame and the mouse cursor ImGui wants up to date before each `ImGui::NewFrame()`. ImGui's clipboard is the window's. Nothing in the editor reaches into GLFW.
+- **`ImGuiRenderer`** records ImGui's draw data as an `Overlay` pass, through `GpuResourceManager` and `FrameRecorder` like any other code. It has one material, made from `editor/resources/shaders/S_ImGui.hlsl`, for all of the UI, and each draw sets its texture with `MaterialProperties`, so there is no material for each texture. Its vertices and indices go into Stream buffers updated every frame, and each ImGui clip rect is the draw's `Scissor`. ImGui's own textures, the fonts, are kept as engine textures: it makes and updates them from the requests ImGui puts in its draw data (`ImGuiBackendFlags_RendererHasTextures`).
+- **An `ImTextureID` is a `TextureHandle`.** `ui::ToImTextureID` and `ui::FromImTextureID` convert between them, so showing a render target or a texture asset needs no registering, and a texture can be destroyed without telling ImGui first.
+
 ### Panels and menus
 
-Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel inside a single native pass. They share an `EditorContext`, and reach the scene, the assets, their edits, undo and the selection only through its `Session`. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default.
+Panels derive from `ui::Panel` and are owned by `ui::EditorUI`, which draws the dockspace and every panel into the one frame ImGui builds, which the UI pass records (see above). They share an `EditorContext`, and reach the scene, the assets, their edits, undo and the selection only through its `Session`. A first start builds a default layout, later starts use the one saved in `imgui.ini`, and **View > Reset Layout** restores the default.
 
 - **The main menu:** File, **Edit** (Undo, Redo) and View come from `EditorUI`. Panels add their own menus between them through `Panel::OnMainMenuBar`, and items to Edit, which ImGui puts after the ones already there. The Hierarchy adds **Edit** (Rename, Delete) and **Create**, the same as its right-click menu. The Preferences window adds **Edit > Preferences**.
 - **Notifications:** `ui::Notifications` shows errors, from anywhere in the engine, and finished saves in the bottom right corner, so they are seen with the Console closed. It reads the same `Logger` the Console does.

@@ -7,6 +7,7 @@
 #include <tuple>
 #include <vector>
 
+#include "crimson/renderer/draw_state.hpp"
 #include "crimson/renderer/frame_recorder.hpp"
 #include "crimson/renderer/material_settings.hpp"
 
@@ -21,13 +22,16 @@ namespace crimson
     // Opaque draws, from the highest bits down: transparent (1), shader (12), cull (2), material (17), vertex buffer (16),
     // index buffer (16). Ids too large for their field wrap around, which can only cost extra binds, the draws still use their own handles.
     //
-    // Transparent draws set the top bit, then their depth inverted, so the farthest comes first and blends under the nearer ones.
+    // A pass that keeps the recorded order gives every draw 0, so the index decides. Transparent draws set the top bit, then their depth inverted, so the farthest comes first and blends under the nearer ones.
     // Equal depths leave the rest 0, so the index keeps them in submission order. A depth version of a transparent material,
     // like in a shadow pass, is drawn as opaque and sorts like it.
     template <typename Material>
-    uint64_t MakeDrawSortKey(const DrawItem& draw, const Material& material)
+    uint64_t MakeDrawSortKey(const DrawItem& draw, const Material& material, DrawSequence order)
     {
-        if (draw.Variant == ShaderVariant::Main && material.Settings.RenderMode == MaterialRenderMode::Transparent)
+        if (order == DrawSequence::Recorded)
+            return 0;
+
+        if (order == DrawSequence::BackToFront)
         {
             // Non-negative floats order like their bits. A negative or NaN depth counts as 0.
             const float depth = draw.SortDepth > 0.0f ? draw.SortDepth : 0.0f;
@@ -47,15 +51,20 @@ namespace crimson
              | field(draw.IndexBuffer.GetId(), 16, 0);
     }
 
-    // Opaque draws first, grouped by state so the renderers rebind as little as possible.
+    // What ResolveDrawState says of each draw: opaque ones first, grouped by state so the renderers rebind as little as possible,
+    // then the transparent ones farthest first, or just as recorded.
     template <typename ResourceManager>
-    void BuildDrawOrder(std::span<const DrawItem> draws, const ResourceManager& resourceManager, std::vector<DrawSortEntry>& order)
+    void BuildDrawOrder(std::span<const DrawItem> draws, const ResourceManager& resourceManager, std::vector<DrawSortEntry>& order, PassKind kind)
     {
         order.clear();
         order.reserve(draws.size());
 
         for (uint32_t i = 0; i < draws.size(); ++i)
-            order.push_back({ MakeDrawSortKey(draws[i], resourceManager.GetMaterial(draws[i].Material)), i });
+        {
+            const auto& material = resourceManager.GetMaterial(draws[i].Material);
+            const DrawState state = ResolveDrawState(kind, material.Settings, draws[i].Variant);
+            order.push_back({ MakeDrawSortKey(draws[i], material, state.Order), i });
+        }
 
         std::sort(order.begin(), order.end(), [](const DrawSortEntry& a, const DrawSortEntry& b)
         {

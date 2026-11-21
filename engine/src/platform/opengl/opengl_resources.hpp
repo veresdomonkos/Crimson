@@ -13,14 +13,15 @@
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/shader_variant.hpp"
+#include "crimson/renderer/texture.hpp"
 #include "crimson/renderer/shader_property_info.hpp"
+#include "renderer/draw_material.hpp"
 #include "shader/shader_reflection.hpp"
 
 namespace crimson::opengl
 {
     struct OpenGLSurface
     {
-        void* WindowHandle{};
         RenderTargetHandle BackBufferHandle;
     };
 
@@ -28,8 +29,9 @@ namespace crimson::opengl
     {
         GLuint GLHandle = 0;
         GLenum InternalFormat = GL_RGBA8;
-        uint32_t Width  = 0;
-        uint32_t Height = 0;
+
+        // What it was created with: its size, and what decides if it can be updated
+        TextureInfo Info;
     };
 
     struct OpenGLRenderTarget
@@ -60,7 +62,7 @@ namespace crimson::opengl
     // A texture unit the shader samples from, with what has to be bound to it
     struct OpenGLShaderTextureUnit
     {
-        std::string Texture;
+        PropertyId Texture;
         GLuint Sampler = 0;
         uint32_t Unit = 0;
         bool IsShadowAtlas = false;
@@ -92,7 +94,8 @@ namespace crimson::opengl
         std::unique_ptr<std::byte[]> UniformData = nullptr;
         std::size_t UniformDataSize = 0;
         GLuint GLBufferHandle = 0;
-        std::unordered_map<std::string, GLuint> Textures;
+        // What was set with SetMaterialTexture, by slot
+        MaterialTextures Textures;
         bool IsDirty = true;
 
         template<MaterialProperty T>
