@@ -1,5 +1,6 @@
 #include "crimson_editor/ui/drag_drop.hpp"
 
+#include <cstring>
 #include <string>
 
 #include <imgui.h>
@@ -20,20 +21,23 @@ namespace crimson::editor::ui::drag_drop
             ImGui::EndDragDropSource();
         }
 
-        const void* Accept(std::string_view type, std::size_t size, DropLook look, const std::function<bool(const void*)>& accepts)
+        bool Accept(std::string_view type, void* out, std::size_t size, DropLook look, const std::function<bool(const void*)>& accepts)
         {
             if (!ImGui::BeginDragDropTarget())
-                return nullptr;
+                return false;
 
             const std::string name(type);
-            const void* dropped = nullptr;
+            bool dropped = false;
 
             if (const ImGuiPayload* payload = ImGui::GetDragDropPayload(); payload && payload->IsDataType(name.c_str()) && payload->DataSize == static_cast<int>(size))
             {
                 const ImGuiDragDropFlags flags = look == DropLook::None ? ImGuiDragDropFlags_AcceptNoDrawDefaultRect : ImGuiDragDropFlags_None;
 
                 if (accepts(payload->Data) && ImGui::AcceptDragDropPayload(name.c_str(), flags))
-                    dropped = payload->Data;
+                {
+                    std::memcpy(out, payload->Data, size);
+                    dropped = true;
+                }
             }
 
             ImGui::EndDragDropTarget();
