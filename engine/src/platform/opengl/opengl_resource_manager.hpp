@@ -20,9 +20,11 @@ namespace crimson::opengl
         OpenGLResourceManager(Window& window);
 
         VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) override;
+        void UpdateVertexBuffer(VertexBufferHandle handle, std::span<const std::byte> data) override;
         void DestroyVertexBuffer(VertexBufferHandle handle) override;
 
         IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) override;
+        void UpdateIndexBuffer(IndexBufferHandle handle, std::span<const std::byte> data) override;
         void DestroyIndexBuffer(IndexBufferHandle handle) override;
 
         GLuint GetOrCreateVertexArray(VertexBufferHandle vertexBuffer, IndexBufferHandle indexBuffer);
@@ -37,6 +39,7 @@ namespace crimson::opengl
         void SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture) override;
 
         TextureHandle CreateTexture(const TextureInfo& info, const void* data) override;
+        void UpdateTexture(TextureHandle texture, const TextureRegion& region, const void* data) override;
         void DestroyTexture(TextureHandle handle) override;
         std::vector<std::byte> ReadColorPixels(TextureHandle texture) override;
 

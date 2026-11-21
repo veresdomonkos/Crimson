@@ -46,6 +46,13 @@ namespace crimson
 
         // The camera it is drawn with, the pass's own unless it names another of the frame's views
         ViewId View = kPassView;
+
+        // Limits the draw to a rect of the target, in the same space as PassInfo::Viewport. It is cut to the view's area,
+        // and a draw that ends up with nothing left is skipped.
+        std::optional<RenderRect> Scissor;
+
+        // Added to each index to find its vertex, so many meshes can share one vertex buffer
+        int32_t BaseVertex = 0;
     };
 
     struct DrawOptions
@@ -59,6 +66,18 @@ namespace crimson
 
         // The pass's view unless set. A pass can draw with several, like the shadows with one per atlas tile.
         ViewId View = kPassView;
+    };
+
+    // How a pass's draws are ordered and blended
+    enum class PassKind
+    {
+        // Draws are grouped by state to rebind as little as possible, transparent ones come last and farthest first, and
+        // depth is tested and written
+        Scene,
+
+        // Draws keep the order they were recorded in, every one is alpha blended, and there is no depth test or depth
+        // write. The material decides culling. For what is drawn on top of a scene, such as a UI or gizmos.
+        Overlay
     };
 
     struct PassInfo
@@ -78,6 +97,8 @@ namespace crimson
 
         // The textures the pass samples, written by an earlier pass or not at all this frame. The empty ones are ignored.
         std::array<TextureHandle, kMaxPassReads> Reads{};
+
+        PassKind Kind = PassKind::Scene;
     };
 
     // One pass of a recorded frame: draws, or a native callback in their place

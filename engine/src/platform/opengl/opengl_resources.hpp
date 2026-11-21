@@ -13,6 +13,7 @@
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/shader_variant.hpp"
+#include "crimson/renderer/texture.hpp"
 #include "crimson/renderer/shader_property_info.hpp"
 #include "shader/shader_reflection.hpp"
 
@@ -27,8 +28,9 @@ namespace crimson::opengl
     {
         GLuint GLHandle = 0;
         GLenum InternalFormat = GL_RGBA8;
-        uint32_t Width  = 0;
-        uint32_t Height = 0;
+
+        // What it was created with: its size, and what decides if it can be updated
+        TextureInfo Info;
     };
 
     struct OpenGLRenderTarget

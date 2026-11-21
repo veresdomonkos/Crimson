@@ -21,9 +21,16 @@ namespace crimson
         virtual ~GpuResourceManager() = default;
 
         virtual VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) = 0;
+        // Replaces what a Dynamic or Stream buffer holds, from its start. The data has to fit the size of the buffer:
+        // more logs an error and changes nothing, as does updating a Static buffer. What the frame being recorded draws is
+        // what the buffer holds when that frame is submitted, whatever the frames before it drew. It can be called while
+        // recording, and again for the same frame.
+        virtual void UpdateVertexBuffer(VertexBufferHandle handle, std::span<const std::byte> data) = 0;
         virtual void DestroyVertexBuffer(VertexBufferHandle handle) = 0;
 
         virtual IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) = 0;
+        // The same, for indices
+        virtual void UpdateIndexBuffer(IndexBufferHandle handle, std::span<const std::byte> data) = 0;
         virtual void DestroyIndexBuffer(IndexBufferHandle handle) = 0;
 
         virtual ShaderHandle CreateShader(const ShaderBinary& binary) = 0;
@@ -49,6 +56,13 @@ namespace crimson
         virtual void SetMaterialTexture(MaterialHandle material, std::string_view name, TextureHandle texture) = 0;
 
         virtual TextureHandle CreateTexture(const TextureInfo& info, const void* data) = 0;
+
+        // Replaces a region of the texture, which has to be a color texture with one mip level that shaders sample. The data
+        // is the rows of the region, one after the other with nothing between them, in the format the texture was created
+        // with. A region that isn't inside the texture, or a texture that can't be updated, logs an error and changes
+        // nothing. It can be called while recording: the frames in flight that sample the texture are waited for.
+        virtual void UpdateTexture(TextureHandle texture, const TextureRegion& region, const void* data) = 0;
+
         virtual void DestroyTexture(TextureHandle handle) = 0;
 
         // The pixels of an RGBA8 color attachment, row by row, with the first row at the bottom of clip space (y = -1).

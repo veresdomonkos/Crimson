@@ -6,9 +6,13 @@
 
 namespace crimson::vulkan
 {
-    static void SetViewportAndScissor(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
+    static void SetViewport(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
     {
         cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
+    }
+
+    static void SetScissor(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
+    {
         cmdBuffer.setScissor(0, vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } });
     }
 
@@ -298,9 +302,9 @@ namespace crimson::vulkan
         const RenderRect passArea = info.Viewport.value_or(RenderRect{ 0, 0, rt.Width, rt.Height });
         const std::span<const DrawItem> draws = pass.GetDraws();
 
-        BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
+        BuildDrawOrder(draws, m_resourceManager, m_drawOrder, info.Kind);
         for (const DrawSortEntry& sorted : m_drawOrder)
-            ExecuteDraw(cmdBuffer, draws[sorted.Index], target, views, passArea);
+            ExecuteDraw(cmdBuffer, draws[sorted.Index], target, views, passArea, info.Kind);
 
         EndPass(cmdBuffer, rt);
     }
@@ -396,16 +400,21 @@ namespace crimson::vulkan
 
         cmdBuffer.beginRendering(rendering);
 
-        SetViewportAndScissor(cmdBuffer, rect);
+        SetViewport(cmdBuffer, rect);
+        SetScissor(cmdBuffer, rect);
     }
 
-    void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, std::span<const FrameView> views, const RenderRect& passArea)
+    void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, std::span<const FrameView> views, const RenderRect& passArea, PassKind kind)
     {
         CRIMSON_PROFILE_FUNCTION();
 
         // A view whose part of the target is outside the pass's draws nothing
         const RenderRect viewArea = ViewArea(views[draw.View], passArea);
         if (IsEmpty(viewArea)) return;
+
+        // A draw can limit itself further, to a part of what its view shows
+        const RenderRect scissor = draw.Scissor ? Intersect(viewArea, *draw.Scissor) : viewArea;
+        if (IsEmpty(scissor)) return;
 
         VulkanVertexBuffer& vertexBuffer = m_resourceManager.GetVertexBuffer(draw.VertexBuffer);
         VulkanIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(draw.IndexBuffer);
@@ -414,16 +423,17 @@ namespace crimson::vulkan
         if (!*material.DescriptorSet) return;
 
         if (!m_bound.PipelineEntry || m_bound.Shader != material.Shader || m_bound.Settings != material.Settings || m_bound.Variant != draw.Variant
-            || m_bound.Target != target || m_bound.VertexBufferHandle != draw.VertexBuffer)
+            || m_bound.Target != target || m_bound.VertexBufferHandle != draw.VertexBuffer || m_bound.Kind != kind)
         {
             m_bound.PipelineEntry = &m_resourceManager.GetOrCreateGraphicsPipeline({
-                .Layout = vertexBuffer.Layout, .Shader = material.Shader, .Target = target, .Settings = material.Settings, .Variant = draw.Variant
+                .Layout = vertexBuffer.Layout, .Shader = material.Shader, .Target = target, .Settings = material.Settings, .Variant = draw.Variant, .Kind = kind
             });
             m_bound.Shader = material.Shader;
             m_bound.Settings = material.Settings;
             m_bound.Variant = draw.Variant;
             m_bound.Target = target;
             m_bound.VertexBufferHandle = draw.VertexBuffer;
+            m_bound.Kind = kind;
         }
 
         const VulkanGraphicsPipeline& pipeline = *m_bound.PipelineEntry;
@@ -479,7 +489,13 @@ namespace crimson::vulkan
 
         // A view draws to its own part of the target, like a shadow view to its tile of the atlas
         if (!m_bound.DrawPushed || m_bound.Draw.ViewIndex != drawData.ViewIndex)
-            SetViewportAndScissor(cmdBuffer, viewArea);
+            SetViewport(cmdBuffer, viewArea);
+
+        if (!m_bound.DrawPushed || m_bound.Scissor != scissor)
+        {
+            SetScissor(cmdBuffer, scissor);
+            m_bound.Scissor = scissor;
+        }
 
         if (!m_bound.DrawPushed || m_bound.Draw != drawData)
         {
@@ -490,7 +506,7 @@ namespace crimson::vulkan
 
         const uint32_t total = static_cast<uint32_t>(indexBuffer.Size / Index::Size(indexBuffer.Type));
         const uint32_t indexCount = draw.IndexCount ? draw.IndexCount : total;
-        cmdBuffer.drawIndexed(indexCount, 1, draw.FirstIndex, 0, 0);
+        cmdBuffer.drawIndexed(indexCount, 1, draw.FirstIndex, draw.BaseVertex, 0);
 
         ++m_stats.DrawCalls;
         m_stats.Triangles += indexCount / 3;
@@ -537,6 +553,9 @@ namespace crimson::vulkan
         CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
 
         EndFrame();
+
+        // A frame that was dropped has no number, so what it updated is written again by the next one
+        m_resourceManager.FinishFrame();
         return true;
     }
 

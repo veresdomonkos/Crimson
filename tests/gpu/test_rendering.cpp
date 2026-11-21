@@ -2,6 +2,9 @@
 
 #include <array>
 #include <chrono>
+#include <cstdint>
+#include <optional>
+#include <span>
 #include <string>
 #include <thread>
 
@@ -667,4 +670,336 @@ TEST_CASE_METHOD(Fixture, "S_DebugUV draws a checkerboard in UV space, scaled by
     CHECK(IsNear(image.AtClip(0.5f, 0.5f), glm::ivec3(204), 2));
     CHECK(IsNear(image.AtClip(0.5f, -0.5f), glm::ivec3(51), 2));
     CHECK(IsNear(image.AtClip(-0.5f, 0.5f), glm::ivec3(51), 2));
+}
+
+namespace
+{
+    // The corners of one quarter of the target in clip space, as bottom left, bottom right, top right, top left
+    std::array<glm::vec3, 4> QuarterCorners(int quarter)
+    {
+        const float left = (quarter & 1) ? 0.0f : -1.0f;
+        const float bottom = (quarter & 2) ? 0.0f : -1.0f;
+
+        return { glm::vec3(left, bottom, 0.5f), glm::vec3(left + 1.0f, bottom, 0.5f),
+                 glm::vec3(left + 1.0f, bottom + 1.0f, 0.5f), glm::vec3(left, bottom + 1.0f, 0.5f) };
+    }
+
+    glm::vec2 QuarterCenter(int quarter)
+    {
+        return { (quarter & 1) ? 0.5f : -0.5f, (quarter & 2) ? 0.5f : -0.5f };
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "A stream buffer updated every frame draws what it was last given", "[rendering]")
+{
+    GpuResourceManager& gpu = *Gpu().GPUResources;
+    AssetManager assets(gpu, Project.Path());
+
+    const MaterialHandle red = *assets.Get<MaterialAsset>("red.mat");
+    REQUIRE(red);
+
+    const std::array<glm::vec3, 4> firstQuarter = QuarterCorners(0);
+    const VertexBufferHandle vertices = gpu.CreateVertexBuffer({ .Layout = { ShaderDataType::Float3 }, .Size = sizeof(firstQuarter), .Usage = BufferUsage::Stream }, nullptr);
+    const IndexBufferHandle indices = gpu.CreateIndexBuffer({ .Size = 6 * sizeof(uint16_t), .Usage = BufferUsage::Stream, .Type = IndexType::UInt16 }, nullptr);
+    REQUIRE(vertices);
+    REQUIRE(indices);
+
+    const auto draw = [&](std::uint32_t indexCount)
+    {
+        RenderOneFrame([&](FrameRecorder& frame)
+        {
+            frame.AddPass(Pass()).Draw({ .VertexBuffer = vertices, .IndexBuffer = indices, .Material = red, .IndexCount = indexCount });
+        });
+
+        return Target.Read();
+    };
+
+    // Written once, and drawn by every frame below
+    const std::array<uint16_t, 6> quad = { 0, 1, 2, 0, 2, 3 };
+    gpu.UpdateIndexBuffer(indices, std::as_bytes(std::span(quad)));
+
+    // More frames than there are copies of a buffer, each with the quad somewhere else
+    for (int frame = 0; frame < 4; ++frame)
+    {
+        const std::array<glm::vec3, 4> corners = QuarterCorners(frame);
+        gpu.UpdateVertexBuffer(vertices, std::as_bytes(std::span(corners)));
+
+        const Image image = draw(6);
+
+        for (int quarter = 0; quarter < 4; ++quarter)
+        {
+            const glm::vec2 at = QuarterCenter(quarter);
+
+            CAPTURE(frame, quarter);
+            CHECK(IsNear(image.AtClip(at.x, at.y), quarter == frame ? kRed : kBlack));
+        }
+    }
+
+    // One triangle of the last quarter, the one under its diagonal
+    const std::array<uint16_t, 3> triangle = { 0, 1, 2 };
+    gpu.UpdateIndexBuffer(indices, std::as_bytes(std::span(triangle)));
+
+    const Image half = draw(3);
+    CHECK(IsNear(half.AtClip(0.75f, 0.25f), kRed));
+    CHECK(IsNear(half.AtClip(0.25f, 0.75f), kBlack));
+
+    // A static buffer can't change, so it draws what it was created with
+    const VertexBufferHandle fixedVertices = gpu.CreateVertexBuffer({ .Layout = { ShaderDataType::Float3 }, .Size = sizeof(firstQuarter), .Usage = BufferUsage::Static }, firstQuarter.data());
+    REQUIRE(fixedVertices);
+
+    const std::array<glm::vec3, 4> elsewhere = QuarterCorners(3);
+    gpu.UpdateVertexBuffer(fixedVertices, std::as_bytes(std::span(elsewhere)));
+    CHECK(ExpectLoggedErrors("static buffer") == 1);
+
+    gpu.UpdateIndexBuffer(indices, std::as_bytes(std::span(quad)));
+    RenderOneFrame([&](FrameRecorder& frame)
+    {
+        frame.AddPass(Pass()).Draw({ .VertexBuffer = fixedVertices, .IndexBuffer = indices, .Material = red, .IndexCount = 6 });
+    });
+
+    const Image fixedImage = Target.Read();
+    CHECK(IsNear(fixedImage.AtClip(-0.5f, -0.5f), kRed));
+    CHECK(IsNear(fixedImage.AtClip(0.5f, 0.5f), kBlack));
+
+    gpu.DestroyVertexBuffer(fixedVertices);
+    gpu.DestroyVertexBuffer(vertices);
+    gpu.DestroyIndexBuffer(indices);
+}
+
+namespace
+{
+    // The textured shader with no filtering, so each pixel shows the texel it lands in
+    constexpr std::string_view kPointSampledShader = R"(
+#include "crimson/bindings.hlsli"
+
+Texture2D Albedo : register(t0, space1);
+
+struct VertexInput
+{
+    float3 Position : POSITION;
+    float3 Normal : NORMAL;
+    float2 UV : TEXCOORD0;
+};
+
+struct VertexOutput
+{
+    float4 ClipPosition : SV_Position;
+    float2 UV : TEXCOORD0;
+};
+
+VertexOutput VSMain(VertexInput input)
+{
+    VertexOutput output;
+    output.ClipPosition = mul(GetView().ViewProj, mul(GetObjectData().Transform, float4(input.Position, 1.0)));
+    output.UV = input.UV;
+    return output;
+}
+
+float4 PSMain(VertexOutput input) : SV_Target { return Albedo.Sample(PointClamp, input.UV); }
+)";
+}
+
+TEST_CASE_METHOD(Fixture, "Updating a region of a texture changes only that region", "[rendering]")
+{
+    Project.Write("point.hlsl", kPointSampledShader);
+    Project.Write("point.mat", R"({ "shader": "point.hlsl", "cull": "none" })");
+    Project.Write("all.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
+
+    GpuResourceManager& gpu = *Gpu().GPUResources;
+    AssetManager assets(gpu, Project.Path());
+
+    const Mesh* mesh = assets.Get<MeshAsset>("all.obj");
+    const MaterialHandle material = *assets.Get<MaterialAsset>("point.mat");
+    REQUIRE(mesh);
+    REQUIRE(material);
+
+    // Four red texels, the first row being the bottom of the quad
+    const std::array<unsigned char, 16> red = { 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255 };
+    const TextureHandle texture = gpu.CreateTexture({ .Width = 2, .Height = 2 }, red.data());
+    REQUIRE(texture);
+    gpu.SetMaterialTexture(material, "Albedo", texture);
+
+    const auto render = [&]
+    {
+        RenderOneFrame([&](FrameRecorder& frame) { frame.AddPass(Pass()).DrawMesh(*mesh, {}, 0, { .MaterialOverride = material }); });
+        return Target.Read();
+    };
+
+    const Image before = render();
+    CHECK(IsNear(before.AtClip(-0.5f, -0.5f), kRed));
+    CHECK(IsNear(before.AtClip(0.5f, -0.5f), kRed));
+
+    // The texel right of the first one
+    const std::array<unsigned char, 4> green = { 0, 255, 0, 255 };
+    gpu.UpdateTexture(texture, { 1, 0, 1, 1 }, green.data());
+
+    const Image after = render();
+    CHECK(IsNear(after.AtClip(0.5f, -0.5f), kGreen));
+    CHECK(IsNear(after.AtClip(-0.5f, -0.5f), kRed));
+    CHECK(IsNear(after.AtClip(-0.5f, 0.5f), kRed));
+    CHECK(IsNear(after.AtClip(0.5f, 0.5f), kRed));
+
+    // A region of several rows has them one after the other
+    const std::array<unsigned char, 8> blue = { 0, 0, 255, 255, 0, 0, 255, 255 };
+    gpu.UpdateTexture(texture, { 0, 0, 1, 2 }, blue.data());
+
+    const glm::ivec3 kBlue(0, 0, 255);
+    const Image column = render();
+    CHECK(IsNear(column.AtClip(-0.5f, -0.5f), kBlue));
+    CHECK(IsNear(column.AtClip(-0.5f, 0.5f), kBlue));
+    CHECK(IsNear(column.AtClip(0.5f, -0.5f), kGreen));
+    CHECK(IsNear(column.AtClip(0.5f, 0.5f), kRed));
+
+    // What can't be updated is reported, and left as it was
+    gpu.UpdateTexture(texture, { 1, 1, 2, 1 }, red.data());
+    CHECK(ExpectLoggedErrors("outside the texture") == 1);
+
+    const TextureHandle mipped = gpu.CreateTexture({ .Width = 2, .Height = 2, .MipLevels = 2 }, red.data());
+    REQUIRE(mipped);
+    gpu.UpdateTexture(mipped, { 0, 0, 1, 1 }, green.data());
+    CHECK(ExpectLoggedErrors("mip levels") == 1);
+
+    CHECK(IsNear(render().AtClip(0.5f, 0.5f), kRed));
+
+    gpu.DestroyTexture(mipped);
+    gpu.SetMaterialTexture(material, "Albedo", {});
+    gpu.DestroyTexture(texture);
+}
+
+namespace
+{
+    // Draws the color from a vertex attribute of four bytes
+    constexpr std::string_view kVertexColorShader = R"(
+#include "crimson/bindings.hlsli"
+
+struct VertexInput
+{
+    float3 Position : POSITION;
+    float4 Color : COLOR;
+};
+
+struct VertexOutput
+{
+    float4 ClipPosition : SV_Position;
+    float4 Color : COLOR;
+};
+
+VertexOutput VSMain(VertexInput input)
+{
+    VertexOutput output;
+    output.ClipPosition = mul(GetView().ViewProj, mul(GetObjectData().Transform, float4(input.Position, 1.0)));
+    output.Color = input.Color;
+    return output;
+}
+
+float4 PSMain(VertexOutput input) : SV_Target { return input.Color; }
+)";
+
+    struct ColoredVertex
+    {
+        glm::vec3 Position;
+        std::array<unsigned char, 4> Color;
+    };
+
+    static_assert(sizeof(ColoredVertex) == 16);
+}
+
+TEST_CASE_METHOD(Fixture, "A draw's scissor and base vertex pick what it draws and where", "[rendering]")
+{
+    Project.Write("vertex_color.hlsl", kVertexColorShader);
+    Project.Write("vertex_color.mat", R"({ "shader": "vertex_color.hlsl", "cull": "none" })");
+
+    GpuResourceManager& gpu = *Gpu().GPUResources;
+    AssetManager assets(gpu, Project.Path());
+
+    const MaterialHandle material = *assets.Get<MaterialAsset>("vertex_color.mat");
+    REQUIRE(material);
+
+    // The left half of the target and then its right half, in one buffer
+    constexpr std::array<unsigned char, 4> kLime = { 128, 255, 0, 255 };
+    const std::array<ColoredVertex, 8> vertices = {
+        ColoredVertex{ { -1.0f, -1.0f, 0.5f }, kLime }, ColoredVertex{ { 0.0f, -1.0f, 0.5f }, kLime },
+        ColoredVertex{ { 0.0f, 1.0f, 0.5f }, kLime }, ColoredVertex{ { -1.0f, 1.0f, 0.5f }, kLime },
+        ColoredVertex{ { 0.0f, -1.0f, 0.5f }, kLime }, ColoredVertex{ { 1.0f, -1.0f, 0.5f }, kLime },
+        ColoredVertex{ { 1.0f, 1.0f, 0.5f }, kLime }, ColoredVertex{ { 0.0f, 1.0f, 0.5f }, kLime },
+    };
+    const std::array<uint16_t, 6> indices = { 0, 1, 2, 0, 2, 3 };
+
+    const VertexBufferHandle vertexBuffer = gpu.CreateVertexBuffer(
+        { .Layout = { ShaderDataType::Float3, ShaderDataType::UByte4Norm }, .Size = sizeof(vertices), .Usage = BufferUsage::Static }, vertices.data());
+    const IndexBufferHandle indexBuffer = gpu.CreateIndexBuffer({ .Size = sizeof(indices), .Usage = BufferUsage::Static, .Type = IndexType::UInt16 }, indices.data());
+    REQUIRE(vertexBuffer);
+    REQUIRE(indexBuffer);
+
+    const auto draw = [&](int32_t baseVertex, std::optional<RenderRect> scissor)
+    {
+        RenderOneFrame([&](FrameRecorder& frame)
+        {
+            frame.AddPass(Pass()).Draw({ .VertexBuffer = vertexBuffer, .IndexBuffer = indexBuffer, .Material = material, .Scissor = scissor, .BaseVertex = baseVertex });
+        });
+
+        return Target.Read();
+    };
+
+    // The same four indices find the left quad or the right one, and the bytes arrive as the floats 0.5 and 1
+    const Image left = draw(0, std::nullopt);
+    CHECK(IsNear(left.AtClip(-0.5f, 0.0f), glm::ivec3(128, 255, 0), 2));
+    CHECK(IsNear(left.AtClip(0.5f, 0.0f), kBlack));
+
+    const Image right = draw(4, std::nullopt);
+    CHECK(IsNear(right.AtClip(0.5f, 0.0f), glm::ivec3(128, 255, 0), 2));
+    CHECK(IsNear(right.AtClip(-0.5f, 0.0f), kBlack));
+
+    // The bottom left quarter, counting rows from the bottom of clip space like the viewport does
+    const Image cut = draw(0, RenderRect{ 0, 0, kSize / 2, kSize / 2 });
+    CHECK(IsNear(cut.AtClip(-0.5f, -0.5f), glm::ivec3(128, 255, 0), 2));
+    CHECK(IsNear(cut.AtClip(-0.5f, 0.5f), kBlack));
+    CHECK(IsNear(cut.AtClip(0.5f, -0.5f), kBlack));
+
+    // A scissor outside what is drawn leaves nothing
+    const Image nothing = draw(0, RenderRect{ kSize / 2, 0, kSize / 2, kSize });
+    CHECK(IsNear(nothing.AtClip(-0.5f, 0.0f), kBlack));
+    CHECK(IsNear(nothing.AtClip(0.5f, 0.0f), kBlack));
+
+    gpu.DestroyVertexBuffer(vertexBuffer);
+    gpu.DestroyIndexBuffer(indexBuffer);
+}
+
+TEST_CASE_METHOD(Fixture, "An overlay pass draws in recorded order, blended, without depth", "[rendering]")
+{
+    Project.Write("half_green.mat", MakeMaterial("[0, 1, 0, 0.5]"));
+    Project.Write("near.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f, 0.1f));
+    Project.Write("far.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f, 0.9f));
+
+    AssetManager assets(*Gpu().GPUResources, Project.Path());
+
+    const Mesh* near = assets.Get<MeshAsset>("near.obj");
+    const Mesh* far = assets.Get<MeshAsset>("far.obj");
+    REQUIRE(near);
+    REQUIRE(far);
+
+    const MaterialHandle red = *assets.Get<MaterialAsset>("red.mat");
+    const MaterialHandle halfGreen = *assets.Get<MaterialAsset>("half_green.mat");
+
+    const auto render = [&](PassKind kind)
+    {
+        PassInfo info = Pass();
+        info.Kind = kind;
+
+        RenderOneFrame([&](FrameRecorder& frame)
+        {
+            // The nearer quad first, and the farther one, which depth would hide, after it
+            PassBuilder pass = frame.AddPass(info);
+            pass.DrawMesh(*near, {}, 0, { .MaterialOverride = red });
+            pass.DrawMesh(*far, {}, 0, { .MaterialOverride = halfGreen });
+        });
+
+        return Target.Read().AtClip(0.0f, 0.0f);
+    };
+
+    // Half of the green over the red, even though it is farther away and its material is opaque
+    CHECK(IsNear(render(PassKind::Overlay), glm::ivec3(127, 127, 0), 4));
+
+    // A scene pass tests depth, so the nearer red one stays
+    CHECK(IsNear(render(PassKind::Scene), kRed));
 }

@@ -33,9 +33,11 @@ namespace crimson::vulkan
         bool RecreateSwapchain(VulkanSurface& surface);
 
         VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) override;
+        void UpdateVertexBuffer(VertexBufferHandle handle, std::span<const std::byte> data) override;
         void DestroyVertexBuffer(VertexBufferHandle handle) override;
 
         IndexBufferHandle CreateIndexBuffer(const IndexBufferInfo& info, const void* data) override;
+        void UpdateIndexBuffer(IndexBufferHandle handle, std::span<const std::byte> data) override;
         void DestroyIndexBuffer(IndexBufferHandle handle) override;
 
         ShaderHandle CreateShader(const ShaderBinary& binary) override;
@@ -49,6 +51,7 @@ namespace crimson::vulkan
         void SetMaterialTexture(MaterialHandle handle, std::string_view name, TextureHandle texture) override;
 
         TextureHandle CreateTexture(const TextureInfo& info, const void* data) override;
+        void UpdateTexture(TextureHandle texture, const TextureRegion& region, const void* data) override;
         void DestroyTexture(TextureHandle handle) override;
         std::vector<std::byte> ReadColorPixels(TextureHandle texture) override;
 
@@ -65,6 +68,10 @@ namespace crimson::vulkan
         [[nodiscard]] vk::DescriptorSetLayout GetFrameSetLayout() const { return *m_frameSetLayout; }
 
         VulkanGraphicsPipeline& GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info);
+
+        // Counts the frames the renderer submitted. An update writes the copy of a buffer that the frame with this number reads.
+        [[nodiscard]] uint64_t GetFrameNumber() const { return m_frameNumber; }
+        void FinishFrame() { ++m_frameNumber; }
     protected:
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
 
@@ -87,9 +94,10 @@ namespace crimson::vulkan
         [[nodiscard]] vk::raii::ShaderModule CreateShaderModule(std::span<const uint32_t> code) const;
         void WriteMaterialTexture(vk::DescriptorSet set, uint32_t binding, const VulkanTexture& texture) const;
 
-        AllocatedBuffer CreateBufferWithData(vk::DeviceSize size, vk::BufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const;
+        VulkanBufferCopies CreateBufferWithData(vk::DeviceSize size, vk::BufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const;
+        void WriteBuffer(VulkanBufferCopies& buffer, vk::DeviceSize size, BufferUsage usage, std::span<const std::byte> data);
         void CopyBuffer(vk::Buffer src, vk::Buffer dst, vk::DeviceSize size) const;
-        void UploadTextureData(VulkanTexture& texture, const TextureInfo& info, const void* data) const;
+        void UploadTextureData(VulkanTexture& texture, const TextureRegion& region, const void* data) const;
 
     private:
         VulkanDevice& m_device;
@@ -102,5 +110,6 @@ namespace crimson::vulkan
         TextureHandle m_defaultTexture; // what a material's textures show until they are set
         VulkanSurface m_primarySurface;
         GraphicsPipelineCache<VulkanGraphicsPipeline> m_graphicsPipelines;
+        uint64_t m_frameNumber = 0;
     };
 }

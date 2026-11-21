@@ -4,6 +4,7 @@
 #include <functional>
 
 #include "crimson/renderer/buffer_layout.hpp"
+#include "crimson/renderer/frame_recorder.hpp"
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/shader_variant.hpp"
@@ -17,10 +18,12 @@ namespace crimson::vulkan
         RenderTargetHandle Target;
         MaterialSettings Settings;
         ShaderVariant Variant = ShaderVariant::Main;
+        PassKind Kind = PassKind::Scene;
 
         bool operator==(const GraphicsPipelineInfo& other) const
         {
-            return Layout == other.Layout && Shader == other.Shader && Target == other.Target && Settings == other.Settings && Variant == other.Variant;
+            return Layout == other.Layout && Shader == other.Shader && Target == other.Target && Settings == other.Settings && Variant == other.Variant
+                && Kind == other.Kind;
         }
     };
 
@@ -45,6 +48,7 @@ namespace crimson::vulkan
             HashCombine(hash, static_cast<size_t>(key.Settings.RenderMode));
             HashCombine(hash, static_cast<size_t>(key.Settings.Cull));
             HashCombine(hash, static_cast<size_t>(key.Variant));
+            HashCombine(hash, static_cast<size_t>(key.Kind));
 
             return hash;
         }

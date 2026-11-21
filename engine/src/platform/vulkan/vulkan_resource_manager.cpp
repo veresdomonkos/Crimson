@@ -10,6 +10,8 @@
 #include "utils.hpp"
 #include "vulkan_renderer.hpp"
 #include "crimson/core/log.hpp"
+#include "crimson/renderer/draw_state.hpp"
+#include "renderer/update_validation.hpp"
 
 namespace crimson::vulkan
 {
@@ -170,9 +172,10 @@ namespace crimson::vulkan
         return CreateSwapchainResources(surface);
     }
 
-    AllocatedBuffer VulkanResourceManager::CreateBufferWithData(vk::DeviceSize size, vk::BufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const
+    VulkanBufferCopies VulkanResourceManager::CreateBufferWithData(vk::DeviceSize size, vk::BufferUsageFlags usage, BufferUsage bufferUsage, const void* data) const
     {
         const VmaAllocator allocator = m_device.GetAllocator();
+        VulkanBufferCopies copies;
 
         if (bufferUsage == BufferUsage::Static && data)
         {
@@ -185,18 +188,42 @@ namespace crimson::vulkan
 
             AllocatedBuffer buffer = CreateAllocatedBuffer(allocator, size, usage | vk::BufferUsageFlagBits::eTransferDst, BufferMemory::DeviceLocal);
 
-            if (buffer)
-                CopyBuffer(staging.Get(), buffer.Get(), size);
+            if (!buffer)
+                return {};
 
-            return buffer;
+            CopyBuffer(staging.Get(), buffer.Get(), size);
+            copies.Versions.push_back(std::move(buffer));
+            return copies;
         }
 
-        AllocatedBuffer buffer = CreateAllocatedBuffer(allocator, size, usage, BufferMemory::HostMapped);
+        // A buffer that can change has a copy for every frame that may still read it
+        const size_t count = bufferUsage == BufferUsage::Static ? 1 : kBufferVersions;
 
-        if (buffer && data)
-            std::memcpy(buffer.Mapped(), data, static_cast<size_t>(size));
+        for (size_t i = 0; i < count; ++i)
+        {
+            AllocatedBuffer buffer = CreateAllocatedBuffer(allocator, size, usage, BufferMemory::HostMapped);
 
-        return buffer;
+            if (!buffer)
+                return {};
+
+            if (data)
+                std::memcpy(buffer.Mapped(), data, static_cast<size_t>(size));
+
+            copies.Versions.push_back(std::move(buffer));
+        }
+
+        return copies;
+    }
+
+    void VulkanResourceManager::WriteBuffer(VulkanBufferCopies& buffer, vk::DeviceSize size, BufferUsage usage, std::span<const std::byte> data)
+    {
+        if (const auto error = ValidateBufferUpdate(usage, static_cast<std::size_t>(size), data.size()))
+        {
+            LOG_ERROR("[Vulkan] {}", *error);
+            return;
+        }
+
+        std::memcpy(buffer.ForUpdate(m_frameNumber).Mapped(), data.data(), data.size());
     }
 
     VertexBufferHandle VulkanResourceManager::CreateVertexBuffer(const VertexBufferInfo& info, const void* data)
@@ -211,6 +238,19 @@ namespace crimson::vulkan
             return {};
 
         return m_vertexBuffers.Register(std::move(buffer));
+    }
+
+    void VulkanResourceManager::UpdateVertexBuffer(VertexBufferHandle handle, std::span<const std::byte> data)
+    {
+        VulkanVertexBuffer* buffer = m_vertexBuffers.Find(handle);
+
+        if (!buffer)
+        {
+            LOG_ERROR("[Vulkan] The vertex buffer to update doesn't exist");
+            return;
+        }
+
+        WriteBuffer(buffer->Buffer, buffer->Size, buffer->Usage, data);
     }
 
     void VulkanResourceManager::DestroyVertexBuffer(VertexBufferHandle handle)
@@ -231,6 +271,19 @@ namespace crimson::vulkan
             return {};
 
         return m_indexBuffers.Register(std::move(buffer));
+    }
+
+    void VulkanResourceManager::UpdateIndexBuffer(IndexBufferHandle handle, std::span<const std::byte> data)
+    {
+        VulkanIndexBuffer* buffer = m_indexBuffers.Find(handle);
+
+        if (!buffer)
+        {
+            LOG_ERROR("[Vulkan] The index buffer to update doesn't exist");
+            return;
+        }
+
+        WriteBuffer(buffer->Buffer, buffer->Size, buffer->Usage, data);
     }
 
     void VulkanResourceManager::DestroyIndexBuffer(IndexBufferHandle handle)
@@ -439,13 +492,14 @@ namespace crimson::vulkan
 
         VulkanTexture texture{};
         texture.Format = format;
-        texture.Width = info.Width;
-        texture.Height = info.Height;
         texture.Layout = vk::ImageLayout::eUndefined;
         texture.Aspect = utils::GetImageAspect(info.Format);
 
-        if (data)
+        // A texture that can be updated later takes a copy into it
+        if (data || CanUpdateTexture(info))
             usage |= vk::ImageUsageFlagBits::eTransferDst;
+
+        texture.Info = info;
 
         // Each mip level is made by blitting from the one above it
         if (data && info.MipLevels > 1)
@@ -501,9 +555,31 @@ namespace crimson::vulkan
         TextureHandle handle = m_textures.Register(std::move(texture));
 
         if (data)
-            UploadTextureData(m_textures.Get(handle), info, data);
+            UploadTextureData(m_textures.Get(handle), TextureRegion{ 0, 0, info.Width, info.Height }, data);
 
         return handle;
+    }
+
+    void VulkanResourceManager::UpdateTexture(TextureHandle handle, const TextureRegion& region, const void* data)
+    {
+        VulkanTexture* texture = m_textures.Find(handle);
+
+        if (!texture)
+        {
+            LOG_ERROR("[Vulkan] The texture to update doesn't exist");
+            return;
+        }
+
+        if (const auto error = ValidateTextureUpdate(texture->Info, region))
+        {
+            LOG_ERROR("[Vulkan] {}", *error);
+            return;
+        }
+
+        if (region.IsEmpty())
+            return;
+
+        UploadTextureData(*texture, region, data);
     }
 
     void VulkanResourceManager::DestroyTexture(TextureHandle handle)
@@ -527,7 +603,7 @@ namespace crimson::vulkan
             return {};
         }
 
-        const vk::DeviceSize size = static_cast<vk::DeviceSize>(texture.Width) * texture.Height * kBytesPerPixel;
+        const vk::DeviceSize size = static_cast<vk::DeviceSize>(texture.Info.Width) * texture.Info.Height * kBytesPerPixel;
 
         AllocatedBuffer staging = CreateAllocatedBuffer(m_device.GetAllocator(), size, vk::BufferUsageFlagBits::eTransferDst, BufferMemory::HostReadable);
 
@@ -561,7 +637,7 @@ namespace crimson::vulkan
             region.imageSubresource.mipLevel = 0;
             region.imageSubresource.baseArrayLayer = 0;
             region.imageSubresource.layerCount = 1;
-            region.imageExtent = vk::Extent3D{ texture.Width, texture.Height, 1 };
+            region.imageExtent = vk::Extent3D{ texture.Info.Width, texture.Info.Height, 1 };
             commandBuffer.copyImageToBuffer(texture.Image, vk::ImageLayout::eTransferSrcOptimal, staging.Get(), region);
 
             // Back to how the renderer left it, as it tracks the layout
@@ -739,6 +815,7 @@ namespace crimson::vulkan
                 case ShaderDataType::Float2: attribute.format = vk::Format::eR32G32Sfloat; break;
                 case ShaderDataType::Float3: attribute.format = vk::Format::eR32G32B32Sfloat; break;
                 case ShaderDataType::Float4: attribute.format = vk::Format::eR32G32B32A32Sfloat; break;
+                case ShaderDataType::UByte4Norm: attribute.format = vk::Format::eR8G8B8A8Unorm; break;
                 case ShaderDataType::Int:    attribute.format = vk::Format::eR32Sint; break;
                 case ShaderDataType::Int2:   attribute.format = vk::Format::eR32G32Sint; break;
                 case ShaderDataType::Int3:   attribute.format = vk::Format::eR32G32B32Sint; break;
@@ -780,11 +857,10 @@ namespace crimson::vulkan
         multisampleState.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
         vk::PipelineDepthStencilStateCreateInfo depthState{};
-        depthState.depthTestEnable = hasDepth ? VK_TRUE : VK_FALSE;
-        // A depth pass draws everything as opaque, so a transparent mesh still casts its shadow
-        const bool isTransparent = !depthPass && info.Settings.RenderMode == MaterialRenderMode::Transparent;
+        const DrawState state = ResolveDrawState(info.Kind, info.Settings, info.Variant);
 
-        depthState.depthWriteEnable = hasDepth && !isTransparent ? VK_TRUE : VK_FALSE;
+        depthState.depthTestEnable = hasDepth && state.DepthTest ? VK_TRUE : VK_FALSE;
+        depthState.depthWriteEnable = hasDepth && state.DepthWrite ? VK_TRUE : VK_FALSE;
         depthState.depthCompareOp = vk::CompareOp::eLessOrEqual;
         depthState.depthBoundsTestEnable = VK_FALSE;
         depthState.stencilTestEnable = VK_FALSE;
@@ -795,9 +871,9 @@ namespace crimson::vulkan
             attachment.colorWriteMask =
                 vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
                 vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-            attachment.blendEnable = isTransparent ? VK_TRUE : VK_FALSE;
+            attachment.blendEnable = state.Blend ? VK_TRUE : VK_FALSE;
 
-            if (isTransparent)
+            if (state.Blend)
             {
                 // The alpha factors keep an opaque target's alpha at 1, so the viewport doesn't show through
                 attachment.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
@@ -893,9 +969,9 @@ namespace crimson::vulkan
         });
     }
 
-    void VulkanResourceManager::UploadTextureData(VulkanTexture& texture, const TextureInfo& info, const void* data) const
+    void VulkanResourceManager::UploadTextureData(VulkanTexture& texture, const TextureRegion& region, const void* data) const
     {
-        const vk::DeviceSize size = static_cast<vk::DeviceSize>(info.Width) * info.Height * utils::GetBytesPerPixel(info.Format);
+        const vk::DeviceSize size = static_cast<vk::DeviceSize>(region.Width) * region.Height * utils::GetBytesPerPixel(texture.Info.Format);
 
         AllocatedBuffer staging = CreateAllocatedBuffer(m_device.GetAllocator(), size, vk::BufferUsageFlagBits::eTransferSrc, BufferMemory::HostMapped);
 
@@ -906,12 +982,25 @@ namespace crimson::vulkan
 
         m_device.ImmediateSubmit([&](vk::CommandBuffer commandBuffer)
         {
+            // A new texture has nothing to wait for. One that shaders read may be sampled by the frames in flight, which are
+            // earlier on the queue, so their fragment shaders have to finish before the copy.
             vk::ImageMemoryBarrier2 barrier{};
             barrier.srcStageMask = vk::PipelineStageFlagBits2::eNone;
             barrier.srcAccessMask = vk::AccessFlagBits2::eNone;
+
+            if (texture.Layout == vk::ImageLayout::eShaderReadOnlyOptimal)
+            {
+                barrier.srcStageMask = vk::PipelineStageFlagBits2::eFragmentShader;
+            }
+            else if (texture.Layout != vk::ImageLayout::eUndefined)
+            {
+                barrier.srcStageMask = vk::PipelineStageFlagBits2::eAllCommands;
+                barrier.srcAccessMask = vk::AccessFlagBits2::eMemoryWrite;
+            }
+
             barrier.dstStageMask = vk::PipelineStageFlagBits2::eCopy;
             barrier.dstAccessMask = vk::AccessFlagBits2::eTransferWrite;
-            barrier.oldLayout = vk::ImageLayout::eUndefined;
+            barrier.oldLayout = texture.Layout;
             barrier.newLayout = vk::ImageLayout::eTransferDstOptimal;
             barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
             barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -923,13 +1012,14 @@ namespace crimson::vulkan
             dependency.pImageMemoryBarriers = &barrier;
             commandBuffer.pipelineBarrier2(dependency);
 
-            vk::BufferImageCopy region{};
-            region.imageSubresource.aspectMask = texture.Aspect;
-            region.imageSubresource.mipLevel = 0;
-            region.imageSubresource.baseArrayLayer = 0;
-            region.imageSubresource.layerCount = 1;
-            region.imageExtent = vk::Extent3D{ info.Width, info.Height, 1 };
-            commandBuffer.copyBufferToImage(staging.Get(), texture.Image, vk::ImageLayout::eTransferDstOptimal, region);
+            vk::BufferImageCopy copy{};
+            copy.imageSubresource.aspectMask = texture.Aspect;
+            copy.imageSubresource.mipLevel = 0;
+            copy.imageSubresource.baseArrayLayer = 0;
+            copy.imageSubresource.layerCount = 1;
+            copy.imageOffset = vk::Offset3D{ static_cast<int32_t>(region.X), static_cast<int32_t>(region.Y), 0 };
+            copy.imageExtent = vk::Extent3D{ region.Width, region.Height, 1 };
+            commandBuffer.copyBufferToImage(staging.Get(), texture.Image, vk::ImageLayout::eTransferDstOptimal, copy);
 
             const auto transitionLevel = [&](uint32_t level, vk::ImageLayout from, vk::ImageLayout to,
                 vk::PipelineStageFlags2 srcStage, vk::AccessFlags2 srcAccess, vk::PipelineStageFlags2 dstStage, vk::AccessFlags2 dstAccess)
@@ -944,10 +1034,11 @@ namespace crimson::vulkan
                 commandBuffer.pipelineBarrier2(dependency);
             };
 
-            int32_t width = static_cast<int32_t>(info.Width);
-            int32_t height = static_cast<int32_t>(info.Height);
+            // Only a new texture has mip levels, and its region is all of it
+            int32_t width = static_cast<int32_t>(texture.Info.Width);
+            int32_t height = static_cast<int32_t>(texture.Info.Height);
 
-            for (uint32_t level = 1; level < info.MipLevels; ++level)
+            for (uint32_t level = 1; level < texture.Info.MipLevels; ++level)
             {
                 transitionLevel(level - 1, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eTransferSrcOptimal,
                     level == 1 ? vk::PipelineStageFlagBits2::eCopy : vk::PipelineStageFlagBits2::eBlit, vk::AccessFlagBits2::eTransferWrite,
@@ -972,7 +1063,7 @@ namespace crimson::vulkan
                 height = nextHeight;
             }
 
-            const uint32_t lastLevel = info.MipLevels > 0 ? info.MipLevels - 1 : 0;
+            const uint32_t lastLevel = texture.Info.MipLevels > 0 ? texture.Info.MipLevels - 1 : 0;
 
             transitionLevel(lastLevel, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal,
                 lastLevel == 0 ? vk::PipelineStageFlagBits2::eCopy : vk::PipelineStageFlagBits2::eBlit, vk::AccessFlagBits2::eTransferWrite,
@@ -987,10 +1078,11 @@ namespace crimson::vulkan
         VulkanTexture texture{};
         texture.Image = image;
         texture.Format = format;
-        texture.Width = width;
-        texture.Height = height;
         texture.Aspect = vk::ImageAspectFlagBits::eColor;
         texture.Layout = vk::ImageLayout::eUndefined;
+
+        // Owned by the swapchain, and not for shaders to sample, so it can't be updated
+        texture.Info = { .Width = width, .Height = height, .Usage = TextureUsage::ColorAttachment };
 
         vk::ImageViewCreateInfo viewInfo{};
         viewInfo.image = image;

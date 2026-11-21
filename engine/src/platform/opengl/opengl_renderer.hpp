@@ -26,7 +26,7 @@ namespace crimson::opengl
         RenderRect BindTarget(const PassInfo& info);
         void ClearTarget(const ClearInfo& clear);
         // passArea is where a draw lands when its view has no viewport of its own
-        void ExecuteDraw(const DrawItem& info, std::span<const FrameView> views, const RenderRect& passArea);
+        void ExecuteDraw(const DrawItem& info, std::span<const FrameView> views, const RenderRect& passArea, PassKind kind);
         void ResetBoundState();
         void BindFrameResources();
     private:

@@ -40,10 +40,10 @@ namespace
         return DrawItem{ .VertexBuffer = VertexBufferHandle{ vertexBuffer, 1 }, .Material = MaterialHandle{ material, 1 } };
     }
 
-    std::vector<uint32_t> DrawOrder(const std::vector<DrawItem>& draws, const FakeMaterials& materials)
+    std::vector<uint32_t> DrawOrder(const std::vector<DrawItem>& draws, const FakeMaterials& materials, PassKind kind = PassKind::Scene)
     {
         std::vector<DrawSortEntry> order;
-        BuildDrawOrder(std::span<const DrawItem>(draws), materials, order);
+        BuildDrawOrder(std::span<const DrawItem>(draws), materials, order, kind);
 
         std::vector<uint32_t> indices;
         for (const DrawSortEntry& entry : order)
@@ -540,4 +540,27 @@ TEST_CASE("The frame block carries the frame's time", "[frame]")
 
     CHECK(data.Block.Time == 2.5f);
     CHECK(data.Block.DeltaTime == 0.125f);
+}
+
+TEST_CASE("An overlay pass keeps its draws in the order they were recorded", "[draw sort]")
+{
+    FakeMaterials materials;
+    materials.Materials = {
+        { ShaderHandle{ 3, 1 }, {} },
+        { ShaderHandle{ 1, 1 }, { .RenderMode = MaterialRenderMode::Transparent } },
+        { ShaderHandle{ 2, 1 }, {} }
+    };
+
+    const auto at = [](uint32_t material, float depth)
+    {
+        DrawItem draw = MakeDraw(material);
+        draw.SortDepth = depth;
+        return draw;
+    };
+
+    // A scene pass would draw the opaque ones first, grouped by shader, and the transparent one last
+    const std::vector<DrawItem> draws = { at(1, 4.0f), at(0, 1.0f), at(2, 9.0f), at(1, 16.0f), at(0, 1.0f) };
+
+    CHECK(DrawOrder(draws, materials, PassKind::Scene) != std::vector<uint32_t>{ 0, 1, 2, 3, 4 });
+    CHECK(DrawOrder(draws, materials, PassKind::Overlay) == std::vector<uint32_t>{ 0, 1, 2, 3, 4 });
 }

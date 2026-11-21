@@ -24,6 +24,7 @@ namespace crimson::vulkan
         ShaderHandle Shader;
         MaterialSettings Settings;
         ShaderVariant Variant = ShaderVariant::Main;
+        PassKind Kind = PassKind::Scene;
         RenderTargetHandle Target;
         crimson::VertexBufferHandle VertexBufferHandle;
 
@@ -33,6 +34,9 @@ namespace crimson::vulkan
         vk::Buffer IndexBuffer;
         vk::DescriptorSet MaterialSet;
         bool FrameSetBound = false;
+
+        // The scissor of the last draw, which a draw can set apart from its view
+        RenderRect Scissor;
 
         // What the push constant holds. A view also sets the viewport, so it starts over with every pass.
         DrawData Draw{ std::numeric_limits<ObjectId>::max(), kPassView };
@@ -92,7 +96,7 @@ namespace crimson::vulkan
         void EndPass(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt);
 
         // passArea is where a draw lands when its view has no viewport of its own
-        void ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, std::span<const FrameView> views, const RenderRect& passArea);
+        void ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, std::span<const FrameView> views, const RenderRect& passArea, PassKind kind);
         void ExecuteNativePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, VulkanRenderTarget& rt);
 
         void BeginRendering(const vk::raii::CommandBuffer& cmd, VulkanRenderTarget& rt, const ClearInfo& clear, const std::optional<RenderRect>& area);

@@ -3,15 +3,21 @@
 #include "utils.hpp"
 #include "crimson/core/log.hpp"
 #include "crimson/core/profiler.hpp"
+#include "crimson/renderer/draw_state.hpp"
 
 #include <tracy/TracyOpenGL.hpp>
 
 namespace crimson::opengl
 {
+    static void SetViewport(const RenderRect& rect)
+    {
+        glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
+    }
+
     // The scissor is only left off when the rect is the whole target
     static void SetViewportAndScissor(OpenGLStateCache& state, const RenderRect& rect, bool scissor)
     {
-        glViewport(rect.X, rect.Y, static_cast<GLsizei>(rect.Width), static_cast<GLsizei>(rect.Height));
+        SetViewport(rect);
         state.SetScissor(scissor ? &rect : nullptr);
     }
 
@@ -132,16 +138,14 @@ namespace crimson::opengl
 
         const RenderRect passArea = BindTarget(info);
 
-        m_state.SetDepthTest(true);
-
         // BindTarget set the viewport to the pass's area, which the first draw's view may not have
         m_boundView = kPassView;
 
         const std::span<const DrawItem> draws = pass.GetDraws();
 
-        BuildDrawOrder(draws, m_resourceManager, m_drawOrder);
+        BuildDrawOrder(draws, m_resourceManager, m_drawOrder, info.Kind);
         for (const DrawSortEntry& sorted : m_drawOrder)
-            ExecuteDraw(draws[sorted.Index], views, passArea);
+            ExecuteDraw(draws[sorted.Index], views, passArea, info.Kind);
     }
 
     void OpenGLRenderer::ExecuteNativePass(const PassRecord& pass)
@@ -209,13 +213,17 @@ namespace crimson::opengl
         m_state.BindStorageBuffer(kViewsSlot, m_viewsBuffer);
     }
 
-    void OpenGLRenderer::ExecuteDraw(const DrawItem& info, std::span<const FrameView> views, const RenderRect& passArea)
+    void OpenGLRenderer::ExecuteDraw(const DrawItem& info, std::span<const FrameView> views, const RenderRect& passArea, PassKind kind)
     {
         CRIMSON_PROFILE_FUNCTION();
 
         // A view whose part of the target is outside the pass's draws nothing
         const RenderRect viewArea = ViewArea(views[info.View], passArea);
         if (IsEmpty(viewArea)) return;
+
+        // A draw can limit itself further, to a part of what its view shows
+        const RenderRect scissor = info.Scissor ? Intersect(viewArea, *info.Scissor) : viewArea;
+        if (IsEmpty(scissor)) return;
 
         OpenGLIndexBuffer& indexBuffer = m_resourceManager.GetIndexBuffer(info.IndexBuffer);
         OpenGLMaterial& material = m_resourceManager.GetMaterial(info.Material);
@@ -227,12 +235,12 @@ namespace crimson::opengl
             material.IsDirty = false;
         }
 
-        // Applied on every draw because clearing depth between passes can change depth write. A depth pass draws
-        // everything as opaque, so a transparent mesh still casts its shadow.
-        const bool transparent = info.Variant == ShaderVariant::Main && material.Settings.RenderMode == MaterialRenderMode::Transparent;
+        // Applied on every draw because clearing depth between passes can change depth write
+        const DrawState state = ResolveDrawState(kind, material.Settings, info.Variant);
 
-        m_state.SetBlend(transparent);
-        m_state.SetDepthWrite(!transparent);
+        m_state.SetBlend(state.Blend);
+        m_state.SetDepthTest(state.DepthTest);
+        m_state.SetDepthWrite(state.DepthWrite);
         m_state.SetCull(material.Settings.Cull);
 
         bool programChanged = false;
@@ -269,7 +277,9 @@ namespace crimson::opengl
         const bool viewChanged = info.View != m_boundView;
 
         if (viewChanged)
-            SetViewportAndScissor(m_state, viewArea, true);
+            SetViewport(viewArea);
+
+        m_state.SetScissor(&scissor);
 
         // Each program has its own copy of the uniforms
         if (programChanged || info.Object != m_boundObject)
@@ -297,7 +307,7 @@ namespace crimson::opengl
         const GLsizei count = info.IndexCount ? info.IndexCount : total;
         const auto offset = reinterpret_cast<const void*>(static_cast<uintptr_t>(info.FirstIndex) * Index::Size(indexBuffer.Type));
 
-        glDrawElements(GL_TRIANGLES, count, utils::GetGLIndexType(indexBuffer.Type), offset);
+        glDrawElementsBaseVertex(GL_TRIANGLES, count, utils::GetGLIndexType(indexBuffer.Type), offset, info.BaseVertex);
 
         ++m_stats.DrawCalls;
         m_stats.Triangles += count / 3;

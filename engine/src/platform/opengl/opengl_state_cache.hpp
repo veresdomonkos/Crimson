@@ -27,6 +27,7 @@ namespace crimson::opengl
             m_textures.fill(kUnknown);
             m_samplers.fill(kUnknown);
             m_scissor = Toggle::Unknown;
+            m_scissorRectKnown = false;
             m_depthTest = Toggle::Unknown;
             m_depthWrite = Toggle::Unknown;
             m_blend = Toggle::Unknown;
@@ -103,8 +104,12 @@ namespace crimson::opengl
         // Limits drawing and clearing to the rect, or lifts the limit when it is null
         void SetScissor(const RenderRect* rect)
         {
-            if (rect)
+            if (rect && (!m_scissorRectKnown || m_scissorRect != *rect))
+            {
                 glScissor(rect->X, rect->Y, static_cast<GLsizei>(rect->Width), static_cast<GLsizei>(rect->Height));
+                m_scissorRect = *rect;
+                m_scissorRectKnown = true;
+            }
 
             if (!Update(m_scissor, rect != nullptr)) return;
 
@@ -190,6 +195,8 @@ namespace crimson::opengl
         std::array<GLuint, 32> m_textures{};
         std::array<GLuint, 32> m_samplers{};
         Toggle m_scissor = Toggle::Unknown;
+        RenderRect m_scissorRect;
+        bool m_scissorRectKnown = false;
         Toggle m_depthTest = Toggle::Unknown;
         Toggle m_depthWrite = Toggle::Unknown;
         Toggle m_blend = Toggle::Unknown;

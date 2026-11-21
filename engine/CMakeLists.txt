@@ -21,6 +21,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/renderer/buffers.hpp
     include/crimson/renderer/camera_data.hpp
     include/crimson/renderer/core.hpp
+    include/crimson/renderer/draw_state.hpp
     include/crimson/renderer/draw_sort.hpp
     include/crimson/renderer/frame_gpu_data.hpp
     include/crimson/renderer/frame_recorder.hpp
@@ -154,6 +155,8 @@ set(ENGINE_SOURCES
 
     src/project/project.cpp
     src/project/shader_includes.cpp
+
+    src/renderer/update_validation.hpp
 
     src/scene/component_registry.cpp
     src/scene/native_components.cpp
