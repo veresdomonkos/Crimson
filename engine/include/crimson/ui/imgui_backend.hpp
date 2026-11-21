@@ -2,7 +2,6 @@
 #include <memory>
 
 #include <imgui/imgui.h>
-#include "crimson/core/window.hpp"
 #include "crimson/renderer/renderer.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/resource_manager.hpp"

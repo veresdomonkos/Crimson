@@ -69,7 +69,6 @@ namespace crimson::opengl
             return false;
 
         const FramePacket& packet = frame.GetPacket();
-        auto* window = m_device.GetPrimaryWindow();
 
         // ImGui and resource creation may have touched GL state since the last frame
         ResetBoundState();
@@ -109,7 +108,7 @@ namespace crimson::opengl
         {
             CRIMSON_PROFILE_SCOPE("Swap Buffers");
             ScopedWaitTimer waitTimer(m_stats);
-            glfwSwapBuffers(window);
+            m_device.GetWindowGraphics().SwapBuffers();
         }
 
         TracyGpuCollect;

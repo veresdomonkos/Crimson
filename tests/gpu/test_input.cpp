@@ -45,3 +45,18 @@ TEST_CASE("A locked cursor stays where it was locked, and its movement still cou
     CHECK_FALSE(input.IsCursorLocked());
     CHECK(glfwGetInputMode(window, GLFW_CURSOR) == GLFW_CURSOR_NORMAL);
 }
+
+TEST_CASE("The window gives its OS handle", "[window]")
+{
+    const OSWindowHandle handle = GpuWindow().GetOSHandle();
+
+#ifdef _WIN32
+    CHECK(handle.Type == OSWindowHandle::Kind::Win32);
+#elif defined(__APPLE__)
+    CHECK(handle.Type == OSWindowHandle::Kind::Cocoa);
+#else
+    // CI builds GLFW without Wayland
+    CHECK(handle.Type == OSWindowHandle::Kind::X11);
+#endif
+    CHECK(handle.Value != 0);
+}

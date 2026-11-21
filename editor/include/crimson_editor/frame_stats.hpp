@@ -1,6 +1,8 @@
 #pragma once
 
 #include <crimson/renderer/render_stats.hpp>
+#include <chrono>
+#include <optional>
 
 namespace crimson::editor
 {
@@ -16,7 +18,7 @@ namespace crimson::editor
         // Last finished frame
         RenderStats Render;
 
-        double LastFrameTime = 0.0;
+        std::optional<std::chrono::steady_clock::time_point> LastFrameTime;
         double WindowSeconds = 0.0;
         double WindowWaitSeconds = 0.0;
         double WindowWorstSeconds = 0.0;

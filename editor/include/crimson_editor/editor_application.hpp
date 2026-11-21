@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <filesystem>
 #include <memory>
 #include <optional>
@@ -49,7 +50,7 @@ namespace crimson::editor
 	    void OnEvent(Event& event);
 	private:
 	    bool m_running;
-	    double m_lastTime;
+        std::chrono::steady_clock::time_point m_lastTime;
 
 	    // ImGui only keeps a pointer to this, so it has to outlive the backend
 	    std::string m_imguiIniPath;

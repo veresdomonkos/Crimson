@@ -9,7 +9,6 @@
 #include "crimson/renderer/buffers.hpp"
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
-#include "crimson/core/window.hpp"
 #include "crimson/renderer/shader_interface.hpp"
 #include "crimson/renderer/shader_property_info.hpp"
 #include "crimson/renderer/texture.hpp"

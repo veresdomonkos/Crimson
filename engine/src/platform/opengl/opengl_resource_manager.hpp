@@ -4,6 +4,7 @@
 #include <span>
 #include <string_view>
 #include "opengl_device.hpp"
+#include "crimson/core/window.hpp"
 #include "opengl_resources.hpp"
 #include "vertex_array_cache.hpp"
 #include "crimson/renderer/resource_handles.hpp"

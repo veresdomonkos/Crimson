@@ -6,8 +6,8 @@
 #include <crimson/core/profiler.hpp>
 #include <crimson/project/project.hpp>
 #include <crimson/graphics/graphics_api.hpp>
-#include <GLFW/glfw3.h>
 #include <nfd.h>
+#include <chrono>
 #include <exception>
 #include <utility>
 
@@ -24,7 +24,7 @@ namespace crimson::editor
     constexpr uint32_t kEditorHeight = 720;
 
 	EditorApplication::EditorApplication(GraphicsApi rendererType, const std::filesystem::path& projectPath)
-        : m_running(true), m_lastTime(0.0)
+        : m_running(true), m_lastTime(std::chrono::steady_clock::now())
     {
         if (NFD_Init() != NFD_OKAY)
             LOG_ERROR("[Editor] The folder picker is unavailable: {}", NFD_GetError());
@@ -39,7 +39,7 @@ namespace crimson::editor
         {
             m_graphicsBackend.reset();
             m_window          = Window::Create(api, WindowData{ "Crimson", kProjectManagerWidth, kProjectManagerHeight, BIND_FN(OnEvent) });
-            m_graphicsBackend = GraphicsBackend::Create(api, *m_window);
+            m_graphicsBackend = m_window->CreateGraphicsBackend();
         };
 
         try
@@ -76,7 +76,7 @@ namespace crimson::editor
         ImGui::GetIO().IniFilename = m_imguiIniPath.c_str();
         ui::theme::Apply(m_window->GetContentScale());
 
-        m_lastTime = glfwGetTime();
+        m_lastTime = std::chrono::steady_clock::now();
 
         if (projectPath.empty())
         {
@@ -147,7 +147,7 @@ namespace crimson::editor
         m_closeProjectRequested = false;
 
         // Loading isn't part of any frame, so the camera shouldn't see it as one
-        m_lastTime = glfwGetTime();
+        m_lastTime = std::chrono::steady_clock::now();
     }
 
     void EditorApplication::Run()
@@ -158,8 +158,8 @@ namespace crimson::editor
 
     void EditorApplication::RunFrame()
     {
-        const double currentTime = glfwGetTime();
-        const auto deltaTime = static_cast<float>(currentTime - m_lastTime);
+        const auto currentTime = std::chrono::steady_clock::now();
+        const auto deltaTime = std::chrono::duration<float>(currentTime - m_lastTime).count();
         m_lastTime = currentTime;
 
         {

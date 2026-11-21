@@ -1,14 +1,18 @@
 #pragma once
 
 #include "crimson/core/window.hpp"
+#include "../window_graphics.hpp"
+
+// Glad provides the OpenGL declarations
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
 namespace crimson::glfw
 {
-	class GLFWWindow : public Window
+    class GLFWWindow : public Window, public WindowGraphics
 	{
 	public:
-		explicit GLFWWindow(WindowData data);
+        GLFWWindow(GraphicsApi api, WindowData data);
         ~GLFWWindow() override;
 
 		void PollEvents() override;
@@ -28,8 +32,19 @@ namespace crimson::glfw
 	        return x > 0.0f ? x : 1.0f;
 	    }
 
+        [[nodiscard]] OSWindowHandle GetOSHandle() const override;
+        [[nodiscard]] std::unique_ptr<GraphicsBackend> CreateGraphicsBackend() override;
 	    void* GetNativeHandle() const override { return m_handle; }
+
+        // WindowGraphics
+        [[nodiscard]] std::vector<const char*> GetVulkanInstanceExtensions() const override;
+        VkResult CreateVulkanSurface(VkInstance instance, VkSurfaceKHR* surface) const override;
+        void MakeContextCurrent() override { glfwMakeContextCurrent(m_handle); }
+        void SetSwapInterval(int interval) override { glfwSwapInterval(interval); }
+        void SwapBuffers() override { glfwSwapBuffers(m_handle); }
+        [[nodiscard]] GLLoader GetGLLoader() const override;
 	private:
+        GraphicsApi m_api;
 	    WindowData m_data;
 		GLFWwindow* m_handle;
 	};

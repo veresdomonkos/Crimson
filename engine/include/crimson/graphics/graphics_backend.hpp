@@ -8,13 +8,12 @@
 
 namespace crimson
 {
+    // What a window's graphics API gives it: made by Window::CreateGraphicsBackend()
     struct GraphicsBackend
     {
         std::unique_ptr<GraphicsDevice> Device;
         std::unique_ptr<GpuResourceManager> GPUResources;
         std::unique_ptr<crimson::Renderer> Renderer;
         std::unique_ptr<ImGuiBackend> Imgui;
-
-        static std::unique_ptr<GraphicsBackend> Create(GraphicsApi type, Window& window);
     };
 }

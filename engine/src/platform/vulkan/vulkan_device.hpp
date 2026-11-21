@@ -6,13 +6,14 @@
 #include "vulkan_allocator.hpp"
 #include "crimson/core/window.hpp"
 #include "crimson/graphics/graphics_device.hpp"
+#include "../window_graphics.hpp"
 
 namespace crimson::vulkan
 {
     class VulkanDevice : public GraphicsDevice
     {
     public:
-        explicit VulkanDevice(const Window& window);
+        VulkanDevice(const Window& window, WindowGraphics& windowGraphics);
         ~VulkanDevice() override;
 
         VulkanDevice(const VulkanDevice&) = delete;
@@ -41,7 +42,7 @@ namespace crimson::vulkan
     private:
         void CreateInstance();
         void SetupDebugMessenger();
-        void CreateSurface(const Window& window);
+        void CreateSurface();
         void PickPhysicalDevice();
         void CreateLogicalDevice();
         void CreateImmediateCommandPool();
@@ -61,6 +62,7 @@ namespace crimson::vulkan
 
     private:
         const Window& m_primaryWindow;
+        WindowGraphics& m_windowGraphics;
 
         // Declared in creation order, destruction runs in reverse
         vk::raii::Context m_context;

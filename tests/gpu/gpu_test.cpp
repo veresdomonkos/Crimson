@@ -26,7 +26,7 @@ namespace crimson::tests
             return;
 
         s_window = Window::Create(s_backend, WindowData{ "Crimson GPU tests", 320, 240, [](Event&) {} });
-        s_graphics = GraphicsBackend::Create(s_backend, *s_window);
+        s_graphics = s_window->CreateGraphicsBackend();
     }
 
     GraphicsApi SelectedBackend() { return s_backend; }

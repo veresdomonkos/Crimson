@@ -20,7 +20,6 @@ namespace crimson::opengl
 {
     struct OpenGLSurface
     {
-        void* WindowHandle{};
         RenderTargetHandle BackBufferHandle;
     };
 

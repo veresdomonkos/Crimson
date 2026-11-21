@@ -108,9 +108,11 @@ set(ENGINE_SOURCES
     src/core/input.cpp
     src/core/log.cpp
 
+    src/graphics/create_graphics_backend.hpp
     src/graphics/graphics_backend.cpp
 
     src/platform/files.hpp
+    src/platform/window_graphics.hpp
 
     src/platform/glfw/glfw_window.cpp
     src/platform/glfw/glfw_window.hpp
@@ -119,8 +121,8 @@ set(ENGINE_SOURCES
     src/platform/opengl/opengl_device.hpp
     src/platform/opengl/opengl_imgui_backend.cpp
     src/platform/opengl/opengl_imgui_backend.hpp
+    src/platform/opengl/opengl_renderer.cpp
     src/platform/opengl/opengl_renderer.hpp
-    src/platform/opengl/opengl_renderer_glfw.cpp
     src/platform/opengl/opengl_resource_manager.cpp
     src/platform/opengl/opengl_resource_manager.hpp
     src/platform/opengl/opengl_resources.hpp

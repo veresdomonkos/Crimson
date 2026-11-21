@@ -12,7 +12,6 @@
 #include <string>
 #include <utility>
 #include <glm/gtc/matrix_transform.hpp>
-#include <GLFW/glfw3.h>
 
 #include "crimson_editor/editor_settings.hpp"
 #include "crimson_editor/recent_projects.hpp"
@@ -350,14 +349,14 @@ namespace crimson::editor
 
     void ProjectSessionMode::UpdateFrameStats()
     {
-        const double now = glfwGetTime();
+        const auto now = std::chrono::steady_clock::now();
         FrameStats& stats = m_frameStats;
 
         stats.Render = m_services.Graphics.Renderer->GetStats();
 
-        if (stats.LastFrameTime > 0.0)
+        if (stats.LastFrameTime)
         {
-            const double frameSeconds = now - stats.LastFrameTime;
+            const double frameSeconds = std::chrono::duration<double>(now - *stats.LastFrameTime).count();
 
             stats.WindowSeconds += frameSeconds;
             stats.WindowWaitSeconds += stats.Render.WaitSeconds;

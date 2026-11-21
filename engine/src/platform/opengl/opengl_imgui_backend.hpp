@@ -8,7 +8,7 @@ namespace crimson::opengl
     class OpenGLImGuiBackend : public ImGuiBackend
     {
     public:
-        OpenGLImGuiBackend(OpenGLDevice& device, OpenGLResourceManager& resourceManager);
+        OpenGLImGuiBackend(OpenGLDevice& device, OpenGLResourceManager& resourceManager, void* glfwWindow);
         ~OpenGLImGuiBackend() override;
         void NewFrame() override;
         void RenderDrawData(ImDrawData* drawData, const NativeContext& context) override;

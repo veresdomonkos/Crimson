@@ -2,9 +2,25 @@
 
 #include "glfw_window.hpp"
 
+#include <stdexcept>
 #include <utility>
 #include "crimson/core/log.hpp"
 #include "crimson/graphics/graphics_api.hpp"
+#include "../../graphics/create_graphics_backend.hpp"
+
+// Last, as X11's headers define macros such as None
+#if defined(_WIN32)
+#define GLFW_EXPOSE_NATIVE_WIN32
+#elif defined(__APPLE__)
+#define GLFW_EXPOSE_NATIVE_COCOA
+#else
+#define GLFW_EXPOSE_NATIVE_X11
+// CI builds GLFW without Wayland
+#if __has_include(<wayland-client.h>)
+#define GLFW_EXPOSE_NATIVE_WAYLAND
+#endif
+#endif
+#include <GLFW/glfw3native.h>
 
 namespace crimson
 {
@@ -36,13 +52,13 @@ namespace crimson
 				break;
 		}
 
-	    return CreateUnique<glfw::GLFWWindow>(std::move(data));
+        return CreateUnique<glfw::GLFWWindow>(rendererAPI, std::move(data));
 	}
 }
 
 namespace crimson::glfw
 {
-	GLFWWindow::GLFWWindow(WindowData data) : m_data(std::move(data)), m_handle(nullptr)
+    GLFWWindow::GLFWWindow(GraphicsApi api, WindowData data) : m_api(api), m_data(std::move(data)), m_handle(nullptr)
 	{
 		m_handle = glfwCreateWindow(static_cast<int>(m_data.Width), static_cast<int>(m_data.Height), m_data.Title.c_str(), nullptr, nullptr);
 
@@ -119,5 +135,46 @@ namespace crimson::glfw
     void GLFWWindow::SetSize(uint32_t width, uint32_t height)
     {
         glfwSetWindowSize(m_handle, static_cast<int>(width), static_cast<int>(height));
+    }
+
+    OSWindowHandle GLFWWindow::GetOSHandle() const
+    {
+#if defined(_WIN32)
+        return { OSWindowHandle::Kind::Win32, reinterpret_cast<std::uintptr_t>(glfwGetWin32Window(m_handle)) };
+#elif defined(__APPLE__)
+        return { OSWindowHandle::Kind::Cocoa, reinterpret_cast<std::uintptr_t>(glfwGetCocoaWindow(m_handle)) };
+#else
+#if defined(GLFW_EXPOSE_NATIVE_WAYLAND)
+        if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND)
+            return { OSWindowHandle::Kind::Wayland, reinterpret_cast<std::uintptr_t>(glfwGetWaylandWindow(m_handle)) };
+#endif
+        return { OSWindowHandle::Kind::X11, static_cast<std::uintptr_t>(glfwGetX11Window(m_handle)) };
+#endif
+    }
+
+    std::unique_ptr<GraphicsBackend> GLFWWindow::CreateGraphicsBackend()
+    {
+        return crimson::CreateGraphicsBackend(m_api, *this, *this);
+    }
+
+    std::vector<const char*> GLFWWindow::GetVulkanInstanceExtensions() const
+    {
+        uint32_t count = 0;
+        const char** extensions = glfwGetRequiredInstanceExtensions(&count);
+
+        if (!extensions)
+            throw std::runtime_error("Failed to get GLFW Vulkan extensions.");
+
+        return std::vector<const char*>(extensions, extensions + count);
+    }
+
+    VkResult GLFWWindow::CreateVulkanSurface(VkInstance instance, VkSurfaceKHR* surface) const
+    {
+        return glfwCreateWindowSurface(instance, m_handle, nullptr, surface);
+    }
+
+    WindowGraphics::GLLoader GLFWWindow::GetGLLoader() const
+    {
+        return reinterpret_cast<GLLoader>(glfwGetProcAddress);
     }
 }
