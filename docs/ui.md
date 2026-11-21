@@ -1,6 +1,6 @@
 # The editor's look
 
-The editor's colors, sizes and fonts are named in [`editor_theme.hpp`](../editor/include/crimson_editor/ui/editor_theme.hpp). A panel uses those names and writes no color, spacing, radius or font size of its own. `tests/editor/test_editor_theme.cpp` checks the panels' sources for it.
+The editor's colors, sizes and fonts are named in [`editor_theme.hpp`](../editor/ui/include/crimson_editor/ui/editor_theme.hpp). A panel uses those names and writes no color, spacing, radius or font size of its own. `tests/editor/test_editor_theme.cpp` checks the panels' sources for it.
 
 ## References
 
@@ -16,7 +16,7 @@ The editor's colors, sizes and fonts are named in [`editor_theme.hpp`](../editor
 - **Hovers and presses are grey** (`Hover`, `Pressed`), never the accent.
 - **The accent** (`Accent` and its shades) marks selection, focus, the active tab's line and primary buttons, and nothing else. Drag and drop targets and the docking preview are focus, so they use it too.
 - **One radius** (`Radius`) for every corner, and 1 px (`BorderSize`) for borders and splitters.
-- **Spacing comes from the scale**: `SpaceXS`, `SpaceS`, `SpaceM`, `SpaceL`, `SpaceXL`. Widths that depend on the text, such as a field that fits 12 characters, are in ems: `ImGui::GetFontSize() * 12.0f`. They are not spacing, so they have no token.
+- **Spacing comes from the scale**: `SpaceXS`, `SpaceS`, `SpaceM`, `SpaceL`, `SpaceXL`. Widths that depend on the text, such as a field that fits 12 characters, are in ems: `ui::FontSize() * 12.0f`. They are not spacing, so they have no token.
 - **Three type sizes and two weights**: `FontBody`, `FontSmall` and `FontHeading`, in Regular and Bold.
 - **One icon size** (`IconSize`, the body size). An icon is muted unless it carries meaning: a status, a kind of asset or an axis.
 - **Sliders always have a number field next to them** (`props::Slider`, or `props::SliderField` outside a props table), so a value can be typed as well as dragged.
@@ -31,7 +31,7 @@ The editor's colors, sizes and fonts are named in [`editor_theme.hpp`](../editor
 | Text | `Text`, `TextMuted`, `TextOnAccent` |
 | Accent | `Accent`, `AccentHover`, `AccentPressed`, `Selection`, `TextSelection` |
 | Status | `Success`, `Warning`, `Error`, with `TintAlpha`, `TintHoverAlpha` and `WithAlpha` for tinted controls |
-| Category | `AssetColor(type)`, `Folder`, `FolderTab`, and `AxisX` to `AxisW` |
+| Category | `AssetMaterial`, `AssetMesh`, `AssetShader`, `AssetTexture`, `AssetScene`, `AssetOther`, `Folder`, `FolderTab`, and `AxisX` to `AxisW` |
 | Spacing | `SpaceXS` 4, `SpaceS` 8, `SpaceM` 12, `SpaceL` 16, `SpaceXL` 24 |
 | Shape | `Radius` 4, `BorderSize` 1, `AccentLineSize` 2 |
 | Type | `FontBody` 14, `FontSmall` 12, `FontHeading` 16, `IconSize` 14 |
@@ -44,12 +44,15 @@ Inter stays, in Regular and Bold, at its 18 pt optical size, the smallest that i
 
 ## Helpers
 
-- `PrimaryButton` for the main action of a dialog or a form. Only one per dialog.
-- `ToggleButton` for a button that stays pressed while its setting is on, such as a gizmo tool.
-- `IconTreeNode` for a tree row with an icon, which draws the icon in its own color: `TextMuted` for entities and components, `Folder` for folders.
-- `Scaled` for a spacing, radius or margin token that goes outside the style, such as a draw list's rounding.
-- `ScopedFont` for one scope in another font or type size, `ScopedBold` for bold at the current size.
-- `WithAlpha` for a status color as a tint.
+- `ui::PrimaryButton` for the main action of a dialog or a form. Only one per dialog.
+- `ui::ToggleButton` for a button that stays pressed while its setting is on, such as a gizmo tool.
+- `ui::TreeRow` for a tree row with an icon, which draws the icon in its own color: `TextMuted` for entities and components, `Folder` for folders.
+- `ui::theme::Scaled` for a spacing, radius or margin token that goes outside the style, such as a painter's rounding.
+- `ui::FontScope` for one scope in another font or type size, `ui::BoldScope` for bold at the current size.
+- `ui::TintedToggle` for a toggle that takes the color of a status while it is on, such as the Console's level buttons.
+- `ui::Painter` for what is drawn by hand, such as a thumbnail or a highlight. It takes only `ui::Color`s, so a panel has no ImGui types to write.
+- Nothing else: a panel includes only `crimson_editor/ui/`, whose headers hold no ImGui. [architecture.md](architecture.md#the-ui-layer) says why.
+- `ui::WithAlpha` for a status color as a tint.
 - `AssetField` for any reference to an asset, never a combo. Its picker marks the engine's assets with a `TextMuted` name and an `Engine` label, and the field has the accent border while its picker is open.
 
 ## Next

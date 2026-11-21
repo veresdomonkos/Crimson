@@ -1,12 +1,10 @@
 #pragma once
-#include <array>
 #include <filesystem>
 #include <string>
 #include <vector>
 
-#include <imgui.h>
-
 #include "crimson_editor/app_mode.hpp"
+#include "crimson_editor/ui/widgets.hpp"
 
 namespace crimson::editor
 {
@@ -17,7 +15,7 @@ namespace crimson::editor
         // The error is shown right away, for when a project couldn't be opened before getting here
         ProjectManagerMode(EditorServices& services, std::string error = {});
 
-        void OnImGui() override;
+        void DrawUI() override;
     private:
         struct ListedProject
         {
@@ -46,12 +44,12 @@ namespace crimson::editor
 
         std::vector<ListedProject> m_projects;
         std::filesystem::path m_selected;
-        ImGuiTextFilter m_filter;
+        ui::SearchFilter m_filter;
         std::string m_error;
 
-        bool m_openNewProjectPopup = false;
-        std::array<char, 256> m_newName{};
-        std::array<char, 1024> m_newParent{};
+        bool m_creating = false;
+        std::string m_newName;
+        std::string m_newParent;
         std::string m_newProblem;
     };
 }

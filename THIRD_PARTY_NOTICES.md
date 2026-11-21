@@ -1,6 +1,6 @@
 # Third-party notices
 
-The editor bundles the fonts below from `editor/resources/fonts/`, and the engine builds in MikkTSpace. Their licenses follow.
+The editor bundles the fonts below from `editor/ui/resources/fonts/`, and the engine builds in MikkTSpace. Their licenses follow.
 
 ## Inter
 

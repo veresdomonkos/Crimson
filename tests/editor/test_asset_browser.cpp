@@ -1,10 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <crimson_editor/ui/asset_browser_panel.hpp>
+#include <crimson_editor/panels/asset_browser_panel.hpp>
 
 using namespace crimson;
-using crimson::editor::ui::IsEngineFolder;
-using crimson::editor::ui::ListsAsset;
+using crimson::editor::IsEngineFolder;
+using crimson::editor::ListsAsset;
 
 TEST_CASE("The Assets panel lists the engine's assets only when asked to", "[asset browser]")
 {

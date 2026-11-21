@@ -11,7 +11,7 @@ namespace crimson::editor
     [[nodiscard]] TextureHandle CreateTexturePreview(GpuResourceManager& gpu, const AssetManager& assets, TextureID id);
 
     // The previews of texture assets, loaded the first time one is drawn. A texture goes when its asset is replaced or
-    // removed, which is between frames, as nothing that draws it is recorded then. There is no ImGui id to release first.
+    // removed, which is between frames, as nothing that draws it is recorded then. There is no UI texture id to release first.
     class AssetThumbnails
     {
     public:

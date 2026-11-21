@@ -12,8 +12,12 @@
 #include "crimson_editor/project_session.hpp"
 #include "crimson_editor/scene_camera_controller.hpp"
 #include "crimson_editor/scene_view.hpp"
-#include "crimson_editor/ui/editor_ui.hpp"
-#include "crimson_editor/ui/viewport_panel.hpp"
+#include "crimson_editor/panels/asset_browser_panel.hpp"
+#include "crimson_editor/panels/console_panel.hpp"
+#include "crimson_editor/panels/notifications.hpp"
+#include "crimson_editor/panels/preferences_panel.hpp"
+#include "crimson_editor/panels/viewport_panel.hpp"
+#include "crimson_editor/ui/workspace.hpp"
 
 namespace crimson::editor
 {
@@ -26,24 +30,25 @@ namespace crimson::editor
         ~ProjectSessionMode() override;
 
         void Record(FrameRecorder& frame) override;
-        void OnImGui() override;
+        void DrawUI() override;
         void Update(float deltaTime) override;
         void RequestClose(std::function<void()> proceed) override;
 
         [[nodiscard]] EditorContext& GetContext() { return m_context; }
         [[nodiscard]] SceneView& GetSceneView() { return m_sceneView; }
         [[nodiscard]] ProjectSession& GetSession() { return m_session; }
+        [[nodiscard]] ui::Workspace& GetWorkspace() { return m_workspace; }
     private:
         // --- Setup called from constructor ---
         void CreateRenderTargets();
         void SetupRenderer();
         void SetupUI();
+        void SetupCommands();
 
         // Gives the renderer the scene's tone mapping, which it ignores when nothing changed
         void ApplyToneMapping();
 
         void UpdateFrameStats();
-        void HandleShortcuts();
         void DrawUnsavedChangesDialog();
         void DrawRecoveryDialog();
 
@@ -80,8 +85,14 @@ namespace crimson::editor
 
         FrameStats m_frameStats;
 
-        std::unique_ptr<ui::EditorUI> m_ui;
-        const ui::ViewportPanel* m_sceneViewport = nullptr;
+        ui::Workspace m_workspace;
+        const ViewportPanel* m_sceneViewport = nullptr;
+        AssetBrowserPanel* m_assetBrowser = nullptr;
+        ConsolePanel* m_console = nullptr;
+        PreferencesPanel* m_preferences = nullptr;
+
+        // Clicking a message shows the Console
+        Notifications m_notifications;
         std::unique_ptr<SceneCameraController> m_cameraController;
 
         float m_sinceShaderCheck = 0.0f;

@@ -1,10 +1,11 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include "crimson_editor/ui/component_fields.hpp"
+#include "crimson_editor/panels/component_fields.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
 using namespace crimson;
 using namespace crimson::editor::ui;
+using namespace crimson::editor;
 
 TEST_CASE("Uniform scaling keeps the ratio of the axis that changed", "[component fields]")
 {

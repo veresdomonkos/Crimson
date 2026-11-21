@@ -1,3 +1,5 @@
+add_subdirectory(ui)
+
 set(EDITOR_HEADERS
     include/crimson_editor/app_mode.hpp
     include/crimson_editor/asset_edits.hpp
@@ -23,30 +25,24 @@ set(EDITOR_HEADERS
     include/crimson_editor/script_editor.hpp
     include/crimson_editor/system_shell.hpp
 
-    include/crimson_editor/ui/asset_browser_panel.hpp
-    include/crimson_editor/ui/asset_drag.hpp
-    include/crimson_editor/ui/asset_field.hpp
-    include/crimson_editor/ui/asset_inspector.hpp
-    include/crimson_editor/ui/asset_picker.hpp
-    include/crimson_editor/ui/asset_tiles.hpp
-    include/crimson_editor/ui/component_fields.hpp
-    include/crimson_editor/ui/console_panel.hpp
-    include/crimson_editor/ui/editor_theme.hpp
-    include/crimson_editor/ui/editor_ui.hpp
-    include/crimson_editor/ui/hierarchy_panel.hpp
-    include/crimson_editor/ui/icons.hpp
-    include/crimson_editor/ui/imgui_platform.hpp
-    include/crimson_editor/ui/imgui_renderer.hpp
-    include/crimson_editor/ui/inspector_panel.hpp
-    include/crimson_editor/ui/linear_color.hpp
-    include/crimson_editor/ui/notifications.hpp
-    include/crimson_editor/ui/panel.hpp
-    include/crimson_editor/ui/preferences_panel.hpp
-    include/crimson_editor/ui/property_fields.hpp
-    include/crimson_editor/ui/scene_settings_panel.hpp
-    include/crimson_editor/ui/scene_viewport_panel.hpp
-    include/crimson_editor/ui/stats_panel.hpp
-    include/crimson_editor/ui/viewport_panel.hpp
+    include/crimson_editor/panels/asset_look.hpp
+
+    include/crimson_editor/panels/asset_browser_panel.hpp
+    include/crimson_editor/panels/asset_drag.hpp
+    include/crimson_editor/panels/asset_field.hpp
+    include/crimson_editor/panels/asset_inspector.hpp
+    include/crimson_editor/panels/asset_picker.hpp
+    include/crimson_editor/panels/asset_tiles.hpp
+    include/crimson_editor/panels/component_fields.hpp
+    include/crimson_editor/panels/console_panel.hpp
+    include/crimson_editor/panels/hierarchy_panel.hpp
+    include/crimson_editor/panels/inspector_panel.hpp
+    include/crimson_editor/panels/notifications.hpp
+    include/crimson_editor/panels/preferences_panel.hpp
+    include/crimson_editor/panels/scene_settings_panel.hpp
+    include/crimson_editor/panels/scene_viewport_panel.hpp
+    include/crimson_editor/panels/stats_panel.hpp
+    include/crimson_editor/panels/viewport_panel.hpp
 )
 
 set(EDITOR_SOURCES
@@ -69,27 +65,23 @@ set(EDITOR_SOURCES
     src/script_editor.cpp
     src/system_shell.cpp
 
-    src/ui/asset_browser_panel.cpp
-    src/ui/asset_field.cpp
-    src/ui/asset_inspector.cpp
-    src/ui/asset_picker.cpp
-    src/ui/asset_tiles.cpp
-    src/ui/component_fields.cpp
-    src/ui/console_panel.cpp
-    src/ui/editor_theme.cpp
-    src/ui/editor_ui.cpp
-    src/ui/hierarchy_panel.cpp
-    src/ui/imgui_platform.cpp
-    src/ui/imgui_renderer.cpp
-    src/ui/inspector_panel.cpp
-    src/ui/linear_color.cpp
-    src/ui/notifications.cpp
-    src/ui/preferences_panel.cpp
-    src/ui/property_fields.cpp
-    src/ui/scene_settings_panel.cpp
-    src/ui/scene_viewport_panel.cpp
-    src/ui/stats_panel.cpp
-    src/ui/viewport_panel.cpp
+    src/panels/asset_look.cpp
+
+    src/panels/asset_browser_panel.cpp
+    src/panels/asset_field.cpp
+    src/panels/asset_inspector.cpp
+    src/panels/asset_picker.cpp
+    src/panels/asset_tiles.cpp
+    src/panels/component_fields.cpp
+    src/panels/console_panel.cpp
+    src/panels/hierarchy_panel.cpp
+    src/panels/inspector_panel.cpp
+    src/panels/notifications.cpp
+    src/panels/preferences_panel.cpp
+    src/panels/scene_settings_panel.cpp
+    src/panels/scene_viewport_panel.cpp
+    src/panels/stats_panel.cpp
+    src/panels/viewport_panel.cpp
 )
 
 # Everything but main, so the tests can link and drive the editor
@@ -102,8 +94,7 @@ crimson_embed_resources(EditorCore DIRECTORY resources NAMESPACE crimson::editor
 target_link_libraries(EditorCore
     PUBLIC
         Engine
-        imgui
-        imguizmo
+        EditorUI
     PRIVATE
         nfd
 )
@@ -123,7 +114,7 @@ else()
     )
 endif()
 
-crimson_precompile_headers(EditorCore ${CRIMSON_PRECOMPILED_ENGINE_DEPS} <imgui.h>)
+crimson_precompile_headers(EditorCore ${CRIMSON_PRECOMPILED_ENGINE_DEPS})
 
 add_executable(Editor src/main.cpp)
 

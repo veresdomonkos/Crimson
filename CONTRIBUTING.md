@@ -55,7 +55,7 @@ C++23, in the style the code already has:
 - **Names:**
   - `PascalCase` for types, functions and public members
   - `m_camelCase` for private members, `s_camelCase` for statics, `kPascalCase` for constants
-  - the engine in `crimson::`, the editor in `crimson::editor::`, and its panels in `crimson::editor::ui::`
+  - the engine in `crimson::`, the editor in `crimson::editor::`, and its UI layer in `crimson::editor::ui::`
   - `snake_case` for namespaces, such as `scene_data` next to the `SceneData` type, so `scene_data::Parse` doesn't read as a static member
 - **Groups:** in a public header (`include/`), free functions and constants that belong together go in a small namespace named after what they share, inside the header's namespace, and that part comes out of their names: `scene_data::Parse`, not `ParseSceneData`. One that is on its own stays as it is, with no namespace for a single function. Names private to the engine and the editor, and tests, are not grouped.
 - **Code private to a `.cpp`:** functions and variables are `static`, and constants need nothing, as `const` and `constexpr` are already private to the file. If the private code has a type, all of it (types, constants and functions) goes in one unnamed namespace at the top of the file instead. Only that keeps two files' types of the same name apart, and it draws one line between the file's private code and its public functions. Tests too, where a file may have several blocks, each next to the tests that use it, and each follows the same rule: `static` functions when it has no types, an unnamed namespace when it has.
@@ -65,7 +65,8 @@ C++23, in the style the code already has:
 - **GPU resources** only change between frames. Panels queue such changes in `EditorContext::Deferred`.
 - **Editor UI:**
   - Colors, spacing, radii and font sizes come from `crimson_editor/ui/editor_theme.hpp`, never written out in a panel. [docs/ui.md](docs/ui.md) has the rules.
-  - The main action of a dialog is a `theme::PrimaryButton`.
+  - Panels and modes use only `crimson_editor/ui/`, never ImGui: it is private to the `EditorUI` library, so including it fails to build. A widget a panel needs goes into the layer.
+  - The main action of a dialog is a `ui::PrimaryButton`.
   - Icons come from `crimson_editor/ui/icons.hpp`.
   - Inspector fields go through `crimson_editor/ui/property_fields.hpp`.
 - **Errors** are logged with `LOG_ERROR`. That puts them in the Console and in the corner of the window, and makes a test fail unless it expected them.

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include <imgui.h>
+#include "crimson_editor/ui/input.hpp"
 
 namespace crimson::editor
 {
@@ -16,7 +16,7 @@ namespace crimson::editor
     constexpr float kZoomSensitivity = 0.005f;
     constexpr float kMinPivotDistance = 0.1f;
 
-    SceneCameraController::SceneCameraController(PerspectiveCamera& camera, Input& input, Window& window, const ui::ViewportPanel& viewport)
+    SceneCameraController::SceneCameraController(PerspectiveCamera& camera, Input& input, Window& window, const ViewportPanel& viewport)
         : m_camera(camera), m_input(input), m_window(window), m_viewport(viewport)
     {
     }
@@ -84,13 +84,13 @@ namespace crimson::editor
             m_window.SetCursorLocked(true);
         };
 
-        if (ImGui::IsMouseClicked(ImGuiMouseButton_Middle))
+        if (ui::input::MouseClicked(MouseButton::Middle))
             begin(Gesture::Pan, MouseButton::Middle);
-        else if (alt && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+        else if (alt && ui::input::MouseClicked(MouseButton::Left))
             begin(Gesture::Orbit, MouseButton::Left);
-        else if (alt && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        else if (alt && ui::input::MouseClicked(MouseButton::Right))
             begin(Gesture::Zoom, MouseButton::Right);
-        else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        else if (ui::input::MouseClicked(MouseButton::Right))
             begin(Gesture::Fly, MouseButton::Right);
     }
 
@@ -106,7 +106,7 @@ namespace crimson::editor
         m_camera.Rotate(mouse.x * kLookSensitivity, -mouse.y * kLookSensitivity);
 
         // The wheel changes the speed while flying
-        const float wheel = ImGui::GetIO().MouseWheel;
+        const float wheel = ui::input::MouseWheel();
         if (wheel != 0.0f)
             m_flySpeed = std::clamp(m_flySpeed * std::pow(kFlySpeedStep, wheel), kMinFlySpeed, kMaxFlySpeed);
 
@@ -142,7 +142,7 @@ namespace crimson::editor
     // The move keys only fly while the right mouse button is held, which leaves W, E and R for the gizmo tools
     void SceneCameraController::UpdateWithoutGesture()
     {
-        const float wheel = ImGui::GetIO().MouseWheel;
+        const float wheel = ui::input::MouseWheel();
         if (wheel != 0.0f && m_viewport.IsHovered())
             Dolly(wheel * kDollyStep * m_pivotDistance);
     }

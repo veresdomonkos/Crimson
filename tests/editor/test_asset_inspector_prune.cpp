@@ -1,9 +1,9 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <crimson_editor/ui/asset_inspector.hpp>
+#include <crimson_editor/panels/asset_inspector.hpp>
 
 using namespace crimson;
-using crimson::editor::ui::PruneToShader;
+using crimson::editor::PruneToShader;
 
 TEST_CASE("A material keeps what its shader has and drops the rest", "[asset inspector]")
 {
