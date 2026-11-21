@@ -120,6 +120,7 @@ set(ENGINE_SOURCES
 
     src/platform/glfw/glfw_input.cpp
     src/platform/glfw/glfw_input.hpp
+    src/platform/glfw/glfw_os_handle.cpp
     src/platform/glfw/glfw_window.cpp
     src/platform/glfw/glfw_window.hpp
 
