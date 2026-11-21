@@ -39,7 +39,7 @@ namespace crimson::vulkan
         RenderRect Scissor;
 
         // What the push constant holds. A view also sets the viewport, so it starts over with every pass.
-        DrawData Draw{ std::numeric_limits<ObjectId>::max(), kPassView };
+        DrawData Draw;
         bool DrawPushed = false;
     };
 

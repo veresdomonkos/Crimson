@@ -13,6 +13,7 @@
 
 #include "core.hpp"
 #include "frame_gpu_data.hpp"
+#include "frame_table.hpp"
 #include "mesh.hpp"
 #include "native_context.hpp"
 #include "shader_variant.hpp"
@@ -22,14 +23,13 @@ namespace crimson
     constexpr uint32_t kMaxFramesInFlight = 2;
     constexpr uint32_t kMaxPassReads = 4;
 
-    // An index into the frame's object transforms. 0 is always the identity transform.
-    using ObjectId = uint32_t;
+    // An object transform of the frame, from FrameRecorder::AddObject. None is the identity transform.
+    struct ObjectTag;
+    using ObjectId = FrameId<ObjectTag>;
 
-    // An index into the frame's views, from FrameRecorder::AddView
-    using ViewId = uint32_t;
-
-    // The view of the pass a draw is in
-    constexpr ViewId kPassView = std::numeric_limits<ViewId>::max();
+    // A view of the frame, from FrameRecorder::AddView. None is the view of the pass a draw is in.
+    struct ViewTag;
+    using ViewId = FrameId<ViewTag>;
 
     struct DrawItem
     {
@@ -38,14 +38,15 @@ namespace crimson
         MaterialHandle Material;
         uint32_t FirstIndex = 0;
         uint32_t IndexCount = 0;
-        ObjectId Object = 0;
+        // None is drawn with the identity transform
+        ObjectId Object;
         ShaderVariant Variant = ShaderVariant::Main;
 
         // Squared distance from the view's camera, transparent draws go back to front by it
         float SortDepth = 0.0f;
 
-        // The camera it is drawn with, the pass's own unless it names another of the frame's views
-        ViewId View = kPassView;
+        // The camera it is drawn with: the pass's own when none, or another of the frame's views
+        ViewId View;
 
         // Limits the draw to a rect of the target, in the same space as PassInfo::Viewport. It is cut to the view's area,
         // and a draw that ends up with nothing left is skipped.
@@ -65,7 +66,7 @@ namespace crimson
         ShaderVariant Variant = ShaderVariant::Main;
 
         // The pass's view unless set. A pass can draw with several, like the shadows with one per atlas tile.
-        ViewId View = kPassView;
+        ViewId View;
     };
 
     // How a pass's draws are ordered and blended
@@ -119,7 +120,7 @@ namespace crimson
         friend class PassBuilder;
 
         PassInfo m_info;
-        ViewId m_view = 0;
+        ViewId m_view;
         std::vector<DrawItem> m_draws;
         NativePassFn m_native;
     };
@@ -131,8 +132,13 @@ namespace crimson
         FramePacket() { Reset(); }
 
         [[nodiscard]] std::span<const PassRecord> GetPasses() const { return std::span(m_passes.data(), m_passCount); }
-        [[nodiscard]] std::span<const GpuObject> GetObjects() const { return m_objects; }
-        [[nodiscard]] std::span<const FrameView> GetViews() const { return m_views; }
+        [[nodiscard]] std::span<const GpuObject> GetObjects() const { return m_objects.All(); }
+        [[nodiscard]] const GpuObject& GetObject(ObjectId object) const { return m_objects.Get(object); }
+        [[nodiscard]] std::span<const FrameView> GetViews() const { return m_views.All(); }
+        [[nodiscard]] const FrameView& GetView(ViewId view) const { return m_views.Get(view); }
+
+        // What an object of none stands for. It is the first object, so it is index 0 of the uploaded transforms.
+        [[nodiscard]] ObjectId IdentityObject() const { return m_identityObject; }
         [[nodiscard]] const FrameLighting& GetLighting() const { return m_lighting; }
 
         // Keeps the capacity of the lists, so a frame like the last one doesn't allocate
@@ -144,10 +150,10 @@ namespace crimson
 
             m_passCount = 0;
 
-            m_objects.clear();
-            m_objects.push_back({ glm::mat4(1.0f), glm::mat4(1.0f) });
+            m_objects.Clear();
+            m_identityObject = m_objects.Add({ glm::mat4(1.0f), glm::mat4(1.0f) });
 
-            m_views.clear();
+            m_views.Clear();
 
             m_lighting.AmbientColor = FrameLighting{}.AmbientColor;
             m_lighting.Lights.clear();
@@ -160,8 +166,9 @@ namespace crimson
         // Records past m_passCount are left over from earlier frames, kept for their draw lists' capacity
         std::vector<PassRecord> m_passes;
         uint32_t m_passCount = 0;
-        std::vector<GpuObject> m_objects;
-        std::vector<FrameView> m_views;
+        FrameTable<ObjectTag, GpuObject> m_objects;
+        ObjectId m_identityObject;
+        FrameTable<ViewTag, FrameView> m_views;
         FrameLighting m_lighting;
     };
 
@@ -172,25 +179,24 @@ namespace crimson
         PassBuilder(FramePacket& packet, uint32_t index) : m_packet(&packet), m_index(index) {}
 
         // A draw without a material is skipped, so a shader that failed to compile leaves the object out of the frame.
-        // The recorded draw has the view it ends up with, the pass's in place of kPassView.
+        // The recorded draw has the object and the view it ends up with, the identity and the pass's in place of none.
         void Draw(const DrawItem& item)
         {
             if (!item.Material)
                 return;
 
             DrawItem& draw = Record().m_draws.emplace_back(item);
-            draw.View = Resolve(item.View);
+            draw.Object = ResolveObject(item.Object);
+            draw.View = ResolveView(item.View);
         }
 
         // One draw per submesh, with the material at its slot in materials (one per slot of the mesh, by SubMesh::MaterialSlot).
         // A slot past the end has none, and is skipped like one that failed to load. They sort by the distance to the mesh's center.
-        void DrawMesh(const Mesh& mesh, std::span<const MaterialHandle> materials, ObjectId object = 0, const DrawOptions& options = {})
+        void DrawMesh(const Mesh& mesh, std::span<const MaterialHandle> materials, ObjectId object = {}, const DrawOptions& options = {})
         {
-            assert(object < m_packet->m_objects.size() && "The object has to come from this frame's AddObject");
-
             const glm::vec3 localCenter = (mesh.Bounds.Min + mesh.Bounds.Max) * 0.5f;
-            const glm::vec3 center = glm::vec3(m_packet->m_objects[object].Transform * glm::vec4(localCenter, 1.0f));
-            const glm::vec3 fromCamera = center - m_packet->m_views[Resolve(options.View)].View.CameraPosition;
+            const glm::vec3 center = glm::vec3(m_packet->GetObject(ResolveObject(object)).Transform * glm::vec4(localCenter, 1.0f));
+            const glm::vec3 fromCamera = center - m_packet->GetView(ResolveView(options.View)).View.CameraPosition;
             const float depth = glm::dot(fromCamera, fromCamera);
 
             for (const SubMesh& subMesh : mesh.SubMeshes)
@@ -206,13 +212,16 @@ namespace crimson
     private:
         [[nodiscard]] PassRecord& Record() const { return m_packet->m_passes[m_index]; }
 
-        [[nodiscard]] ViewId Resolve(ViewId view) const
+        [[nodiscard]] ObjectId ResolveObject(ObjectId object) const
         {
-            if (view == kPassView)
-                return Record().m_view;
+            assert((!object || m_packet->m_objects.Contains(object)) && "The object has to come from this frame's AddObject");
+            return object ? object : m_packet->IdentityObject();
+        }
 
-            assert(view < m_packet->m_views.size() && "The view has to come from this frame's AddView");
-            return view;
+        [[nodiscard]] ViewId ResolveView(ViewId view) const
+        {
+            assert((!view || m_packet->m_views.Contains(view)) && "The view has to come from this frame's AddView");
+            return view ? view : Record().m_view;
         }
 
         FramePacket* m_packet;
@@ -250,16 +259,14 @@ namespace crimson
         // The id stays valid for this frame and can be drawn in any of its passes
         ObjectId AddObject(const glm::mat4& transform)
         {
-            m_packet->m_objects.push_back({ transform, glm::transpose(glm::inverse(transform)) });
-            return static_cast<ObjectId>(m_packet->m_objects.size() - 1);
+            return m_packet->m_objects.Add({ transform, glm::transpose(glm::inverse(transform)) });
         }
 
         // Another camera for the frame's draws, besides the one each pass has. With a viewport, its draws only reach
         // that part of their pass's target. The id stays valid for this frame and can be drawn with in any of its passes.
         ViewId AddView(const ViewData& view, const std::optional<RenderRect>& viewport = std::nullopt)
         {
-            m_packet->m_views.push_back({ view, viewport });
-            return static_cast<ViewId>(m_packet->m_views.size() - 1);
+            return m_packet->m_views.Add({ view, viewport });
         }
 
         // Starts empty every frame

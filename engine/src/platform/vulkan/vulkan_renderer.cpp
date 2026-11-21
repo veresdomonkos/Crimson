@@ -409,7 +409,7 @@ namespace crimson::vulkan
         CRIMSON_PROFILE_FUNCTION();
 
         // A view whose part of the target is outside the pass's draws nothing
-        const RenderRect viewArea = ViewArea(views[draw.View], passArea);
+        const RenderRect viewArea = ViewArea(views[draw.View.Index()], passArea);
         if (IsEmpty(viewArea)) return;
 
         // A draw can limit itself further, to a part of what its view shows
@@ -485,7 +485,7 @@ namespace crimson::vulkan
             ++m_stats.MaterialBinds;
         }
 
-        const DrawData drawData{ draw.Object, draw.View };
+        const DrawData drawData{ draw.Object.Index(), draw.View.Index() };
 
         // A view draws to its own part of the target, like a shadow view to its tile of the atlas
         if (!m_bound.DrawPushed || m_bound.Draw.ViewIndex != drawData.ViewIndex)

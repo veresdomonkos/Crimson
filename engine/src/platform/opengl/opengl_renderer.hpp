@@ -47,9 +47,9 @@ namespace crimson::opengl
         ShaderVariant m_boundVariant = ShaderVariant::Main;
         VertexBufferHandle m_boundVertexBuffer;
         IndexBufferHandle m_boundIndexBuffer;
-        ObjectId m_boundObject = 0;
+        ObjectId m_boundObject;
 
         // A view also sets the viewport, so it starts over with every pass
-        ViewId m_boundView = kPassView;
+        ViewId m_boundView;
     };
 }

@@ -4,6 +4,7 @@
 #include <chrono>
 #include <limits>
 #include <map>
+#include <type_traits>
 #include <string_view>
 #include <vector>
 
@@ -145,7 +146,7 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
 
     SECTION("An override replaces all of them")
     {
-        pass.DrawMesh(mesh, materials, 0, { .MaterialOverride = kOverride });
+        pass.DrawMesh(mesh, materials, {}, { .MaterialOverride = kOverride });
 
         REQUIRE(pass.GetDraws().size() == 2);
         CHECK(pass.GetDraws()[0].Material == kOverride);
@@ -154,7 +155,7 @@ TEST_CASE("Drawing a mesh makes one draw per submesh", "[frame]")
 
     SECTION("A depth pass keeps each one's own material, in its depth version")
     {
-        pass.DrawMesh(mesh, materials, 0, { .Variant = ShaderVariant::Depth });
+        pass.DrawMesh(mesh, materials, {}, { .Variant = ShaderVariant::Depth });
 
         REQUIRE(pass.GetDraws().size() == 1);
         CHECK(pass.GetDraws()[0].Material == kMaterial);
@@ -179,19 +180,71 @@ TEST_CASE("A native pass keeps its callback and has no draws", "[frame]")
     CHECK(called);
 }
 
-TEST_CASE("Object 0 is always the identity", "[frame]")
+TEST_CASE("Frame ids are none by default, and each kind is its own type", "[frame]")
+{
+    static_assert(!std::is_convertible_v<ObjectId, ViewId>);
+    static_assert(!std::is_convertible_v<ViewId, ObjectId>);
+    static_assert(!std::is_convertible_v<uint32_t, ObjectId>);
+
+    CHECK_FALSE(ObjectId{}.IsValid());
+    CHECK_FALSE(ViewId{}.IsValid());
+    CHECK(ObjectId{ 3 }.Index() == 3);
+
+    FrameTable<ObjectTag, int> table;
+    CHECK_FALSE(table.Contains(ObjectId{}));
+
+    const ObjectId first = table.Add(10);
+    const ObjectId second = table.Add(20);
+    const ObjectId third = table.Add(30);
+
+    CHECK(first.Index() == 0);
+    CHECK(second.Index() == 1);
+    CHECK(third.Index() == 2);
+    CHECK(table.Get(second) == 20);
+    CHECK(table.Size() == 3);
+
+    const std::span<const int> all = table.All();
+    REQUIRE(all.size() == 3);
+    CHECK(all[0] == 10);
+    CHECK(all[2] == 30);
+
+    CHECK(table.Contains(third));
+    CHECK_FALSE(table.Contains(ObjectId{ 3 }));
+
+    table.Clear();
+    CHECK(table.Size() == 0);
+    CHECK_FALSE(table.Contains(first));
+    CHECK(table.Add(40).Index() == 0);
+}
+
+TEST_CASE("A draw without an object uses the identity", "[frame]")
 {
     FramePacket packet;
     FrameRecorder frame(packet);
 
     const glm::mat4 moved = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 2.0f, 3.0f));
 
-    CHECK(frame.AddObject(moved) == 1);
-    CHECK(frame.AddObject(moved) == 2);
+    // The identity is the first object, so it is index 0 of what is uploaded
+    CHECK(packet.IdentityObject().Index() == 0);
+    CHECK(frame.AddObject(moved).Index() == 1);
+    CHECK(frame.AddObject(moved).Index() == 2);
 
     REQUIRE(packet.GetObjects().size() == 3);
     CHECK(packet.GetObjects()[0].Transform == glm::mat4(1.0f));
     CHECK(packet.GetObjects()[1].Transform == moved);
+
+    PassBuilder pass = frame.AddPass({});
+    pass.Draw(DrawItem{ .Material = kMaterial });
+    pass.Draw(DrawItem{ .Material = kMaterial, .Object = ObjectId{ 1 } });
+
+    REQUIRE(pass.GetDraws().size() == 2);
+    CHECK(pass.GetDraws()[0].Object == packet.IdentityObject());
+    CHECK(pass.GetDraws()[1].Object == ObjectId{ 1 });
+
+    // The identity is the first again after a reset
+    packet.Reset();
+    CHECK(packet.IdentityObject().Index() == 0);
+    CHECK(frame.AddObject(moved).Index() == 1);
 }
 
 TEST_CASE("Resetting a packet leaves it empty for the next frame", "[frame]")
@@ -426,15 +479,15 @@ TEST_CASE("A draw uses its pass's view unless it names one", "[frame]")
     CHECK(passes[0].GetView() != passes[1].GetView());
 
     // The pass's view is the camera it was added with, and covers the pass's area
-    CHECK(views[passes[1].GetView()].View.ViewProj == camera.ViewProj);
-    CHECK(views[passes[1].GetView()].View.CameraPosition == camera.CameraPosition);
-    CHECK_FALSE(views[passes[1].GetView()].Viewport);
+    CHECK(views[passes[1].GetView().Index()].View.ViewProj == camera.ViewProj);
+    CHECK(views[passes[1].GetView().Index()].View.CameraPosition == camera.CameraPosition);
+    CHECK_FALSE(views[passes[1].GetView().Index()].Viewport);
 
-    REQUIRE(views[extra].Viewport);
-    CHECK(views[extra].Viewport->X == tile.X);
-    CHECK(views[extra].Viewport->Y == tile.Y);
-    CHECK(views[extra].Viewport->Width == tile.Width);
-    CHECK(views[extra].Viewport->Height == tile.Height);
+    REQUIRE(views[extra.Index()].Viewport);
+    CHECK(views[extra.Index()].Viewport->X == tile.X);
+    CHECK(views[extra.Index()].Viewport->Y == tile.Y);
+    CHECK(views[extra.Index()].Viewport->Width == tile.Width);
+    CHECK(views[extra.Index()].Viewport->Height == tile.Height);
 
     // Naming a view is for that draw only, the next one is back to the pass's
     REQUIRE(second.GetDraws().size() == 3);
@@ -460,7 +513,7 @@ TEST_CASE("A mesh drawn with a view of its own sorts by the distance from that v
     const ViewId far = frame.AddView({ .CameraPosition = glm::vec3(0.0f, 0.0f, 5.0f) });
 
     pass.DrawMesh(mesh, materials);
-    pass.DrawMesh(mesh, materials, 0, { .View = far });
+    pass.DrawMesh(mesh, materials, {}, { .View = far });
 
     REQUIRE(pass.GetDraws().size() == 2);
     CHECK(pass.GetDraws()[0].SortDepth == 4.0f);

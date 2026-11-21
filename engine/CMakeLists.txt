@@ -25,6 +25,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/renderer/draw_sort.hpp
     include/crimson/renderer/frame_gpu_data.hpp
     include/crimson/renderer/frame_recorder.hpp
+    include/crimson/renderer/frame_table.hpp
     include/crimson/renderer/frame_validation.hpp
     include/crimson/renderer/handle_registry.hpp
     include/crimson/renderer/light.hpp

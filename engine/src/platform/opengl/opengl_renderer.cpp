@@ -139,7 +139,7 @@ namespace crimson::opengl
         const RenderRect passArea = BindTarget(info);
 
         // BindTarget set the viewport to the pass's area, which the first draw's view may not have
-        m_boundView = kPassView;
+        m_boundView = {};
 
         const std::span<const DrawItem> draws = pass.GetDraws();
 
@@ -218,7 +218,7 @@ namespace crimson::opengl
         CRIMSON_PROFILE_FUNCTION();
 
         // A view whose part of the target is outside the pass's draws nothing
-        const RenderRect viewArea = ViewArea(views[info.View], passArea);
+        const RenderRect viewArea = ViewArea(views[info.View.Index()], passArea);
         if (IsEmpty(viewArea)) return;
 
         // A draw can limit itself further, to a part of what its view shows
@@ -284,13 +284,13 @@ namespace crimson::opengl
         // Each program has its own copy of the uniforms
         if (programChanged || info.Object != m_boundObject)
         {
-            glUniform1ui(program.ObjectIndexLocation, info.Object);
+            glUniform1ui(program.ObjectIndexLocation, info.Object.Index());
             m_boundObject = info.Object;
         }
 
         if (programChanged || viewChanged)
         {
-            glUniform1ui(program.ViewIndexLocation, info.View);
+            glUniform1ui(program.ViewIndexLocation, info.View.Index());
             m_boundView = info.View;
         }
 
