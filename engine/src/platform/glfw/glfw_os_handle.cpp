@@ -9,10 +9,7 @@
 #define GLFW_EXPOSE_NATIVE_COCOA
 #else
 #define GLFW_EXPOSE_NATIVE_X11
-// CI builds GLFW without Wayland
-#if __has_include(<wayland-client.h>)
-#define GLFW_EXPOSE_NATIVE_WAYLAND
-#endif
+// GLFW_EXPOSE_NATIVE_WAYLAND comes from the build, only when GLFW is built with Wayland
 #endif
 #include <GLFW/glfw3native.h>
 

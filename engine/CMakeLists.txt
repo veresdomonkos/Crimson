@@ -187,6 +187,11 @@ else()
     target_sources(Engine PRIVATE src/platform/posix/posix_files.cpp)
 endif()
 
+# The Wayland window handle exists only when GLFW was built with Wayland, which having its headers doesn't tell
+if(GLFW_BUILD_WAYLAND)
+    set_source_files_properties(src/platform/glfw/glfw_os_handle.cpp PROPERTIES COMPILE_DEFINITIONS GLFW_EXPOSE_NATIVE_WAYLAND)
+endif()
+
 crimson_embed_resources(Engine DIRECTORY resources NAMESPACE crimson FUNCTION GetEngineResources)
 
 # Every engine file gets the Vulkan headers too. That was measured at about 5% more compile time than a separate
