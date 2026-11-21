@@ -276,6 +276,14 @@ namespace crimson::glfw
         return glfwCreateWindowSurface(instance, m_handle, nullptr, surface);
     }
 
+    glm::uvec2 GLFWWindow::GetFramebufferSize() const
+    {
+        int width = 0;
+        int height = 0;
+        glfwGetFramebufferSize(m_handle, &width, &height);
+        return { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
+    }
+
     WindowGraphics::GLLoader GLFWWindow::GetGLLoader() const
     {
         return reinterpret_cast<GLLoader>(glfwGetProcAddress);

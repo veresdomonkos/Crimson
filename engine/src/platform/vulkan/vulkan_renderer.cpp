@@ -7,14 +7,32 @@
 
 namespace crimson::vulkan
 {
-    static void SetViewport(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
+    // A swapchain image is shown with its first row at the top of the window, where OpenGL shows the last row of its default
+    // framebuffer. Passes to it are flipped vertically, so clip space's +Y is the top of the window with both APIs, and a
+    // RenderRect counts rows from clip space's -Y edge on every target, as in OpenGL.
+    static vk::Rect2D ToFramebuffer(const RenderRect& rect, const VulkanRenderTarget& rt)
     {
-        cmdBuffer.setViewport(0, vk::Viewport{ static_cast<float>(rect.X), static_cast<float>(rect.Y), static_cast<float>(rect.Width), static_cast<float>(rect.Height), 0.0f, 1.0f });
+        const int32_t y = rt.IsSwapchain ? static_cast<int32_t>(rt.Height) - rect.Y - static_cast<int32_t>(rect.Height) : rect.Y;
+        return vk::Rect2D{ vk::Offset2D{ rect.X, y }, vk::Extent2D{ rect.Width, rect.Height } };
     }
 
-    static void SetScissor(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect)
+    static void SetViewport(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect, const VulkanRenderTarget& rt)
     {
-        cmdBuffer.setScissor(0, vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } });
+        const vk::Rect2D area = ToFramebuffer(rect, rt);
+        const auto x = static_cast<float>(area.offset.x);
+        const auto y = static_cast<float>(area.offset.y);
+        const auto width = static_cast<float>(area.extent.width);
+        const auto height = static_cast<float>(area.extent.height);
+
+        // A negative height flips the viewport
+        cmdBuffer.setViewport(0, rt.IsSwapchain
+            ? vk::Viewport{ x, y + height, width, -height, 0.0f, 1.0f }
+            : vk::Viewport{ x, y, width, height, 0.0f, 1.0f });
+    }
+
+    static void SetScissor(const vk::raii::CommandBuffer& cmdBuffer, const RenderRect& rect, const VulkanRenderTarget& rt)
+    {
+        cmdBuffer.setScissor(0, ToFramebuffer(rect, rt));
     }
 
     VulkanRenderer::VulkanRenderer(VulkanDevice& device, VulkanResourceManager& resourceManager)
@@ -514,7 +532,7 @@ namespace crimson::vulkan
         vk::RenderingInfo rendering{};
         // A load op clear only touches the render area, so a pass can clear just its part of the target
         const RenderRect rect = area.value_or(RenderRect{ 0, 0, rt.Width, rt.Height });
-        rendering.renderArea = vk::Rect2D{ vk::Offset2D{ rect.X, rect.Y }, vk::Extent2D{ rect.Width, rect.Height } };
+        rendering.renderArea = ToFramebuffer(rect, rt);
         rendering.layerCount = 1;
         rendering.colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size());
         rendering.pColorAttachments = colorAttachments.data();
@@ -523,8 +541,12 @@ namespace crimson::vulkan
 
         cmdBuffer.beginRendering(rendering);
 
-        SetViewport(cmdBuffer, rect);
-        SetScissor(cmdBuffer, rect);
+        // Front faces wind counter-clockwise in OpenGL's window space. Vulkan's framebuffer Y points the other way, so that is
+        // clockwise here, unless the pass is flipped onto a swapchain image.
+        cmdBuffer.setFrontFace(rt.IsSwapchain ? vk::FrontFace::eCounterClockwise : vk::FrontFace::eClockwise);
+
+        SetViewport(cmdBuffer, rect, rt);
+        SetScissor(cmdBuffer, rect, rt);
     }
 
     void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, const FramePacket& packet, const RenderRect& passArea, PassKind kind)
@@ -623,13 +645,15 @@ namespace crimson::vulkan
 
         const DrawData drawData{ draw.Object.Index(), draw.View.Index() };
 
+        const VulkanRenderTarget& rt = m_resourceManager.GetRenderTarget(target);
+
         // A view draws to its own part of the target, like a shadow view to its tile of the atlas
         if (!m_bound.DrawPushed || m_bound.Draw.ViewIndex != drawData.ViewIndex)
-            SetViewport(cmdBuffer, viewArea);
+            SetViewport(cmdBuffer, viewArea, rt);
 
         if (!m_bound.DrawPushed || m_bound.Scissor != scissor)
         {
-            SetScissor(cmdBuffer, scissor);
+            SetScissor(cmdBuffer, scissor, rt);
             m_bound.Scissor = scissor;
         }
 

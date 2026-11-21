@@ -52,6 +52,7 @@ namespace crimson::glfw
         void MakeContextCurrent() override { glfwMakeContextCurrent(m_handle); }
         void SetSwapInterval(int interval) override { glfwSwapInterval(interval); }
         void SwapBuffers() override { glfwSwapBuffers(m_handle); }
+        [[nodiscard]] glm::uvec2 GetFramebufferSize() const override;
         [[nodiscard]] GLLoader GetGLLoader() const override;
 	private:
         GraphicsApi m_api;

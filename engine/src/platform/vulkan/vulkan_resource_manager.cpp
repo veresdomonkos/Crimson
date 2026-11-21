@@ -856,7 +856,7 @@ namespace crimson::vulkan
             case CullMode::Back:  rasterInfo.cullMode = vk::CullModeFlagBits::eBack; break;
             case CullMode::Front: rasterInfo.cullMode = vk::CullModeFlagBits::eFront; break;
         }
-        rasterInfo.frontFace = vk::FrontFace::eClockwise;
+        // The front face is dynamic: a pass sets it, as passes to a swapchain image are flipped
         rasterInfo.depthBiasEnable = VK_FALSE;
 
         vk::PipelineMultisampleStateCreateInfo multisampleState{};
@@ -895,7 +895,7 @@ namespace crimson::vulkan
         colorBlendInfo.attachmentCount = static_cast<uint32_t>(colorBlendAttachments.size());
         colorBlendInfo.pAttachments = colorBlendAttachments.empty() ? nullptr : colorBlendAttachments.data();
 
-        std::array<vk::DynamicState, 2> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+        std::array<vk::DynamicState, 3> dynamicStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor, vk::DynamicState::eFrontFace };
 
         vk::PipelineDynamicStateCreateInfo dynamicState{};
         dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());

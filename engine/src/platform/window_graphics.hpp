@@ -2,6 +2,8 @@
 
 #include <vector>
 
+#include "glm/vec2.hpp"
+
 #include <vulkan/vulkan.h>
 
 namespace crimson
@@ -21,6 +23,9 @@ namespace crimson
         virtual void MakeContextCurrent() = 0;
         virtual void SetSwapInterval(int interval) = 0;
         virtual void SwapBuffers() = 0;
+
+        // OpenGL: the size in pixels of the window's default framebuffer, which follows the window as it is resized
+        [[nodiscard]] virtual glm::uvec2 GetFramebufferSize() const = 0;
 
         // Glad takes a C function pointer, so the interface hands one out rather than being one
         using GLLoader = void* (*)(const char* name);

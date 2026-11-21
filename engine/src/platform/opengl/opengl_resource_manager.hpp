@@ -4,7 +4,6 @@
 #include <span>
 #include <string_view>
 #include "opengl_device.hpp"
-#include "crimson/core/window.hpp"
 #include "opengl_resources.hpp"
 #include "vertex_array_cache.hpp"
 #include "crimson/renderer/resource_handles.hpp"
@@ -17,7 +16,7 @@ namespace crimson::opengl
     class OpenGLResourceManager : public ResourceManagerBase<OpenglResourceTraits>
     {
     public:
-        OpenGLResourceManager(Window& window);
+        OpenGLResourceManager();
 
         VertexBufferHandle CreateVertexBuffer(const VertexBufferInfo& info, const void* data) override;
         void UpdateVertexBuffer(VertexBufferHandle handle, std::span<const std::byte> data) override;
@@ -49,7 +48,6 @@ namespace crimson::opengl
         [[nodiscard]] TextureHandle GetColorAttachment(RenderTargetHandle handle, uint32_t index) const override;
         [[nodiscard]] std::optional<TextureHandle> GetDepthAttachment(RenderTargetHandle handle) const override;
 
-        [[nodiscard]] RenderTargetHandle GetBackBufferHandle() const { return m_backBufferHandle; }
         [[nodiscard]] GLuint GetDefaultTexture() const { return m_textures.Get(m_defaultTexture).GLHandle; }
     protected:
         void SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data) override;
@@ -59,7 +57,6 @@ namespace crimson::opengl
         [[nodiscard]] GLuint GetSharedSampler(std::string_view name) const;
     private:
         VertexArrayCache m_vertexArrays;
-        RenderTargetHandle m_backBufferHandle;
         TextureHandle m_defaultTexture; // what a material's textures show until they are set
 
         GLuint m_linearWrapSampler = 0;

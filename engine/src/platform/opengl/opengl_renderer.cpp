@@ -156,11 +156,21 @@ namespace crimson::opengl
     // Returns the part of the target the pass draws to
     RenderRect OpenGLRenderer::BindTarget(const PassInfo& info)
     {
-        // A pass without a target draws to the back buffer
-        const auto& target = m_resourceManager.GetRenderTarget(info.Target ? info.Target : m_resourceManager.GetBackBufferHandle());
-        m_state.BindFramebuffer(target.FrameBufferHandle);
+        // A pass without a target draws to the window's default framebuffer, whose size is the window's as it is now
+        glm::uvec2 size{};
+        if (info.Target)
+        {
+            const OpenGLRenderTarget& target = m_resourceManager.GetRenderTarget(info.Target);
+            m_state.BindFramebuffer(target.FrameBufferHandle);
+            size = { target.Width, target.Height };
+        }
+        else
+        {
+            m_state.BindFramebuffer(0);
+            size = m_device.GetWindowGraphics().GetFramebufferSize();
+        }
 
-        const RenderRect rect = info.Viewport.value_or(RenderRect{ 0, 0, target.Width, target.Height });
+        const RenderRect rect = info.Viewport.value_or(RenderRect{ 0, 0, size.x, size.y });
         SetViewportAndScissor(m_state, rect, info.Viewport.has_value());
 
         ClearTarget(info.Clear);

@@ -27,12 +27,12 @@ namespace crimson
         return backend;
     }
 
-    static GraphicsBackend CreateOpenGLBackend(Window& window, WindowGraphics& graphics)
+    static GraphicsBackend CreateOpenGLBackend(WindowGraphics& graphics)
     {
         GraphicsBackend backend;
 
         auto device = std::make_unique<opengl::OpenGLDevice>(graphics);
-        auto resourceManager = std::make_unique<opengl::OpenGLResourceManager>(window);
+        auto resourceManager = std::make_unique<opengl::OpenGLResourceManager>();
         auto renderer = std::make_unique<opengl::OpenGLRenderer>(*device, *resourceManager);
 
         backend.Device = std::move(device);
@@ -47,7 +47,7 @@ namespace crimson
         switch (api)
         {
             case GraphicsApi::Vulkan: return std::make_unique<GraphicsBackend>(CreateVulkanBackend(window, graphics));
-            case GraphicsApi::OpenGL: return std::make_unique<GraphicsBackend>(CreateOpenGLBackend(window, graphics));
+            case GraphicsApi::OpenGL: return std::make_unique<GraphicsBackend>(CreateOpenGLBackend(graphics));
         }
         return {};
     }

@@ -40,18 +40,8 @@ namespace crimson::opengl
         glNamedBufferSubData(buffer, 0, static_cast<GLsizeiptr>(data.size()), data.data());
     }
 
-    OpenGLResourceManager::OpenGLResourceManager(Window& window)
+    OpenGLResourceManager::OpenGLResourceManager()
     {
-        OpenGLRenderTarget rt {
-            .ColorAttachments = {},
-            .DepthAttachment = TextureHandle::Invalid(),
-            .Width = window.Width(),
-            .Height = window.Height(),
-            .FrameBufferHandle = 0
-        };
-
-        m_backBufferHandle = m_renderTargets.Register(rt);
-
         const auto createSampler = [](GLint filter, GLint addressMode, bool compare)
         {
             GLuint sampler = 0;
