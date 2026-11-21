@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cmath>
+#include <numbers>
 #include <span>
 #include <string>
 #include <string_view>
@@ -683,9 +684,9 @@ TEST_CASE_METHOD(Fixture, "A selected mesh gets an outline", "[lighting]")
 
 // Every shader that has a cutout, and the ones that light a surface
 constexpr std::array kCutoutShaders = {
-    "S_Lit", "S_LitMask", "S_LitMaskParallax", "S_LitMaskTriplanar", "S_LitMaskBiplanar", "S_Unlit"
+    "S_Lit", "S_LitMask", "S_LitMaskParallax", "S_LitMaskTriplanar", "S_LitMaskBiplanar", "S_LitCallisto", "S_LitMaskCallisto", "S_Unlit"
 };
-constexpr size_t kLitShaders = 5;
+constexpr size_t kLitShaders = 7;
 
 // Cutout materials whose alpha is all under the cutoff, and all over it
 static std::string CutAway(std::string_view shader)
@@ -976,4 +977,51 @@ TEST_CASE_METHOD(MaterialFixture, "A parallax height map shows the surface sunk 
 
     CAPTURE(flat, sunk);
     CHECK(sunk > flat);
+}
+
+namespace
+{
+    // A white dielectric wall, fully rough, lit and seen straight on: N, L, V and H are then all the same.
+    // There, GGX's highlight is f0 * D * Vis = 0.04 * 1 / (PI * alpha^2) * 0.25, which a roughness of 1 brings down to 0.01 / PI.
+    constexpr std::string_view kRoughWhite = R"({ "Color": [1, 1, 1, 1], "Metallic": 0, "Roughness": 1 })";
+    constexpr float kRoughHighlight = 0.01f / std::numbers::pi_v<float>;
+    constexpr float kValueTolerance = 0.01f;
+
+    struct StraightOnFixture : MaterialFixture
+    {
+        StraightOnFixture()
+        {
+            AddLight({ .Type = LightType::Directional }, glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, -1.0f));
+        }
+
+        float RenderWithShader(const std::string& shader)
+        {
+            const Entity wall = AddWall(std::string(kRoughWhite), "{}", fmt::format("engine/shaders/{}.hlsl", shader));
+            const float center = RenderCenter();
+            World.DestroyEntity(wall);
+            return center;
+        }
+    };
+}
+
+TEST_CASE_METHOD(StraightOnFixture, "S_Lit's diffuse is Burley's, which a rough surface seen straight on darkens by a third", "[pbr]")
+{
+    // Straight on, Burley's grazing terms are 1, which leaves Frostbite's normalization: 1 / 1.51 at a roughness of 1.
+    // Lambert would be 1 / PI.
+    const float center = RenderWithShader("S_Lit");
+    CAPTURE(center);
+    CHECK(std::abs(center - (1.0f / 1.51f / std::numbers::pi_v<float> + kRoughHighlight)) <= kValueTolerance);
+}
+
+TEST_CASE_METHOD(StraightOnFixture, "The Callisto shaders at their defaults are Lambert + GGX", "[pbr]")
+{
+    for (const char* shader : { "S_LitCallisto", "S_LitMaskCallisto" })
+    {
+        DYNAMIC_SECTION(shader)
+        {
+            const float center = RenderWithShader(shader);
+            CAPTURE(center);
+            CHECK(std::abs(center - (1.0f / std::numbers::pi_v<float> + kRoughHighlight)) <= kValueTolerance);
+        }
+    }
 }

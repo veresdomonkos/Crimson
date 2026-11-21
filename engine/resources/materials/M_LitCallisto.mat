@@ -1,0 +1,6 @@
+{
+  "shader": "engine/shaders/S_LitCallisto.hlsl",
+  "properties": {
+    "Color": [0.8, 0.8, 0.8, 1.0]
+  }
+}

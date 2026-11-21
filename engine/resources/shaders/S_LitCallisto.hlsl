@@ -1,0 +1,125 @@
+// S_Lit with the Callisto BRDF: Lambert + GGX at the defaults, with controls for the diffuse Fresnel, retroreflection,
+// a smooth terminator, the specular Fresnel's falloff and a second highlight on top.
+// Colors are linear. Turn sRGB off on the textures in every slot but ColorMap and EmissiveMap.
+#include "crimson/normals.hlsli"
+#include "crimson/lighting.hlsli"
+
+cbuffer MaterialBlock : register(b0, space1)
+{
+    float4 Color;            // @default 1 1 1 1
+    float Metallic;          // @default 0 @range 0 1
+    float Roughness;         // @default 0.5 @range 0 1
+    float NormalStrength;    // @default 1 @range 0 2
+    float OcclusionStrength; // @default 1 @range 0 1
+    float3 EmissiveColor;    // @default 0 0 0
+    float EmissiveStrength;  // @default 1
+    // A float2 has to sit on an 8-byte boundary for OpenGL, so Tiling goes before the lone float after it
+    float2 Tiling;           // @default 1 1 @range 0.01 100
+    float AlphaCutoff;       // @default 0.5 @range 0 1
+
+    // The Callisto controls. Default values produce LAMBERT shading!
+    // A float3 can't cross a 16-byte boundary, so each color starts one, and floats fill the rest.
+    float DiffuseFresnel;                // @default 1 @range 0 256
+    float3 DiffuseFresnelColor;          // @default 1 1 1
+    float DiffuseFresnelFalloff;         // @default 0.75 @range 0 1
+    float DiffuseFresnelTangentFalloff;  // @default 0.75 @range 0 1
+    float Retroreflection;               // @default 1 @range 0 256
+    float RetroreflectionFalloff;        // @default 0.75 @range 0 1
+    float RetroreflectionTangentFalloff; // @default 0.75 @range 0 1
+    float3 RetroreflectionColor;         // @default 1 1 1
+    float SmoothTerminator;              // @default 0 @range -1 1
+    float SmoothTerminatorLength;        // @default 0.5 @range 0 1
+    float SpecularFresnelFalloff;        // @default 0.5 @range 0 1
+    float DualSpecularRoughnessScale;    // @default 2 @range 0 16
+    float DualSpecularOpacity;           // @default 0 @range 0 1
+};
+
+Texture2D ColorMap : register(t0, space1);
+Texture2D NormalMap : register(t1, space1);            // @default normal
+Texture2D MetallicRoughnessMap : register(t2, space1); // G: roughness, B: metallic
+Texture2D OcclusionMap : register(t3, space1);         // R: ao
+Texture2D EmissiveMap : register(t4, space1);
+
+struct VertexInput
+{
+    float3 Position : POSITION;
+    float3 Normal : NORMAL;
+    float2 UV : TEXCOORD0;
+    float4 Tangent : TANGENT;
+};
+
+struct VertexOutput
+{
+    float4 ClipPosition : SV_Position;
+    float3 Normal : NORMAL;
+    float3 WorldPosition : WORLDPOSITION;
+    float2 UV : TEXCOORD0;
+    float4 Tangent : TANGENT;
+};
+
+// TODO: change the material block to be able to hold structs, so we can pass that struct into ComputeLightingCallisto without this func.
+CallistoParams GetMaterialCallistoParams()
+{
+    CallistoParams params;
+    params.DiffuseFresnel = DiffuseFresnel * DiffuseFresnelColor;
+    params.DiffuseFresnelFalloff = DiffuseFresnelFalloff;
+    params.DiffuseFresnelTangentFalloff = DiffuseFresnelTangentFalloff;
+    params.Retroreflection = Retroreflection * RetroreflectionColor;
+    params.RetroreflectionFalloff = RetroreflectionFalloff;
+    params.RetroreflectionTangentFalloff = RetroreflectionTangentFalloff;
+    params.SmoothTerminator = SmoothTerminator;
+    params.SmoothTerminatorLength = SmoothTerminatorLength;
+    params.SpecularFresnelFalloff = SpecularFresnelFalloff;
+    params.DualSpecularRoughnessScale = DualSpecularRoughnessScale;
+    params.DualSpecularOpacity = DualSpecularOpacity;
+    return params;
+}
+
+VertexOutput VSMain(VertexInput input)
+{
+    const float3 worldPosition = ObjectToWorldPosition(input.Position);
+
+    VertexOutput output;
+    output.ClipPosition = WorldToClip(worldPosition);
+    output.Normal = ObjectToWorldNormal(input.Normal);
+    output.WorldPosition = worldPosition;
+    output.UV = input.UV * Tiling;
+    output.Tangent = ObjectToWorldTangent(input.Tangent);
+    return output;
+}
+
+float4 PSMain(VertexOutput input) : SV_Target
+{
+    const float4 base = Color * ColorMap.Sample(LinearWrap, input.UV);
+    const float4 metallicRoughness = MetallicRoughnessMap.Sample(LinearWrap, input.UV);
+    const float occlusion = OcclusionMap.Sample(LinearWrap, input.UV).r;
+    const float3 emissive = EmissiveColor * EmissiveStrength * EmissiveMap.Sample(LinearWrap, input.UV).rgb;
+
+    const float3 geometricNormal = normalize(input.Normal);
+    const float3 tangentNormal = ApplyNormalStrength(UnpackNormalXYZ(NormalMap.Sample(LinearWrap, input.UV)), NormalStrength);
+
+    Surface surface;
+    surface.WorldPosition = input.WorldPosition;
+    surface.Normal = ApplyNormalMap(geometricNormal, input.Tangent, tangentNormal);
+    surface.GeometricNormal = geometricNormal;
+    surface.Albedo = base.rgb;
+    surface.Metallic = Metallic * metallicRoughness.b;
+    surface.Occlusion = lerp(1.0, occlusion, OcclusionStrength);
+    surface.Roughness = Roughness * metallicRoughness.g;
+
+    const float3 color = ComputeLightingCallisto(surface, GetMaterialCallistoParams()) + emissive;
+
+    // Last, as a discarded pixel stops at once, and the normal map's derivatives need the pixels around it.
+    // Only a cutout material is given a cutoff above 0, which nothing is under.
+    clip(base.a - AlphaCutoff);
+
+    return float4(color, base.a);
+}
+
+// For the shadows and the selection outline, which only need depth: a cutout leaves the same holes there
+void PSDepth(VertexOutput input)
+{
+    // Only a cutout material is given a cutoff above 0, and the others skip the texture
+    if (AlphaCutoff > 0.0)
+        clip((Color * ColorMap.Sample(LinearWrap, input.UV)).a - AlphaCutoff);
+}

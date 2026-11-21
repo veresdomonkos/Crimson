@@ -43,7 +43,7 @@ cbuffer MaterialBlock : register(b0, space1)
 Texture2D Albedo : register(t0, space1);
 Texture2D Bumps : register(t1, space1); // @default normal
 
-// VSMain uses GetObjectData() and GetView(), PSMain fills in a Surface for ComputeLighting() and uses Albedo.Sample(LinearWrap, uv)
+// VSMain uses GetObjectData() and GetView(), PSMain fills in a Surface for ComputeLightingBurley() and uses Albedo.Sample(LinearWrap, uv)
 ```
 
 - **Discovery:** material properties and textures are found with SPIRV-Reflect, so the shader is the only place they're declared. The standard blocks are checked against the engine's structs.
@@ -73,12 +73,14 @@ Includes resolve relative to the shader's folder, then to the engine's shaders.
 | Header | Has |
 |:-------|:----|
 | `crimson/bindings.hlsli` | the standard resources above, and `GetObjectData()` for the current draw |
-| `crimson/math.hlsli` | `PI`, `TAU`, `HALF_PI`, `INV_PI`, `E`, `EPSILON`, `INV_SQRT3`, `FLT_MIN` and `FLT_MAX` |
+| `crimson/math.hlsli` | `PI`, `TAU`, `HALF_PI`, `INV_PI`, `E`, `EPSILON`, `INV_SQRT3`, `FLT_MIN` and `FLT_MAX`, and `Pow5` and `SafePow`, a `pow` that gives 1 rather than NaN for 0 to the power of 0 |
 | `crimson/transforms.hlsli` | `ObjectToWorldPosition`, `ObjectToWorldDirection`, `ObjectToWorldNormal`, `ObjectToWorldTangent`, `WorldToObjectPosition`, `WorldToObjectDirection`, `WorldToObjectNormal`, `WorldToClip`, `ObjectToClip`, `ObjectWorldPosition()`, `GetViewDirection`, and `TangentFrame` with `WorldToTangentDirection` and `TangentToWorldDirection` |
 | `crimson/normals.hlsli` | unpacking normal maps (`UnpackNormalXYZ`, `UnpackNormalXY`, `ReconstructNormalZ`), `ApplyNormalStrength`, `ApplyNormalMap` and two ways to blend normals, `BlendNormalsDefault` and `BlendNormalsReoriented` |
 | `crimson/projections.hlsli` | texturing without UVs: `SamplePlanar`, and biplanar and triplanar projection in the world or the object (`SampleTriplanarObject`, `SampleBiplanarWorld`, `SampleTriplanarNormalObject` and so on) |
 | `crimson/parallax.hlsli` | `ParallaxOcclusion`, which finds the UV where the view ray meets a height map |
-| `crimson/lighting.hlsli` | `Surface` and `ComputeLighting(Surface)`, the scene's lights and shadows for a point on a surface. Includes `bindings`, `math` and `transforms`. |
+| `crimson/lighting.hlsli` | `Surface`, and the light leaving a point on a surface with the scene's lights, shadows and ambient light: `ComputeLightingBurley(Surface)` with Burley's diffuse, and `ComputeLightingCallisto(Surface, CallistoParams)` with the [Callisto BRDF](#s_litcallisto-and-s_litmaskcallisto). `SampleLight` is how much of one light reaches the point, for a lighting function of your own. Includes `bindings`, `brdf`, `math` and `transforms`. |
+| `crimson/brdf.hlsli` | the BRDFs' parts: `DistributionGGX`, `VisibilitySmithGGX`, `FresnelSchlick`, `EnvironmentBRDF` and `DiffuseBurley`, and for the Callisto BRDF `CallistoParams`, `DiffuseCallisto`, `CallistoTerminator` and `FresnelSchlickFalloff` |
+| `crimson/callisto_presets.hlsli` | `CallistoParams` to start from: `DefaultCallistoParams()`, and the values the Callisto talk fitted to ten measured materials, such as `CallistoBlueFabric()` and `CallistoTwoLayerSilver()` |
 
 ## Built-in shaders and materials
 
@@ -86,7 +88,7 @@ The engine ships shaders in `engine/shaders/` and materials that use them in `en
 
 ### S_Lit
 
-`engine/shaders/S_Lit.hlsl` is the default lit shader, used by `M_Default`: metallic-roughness PBR with a Cook-Torrance GGX specular and a Lambert diffuse, with the same material slots as glTF.
+`engine/shaders/S_Lit.hlsl` is the default lit shader, used by `M_Default`: metallic-roughness PBR with a Cook-Torrance GGX specular and Burley's diffuse, with the same material slots as glTF. Unlike Lambert's, Burley's diffuse depends on roughness: a rough surface looks flatter and brighter at grazing angles, and a smooth one darker there. It is normalized as in Frostbite, so a rough surface doesn't reflect more light than it receives. It has nothing to tune.
 
 | Property | Default | |
 |:---------|:--------|:--|
@@ -110,6 +112,28 @@ These share `S_Lit`'s lighting, `Color`, `NormalStrength`, `OcclusionStrength`, 
 
 The parallax and projected shaders have no material of their own. Pick them as the shader of a material you make.
 
+### S_LitCallisto and S_LitMaskCallisto
+
+`S_LitCallisto` (`M_LitCallisto`) and `S_LitMaskCallisto` (`M_LitMaskCallisto`) are `S_Lit` and `S_LitMask` with the Callisto BRDF, from [The Rendering of The Callisto Protocol](https://advances.realtimerendering.com/s2023/SIGGRAPH2023-Advances-The-Rendering-of-The-Callisto-Protocol-JimenezPetersen.pdf) (Jimenez and Petersen, SIGGRAPH 2023 Advances, slides 70 to 111). It is a Lambert diffuse and GGX specular, which is what it is at its defaults, with controls on top that each change one thing, for matching a material to a reference. Besides their base shader's properties and maps, both have these:
+
+| Property | Default | |
+|:---------|:--------|:--|
+| `DiffuseFresnel`, `DiffuseFresnelColor` | 1, white | brightens (above 1) or darkens (below 1) the diffuse at grazing angles, tinted by the color. For eyes and teeth, which look too dark from the side once they are right from the front. |
+| `DiffuseFresnelFalloff`, `DiffuseFresnelTangentFalloff` | 0.75, 0.75 | how quickly towards grazing it builds up, and how much of it stays where the surface leans away from the light and the camera |
+| `Retroreflection`, `RetroreflectionColor` | 1, white | brightens or darkens the light that comes back towards a light beside the camera, which flattens or rounds the shape. For skin, where it gives the green at the silhouette. |
+| `RetroreflectionFalloff`, `RetroreflectionTangentFalloff` | 0.75, 0.75 | as for the diffuse Fresnel |
+| `SmoothTerminator` | 0 | above 0 the light fades out before it reaches the terminator, the edge between lit and unlit, and below 0 it holds on longer. It leaves the retroreflection and grazing areas alone. |
+| `SmoothTerminatorLength` | 0.5 | how far from the terminator that reaches |
+| `SpecularFresnelFalloff` | 0.5 | Schlick's Fresnel at 0.5. Lower narrows the bright reflections at grazing angles and 0 removes them, higher widens them and 1 reflects everything as at a grazing angle. For backlit skin. |
+| `DualSpecularOpacity`, `DualSpecularRoughnessScale` | 0, 2 | how much of a second highlight is used instead of the first, and its roughness as a multiple of the material's, for highlights one can't match. At 0 the second one costs nothing. |
+
+The falloffs work alike: 0.5 is Schlick's exponent of 5, lower is a higher exponent and so a narrower effect, and 1 is an exponent of 0, which applies the effect everywhere.
+
+- **Not as published:** the talk doesn't give the dual specular's math, only its two controls, so it blends two GGX highlights as Unreal's dual specular does. The talk's `Specular`, a dielectric's reflectance, is left out, and stays 4% as in the other lit shaders.
+- **Ambient light** is shaded as in `S_Lit`, so a scene lit only by it shows none of the controls.
+- **Presets:** `crimson/callisto_presets.hlsli` has the talk's values for ten measured materials as `CallistoParams`. Each one looks like its material only with the base color, roughness and metallic the talk fitted alongside it, which its comment gives.
+- **A shader of your own** picks the Callisto BRDF by calling `ComputeLightingCallisto` with a `CallistoParams` instead of `ComputeLightingBurley`. Start one from `DefaultCallistoParams()` or a preset, or fill it in from the material's properties as `GetMaterialCallistoParams()` does in these two shaders.
+
 ### S_Unlit
 
 `engine/shaders/S_Unlit.hlsl`, used by `M_Unlit`, draws `Color` times `ColorMap` with no lighting. Its alpha blends when the material is Transparent, and cuts out at `AlphaCutoff` when it is Cutout. `Tiling` multiplies the UVs.
@@ -121,7 +145,7 @@ The parallax and projected shaders have no material of their own. Pick them as t
 
 The debug colors are tone mapped like the rest of the scene, so they are close to, not exactly, the values they stand for.
 
-The materials are `M_Default`, `M_LitMask`, `M_Unlit`, `M_DebugNormals` and `M_DebugUV`.
+The materials are `M_Default`, `M_LitMask`, `M_LitCallisto`, `M_LitMaskCallisto`, `M_Unlit`, `M_DebugNormals` and `M_DebugUV`.
 
 ### Cutout
 

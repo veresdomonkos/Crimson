@@ -67,7 +67,7 @@ float4 PSMain(VertexOutput input) : SV_Target
     surface.Roughness = Roughness;
     surface.Occlusion = 1.0;
 
-    return float4(ComputeLighting(surface), base.a);
+    return float4(ComputeLightingBurley(surface), base.a);
 }
 )";
 
