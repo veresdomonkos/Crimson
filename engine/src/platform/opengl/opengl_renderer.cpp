@@ -32,6 +32,9 @@ namespace crimson::opengl
         glCreateBuffers(1, &m_shadowsBuffer);
         glCreateBuffers(1, &m_objectsBuffer);
         glCreateBuffers(1, &m_viewsBuffer);
+        glCreateBuffers(1, &m_propertyBlocks);
+
+        glGetIntegerv(GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT, &m_uniformOffsetAlignment);
 
         TracyGpuContext;
     }
@@ -39,6 +42,7 @@ namespace crimson::opengl
     OpenGLRenderer::~OpenGLRenderer()
     {
         if (m_frameUBO != 0) { glDeleteBuffers(1, &m_frameUBO); m_frameUBO = 0; }
+        if (m_propertyBlocks != 0) { glDeleteBuffers(1, &m_propertyBlocks); m_propertyBlocks = 0; }
         if (m_viewsBuffer != 0) { glDeleteBuffers(1, &m_viewsBuffer); m_viewsBuffer = 0; }
         if (m_lightsBuffer != 0) { glDeleteBuffers(1, &m_lightsBuffer); m_lightsBuffer = 0; }
         if (m_shadowsBuffer != 0) { glDeleteBuffers(1, &m_shadowsBuffer); m_shadowsBuffer = 0; }
@@ -90,6 +94,13 @@ namespace crimson::opengl
         UploadStorageBuffer(m_objectsBuffer, objects.data(), objects.size_bytes(), sizeof(GpuObject));
         UploadStorageBuffer(m_viewsBuffer, m_gpuData.Views.data(), std::span(m_gpuData.Views).size_bytes(), sizeof(GpuView));
 
+        // Replacing the storage, so a frame the GPU is still reading isn't waited on. The blocks of this frame's draws with
+        // properties are written into it as they are drawn.
+        const auto alignment = static_cast<std::size_t>(m_uniformOffsetAlignment);
+        const MaterialPropertiesBudget budget = CountMaterialProperties(packet, m_resourceManager, alignment);
+        glNamedBufferData(m_propertyBlocks, static_cast<GLsizeiptr>(std::max(budget.BlockBytes, alignment)), nullptr, GL_STREAM_DRAW);
+        m_propertyCursor = 0;
+
         BindFrameResources();
 
 #ifndef NDEBUG
@@ -107,7 +118,7 @@ namespace crimson::opengl
         m_stats.Passes = static_cast<uint32_t>(passes.size());
 
         for (const PassRecord& pass : passes)
-            ExecutePass(pass, packet.GetViews());
+            ExecutePass(pass, packet);
 
         CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
 
@@ -123,7 +134,7 @@ namespace crimson::opengl
         return true;
     }
 
-    void OpenGLRenderer::ExecutePass(const PassRecord& pass, std::span<const FrameView> views)
+    void OpenGLRenderer::ExecutePass(const PassRecord& pass, const FramePacket& packet)
     {
         const PassInfo& info = pass.GetInfo();
 
@@ -145,7 +156,7 @@ namespace crimson::opengl
 
         BuildDrawOrder(draws, m_resourceManager, m_drawOrder, info.Kind);
         for (const DrawSortEntry& sorted : m_drawOrder)
-            ExecuteDraw(draws[sorted.Index], views, passArea, info.Kind);
+            ExecuteDraw(draws[sorted.Index], packet, passArea, info.Kind);
     }
 
     void OpenGLRenderer::ExecuteNativePass(const PassRecord& pass)
@@ -202,6 +213,7 @@ namespace crimson::opengl
         m_boundMaterial = MaterialHandle::Invalid();
         m_boundVertexBuffer = VertexBufferHandle::Invalid();
         m_boundIndexBuffer = IndexBufferHandle::Invalid();
+        m_boundProperties = {};
     }
 
     void OpenGLRenderer::BindFrameResources()
@@ -213,9 +225,11 @@ namespace crimson::opengl
         m_state.BindStorageBuffer(kViewsSlot, m_viewsBuffer);
     }
 
-    void OpenGLRenderer::ExecuteDraw(const DrawItem& info, std::span<const FrameView> views, const RenderRect& passArea, PassKind kind)
+    void OpenGLRenderer::ExecuteDraw(const DrawItem& info, const FramePacket& packet, const RenderRect& passArea, PassKind kind)
     {
         CRIMSON_PROFILE_FUNCTION();
+
+        const std::span<const FrameView> views = packet.GetViews();
 
         // A view whose part of the target is outside the pass's draws nothing
         const RenderRect viewArea = ViewArea(views[info.View.Index()], passArea);
@@ -245,10 +259,32 @@ namespace crimson::opengl
 
         bool programChanged = false;
 
-        if (info.Material != m_boundMaterial || info.Variant != m_boundVariant)
+        // What is bound is for the pair of the material and its properties, so the draw after one with properties binds its
+        // material's own block and textures again
+        if (info.Material != m_boundMaterial || info.Properties != m_boundProperties || info.Variant != m_boundVariant)
         {
+            const OpenGLShader& shader = m_resourceManager.GetShader(material.Shader);
+            const std::span<const MaterialPropertyEntry> entries = info.Properties ? packet.GetPropertyEntries(info.Properties) : std::span<const MaterialPropertyEntry>{};
+
             if (material.GLBufferHandle != 0)
-                m_state.BindUniformBuffer(kMaterialBlockSlot, material.GLBufferHandle);
+            {
+                if (SetsValues(entries, shader.Interface))
+                {
+                    const std::size_t size = material.UniformDataSize;
+                    const auto alignment = static_cast<std::size_t>(m_uniformOffsetAlignment);
+
+                    m_blockScratch.resize(size);
+                    WriteMaterialBlock(m_blockScratch, { material.UniformData.get(), size }, shader.Interface, entries, packet.GetPropertyBytes(info.Properties));
+
+                    glNamedBufferSubData(m_propertyBlocks, m_propertyCursor, static_cast<GLsizeiptr>(size), m_blockScratch.data());
+                    m_state.BindUniformBufferRange(kMaterialBlockSlot, m_propertyBlocks, m_propertyCursor, static_cast<GLsizeiptr>(size));
+                    m_propertyCursor += static_cast<GLintptr>((size + alignment - 1) / alignment * alignment);
+                }
+                else
+                {
+                    m_state.BindUniformBuffer(kMaterialBlockSlot, material.GLBufferHandle);
+                }
+            }
 
             for (const OpenGLShaderTextureUnit& unit : program.TextureUnits)
             {
@@ -256,8 +292,8 @@ namespace crimson::opengl
 
                 if (!unit.IsShadowAtlas)
                 {
-                    const auto it = material.Textures.find(unit.Texture);
-                    texture = it != material.Textures.end() ? it->second : m_resourceManager.GetDefaultTexture();
+                    const TextureHandle drawTexture = DrawTexture(unit.Texture, material.Textures, entries);
+                    texture = drawTexture ? m_resourceManager.GetTexture(drawTexture).GLHandle : m_resourceManager.GetDefaultTexture();
                 }
 
                 m_state.BindTexture(unit.Unit, texture);
@@ -269,6 +305,7 @@ namespace crimson::opengl
                 ++m_stats.PipelineBinds;
 
             m_boundMaterial = info.Material;
+            m_boundProperties = info.Properties;
             m_boundVariant = info.Variant;
             ++m_stats.MaterialBinds;
         }

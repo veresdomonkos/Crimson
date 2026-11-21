@@ -59,17 +59,17 @@ namespace crimson
         if (data.Settings.RenderMode != MaterialRenderMode::Cutout)
         {
             const ShaderHandle shader = HandleOf(ctx, data.Shader);
-            if (shader && ctx.Gpu.GetShaderInterface(shader).Properties.contains("AlphaCutoff"))
+            if (shader && ctx.Gpu.GetShaderInterface(shader).Properties.contains(PropertyId("AlphaCutoff")))
                 ctx.Gpu.SetMaterialPropertyByName(material, "AlphaCutoff", 0.0f);
         }
     }
 
     void ApplyShaderPropertyDefaults(ShaderHandle shader, MaterialHandle material, ImportContext& ctx)
     {
-        for (const auto& [name, property] : ctx.Gpu.GetShaderInterface(shader).Properties)
+        for (const auto& [id, property] : ctx.Gpu.GetShaderInterface(shader).Properties)
         {
             if (!property.Default.empty())
-                ApplyMaterialProperty(ctx.Gpu, material, name, property.Default);
+                ApplyMaterialProperty(ctx.Gpu, material, property.Name, property.Default);
         }
     }
 
@@ -86,7 +86,7 @@ namespace crimson
     TextureHandle MaterialImporter::EmptySlotTexture(ImportContext& ctx, ShaderHandle shader, const std::string& slot)
     {
         const auto& textures = ctx.Gpu.GetShaderInterface(shader).Textures;
-        const auto it = textures.find(slot);
+        const auto it = textures.find(PropertyId(slot));
 
         if (it == textures.end() || it->second.Default != ShaderTextureDefault::Normal)
             return TextureHandle::Invalid();
@@ -119,10 +119,10 @@ namespace crimson
 
         ApplyShaderPropertyDefaults(shader, material, ctx);
 
-        for (const auto& [slot, texture] : ctx.Gpu.GetShaderInterface(shader).Textures)
+        for (const auto& [id, texture] : ctx.Gpu.GetShaderInterface(shader).Textures)
         {
-            if (const TextureHandle empty = EmptySlotTexture(ctx, shader, slot))
-                ctx.Gpu.SetMaterialTexture(material, slot, empty);
+            if (const TextureHandle empty = EmptySlotTexture(ctx, shader, texture.Name))
+                ctx.Gpu.SetMaterialTexture(material, texture.Name, empty);
         }
 
         ApplyMaterialValues(data, material, ctx);

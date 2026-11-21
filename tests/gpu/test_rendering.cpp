@@ -1003,3 +1003,203 @@ TEST_CASE_METHOD(Fixture, "An overlay pass draws in recorded order, blended, wit
     // A scene pass tests depth, so the nearer red one stays
     CHECK(IsNear(render(PassKind::Scene), kRed));
 }
+
+namespace
+{
+    // A texture and a color that multiplies it, which a draw can both replace
+    constexpr std::string_view kTintedTextureShader = R"(
+#include "crimson/bindings.hlsli"
+
+cbuffer MaterialBlock : register(b0, space1) { float4 Tint; };
+Texture2D Albedo : register(t0, space1);
+
+struct VertexInput
+{
+    float3 Position : POSITION;
+    float3 Normal : NORMAL;
+    float2 UV : TEXCOORD0;
+};
+
+struct VertexOutput
+{
+    float4 ClipPosition : SV_Position;
+    float2 UV : TEXCOORD0;
+};
+
+VertexOutput VSMain(VertexInput input)
+{
+    VertexOutput output;
+    output.ClipPosition = mul(GetView().ViewProj, mul(GetObjectData().Transform, float4(input.Position, 1.0)));
+    output.UV = input.UV;
+    return output;
+}
+
+float4 PSMain(VertexOutput input) : SV_Target { return Albedo.Sample(LinearWrap, input.UV) * Tint; }
+)";
+}
+
+TEST_CASE_METHOD(Fixture, "Material properties change one draw, not its material", "[rendering]")
+{
+    Project.Write("left.obj", MakeQuad(-1.0f, -1.0f, 0.0f, 1.0f));
+    Project.Write("right.obj", MakeQuad(0.0f, -1.0f, 1.0f, 1.0f));
+
+    GpuResourceManager& gpu = *Gpu().GPUResources;
+    AssetManager assets(gpu, Project.Path());
+
+    const Mesh* left = assets.Get<MeshAsset>("left.obj");
+    const Mesh* right = assets.Get<MeshAsset>("right.obj");
+    const MaterialHandle red = *assets.Get<MaterialAsset>("red.mat");
+    REQUIRE(left);
+    REQUIRE(right);
+    REQUIRE(red);
+
+    const std::array<unsigned char, 4> greenTexel = { 0, 255, 0, 255 };
+    const TextureHandle greenTexture = gpu.CreateTexture({ .Width = 1, .Height = 1 }, greenTexel.data());
+    REQUIRE(greenTexture);
+
+    // The same material twice: plain on the left, and with its color set on the right
+    const auto renderColors = [&](bool withProperties)
+    {
+        RenderOneFrame([&](FrameRecorder& frame)
+        {
+            PassBuilder pass = frame.AddPass(Pass());
+            pass.DrawMesh(*left, {}, {}, { .MaterialOverride = red });
+
+            DrawOptions options = { .MaterialOverride = red };
+
+            // Names the shader lacks are left out, without an error
+            if (withProperties)
+            {
+                options.Properties = frame.AddProperties(MaterialProperties()
+                    .Set("Color", glm::vec4(0.0f, 1.0f, 0.0f, 1.0f))
+                    .Set("NotInTheShader", 5.0f)
+                    .SetTexture("AlsoNotInTheShader", greenTexture));
+            }
+
+            pass.DrawMesh(*right, {}, {}, options);
+        });
+
+        return Target.Read();
+    };
+
+    const Image withProperties = renderColors(true);
+    CHECK(IsNear(withProperties.AtClip(-0.5f, 0.0f), kRed));
+    CHECK(IsNear(withProperties.AtClip(0.5f, 0.0f), kGreen));
+
+    // The material itself was left alone
+    const Image without = renderColors(false);
+    CHECK(IsNear(without.AtClip(-0.5f, 0.0f), kRed));
+    CHECK(IsNear(without.AtClip(0.5f, 0.0f), kRed));
+
+    // Textures: the blue image of the material, or the green one a draw brings
+    Project.Write("textured.hlsl", kTintedTextureShader);
+    Project.Write("image.bmp", MakeImage());
+    Project.Write("textured.mat", R"({ "shader": "textured.hlsl", "cull": "none", "textures": { "Albedo": "image.bmp" }, "properties": { "Tint": [1, 1, 1, 1] } })");
+    Project.Write("all.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
+
+    const Mesh* all = assets.Get<MeshAsset>("all.obj");
+    const MaterialHandle textured = *assets.Get<MaterialAsset>("textured.mat");
+    REQUIRE(all);
+    REQUIRE(textured);
+
+    const auto renderTextured = [&](const MaterialProperties& properties)
+    {
+        RenderOneFrame([&](FrameRecorder& frame)
+        {
+            frame.AddPass(Pass()).DrawMesh(*all, {}, {}, { .MaterialOverride = textured, .Properties = frame.AddProperties(properties) });
+        });
+
+        return Target.Read().AtClip(0.0f, 0.0f);
+    };
+
+    CHECK(IsNear(renderTextured(MaterialProperties()), glm::ivec3(0, 0, 255)));
+    CHECK(IsNear(renderTextured(MaterialProperties().SetTexture("Albedo", greenTexture)), kGreen));
+    CHECK(IsNear(renderTextured(MaterialProperties().SetTexture("Albedo", greenTexture).Set("Tint", glm::vec4(0.5f, 0.5f, 0.5f, 1.0f))), glm::ivec3(0, 127, 0), 4));
+    CHECK(IsNear(renderTextured(MaterialProperties()), glm::ivec3(0, 0, 255)));
+
+    // Within one pass, the draw after one with its own texture has the material's again. An overlay keeps the order, so the
+    // draw with properties comes first.
+    PassInfo overlay = Pass();
+    overlay.Kind = PassKind::Overlay;
+
+    RenderOneFrame([&](FrameRecorder& frame)
+    {
+        PassBuilder pass = frame.AddPass(overlay);
+        const MaterialPropertiesId green = frame.AddProperties(MaterialProperties().SetTexture("Albedo", greenTexture));
+
+        pass.DrawMesh(*right, {}, {}, { .MaterialOverride = textured, .Properties = green });
+        pass.DrawMesh(*left, {}, {}, { .MaterialOverride = textured });
+    });
+
+    const Image samePass = Target.Read();
+    CHECK(IsNear(samePass.AtClip(0.5f, 0.0f), kGreen));
+    CHECK(IsNear(samePass.AtClip(-0.5f, 0.0f), glm::ivec3(0, 0, 255)));
+
+    gpu.DestroyTexture(greenTexture);
+}
+
+TEST_CASE_METHOD(Fixture, "Many draws with their own properties, frame after frame", "[rendering]")
+{
+    Project.Write("textured.hlsl", kTintedTextureShader);
+    Project.Write("image.bmp", MakeImage());
+    Project.Write("textured.mat", R"({ "shader": "textured.hlsl", "cull": "none", "textures": { "Albedo": "image.bmp" }, "properties": { "Tint": [1, 1, 1, 1] } })");
+    Project.Write("cell.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
+
+    GpuResourceManager& gpu = *Gpu().GPUResources;
+    AssetManager assets(gpu, Project.Path());
+
+    const Mesh* cell = assets.Get<MeshAsset>("cell.obj");
+    const MaterialHandle textured = *assets.Get<MaterialAsset>("textured.mat");
+    REQUIRE(cell);
+    REQUIRE(textured);
+
+    // The material's image is blue, so a color other than blue shows that the draw's own texture and tint are both used
+    const std::array<unsigned char, 4> whiteTexel = { 255, 255, 255, 255 };
+    const TextureHandle white = gpu.CreateTexture({ .Width = 1, .Height = 1 }, whiteTexel.data());
+    REQUIRE(white);
+
+    // A grid of cells, each its own draw with its own tint: more than a pool of the first frame's size would hold
+    constexpr int kColumns = 20;
+    constexpr int kRows = 15;
+    constexpr int kCells = kColumns * kRows;
+
+    const auto tintOf = [](int index) { return glm::vec3(index % 3 == 0 ? 1.0f : 0.0f, index % 3 == 1 ? 1.0f : 0.0f, index % 3 == 2 ? 1.0f : 0.0f); };
+    const auto centerOf = [](int index) { return glm::vec2(-1.0f + (static_cast<float>(index % kColumns) + 0.5f) * 2.0f / kColumns, -1.0f + (static_cast<float>(index / kColumns) + 0.5f) * 2.0f / kRows); };
+
+    // Few draws first, then many, over more frames than there are frames in flight: every slot creates its pool and buffer, and
+    // then replaces the ones it used with larger ones, and reuses those
+    constexpr std::array<int, 4> kDrawCounts = { 10, 10, kCells, kCells };
+
+    for (std::size_t frameNumber = 0; frameNumber < kDrawCounts.size(); ++frameNumber)
+    {
+        RenderOneFrame([&](FrameRecorder& frame)
+        {
+            PassBuilder pass = frame.AddPass(Pass());
+
+            for (int index = 0; index < kDrawCounts[frameNumber]; ++index)
+            {
+                const glm::vec2 center = centerOf(index);
+                const ObjectId object = frame.AddObject(glm::translate(glm::mat4(1.0f), glm::vec3(center, 0.0f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.4f / kColumns, 0.4f / kRows, 1.0f)));
+                const MaterialPropertiesId properties = frame.AddProperties(MaterialProperties().Set("Tint", glm::vec4(tintOf(index), 1.0f)).SetTexture("Albedo", white));
+
+                pass.DrawMesh(*cell, {}, object, { .MaterialOverride = textured, .Properties = properties });
+            }
+        });
+
+        const Image image = Target.Read();
+
+        for (const int index : { 0, 1, 2, 9, 17, 150, 299 })
+        {
+            if (index >= kDrawCounts[frameNumber])
+                continue;
+
+            const glm::vec2 center = centerOf(index);
+            const glm::vec3 tint = tintOf(index);
+
+            CAPTURE(frameNumber, index);
+            CHECK(IsNear(image.AtClip(center.x, center.y), glm::ivec3(tint * 255.0f), 4));
+        }
+    }
+
+    gpu.DestroyTexture(white);
+}

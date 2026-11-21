@@ -7,6 +7,7 @@
 #include <utility>
 #include <vector>
 
+#include "crimson/renderer/property_id.hpp"
 #include "crimson/renderer/shader_property_info.hpp"
 
 namespace crimson
@@ -48,6 +49,9 @@ namespace crimson
         bool Vertex = false;
         bool Pixel = false;
         ShaderTextureDefault Default = ShaderTextureDefault::White;
+
+        // As the shader declares it. The map it is in is keyed by the PropertyId of it.
+        std::string Name;
     };
 
     // What a shader's material space contains
@@ -58,8 +62,9 @@ namespace crimson
         bool MaterialBlockInVertex = false;
         bool MaterialBlockInPixel = false;
 
-        std::unordered_map<std::string, ShaderPropertyInfo> Properties;
-        std::unordered_map<std::string, ShaderMaterialTexture> Textures;
+        // By name, as PropertyId(name), which is how a draw's MaterialProperties names them too
+        std::unordered_map<PropertyId, ShaderPropertyInfo, PropertyIdHash> Properties;
+        std::unordered_map<PropertyId, ShaderMaterialTexture, PropertyIdHash> Textures;
     };
 
     namespace shader_bindings

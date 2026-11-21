@@ -5,6 +5,7 @@
 #include "crimson/renderer/renderer.hpp"
 #include "vulkan_device.hpp"
 #include "vulkan_resource_manager.hpp"
+#include "renderer/draw_material.hpp"
 
 #include <tracy/TracyVulkan.hpp>
 
@@ -43,8 +44,9 @@ namespace crimson::vulkan
         bool DrawPushed = false;
     };
 
-    // A host-visible buffer of one frame in flight that grows when its contents don't fit
-    struct FrameStorageBuffer
+    // A host-visible buffer of one frame in flight that grows when its contents don't fit. The kind of buffer it is is up to
+    // what grows it.
+    struct FrameHostBuffer
     {
         AllocatedBuffer Buffer;
         vk::DeviceSize Capacity = 0;
@@ -58,11 +60,20 @@ namespace crimson::vulkan
         vk::raii::Fence InFlightFence{ nullptr };
 
         AllocatedBuffer FrameBlockBuffer;
-        FrameStorageBuffer Lights;
-        FrameStorageBuffer Shadows;
-        FrameStorageBuffer Objects;
-        FrameStorageBuffer Views;
+        FrameHostBuffer Lights;
+        FrameHostBuffer Shadows;
+        FrameHostBuffer Objects;
+        FrameHostBuffer Views;
         vk::raii::DescriptorSet DescriptorSet{ nullptr };
+
+        // For the draws with material properties: each gets a material set from the pool and, when its properties write values, a
+        // copy of its material's uniform block in the buffer. Both are sized once a frame, from what its draws need, before
+        // any is recorded, so there is one pool and one buffer, as large as the largest frame needed.
+        vk::raii::DescriptorPool PropertyPool{ nullptr };
+        uint32_t PropertyPoolSets = 0;
+        uint32_t PropertyPoolTextures = 0;
+        FrameHostBuffer PropertyBlocks;
+        vk::DeviceSize PropertyCursor = 0;
     };
 
     class VulkanRenderer : public Renderer
@@ -89,14 +100,22 @@ namespace crimson::vulkan
         bool BeginFrame(const FramePacket& packet);
         void EndFrame();
 
-        void UploadStorageBuffer(const InFlightFrame& frame, FrameStorageBuffer& storage, uint32_t binding, const void* data, std::size_t size);
+        // Sizes the pool and the buffer of the frame's material properties for what its draws need
+        void PreparePropertyResources(InFlightFrame& frame, const MaterialPropertiesBudget& budget);
+
+        // The material set of a draw with properties, written for this draw. None when the pool has no room left.
+        [[nodiscard]] vk::DescriptorSet WritePropertySet(InFlightFrame& frame, const FramePacket& packet, const DrawItem& draw, const VulkanMaterial& material);
+
+        // False when the buffer couldn't grow. Only for a frame whose fence has been waited on.
+        bool GrowFrameBuffer(FrameHostBuffer& buffer, vk::BufferUsageFlagBits usage, vk::DeviceSize size);
+        void UploadStorageBuffer(const InFlightFrame& frame, FrameHostBuffer& storage, uint32_t binding, const void* data, std::size_t size);
 
         void TransitionImage(const vk::raii::CommandBuffer& cmd, VulkanTexture& texture, vk::ImageLayout newLayout);
-        void ExecutePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, std::span<const FrameView> views);
+        void ExecutePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, const FramePacket& packet);
         void EndPass(const vk::raii::CommandBuffer& cmdBuffer, VulkanRenderTarget& rt);
 
         // passArea is where a draw lands when its view has no viewport of its own
-        void ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, std::span<const FrameView> views, const RenderRect& passArea, PassKind kind);
+        void ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, const FramePacket& packet, const RenderRect& passArea, PassKind kind);
         void ExecuteNativePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, VulkanRenderTarget& rt);
 
         void BeginRendering(const vk::raii::CommandBuffer& cmd, VulkanRenderTarget& rt, const ClearInfo& clear, const std::optional<RenderRect>& area);
@@ -111,6 +130,11 @@ namespace crimson::vulkan
 
         std::vector<DrawSortEntry> m_drawOrder;
         BoundDrawState m_bound;
+
+        // Scratch for WritePropertySet, kept to reuse its memory
+        std::vector<vk::WriteDescriptorSet> m_propertyWrites;
+        std::vector<vk::DescriptorImageInfo> m_propertyImages;
+        vk::DescriptorBufferInfo m_propertyBuffer;
         FrameValidator m_validator;
 
         TracyVkCtx m_tracyContext = nullptr;

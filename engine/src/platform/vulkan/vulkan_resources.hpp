@@ -14,6 +14,7 @@
 #include "crimson/renderer/material_settings.hpp"
 #include "crimson/renderer/resource_handles.hpp"
 #include "crimson/renderer/texture.hpp"
+#include "renderer/draw_material.hpp"
 #include "shader/shader_reflection.hpp"
 #include "vulkan_allocator.hpp"
 
@@ -131,6 +132,9 @@ namespace crimson::vulkan
         AllocatedBuffer UniformBuffer;
         vk::DeviceSize UniformBufferSize = 0;
         vk::raii::DescriptorSet DescriptorSet{ nullptr };
+
+        // What was set with SetMaterialTexture, by slot, for the draws that have properties
+        MaterialTextures Textures;
     };
 
     struct VulkanResourceTraits

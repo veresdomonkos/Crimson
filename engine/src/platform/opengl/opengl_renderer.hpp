@@ -2,10 +2,12 @@
 #include "opengl_resource_manager.hpp"
 #include "opengl_device.hpp"
 #include "opengl_state_cache.hpp"
+#include "renderer/draw_material.hpp"
 #include "crimson/renderer/draw_sort.hpp"
 #include "crimson/renderer/frame_validation.hpp"
 #include "crimson/renderer/renderer.hpp"
 
+#include <cstddef>
 #include <span>
 #include <vector>
 
@@ -21,12 +23,12 @@ namespace crimson::opengl
         bool Submit(FrameRecorder frame) override;
         void SetShadowAtlas(TextureHandle shadowAtlas) override;
     private:
-        void ExecutePass(const PassRecord& pass, std::span<const FrameView> views);
+        void ExecutePass(const PassRecord& pass, const FramePacket& packet);
         void ExecuteNativePass(const PassRecord& pass);
         RenderRect BindTarget(const PassInfo& info);
         void ClearTarget(const ClearInfo& clear);
         // passArea is where a draw lands when its view has no viewport of its own
-        void ExecuteDraw(const DrawItem& info, std::span<const FrameView> views, const RenderRect& passArea, PassKind kind);
+        void ExecuteDraw(const DrawItem& info, const FramePacket& packet, const RenderRect& passArea, PassKind kind);
         void ResetBoundState();
         void BindFrameResources();
     private:
@@ -35,6 +37,12 @@ namespace crimson::opengl
         GLuint m_lightsBuffer = 0;
         GLuint m_shadowsBuffer = 0;
         GLuint m_objectsBuffer = 0;
+
+        // The uniform blocks of the draws with properties that write values, one after the other, as many as the frame needs
+        GLuint m_propertyBlocks = 0;
+        GLintptr m_propertyCursor = 0;
+        GLint m_uniformOffsetAlignment = 1;
+        std::vector<std::byte> m_blockScratch;
         GLuint m_shadowAtlas = 0;
 
         OpenGLDevice& m_device;
@@ -51,5 +59,8 @@ namespace crimson::opengl
 
         // A view also sets the viewport, so it starts over with every pass
         ViewId m_boundView;
+
+        // With m_boundMaterial, the pair the bound block and textures are for. None is the material as it is.
+        MaterialPropertiesId m_boundProperties;
     };
 }

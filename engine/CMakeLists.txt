@@ -29,9 +29,11 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/renderer/frame_validation.hpp
     include/crimson/renderer/handle_registry.hpp
     include/crimson/renderer/light.hpp
+    include/crimson/renderer/material_properties.hpp
     include/crimson/renderer/material_settings.hpp
     include/crimson/renderer/mesh.hpp
     include/crimson/renderer/native_context.hpp
+    include/crimson/renderer/property_id.hpp
     include/crimson/renderer/render_stats.hpp
     include/crimson/renderer/renderer.hpp
     include/crimson/renderer/resource_handles.hpp
@@ -157,6 +159,7 @@ set(ENGINE_SOURCES
     src/project/project.cpp
     src/project/shader_includes.cpp
 
+    src/renderer/draw_material.hpp
     src/renderer/update_validation.hpp
 
     src/scene/component_registry.cpp

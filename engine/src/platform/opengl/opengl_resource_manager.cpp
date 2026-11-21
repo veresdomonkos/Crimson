@@ -282,7 +282,7 @@ namespace crimson::opengl
         for (const GlslTextureUnit& unit : textureUnits)
         {
             result.TextureUnits.push_back({
-                .Texture = unit.Texture,
+                .Texture = PropertyId(unit.Texture),
                 .Sampler = GetSharedSampler(unit.Sampler),
                 .Unit = unit.Unit,
                 .IsShadowAtlas = unit.Texture == "ShadowAtlas"
@@ -376,14 +376,17 @@ namespace crimson::opengl
         }
 
         const OpenGLShader& shader = m_shaders.Get(mat.Shader);
-        auto it = shader.Interface.Textures.find(std::string(name));
+        auto it = shader.Interface.Textures.find(PropertyId(name));
         if (it == shader.Interface.Textures.end())
         {
             LOG_WARN("Texture property '{}' not found in Shader!", name);
             return;
         }
 
-        mat.Textures[it->first] = m_textures.Get(texture ? texture : m_defaultTexture).GLHandle;
+        if (texture)
+            mat.Textures.insert_or_assign(it->first, texture);
+        else
+            mat.Textures.erase(it->first);
     }
 
     void OpenGLResourceManager::SetMaterialPropertyByNameImpl(MaterialHandle handle, std::string_view name, std::span<const std::byte> data)
@@ -397,7 +400,7 @@ namespace crimson::opengl
 
         const OpenGLShader& shader = m_shaders.Get(mat.Shader);
 
-        auto it = shader.Interface.Properties.find(std::string(name));
+        auto it = shader.Interface.Properties.find(PropertyId(name));
         if (it == shader.Interface.Properties.end())
         {
             LOG_WARN("Uniform property '{}' not found in Shader!", name);

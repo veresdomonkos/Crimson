@@ -438,7 +438,7 @@ namespace crimson::vulkan
         VulkanShader& shader = m_shaders.Get(material.Shader);
         VulkanTexture& texture = m_textures.Get(textureHandle ? textureHandle : m_defaultTexture);
 
-        auto it = shader.Interface.Textures.find(std::string(name));
+        auto it = shader.Interface.Textures.find(PropertyId(name));
 
         if (it == shader.Interface.Textures.end())
         {
@@ -450,6 +450,12 @@ namespace crimson::vulkan
         m_device.WaitIdle();
 
         WriteMaterialTexture(*material.DescriptorSet, it->second.Binding, texture);
+
+        // The draws that have properties start from the textures a material has
+        if (textureHandle)
+            material.Textures.insert_or_assign(it->first, textureHandle);
+        else
+            material.Textures.erase(it->first);
     }
 
     void VulkanResourceManager::WriteMaterialTexture(vk::DescriptorSet set, uint32_t binding, const VulkanTexture& texture) const
@@ -939,7 +945,7 @@ namespace crimson::vulkan
         VulkanMaterial& material = m_materials.Get(handle);
         VulkanShader& shader = m_shaders.Get(material.Shader);
 
-        auto property = shader.Interface.Properties.find(std::string(name));
+        auto property = shader.Interface.Properties.find(PropertyId(name));
 
         if (property == shader.Interface.Properties.end())
         {

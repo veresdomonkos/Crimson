@@ -68,6 +68,15 @@ namespace crimson::opengl
             glBindBufferBase(GL_UNIFORM_BUFFER, binding, buffer);
         }
 
+        // Binds a part of a buffer. The cache only knows whole buffers, so the binding is unknown after it.
+        void BindUniformBufferRange(uint32_t binding, GLuint buffer, GLintptr offset, GLsizeiptr size)
+        {
+            if (binding < m_uniformBuffers.size())
+                m_uniformBuffers[binding] = kUnknown;
+
+            glBindBufferRange(GL_UNIFORM_BUFFER, binding, buffer, offset, size);
+        }
+
         void BindStorageBuffer(uint32_t binding, GLuint buffer)
         {
             if (binding < m_storageBuffers.size())

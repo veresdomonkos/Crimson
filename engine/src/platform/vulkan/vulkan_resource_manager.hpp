@@ -67,6 +67,9 @@ namespace crimson::vulkan
         [[nodiscard]] size_t GetDescriptorPoolCount() const { return m_descriptorPools.size(); }
         [[nodiscard]] vk::DescriptorSetLayout GetFrameSetLayout() const { return *m_frameSetLayout; }
 
+        // What a slot shows when no texture was set
+        [[nodiscard]] TextureHandle GetDefaultTexture() const { return m_defaultTexture; }
+
         VulkanGraphicsPipeline& GetOrCreateGraphicsPipeline(const GraphicsPipelineInfo& info);
 
         // Counts the frames the renderer submitted. An update writes the copy of a buffer that the frame with this number reads.

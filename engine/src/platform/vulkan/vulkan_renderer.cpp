@@ -1,6 +1,7 @@
 #include "vulkan_renderer.hpp"
 #include "crimson/core/log.hpp"
 #include "crimson/core/profiler.hpp"
+#include <bit>
 #include <cstring>
 #include <vector>
 
@@ -107,24 +108,35 @@ namespace crimson::vulkan
     }
 
     // Only call this for a frame whose fence has been waited on, as it can free the buffer the frame used last
-    void VulkanRenderer::UploadStorageBuffer(const InFlightFrame& resources, FrameStorageBuffer& storage, uint32_t binding, const void* data, std::size_t size)
+    bool VulkanRenderer::GrowFrameBuffer(FrameHostBuffer& buffer, vk::BufferUsageFlagBits usage, vk::DeviceSize size)
+    {
+        if (size <= buffer.Capacity)
+            return true;
+
+        vk::DeviceSize capacity = std::max<vk::DeviceSize>(buffer.Capacity, 1);
+        while (capacity < size)
+            capacity *= 2;
+
+        AllocatedBuffer created = CreateAllocatedBuffer(m_device.GetAllocator(), capacity, usage, BufferMemory::HostMapped);
+
+        if (!created)
+        {
+            LOG_ERROR("[Vulkan Renderer] Failed to grow a frame buffer to {} bytes", capacity);
+            return false;
+        }
+
+        buffer.Buffer = std::move(created);
+        buffer.Capacity = capacity;
+        return true;
+    }
+
+    // Only call this for a frame whose fence has been waited on, as it can free the buffer the frame used last
+    void VulkanRenderer::UploadStorageBuffer(const InFlightFrame& resources, FrameHostBuffer& storage, uint32_t binding, const void* data, std::size_t size)
     {
         if (size > storage.Capacity)
         {
-            vk::DeviceSize capacity = std::max<vk::DeviceSize>(storage.Capacity, 1);
-            while (capacity < size)
-                capacity *= 2;
-
-            AllocatedBuffer buffer = CreateAllocatedBuffer(m_device.GetAllocator(), capacity, vk::BufferUsageFlagBits::eStorageBuffer, BufferMemory::HostMapped);
-
-            if (!buffer)
-            {
-                LOG_ERROR("[Vulkan Renderer] Failed to grow a storage buffer to {} bytes", capacity);
+            if (!GrowFrameBuffer(storage, vk::BufferUsageFlagBits::eStorageBuffer, size))
                 return;
-            }
-
-            storage.Buffer = std::move(buffer);
-            storage.Capacity = capacity;
 
             vk::DescriptorBufferInfo bufferInfo{};
             bufferInfo.buffer = storage.Buffer.Get();
@@ -143,6 +155,125 @@ namespace crimson::vulkan
 
         if (data)
             std::memcpy(storage.Buffer.Mapped(), data, size);
+    }
+
+    void VulkanRenderer::PreparePropertyResources(InFlightFrame& frame, const MaterialPropertiesBudget& budget)
+    {
+        // The pool is only made again when this frame needs more than it has, and then for twice that at most
+        if (budget.Draws > frame.PropertyPoolSets || budget.Textures > frame.PropertyPoolTextures)
+        {
+            frame.PropertyPoolSets = std::max(frame.PropertyPoolSets, std::bit_ceil(budget.Draws));
+            frame.PropertyPoolTextures = std::max(frame.PropertyPoolTextures, std::bit_ceil(budget.Textures));
+
+            std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+            poolSizes[0].type = vk::DescriptorType::eUniformBuffer;
+            poolSizes[0].descriptorCount = frame.PropertyPoolSets;
+            poolSizes[1].type = vk::DescriptorType::eSampledImage;
+            poolSizes[1].descriptorCount = frame.PropertyPoolTextures;
+
+            vk::DescriptorPoolCreateInfo poolInfo{};
+            poolInfo.maxSets = frame.PropertyPoolSets;
+            poolInfo.poolSizeCount = 2;
+            poolInfo.pPoolSizes = poolSizes.data();
+
+            // The slot's last frame is done, so nothing uses its pool anymore
+            frame.PropertyPool = m_device.GetDevice().createDescriptorPool(poolInfo);
+        }
+        else if (*frame.PropertyPool)
+        {
+            frame.PropertyPool.reset();
+        }
+
+        // Nothing has bound a set of this frame yet, so the buffer can still grow
+        GrowFrameBuffer(frame.PropertyBlocks, vk::BufferUsageFlagBits::eUniformBuffer, budget.BlockBytes);
+        frame.PropertyCursor = 0;
+    }
+
+    vk::DescriptorSet VulkanRenderer::WritePropertySet(InFlightFrame& frame, const FramePacket& packet, const DrawItem& draw, const VulkanMaterial& material)
+    {
+        const vk::raii::Device& device = m_device.GetDevice();
+        const VulkanShader& shader = m_resourceManager.GetShader(material.Shader);
+        const std::span<const MaterialPropertyEntry> entries = packet.GetPropertyEntries(draw.Properties);
+
+        // A failed growth of the block buffer leaves it too small, so the draw is skipped like one without a set
+        if (shader.Interface.MaterialBlockSize > 0 && SetsValues(entries, shader.Interface) && frame.PropertyCursor + shader.Interface.MaterialBlockSize > frame.PropertyBlocks.Capacity)
+        {
+            LOG_ERROR("[Vulkan Renderer] The block buffer of a draw with properties is too small");
+            return {};
+        }
+
+        const vk::DescriptorSetLayout layout = *shader.MaterialSetLayout;
+        vk::DescriptorSetAllocateInfo allocateInfo{};
+        allocateInfo.descriptorPool = *frame.PropertyPool;
+        allocateInfo.descriptorSetCount = 1;
+        allocateInfo.pSetLayouts = &layout;
+
+        // Without the raii wrapper, as the sets are not freed one by one, the pool is reset
+        VkDescriptorSet raw = VK_NULL_HANDLE;
+        const VkResult allocated = device.getDispatcher()->vkAllocateDescriptorSets(
+            static_cast<VkDevice>(*device), reinterpret_cast<const VkDescriptorSetAllocateInfo*>(&allocateInfo), &raw);
+
+        // The pool was sized for every draw of the frame, so this is a bug and not a full pool
+        if (allocated != VK_SUCCESS)
+        {
+            LOG_ERROR("[Vulkan Renderer] Failed to allocate the material set of a draw with properties");
+            return {};
+        }
+
+        const vk::DescriptorSet set = raw;
+        m_propertyWrites.clear();
+        m_propertyImages.clear();
+        m_propertyImages.reserve(shader.Interface.Textures.size());
+
+        if (shader.Interface.MaterialBlockSize > 0)
+        {
+            const vk::DeviceSize size = shader.Interface.MaterialBlockSize;
+
+            if (SetsValues(entries, shader.Interface))
+            {
+                auto* block = static_cast<std::byte*>(frame.PropertyBlocks.Buffer.Mapped()) + frame.PropertyCursor;
+
+                WriteMaterialBlock({ block, static_cast<std::size_t>(size) }, { static_cast<const std::byte*>(material.UniformBuffer.Mapped()), static_cast<std::size_t>(size) },
+                                   shader.Interface, entries, packet.GetPropertyBytes(draw.Properties));
+
+                m_propertyBuffer = vk::DescriptorBufferInfo{ frame.PropertyBlocks.Buffer.Get(), frame.PropertyCursor, size };
+
+                const vk::DeviceSize alignment = std::max<vk::DeviceSize>(m_device.GetProperties().limits.minUniformBufferOffsetAlignment, 1);
+                frame.PropertyCursor += (size + alignment - 1) / alignment * alignment;
+            }
+            else
+            {
+                m_propertyBuffer = vk::DescriptorBufferInfo{ material.UniformBuffer.Get(), 0, size };
+            }
+
+            vk::WriteDescriptorSet write{};
+            write.dstSet = set;
+            write.dstBinding = shader.Interface.MaterialBlockBinding;
+            write.descriptorCount = 1;
+            write.descriptorType = vk::DescriptorType::eUniformBuffer;
+            write.pBufferInfo = &m_propertyBuffer;
+            m_propertyWrites.push_back(write);
+        }
+
+        for (const auto& [id, slot] : shader.Interface.Textures)
+        {
+            const TextureHandle texture = DrawTexture(id, material.Textures, entries);
+
+            m_propertyImages.push_back({ {}, *m_resourceManager.GetTexture(texture ? texture : m_resourceManager.GetDefaultTexture()).View, vk::ImageLayout::eShaderReadOnlyOptimal });
+
+            vk::WriteDescriptorSet write{};
+            write.dstSet = set;
+            write.dstBinding = slot.Binding;
+            write.descriptorCount = 1;
+            write.descriptorType = vk::DescriptorType::eSampledImage;
+            write.pImageInfo = &m_propertyImages.back();
+            m_propertyWrites.push_back(write);
+        }
+
+        if (!m_propertyWrites.empty())
+            device.updateDescriptorSets(m_propertyWrites, nullptr);
+
+        return set;
     }
 
     void VulkanRenderer::SetShadowAtlas(TextureHandle shadowAtlas)
@@ -270,7 +401,7 @@ namespace crimson::vulkan
         texture.Layout = newLayout;
     }
 
-    void VulkanRenderer::ExecutePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, std::span<const FrameView> views)
+    void VulkanRenderer::ExecutePass(const vk::raii::CommandBuffer& cmdBuffer, const PassRecord& pass, const FramePacket& packet)
     {
         const PassInfo& info = pass.GetInfo();
 
@@ -294,6 +425,20 @@ namespace crimson::vulkan
             return;
         }
 
+        // What the draws' properties sample has to be readable too, and can't change inside rendering. A texture the UI shows can
+        // be one that a pass of this frame rendered to.
+        for (const DrawItem& draw : pass.GetDraws())
+        {
+            if (!draw.Properties)
+                continue;
+
+            for (const MaterialPropertyEntry& entry : packet.GetPropertyEntries(draw.Properties))
+            {
+                if (entry.Texture)
+                    TransitionImage(cmdBuffer, m_resourceManager.GetTexture(entry.Texture), vk::ImageLayout::eShaderReadOnlyOptimal);
+            }
+        }
+
         BeginRendering(cmdBuffer, rt, info.Clear, info.Viewport);
 
         // BeginRendering set the viewport to the pass's area, which the first draw's view may not have
@@ -304,7 +449,7 @@ namespace crimson::vulkan
 
         BuildDrawOrder(draws, m_resourceManager, m_drawOrder, info.Kind);
         for (const DrawSortEntry& sorted : m_drawOrder)
-            ExecuteDraw(cmdBuffer, draws[sorted.Index], target, views, passArea, info.Kind);
+            ExecuteDraw(cmdBuffer, draws[sorted.Index], target, packet, passArea, info.Kind);
 
         EndPass(cmdBuffer, rt);
     }
@@ -404,9 +549,11 @@ namespace crimson::vulkan
         SetScissor(cmdBuffer, rect);
     }
 
-    void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, std::span<const FrameView> views, const RenderRect& passArea, PassKind kind)
+    void VulkanRenderer::ExecuteDraw(const vk::raii::CommandBuffer& cmdBuffer, const DrawItem& draw, RenderTargetHandle target, const FramePacket& packet, const RenderRect& passArea, PassKind kind)
     {
         CRIMSON_PROFILE_FUNCTION();
+
+        const std::span<const FrameView> views = packet.GetViews();
 
         // A view whose part of the target is outside the pass's draws nothing
         const RenderRect viewArea = ViewArea(views[draw.View.Index()], passArea);
@@ -478,10 +625,21 @@ namespace crimson::vulkan
             m_bound.FrameSetBound = true;
         }
 
-        if (m_bound.MaterialSet != *material.DescriptorSet)
+        // A draw with properties has a set of its own, so the next draw binds its own again
+        vk::DescriptorSet materialSet = *material.DescriptorSet;
+
+        if (draw.Properties)
         {
-            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, shader_bindings::kMaterialSpace, *material.DescriptorSet, nullptr);
-            m_bound.MaterialSet = *material.DescriptorSet;
+            materialSet = WritePropertySet(m_inFlight[m_inFlightIndex], packet, draw, material);
+
+            if (!materialSet)
+                return;
+        }
+
+        if (m_bound.MaterialSet != materialSet)
+        {
+            cmdBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline.Layout, shader_bindings::kMaterialSpace, materialSet, nullptr);
+            m_bound.MaterialSet = materialSet;
             ++m_stats.MaterialBinds;
         }
 
@@ -548,7 +706,7 @@ namespace crimson::vulkan
         m_stats.Passes = static_cast<uint32_t>(passes.size());
 
         for (const PassRecord& pass : passes)
-            ExecutePass(cmdBuffer, pass, packet.GetViews());
+            ExecutePass(cmdBuffer, pass, packet);
 
         CRIMSON_PROFILE_PLOT("Draw Calls", m_stats.DrawCalls);
 
@@ -586,6 +744,8 @@ namespace crimson::vulkan
         const std::span<const GpuObject> objects = packet.GetObjects();
         UploadStorageBuffer(frame, frame.Objects, shader_bindings::kObjects, objects.data(), objects.size_bytes());
         UploadStorageBuffer(frame, frame.Views, shader_bindings::kViews, m_gpuData.Views.data(), std::span(m_gpuData.Views).size_bytes());
+
+        PreparePropertyResources(frame, CountMaterialProperties(packet, m_resourceManager, m_device.GetProperties().limits.minUniformBufferOffsetAlignment));
 
         uint32_t imageIndex = 0;
         vk::Result result = vk::Result::eSuccess;
