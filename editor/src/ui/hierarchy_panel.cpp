@@ -15,6 +15,15 @@ namespace crimson::editor::ui
 {
     constexpr const char* kEntityPayload = "CRIMSON_ENTITY";
 
+    static constexpr Shortcut kRename{ Key::F2 };
+    static constexpr Shortcut kDelete{ Key::Delete };
+
+    // Where the commands sit in the main menu: Edit after Undo and Redo, and Create after it
+    constexpr int kRenamePriority = 120;
+    constexpr int kDeletePriority = 121;
+    constexpr int kCreateEmptyPriority = 200;
+    constexpr int kCreatePresetPriority = 210;
+
     // What kind of entity it is, at a glance
     static const char* EntityIcon(Entity entity, const ComponentRegistry& components)
     {
@@ -37,10 +46,38 @@ namespace crimson::editor::ui
         return icons::kEntity;
     }
 
-    void HierarchyPanel::OnImGui()
+    HierarchyPanel::HierarchyPanel(EditorContext& context)
+        : Panel({ .Title = "Hierarchy", .Icon = icons::kEntity, .Slot = DockSlot::Left }),
+          m_context(context)
     {
-        ImGui::Begin("Hierarchy");
+        AddCommand({ .MenuPath = "Edit/Rename", .Priority = kRenamePriority, .Shortcuts = { kRename },
+                     .Enabled = [this] { return IsSelectionEditable(); },
+                     .Run = [this] { BeginRename(m_context.Session.GetSelected()); } });
 
+        AddCommand({ .MenuPath = "Edit/Delete", .Priority = kDeletePriority, .Shortcuts = { kDelete },
+                     .Enabled = [this] { return IsSelectionEditable(); },
+                     .Run = [this] { DeleteEntity(m_context.Session.GetSelected()); } });
+
+        const std::vector<CreateOption> options = ListCreateOptions();
+
+        for (size_t i = 0; i < options.size(); ++i)
+        {
+            const CreateOption option = options[i];
+            const std::string path = option.Menu.empty() ? "Create/" + option.Name : "Create/Create " + option.Menu + "/" + option.Name;
+
+            AddCommand({ .MenuPath = path, .Priority = i == 0 ? kCreateEmptyPriority : kCreatePresetPriority + static_cast<int>(i) - 1,
+                         .Run = [this, option] { Create(option, {}); } });
+        }
+    }
+
+    bool HierarchyPanel::IsSelectionEditable() const
+    {
+        const Entity selected = m_context.Session.GetSelected();
+        return selected && !selected.HasComponent<InstancedComponent>();
+    }
+
+    void HierarchyPanel::Draw()
+    {
         Scene& scene = m_context.Session.GetScene();
 
         if (const AssetInfo* info = m_context.Session.GetAssets().GetInfo(m_context.Session.GetSceneAsset()))
@@ -103,22 +140,9 @@ namespace crimson::editor::ui
             ImGui::EndPopup();
         }
 
-        if (m_context.Session.GetSelected() && !m_context.Session.GetSelected().HasComponent<InstancedComponent>() && ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)
-            && !ImGui::GetIO().WantTextInput)
-        {
-            const Entity selected = m_context.Session.GetSelected();
-
-            if (ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-                DeleteEntity(selected);
-            else if (ImGui::IsKeyPressed(ImGuiKey_F2, false))
-                BeginRename(selected);
-        }
-
         // The entity may have gone while its name was being edited
         if (m_renaming != entt::null && !scene.GetRegistry().valid(m_renaming))
             m_renaming = entt::null;
-
-        ImGui::End();
 
         // They are edits made at once, so they are steps of their own right away
         if (!m_deferred.empty())
@@ -128,30 +152,6 @@ namespace crimson::editor::ui
             action();
 
         m_deferred.clear();
-    }
-
-    void HierarchyPanel::OnMainMenuBar()
-    {
-        // What comes from an instance's scene can only be looked at
-        const Entity selected = m_context.Session.GetSelected();
-        const bool editable = selected && !selected.HasComponent<InstancedComponent>();
-
-        if (ImGui::BeginMenu("Edit"))
-        {
-            if (ImGui::MenuItem("Rename", "F2", false, editable))
-                BeginRename(selected);
-
-            if (ImGui::MenuItem("Delete", "Delete", false, editable))
-                DeleteEntity(selected);
-
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu("Create"))
-        {
-            DrawCreateMenu({});
-            ImGui::EndMenu();
-        }
     }
 
     void HierarchyPanel::DeleteEntity(Entity entity)
@@ -271,10 +271,10 @@ namespace crimson::editor::ui
                 ImGui::Separator();
             }
 
-            if (ImGui::MenuItem("Rename", "F2"))
+            if (ImGui::MenuItem("Rename", ToText(kRename).c_str()))
                 BeginRename(entity);
 
-            if (ImGui::MenuItem("Delete", "Delete"))
+            if (ImGui::MenuItem("Delete", ToText(kDelete).c_str()))
                 DeleteEntity(entity);
 
             ImGui::EndPopup();
@@ -343,23 +343,9 @@ namespace crimson::editor::ui
             });
     }
 
-    void HierarchyPanel::DrawCreateMenu(Entity parent)
+    std::vector<HierarchyPanel::CreateOption> HierarchyPanel::ListCreateOptions() const
     {
-        const auto create = [this, parent](std::string name, std::function<void(Entity)> setup)
-        {
-            m_deferred.emplace_back([this, parent, name = std::move(name), setup = std::move(setup)]
-            {
-                const Entity created = m_context.Session.GetScene().CreateEntity(name, parent);
-                if (setup)
-                    setup(created);
-
-                m_context.Session.GetSceneEdits().RecordCreated(created);
-                m_context.Session.SelectEntity(created);
-            });
-        };
-
-        if (ImGui::MenuItem("Create Empty"))
-            create("Entity", nullptr);
+        std::vector<CreateOption> options{ CreateOption{ .Name = "Create Empty" } };
 
         // A submenu for each menu the components' presets name, in the order the components were registered
         const ComponentRegistry& components = m_context.Session.GetAssets().Components();
@@ -376,19 +362,64 @@ namespace crimson::editor::ui
 
         for (const std::string_view menu : menus)
         {
-            if (!ImGui::BeginMenu(("Create " + std::string(menu)).c_str()))
-                continue;
-
             for (const ComponentType& type : components.Types())
             {
                 for (const ComponentPreset& preset : type.Presets)
                 {
-                    if (preset.Menu == menu && ImGui::MenuItem(preset.Name.c_str()))
-                        create(preset.Name, [this, &type, &preset](Entity entity) { ApplyPreset(type, preset, entity, m_context.Session.GetAssets()); });
+                    if (preset.Menu == menu)
+                        options.push_back(CreateOption{ .Menu = std::string(menu), .Name = preset.Name, .Type = &type, .Preset = &preset });
                 }
             }
+        }
 
-            ImGui::EndMenu();
+        return options;
+    }
+
+    void HierarchyPanel::Create(const CreateOption& option, Entity parent)
+    {
+        m_deferred.emplace_back([this, option, parent]
+        {
+            const Entity created = m_context.Session.GetScene().CreateEntity(option.Preset ? option.Preset->Name : "Entity", parent);
+            if (option.Type)
+                ApplyPreset(*option.Type, *option.Preset, created, m_context.Session.GetAssets());
+
+            m_context.Session.GetSceneEdits().RecordCreated(created);
+            m_context.Session.SelectEntity(created);
+        });
+    }
+
+    void HierarchyPanel::DrawCreateMenu(Entity parent)
+    {
+        const std::vector<CreateOption> options = ListCreateOptions();
+
+        for (size_t i = 0; i < options.size();)
+        {
+            if (options[i].Menu.empty())
+            {
+                if (ImGui::MenuItem(options[i].Name.c_str()))
+                    Create(options[i], parent);
+
+                ++i;
+                continue;
+            }
+
+            // The options of a menu are next to each other
+            size_t end = i;
+            while (end < options.size() && options[end].Menu == options[i].Menu)
+                ++end;
+
+            if (ImGui::BeginMenu(("Create " + options[i].Menu).c_str()))
+            {
+                for (size_t j = i; j < end; ++j)
+                {
+                    if (ImGui::MenuItem(options[j].Name.c_str()))
+                        Create(options[j], parent);
+                }
+
+                ImGui::EndMenu();
+            }
+
+            i = end;
         }
     }
 }

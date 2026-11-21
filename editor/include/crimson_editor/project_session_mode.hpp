@@ -12,8 +12,12 @@
 #include "crimson_editor/project_session.hpp"
 #include "crimson_editor/scene_camera_controller.hpp"
 #include "crimson_editor/scene_view.hpp"
-#include "crimson_editor/ui/editor_ui.hpp"
+#include "crimson_editor/ui/asset_browser_panel.hpp"
+#include "crimson_editor/ui/console_panel.hpp"
+#include "crimson_editor/ui/notifications.hpp"
+#include "crimson_editor/ui/preferences_panel.hpp"
 #include "crimson_editor/ui/viewport_panel.hpp"
+#include "crimson_editor/ui/workspace.hpp"
 
 namespace crimson::editor
 {
@@ -33,17 +37,18 @@ namespace crimson::editor
         [[nodiscard]] EditorContext& GetContext() { return m_context; }
         [[nodiscard]] SceneView& GetSceneView() { return m_sceneView; }
         [[nodiscard]] ProjectSession& GetSession() { return m_session; }
+        [[nodiscard]] ui::Workspace& GetWorkspace() { return m_workspace; }
     private:
         // --- Setup called from constructor ---
         void CreateRenderTargets();
         void SetupRenderer();
         void SetupUI();
+        void SetupCommands();
 
         // Gives the renderer the scene's tone mapping, which it ignores when nothing changed
         void ApplyToneMapping();
 
         void UpdateFrameStats();
-        void HandleShortcuts();
         void DrawUnsavedChangesDialog();
         void DrawRecoveryDialog();
 
@@ -80,8 +85,14 @@ namespace crimson::editor
 
         FrameStats m_frameStats;
 
-        std::unique_ptr<ui::EditorUI> m_ui;
+        ui::Workspace m_workspace;
         const ui::ViewportPanel* m_sceneViewport = nullptr;
+        ui::AssetBrowserPanel* m_assetBrowser = nullptr;
+        ui::ConsolePanel* m_console = nullptr;
+        ui::PreferencesPanel* m_preferences = nullptr;
+
+        // Clicking a message shows the Console
+        ui::Notifications m_notifications;
         std::unique_ptr<SceneCameraController> m_cameraController;
 
         float m_sinceShaderCheck = 0.0f;

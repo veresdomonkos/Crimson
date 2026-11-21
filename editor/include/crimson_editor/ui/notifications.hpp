@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -14,7 +15,8 @@ namespace crimson::editor::ui
     class Notifications
     {
     public:
-        Notifications();
+        // Clicking a message about a problem calls showDetails, which opens what has the details
+        explicit Notifications(std::function<void()> showDetails);
         ~Notifications();
         Notifications(const Notifications&) = delete;
         Notifications& operator=(const Notifications&) = delete;
@@ -34,6 +36,8 @@ namespace crimson::editor::ui
             float Age = 0.0f; // seconds shown, which stops while the mouse is on it
             uint64_t Id = 0;
         };
+
+        std::function<void()> m_showDetails;
 
         uint64_t m_logSubscription = 0;
         bool m_subscribing = false;

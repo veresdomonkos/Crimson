@@ -5,6 +5,7 @@
 
 #include "crimson_editor/ui/imgui_platform.hpp"
 #include "support/fake_window.hpp"
+#include "support/imgui_context.hpp"
 
 using namespace crimson;
 using namespace crimson::editor::ui;
@@ -12,24 +13,6 @@ using namespace crimson::tests;
 
 namespace
 {
-    // The platform needs a context, but no GPU
-    struct ImGuiContextGuard
-    {
-        ImGuiContextGuard()
-        {
-            ImGui::CreateContext();
-
-            // So ImGui leaves the font texture to a renderer, which there isn't one of here, and takes all events at once
-            ImGui::GetIO().BackendFlags |= ImGuiBackendFlags_RendererHasTextures;
-            ImGui::GetIO().ConfigInputTrickleEventQueue = false;
-            ImGui::GetIO().IniFilename = nullptr;
-        }
-
-        ~ImGuiContextGuard() { ImGui::DestroyContext(); }
-        ImGuiContextGuard(const ImGuiContextGuard&) = delete;
-        ImGuiContextGuard& operator=(const ImGuiContextGuard&) = delete;
-    };
-
     void Send(ImGuiPlatform& platform, Event&& event)
     {
         platform.OnEvent(event);

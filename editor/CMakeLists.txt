@@ -33,11 +33,9 @@ set(EDITOR_HEADERS
     include/crimson_editor/ui/asset_tiles.hpp
     include/crimson_editor/ui/component_fields.hpp
     include/crimson_editor/ui/console_panel.hpp
-    include/crimson_editor/ui/editor_ui.hpp
     include/crimson_editor/ui/hierarchy_panel.hpp
     include/crimson_editor/ui/inspector_panel.hpp
     include/crimson_editor/ui/notifications.hpp
-    include/crimson_editor/ui/panel.hpp
     include/crimson_editor/ui/preferences_panel.hpp
     include/crimson_editor/ui/scene_settings_panel.hpp
     include/crimson_editor/ui/scene_viewport_panel.hpp
@@ -72,7 +70,6 @@ set(EDITOR_SOURCES
     src/ui/asset_tiles.cpp
     src/ui/component_fields.cpp
     src/ui/console_panel.cpp
-    src/ui/editor_ui.cpp
     src/ui/hierarchy_panel.cpp
     src/ui/inspector_panel.cpp
     src/ui/notifications.cpp

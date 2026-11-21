@@ -128,7 +128,7 @@ namespace crimson::editor::ui
         return m_currentFolder.empty() ? name : m_currentFolder + "/" + name;
     }
 
-    void AssetBrowserPanel::ShowPinged(AssetID asset)
+    void AssetBrowserPanel::Ping(AssetID asset)
     {
         const AssetInfo* info = m_context.Session.GetAssets().GetInfo(asset);
         if (!info || IsInternal(*info))
@@ -146,20 +146,12 @@ namespace crimson::editor::ui
         m_pingStart = ImGui::GetTime();
         m_scrollToPinged = true;
 
-        // Brings the panel's tab to the front
-        ImGui::SetNextWindowFocus();
+        // Opens the panel if it is closed, and brings its tab to the front
+        Show();
     }
 
-    void AssetBrowserPanel::OnImGui()
+    void AssetBrowserPanel::Draw()
     {
-        if (m_context.PingedAsset)
-        {
-            ShowPinged(m_context.PingedAsset);
-            m_context.PingedAsset = {};
-        }
-
-        ImGui::Begin("Assets");
-
         RefreshWhenRefocused();
 
         if (!m_builtOnce || m_builtVersion != m_context.Session.GetAssets().Version() || m_builtShowingEngine != m_settings.GetShowEngineContent())
@@ -189,8 +181,6 @@ namespace crimson::editor::ui
         }
 
         DrawDialogs();
-
-        ImGui::End();
     }
 
     void AssetBrowserPanel::DrawToolbar()

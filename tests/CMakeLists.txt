@@ -1,6 +1,7 @@
 add_executable(CrimsonTests
     support/fake_gpu.hpp
     support/fake_window.hpp
+    support/imgui_context.hpp
     support/log_counter.hpp
     support/scene_fields.hpp
     support/temp_folder.hpp
@@ -28,6 +29,7 @@ add_executable(CrimsonTests
     editor/test_asset_inspector_prune.cpp
     editor/test_asset_picker.cpp
     editor/test_asset_thumbnails.cpp
+    editor/test_command_menu.cpp
     editor/test_component_fields.cpp
     editor/test_edit_history.cpp
     editor/test_editor_theme.cpp
@@ -41,10 +43,12 @@ add_executable(CrimsonTests
     editor/test_scene_view.cpp
     editor/test_script_editor.cpp
     editor/test_system_shell.cpp
+    editor/test_workspace.cpp
 )
 
-# The engine's src folder is for the parts of the backends that run without a GPU, such as GLSL translation
-target_include_directories(CrimsonTests PRIVATE . ${PROJECT_SOURCE_DIR}/engine/src)
+# The engine's src folder is for the parts of the backends that run without a GPU, such as GLSL translation, and the UI
+# layer's for its private headers, which the tests of what is inside it include
+target_include_directories(CrimsonTests PRIVATE . ${PROJECT_SOURCE_DIR}/engine/src ${PROJECT_SOURCE_DIR}/editor/ui/src)
 
 # For the tests that read the sample projects
 target_compile_definitions(CrimsonTests PRIVATE CRIMSON_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

@@ -5,16 +5,8 @@
 
 namespace crimson::editor::ui
 {
-    void ViewportPanel::OnImGui()
+    void ViewportPanel::Draw()
     {
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGui::Begin(m_name.c_str(), nullptr,
-            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoNavInputs);
-        ImGui::PopStyleVar();
-
-        m_hovered = ImGui::IsWindowHovered();
-        m_focused = ImGui::IsWindowFocused();
-
         const ImVec2 origin = ImGui::GetCursorScreenPos();
         const ImVec2 avail  = ImGui::GetContentRegionAvail();
         m_contentSize = avail;
@@ -39,7 +31,5 @@ namespace crimson::editor::ui
 
             OnImageDrawn(position, size);
         }
-
-        ImGui::End();
     }
 }

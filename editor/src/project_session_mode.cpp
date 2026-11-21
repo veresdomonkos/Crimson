@@ -20,6 +20,7 @@
 #include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/hierarchy_panel.hpp"
+#include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/inspector_panel.hpp"
 #include "crimson_editor/ui/preferences_panel.hpp"
 #include "crimson_editor/ui/scene_settings_panel.hpp"
@@ -55,7 +56,9 @@ namespace crimson::editor
 
                          m_session.ForgetAssets(removed);
                      },
-                     .OpenCodeFile = [this](const std::filesystem::path& file) { script_editor::Open(m_services.Settings.GetScriptEditor(), file, m_session.GetProject().Root()); } }
+                     .OpenCodeFile = [this](const std::filesystem::path& file) { script_editor::Open(m_services.Settings.GetScriptEditor(), file, m_session.GetProject().Root()); },
+                     .ShowAsset = [this](AssetID asset) { m_assetBrowser->Ping(asset); } },
+          m_notifications([this] { m_console->Show(); })
     {
         LOG_INFO("[Editor] Opening project '{}' at {}", m_session.GetProject().Name(), m_session.GetProject().Root().string());
 
@@ -63,20 +66,11 @@ namespace crimson::editor
         ExportShaderIncludes(m_session.GetProject());
 
         m_sceneRenderer = std::make_unique<SceneRenderer>(GpuResources(), *m_services.Graphics.Renderer, m_session.GetAssets());
-        // The menu is drawn in the middle of a frame, and undoing can create entities, which load GPU resources
-        m_ui = std::make_unique<ui::EditorUI>(ui::MainMenuActions{
-            .SaveAll = [this] { SaveAll(); },
-            .CloseProject = [this] { RequestClose(m_services.CloseProject); },
-            .Undo = [this] { m_context.Deferred.emplace_back([this] { m_session.Undo(); }); },
-            .Redo = [this] { m_context.Deferred.emplace_back([this] { m_session.Redo(); }); },
-            .CanUndo = [this] { return m_session.GetHistory().CanUndo(); },
-            .CanRedo = [this] { return m_session.GetHistory().CanRedo(); }
-        });
-
         CreateRenderTargets();
         SetupRenderer();
         ApplyToneMapping();
         SetupUI();
+        SetupCommands();
 
         m_cameraController = std::make_unique<SceneCameraController>(m_camera, m_services.AppInput, m_services.AppWindow, *m_sceneViewport);
 
@@ -113,17 +107,47 @@ namespace crimson::editor
 
     void ProjectSessionMode::SetupUI()
     {
-        m_sceneViewport = &m_ui->AddPanel<ui::SceneViewportPanel>("Scene", m_mainColor, 16.0f / 9.0f, m_context, m_sceneView);
-        m_ui->AddPanel<ui::ViewportPanel>("Shadow Map", m_sceneRenderer->GetShadowAtlas(), 1.0f);
-        m_ui->AddPanel<ui::AssetBrowserPanel>(m_context, m_services.Settings, m_services.AppWindow); // before the console, for its tab to be in front
-        m_ui->AddPanel<ui::ConsolePanel>();
-        m_ui->AddPanel<ui::HierarchyPanel>(m_context);
-        m_ui->AddPanel<ui::InspectorPanel>(m_context);
-        m_ui->AddPanel<ui::StatsPanel>(m_frameStats, m_services.RendererType);
-        m_ui->AddPanel<ui::SceneSettingsPanel>(m_context);
+        m_sceneViewport = &m_workspace.AddPanel<ui::SceneViewportPanel>(m_mainColor, 16.0f / 9.0f, m_context, m_sceneView);
+        m_workspace.AddPanel<ui::ViewportPanel>(ui::PanelInfo{ .Title = "Shadow Map", .Icon = ui::icons::kTexture, .Slot = ui::DockSlot::RightBottom, .FillsWindow = true },
+                                                m_sceneRenderer->GetShadowAtlas(), 1.0f);
+        m_assetBrowser = &m_workspace.AddPanel<ui::AssetBrowserPanel>(m_context, m_services.Settings, m_services.AppWindow);
+        m_console = &m_workspace.AddPanel<ui::ConsolePanel>();
+        m_workspace.AddPanel<ui::HierarchyPanel>(m_context);
+        m_workspace.AddPanel<ui::InspectorPanel>(m_context);
+        m_workspace.AddPanel<ui::StatsPanel>(m_frameStats, m_services.RendererType);
+        m_workspace.AddPanel<ui::SceneSettingsPanel>(m_context);
+        m_preferences = &m_workspace.AddPanel<ui::PreferencesPanel>(m_services.Settings, m_services.AppWindow);
+    }
 
-        // Last, for its Edit menu item to come after the Hierarchy's
-        m_ui->AddPanel<ui::PreferencesPanel>(m_services.Settings, m_services.AppWindow);
+    void ProjectSessionMode::SetupCommands()
+    {
+        // Undoing and redoing can create entities, which load GPU resources, so they wait until after the frame
+        m_workspace.AddCommand({ .MenuPath = "File/Save All", .Priority = 0, .Shortcuts = { { Key::S, KeyModifiers::Control } },
+                                 .Run = [this] { SaveAll(); } });
+
+        m_workspace.AddCommand({ .MenuPath = "File/Close Project", .Priority = 1,
+                                 .Run = [this] { RequestClose(m_services.CloseProject); } });
+
+        m_workspace.AddCommand({ .MenuPath = "Edit/Undo", .Priority = 100, .Shortcuts = { { Key::Z, KeyModifiers::Control } }, .Repeats = true,
+                                 .Enabled = [this] { return m_session.GetHistory().CanUndo(); },
+                                 .Run = [this] { m_context.Deferred.emplace_back([this] { m_session.Undo(); }); } });
+
+        m_workspace.AddCommand({ .MenuPath = "Edit/Redo", .Priority = 101,
+                                 .Shortcuts = { { Key::Y, KeyModifiers::Control }, { Key::Z, KeyModifiers::Control | KeyModifiers::Shift } }, .Repeats = true,
+                                 .Enabled = [this] { return m_session.GetHistory().CanRedo(); },
+                                 .Run = [this] { m_context.Deferred.emplace_back([this] { m_session.Redo(); }); } });
+
+        m_workspace.AddCommand({ .MenuPath = "Edit/Preferences...", .Priority = 150,
+                                 .Run = [this] { m_preferences->Show(); } });
+
+        // While flying, F is a key of the camera
+        m_workspace.AddCommand({ .Shortcuts = { { Key::F } },
+                                 .Enabled = [this]
+                                 {
+                                     return m_session.GetSelected() && !m_sceneView.IsLookingThrough()
+                                         && !m_services.AppInput.IsMouseButtonDown(MouseButton::Right);
+                                 },
+                                 .Run = [this] { m_cameraController->Frame(m_session.GetSelected(), m_session.GetAssets()); } });
     }
 
     bool ProjectSessionMode::RunDeferred()
@@ -153,7 +177,7 @@ namespace crimson::editor
 
         // What went wrong is already in the Console, and on screen, as each failure logs an error
         if (saved)
-            m_ui->GetNotifications().Push(ui::Notifications::Kind::Success, "Saved");
+            m_notifications.Push(ui::Notifications::Kind::Success, "Saved");
 
         return saved;
     }
@@ -191,7 +215,7 @@ namespace crimson::editor
             // Stays if something couldn't be saved, as it is better than losing the edit
             if (m_session.SaveAllAndClose())
             {
-                m_ui->GetNotifications().Push(ui::Notifications::Kind::Success, "Saved");
+                m_notifications.Push(ui::Notifications::Kind::Success, "Saved");
                 close = true;
             }
         }
@@ -286,7 +310,11 @@ namespace crimson::editor
         // The Scene view sets it again while the gizmo is dragged, and may not draw the gizmo at all
         m_context.GizmoInUse = false;
 
-        m_ui->Draw();
+        m_workspace.Draw();
+
+        // Above the panels
+        m_notifications.Draw();
+
         m_context.Picker.Draw(m_session.GetAssets(), m_context.Thumbnails);
         DrawUnsavedChangesDialog();
         DrawRecoveryDialog();
@@ -319,7 +347,7 @@ namespace crimson::editor
                 ? "1 asset this scene uses is missing, see the Console"
                 : std::to_string(missing) + " assets this scene uses are missing, see the Console";
 
-            m_ui->GetNotifications().Push(ui::Notifications::Kind::Warning, text);
+            m_notifications.Push(ui::Notifications::Kind::Warning, text);
         }
 
         // The editor camera stays where it is while a scene camera is looked through
@@ -328,9 +356,7 @@ namespace crimson::editor
         else
             m_cameraController->Update(deltaTime);
 
-        HandleShortcuts();
-
-        // Last, as undoing and redoing by shortcut can change the settings
+        // Last, as undoing and redoing can change the settings
         ApplyToneMapping();
     }
 
@@ -374,28 +400,5 @@ namespace crimson::editor
         }
 
         stats.LastFrameTime = now;
-    }
-
-    void ProjectSessionMode::HandleShortcuts()
-    {
-        const ImGuiIO& io = ImGui::GetIO();
-
-        if (io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_S, false))
-            SaveAll();
-
-        // In a text field these are the field's own
-        if (io.KeyCtrl && !io.WantTextInput)
-        {
-            if (ImGui::IsKeyPressed(ImGuiKey_Z) && !io.KeyShift)
-                m_session.Undo();
-            else if (ImGui::IsKeyPressed(ImGuiKey_Y) || (ImGui::IsKeyPressed(ImGuiKey_Z) && io.KeyShift))
-                m_session.Redo();
-        }
-
-        if (!ImGui::GetIO().WantTextInput && !m_services.AppInput.IsMouseButtonDown(MouseButton::Right)
-            && ImGui::IsKeyPressed(ImGuiKey_F, false) && m_session.GetSelected() && !m_sceneView.IsLookingThrough())
-        {
-            m_cameraController->Frame(m_session.GetSelected(), m_session.GetAssets());
-        }
     }
 }

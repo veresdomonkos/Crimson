@@ -54,7 +54,7 @@ namespace crimson::editor::ui
         const bool missing = assets.IsMissing(shown);
 
         if (frameClicked && overName && shown)
-            context.PingedAsset = shown;
+            context.ShowAsset(shown);
 
         if (hovered)
         {

@@ -1,25 +1,41 @@
 #pragma once
 #include <array>
 #include <functional>
+#include <string>
 #include <unordered_set>
 #include <vector>
 
 #include <imgui.h>
 
 #include "crimson_editor/editor_context.hpp"
-#include "panel.hpp"
+#include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/panel.hpp"
 
 namespace crimson::editor::ui
 {
     class HierarchyPanel : public Panel
     {
     public:
-        explicit HierarchyPanel(EditorContext& context) : m_context(context) {}
-        void OnImGui() override;
-
-        // The Edit and Create menus, which do what the tree's shortcuts and right-click menu do
-        void OnMainMenuBar() override;
+        explicit HierarchyPanel(EditorContext& context);
+    protected:
+        void Draw() override;
     private:
+        // What the Create menus offer: Create Empty, and a preset of a component for each of the components'
+        struct CreateOption
+        {
+            std::string Menu; // empty for Create Empty
+            std::string Name;
+            const ComponentType* Type = nullptr;
+            const ComponentPreset* Preset = nullptr;
+        };
+
+        // Grouped by menu, in the order the menus and the components were registered
+        [[nodiscard]] std::vector<CreateOption> ListCreateOptions() const;
+        void Create(const CreateOption& option, Entity parent);
+
+        // What comes from an instance's scene can only be looked at
+        [[nodiscard]] bool IsSelectionEditable() const;
+
         void DrawSearch();
         bool CollectMatches(entt::entity handle);
         void DrawEntity(entt::entity handle);

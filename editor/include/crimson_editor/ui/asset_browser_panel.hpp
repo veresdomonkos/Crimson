@@ -11,6 +11,7 @@
 
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/editor_settings.hpp"
+#include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/panel.hpp"
 
 namespace crimson::editor::ui
@@ -25,9 +26,14 @@ namespace crimson::editor::ui
     class AssetBrowserPanel : public Panel
     {
     public:
-        AssetBrowserPanel(EditorContext& context, EditorSettings& settings, const Window& window) : m_context(context), m_settings(settings), m_window(window) {}
+        AssetBrowserPanel(EditorContext& context, EditorSettings& settings, const Window& window)
+            : Panel({ .Title = "Assets", .Icon = icons::kFolder, .Slot = DockSlot::Bottom }),
+              m_context(context), m_settings(settings), m_window(window) {}
 
-        void OnImGui() override;
+        // Shows an asset in the grid, and flashes it, as when a field points at it. Opens the panel if it is closed.
+        void Ping(AssetID asset);
+    protected:
+        void Draw() override;
     private:
         struct Item
         {
@@ -55,7 +61,6 @@ namespace crimson::editor::ui
         void Rebuild();
         void RefreshFromDisk();
         void RefreshWhenRefocused();
-        void ShowPinged(AssetID asset);
 
         void DrawToolbar();
         void DrawFolderTree(const std::string& parent);

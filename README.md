@@ -72,6 +72,8 @@ It needs a C++23 compiler, CMake 3.22+, the [Vulkan SDK](https://vulkan.lunarg.c
 | **Scene Settings** | ambient light, the main camera and post-processing (exposure and tone mapping), saved with the scene |
 | **Stats** | frame times, draw calls and triangles |
 
+Every panel but Scene can be closed from its tab and opened again from **View**, which also has **Reset Layout**.
+
 ## Editor controls
 
 Based on Unity's scene view. Mouse controls start over the Scene panel, and the move keys fly the camera while the right mouse button is held.
@@ -89,8 +91,8 @@ Based on Unity's scene view. Mouse controls start over the Scene panel, and the 
 | `Alt` + right mouse (hold) | Zoom |
 | `F` | Frame the selected entity |
 | Left click | Select the nearest mesh under the mouse by its bounds, or clear the selection. The selection gets an outline. |
-| `W` / `E` / `R` | Gizmo: move / rotate / scale |
-| `Delete` | Delete the selected entity, while the Scene panel has focus |
+| `W` / `E` / `R` | Gizmo: move / rotate / scale, while the Scene panel has focus |
+| `Delete` | Delete the selected entity, while the Scene or the Hierarchy panel has focus |
 | `Left Ctrl` while dragging the gizmo | Snap to 0.5 units, 15 degrees or 0.1 scale |
 | `F2` | Rename the selected entity, in the Hierarchy |
 | `Ctrl+S` | Save everything |

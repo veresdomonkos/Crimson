@@ -34,15 +34,43 @@ namespace crimson::editor::ui
         });
     }
 
+    SceneViewportPanel::SceneViewportPanel(TextureHandle texture, float aspect, EditorContext& context, SceneView& view)
+        : ViewportPanel({ .Title = "Scene", .Icon = icons::kScene, .Slot = DockSlot::Center, .Closable = false, .FillsWindow = true }, texture, aspect),
+          m_context(context), m_view(view)
+    {
+        // While flying, the same keys move the camera
+        const auto notFlying = [] { return !ImGui::IsMouseDown(ImGuiMouseButton_Right); };
+
+        AddCommand({ .Shortcuts = { { Key::W } }, .Enabled = notFlying, .Run = [this] { m_operation = ImGuizmo::TRANSLATE; } });
+        AddCommand({ .Shortcuts = { { Key::E } }, .Enabled = notFlying, .Run = [this] { m_operation = ImGuizmo::ROTATE; } });
+        AddCommand({ .Shortcuts = { { Key::R } }, .Enabled = notFlying, .Run = [this] { m_operation = ImGuizmo::SCALE; } });
+
+        // What is inside an instance can't be changed here
+        AddCommand({ .Shortcuts = { { Key::Delete } },
+                     .Enabled = [this, notFlying]
+                     {
+                         const Entity selected = m_context.Session.GetSelected();
+                         return notFlying() && selected && !selected.HasComponent<InstancedComponent>();
+                     },
+                     .Run = [this]
+                     {
+                         const Entity selected = m_context.Session.GetSelected();
+                         m_context.Deferred.emplace_back([this, selected]
+                         {
+                             m_context.Session.GetSceneEdits().RecordDestroy(selected);
+                             m_context.Session.GetScene().DestroyEntity(selected);
+                         });
+                     } });
+    }
+
     void SceneViewportPanel::OnImageDrawn(const ImVec2& position, const ImVec2& size)
     {
         HandleAssetDrop(position, size);
 
         // Left clicks focus a window by themselves, but flying starts with a right click
         if (IsHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-            ImGui::SetWindowFocus();
+            Show();
 
-        HandleShortcuts();
         DrawGizmo(position, size);
         DrawToolbar(position);
         HandlePicking(position, size);
@@ -172,33 +200,6 @@ namespace crimson::editor::ui
         {
             m_context.Session.GetSceneEdits().Record(entity);
             AssignAsset(*target.Type, target.Field, entity, asset, m_context.Session.GetAssets());
-        }
-    }
-
-    void SceneViewportPanel::HandleShortcuts()
-    {
-        const ImGuiIO& io = ImGui::GetIO();
-
-        // While flying, the same keys move the camera, and with Ctrl they are other shortcuts
-        if (io.WantTextInput || io.KeyCtrl || ImGui::IsMouseDown(ImGuiMouseButton_Right))
-            return;
-
-        if (IsFocused() || IsHovered())
-        {
-            if (ImGui::IsKeyPressed(ImGuiKey_W, false)) m_operation = ImGuizmo::TRANSLATE;
-            if (ImGui::IsKeyPressed(ImGuiKey_E, false)) m_operation = ImGuizmo::ROTATE;
-            if (ImGui::IsKeyPressed(ImGuiKey_R, false)) m_operation = ImGuizmo::SCALE;
-        }
-
-        // What is inside an instance can't be changed here
-        const Entity selected = m_context.Session.GetSelected();
-        if (IsFocused() && selected && !selected.HasComponent<InstancedComponent>() && ImGui::IsKeyPressed(ImGuiKey_Delete, false))
-        {
-            m_context.Deferred.emplace_back([this, selected]
-            {
-                m_context.Session.GetSceneEdits().RecordDestroy(selected);
-                m_context.Session.GetScene().DestroyEntity(selected);
-            });
         }
     }
 

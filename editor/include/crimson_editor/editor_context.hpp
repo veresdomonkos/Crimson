@@ -32,8 +32,8 @@ namespace crimson::editor
         // The one picker that can be open: fields open it and take what it chose the next frame
         ui::AssetPicker Picker;
 
-        // Set by a field to show the asset in the Assets panel, which clears it
-        AssetID PingedAsset;
+        // Called by a field to show an asset in the Assets panel
+        std::function<void(AssetID)> ShowAsset;
 
         // Panels draw in the middle of a frame, when GPU resources can't change. These run right after it.
         std::vector<std::function<void()>> Deferred;

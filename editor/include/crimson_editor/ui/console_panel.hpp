@@ -26,7 +26,8 @@ namespace crimson::editor::ui
         // From any thread. The entry shows up in the Console the next time it is drawn.
         void AddLog(LogLevel level, const std::string& message, const std::string& stackTrace = "");
         void Clear();
-        void OnImGui() override;
+    protected:
+        void Draw() override;
     private:
         // Moves what AddLog was given into the lists, on the main thread
         void DrainPending();

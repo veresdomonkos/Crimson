@@ -20,39 +20,15 @@ namespace crimson::editor::ui
 {
     constexpr const char* kSystemDefault = "System default";
 
-    void PreferencesPanel::OnMainMenuBar()
+    void PreferencesPanel::OnOpened()
     {
-        // Adds to the Edit menu the Hierarchy started
-        if (ImGui::BeginMenu("Edit"))
-        {
-            ImGui::Separator();
-
-            if (ImGui::MenuItem("Preferences..."))
-            {
-                m_open = true;
-                m_found = script_editor::FindCodeEditors();
-                ImGui::SetWindowFocus("Preferences");
-            }
-
-            ImGui::EndMenu();
-        }
+        m_found = script_editor::FindCodeEditors();
     }
 
-    void PreferencesPanel::OnImGui()
+    void PreferencesPanel::Draw()
     {
-        if (!m_open)
-            return;
-
-        const float fontSize = ImGui::GetFontSize();
-        ImGui::SetNextWindowSize(ImVec2(fontSize * 36.0f, fontSize * 14.0f), ImGuiCond_FirstUseEver);
-
-        if (ImGui::Begin("Preferences", &m_open, ImGuiWindowFlags_NoCollapse))
-        {
-            theme::SectionTitle("External Tools");
-            DrawScriptEditor();
-        }
-
-        ImGui::End();
+        theme::SectionTitle("External Tools");
+        DrawScriptEditor();
     }
 
     void PreferencesPanel::DrawScriptEditor()

@@ -15,10 +15,8 @@
 
 namespace crimson::editor::ui
 {
-    void InspectorPanel::OnImGui()
+    void InspectorPanel::Draw()
     {
-        ImGui::Begin("Inspector");
-
         // Each selection's fields have ids of their own, so what the asset picker chose for one can't reach another's
         if (m_context.Session.GetSelectedAsset())
         {
@@ -54,8 +52,6 @@ namespace crimson::editor::ui
         {
             theme::EmptyHint("Select an entity in the Hierarchy or the Scene view, or an asset in the Assets panel");
         }
-
-        ImGui::End();
     }
 
     void InspectorPanel::DrawHeader(Entity entity)

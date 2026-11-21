@@ -14,6 +14,7 @@
 namespace crimson::editor::ui
 {
     ConsolePanel::ConsolePanel()
+        : Panel({ .Title = "Console", .Icon = icons::kInfo, .Slot = DockSlot::Bottom, .TabOrder = 1 })
     {
         m_LogSubscription = Logger::Subscribe([this](LogLevel level, const std::string& message)
         {
@@ -123,10 +124,8 @@ namespace crimson::editor::ui
         return clicked;
     }
 
-    void ConsolePanel::OnImGui()
+    void ConsolePanel::Draw()
     {
-        ImGui::Begin("Console");
-
         DrainPending();
         DrawToolbar();
 
@@ -158,8 +157,6 @@ namespace crimson::editor::ui
         // Clicking in the list can change the selection, so it is checked again
         if (m_SelectedIndex >= 0 && m_SelectedIndex < static_cast<int>(logs.size()))
             DrawDetails(logs[m_SelectedIndex]);
-
-        ImGui::End();
     }
 
     void ConsolePanel::DrawToolbar()

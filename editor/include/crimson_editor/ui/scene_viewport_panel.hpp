@@ -14,8 +14,7 @@ namespace crimson::editor::ui
     class SceneViewportPanel : public ViewportPanel
     {
     public:
-        SceneViewportPanel(std::string_view name, TextureHandle texture, float aspect, EditorContext& context, SceneView& view)
-            : ViewportPanel(name, texture, aspect), m_context(context), m_view(view) {}
+        SceneViewportPanel(TextureHandle texture, float aspect, EditorContext& context, SceneView& view);
     protected:
         void OnImageDrawn(const ImVec2& position, const ImVec2& size) override;
     private:
@@ -28,7 +27,6 @@ namespace crimson::editor::ui
         // False when the mouse is on the bars around the image. The ray starts on the near plane, as an orthographic view
         // has no eye for it to start from.
         bool GetRayUnderMouse(const ImVec2& position, const ImVec2& size, glm::vec3& origin, glm::vec3& direction) const;
-        void HandleShortcuts();
         void DrawToolbar(const ImVec2& position);
         void DrawGizmo(const ImVec2& position, const ImVec2& size);
     private:

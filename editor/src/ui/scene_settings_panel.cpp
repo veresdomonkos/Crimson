@@ -5,7 +5,6 @@
 #include <vector>
 
 #include <imgui.h>
-#include <imgui_internal.h>
 
 #include <crimson/scene/scene_camera.hpp>
 #include <crimson/scene/scene_serializer.hpp>
@@ -31,20 +30,11 @@ namespace crimson::editor::ui
             CollectCameras(scene, child, cameras);
     }
 
-    void SceneSettingsPanel::OnImGui()
+    void SceneSettingsPanel::Draw()
     {
-        // A layout saved before this panel existed doesn't know about it, so it joins its neighbor
-        if (const ImGuiWindow* stats = ImGui::FindWindowByName("Stats"); stats && stats->DockId != 0)
-            ImGui::SetNextWindowDockID(stats->DockId, ImGuiCond_FirstUseEver);
-
-        ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 15.0f, 0.0f), ImGuiCond_FirstUseEver);
-        ImGui::Begin(kSceneSettingsWindow);
-
         linear_color::Edit("Ambient", &m_context.Session.GetSettings().Ambient.x, 3);
         DrawMainCamera();
         DrawPostProcessing();
-
-        ImGui::End();
     }
 
     void SceneSettingsPanel::DrawMainCamera()

@@ -108,6 +108,33 @@ TEST_CASE("The editor opens a project and draws it", "[editor]")
 
     // Bigger than the project manager's 1000. Not exactly the editor's 1280, as Windows limits a window to the screen.
     CHECK(app.Services().AppWindow.Width() > 1000);
+
+    // Every panel that can be closed draws again after it was shown again
+    ProjectSessionMode& session = dynamic_cast<ProjectSessionMode&>(app.CurrentMode());
+
+    for (const auto& panel : session.GetWorkspace().Panels())
+    {
+        if (panel->Info().Closable)
+            panel->Close();
+    }
+
+    RunFrames(app);
+
+    for (const auto& panel : session.GetWorkspace().Panels())
+    {
+        CAPTURE(panel->Info().Title);
+        CHECK(panel->IsOpen() == !panel->Info().Closable);
+
+        panel->Show();
+    }
+
+    RunFrames(app);
+
+    for (const auto& panel : session.GetWorkspace().Panels())
+    {
+        CAPTURE(panel->Info().Title);
+        CHECK(panel->IsOpen());
+    }
 }
 
 TEST_CASE("Starting with --project goes straight to it", "[editor]")
@@ -337,18 +364,26 @@ TEST_CASE_METHOD(AssetFixture, "A pinged asset is shown in the Assets panel", "[
     const AssetID selected = Assets().Find<MaterialAsset>("materials/floor.mat");
     Context().Session.SelectAsset(selected);
 
-    Context().PingedAsset = Assets().FindId("textures/picture.bmp");
-    REQUIRE(Context().PingedAsset);
+    // It opens the panel if it was closed
+    const auto assetsPanel = std::ranges::find_if(Session().GetWorkspace().Panels(), [](const auto& panel) { return panel->Info().Title == "Assets"; });
+    REQUIRE(assetsPanel != Session().GetWorkspace().Panels().end());
+    (*assetsPanel)->Close();
+
+    const AssetID picture = Assets().FindId("textures/picture.bmp");
+    REQUIRE(picture);
+    Context().ShowAsset(picture);
     RunFrames(App);
 
-    CHECK_FALSE(Context().PingedAsset);
+    CHECK((*assetsPanel)->IsOpen());
     CHECK(Context().Session.GetSelectedAsset() == selected);
 
     // An engine asset is only in the panel while the engine's content is shown, so pinging one turns that on
     EditorSettings& settings = App.Services().Settings;
     settings.SetShowEngineContent(false);
 
-    Context().PingedAsset = Assets().FindId("engine/materials/M_Default.mat");
+    const AssetID engineMaterial = Assets().FindId("engine/materials/M_Default.mat");
+    REQUIRE(engineMaterial);
+    Context().ShowAsset(engineMaterial);
     RunFrames(App);
 
     CHECK(settings.GetShowEngineContent());

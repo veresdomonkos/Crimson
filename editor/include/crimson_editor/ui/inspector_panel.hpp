@@ -1,15 +1,19 @@
 #pragma once
 #include "crimson_editor/editor_context.hpp"
 #include "crimson_editor/ui/asset_inspector.hpp"
-#include "panel.hpp"
+#include "crimson_editor/ui/icons.hpp"
+#include "crimson_editor/ui/panel.hpp"
 
 namespace crimson::editor::ui
 {
     class InspectorPanel : public Panel
     {
     public:
-        explicit InspectorPanel(EditorContext& context) : m_context(context), m_assetInspector(context) {}
-        void OnImGui() override;
+        explicit InspectorPanel(EditorContext& context)
+            : Panel({ .Title = "Inspector", .Icon = icons::kTransform, .Slot = DockSlot::Right }),
+              m_context(context), m_assetInspector(context) {}
+    protected:
+        void Draw() override;
     private:
         void DrawHeader(Entity entity);
 

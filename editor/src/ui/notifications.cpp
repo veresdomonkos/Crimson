@@ -47,7 +47,8 @@ namespace crimson::editor::ui
         }
     }
 
-    Notifications::Notifications()
+    Notifications::Notifications(std::function<void()> showDetails)
+        : m_showDetails(std::move(showDetails))
     {
         // Subscribing hands over what was logged before, which isn't news anymore
         m_subscribing = true;
@@ -146,7 +147,7 @@ namespace crimson::editor::ui
                 if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
                 {
                     if (problem)
-                        ImGui::SetWindowFocus("Console");
+                        m_showDetails();
 
                     dismissed.push_back(message.Id);
                 }

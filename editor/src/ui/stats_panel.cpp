@@ -4,11 +4,8 @@
 
 namespace crimson::editor::ui
 {
-    void StatsPanel::OnImGui()
+    void StatsPanel::Draw()
     {
-        ImGui::SetNextWindowSize(ImVec2(ImGui::GetFontSize() * 15.0f, 0.0f), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Stats");
-
 #ifdef NDEBUG
         constexpr const char* buildType = "Release";
 #else
@@ -37,7 +34,5 @@ namespace crimson::editor::ui
         ImGui::Text("Pipeline binds: %u", m_stats.Render.PipelineBinds);
         ImGui::Text("Material binds: %u", m_stats.Render.MaterialBinds);
         ImGui::Text("Buffer binds: %u", m_stats.Render.BufferBinds);
-
-        ImGui::End();
     }
 }
