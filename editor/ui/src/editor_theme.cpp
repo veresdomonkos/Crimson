@@ -14,7 +14,7 @@
 #include <crimson/asset_manager/importers/texture_asset.hpp>
 #include <crimson/core/log.hpp>
 
-#include "crimson_editor/editor_resources.hpp"
+#include "ui_resources.hpp"
 
 namespace crimson::editor::ui
 {
@@ -24,7 +24,7 @@ namespace crimson::editor::ui
     // The bytes are static, so the atlas must not try to free them
     static ImFont* AddEmbeddedFont(const char* path, const ImFontConfig& base)
     {
-        const EmbeddedFile* file = FindEmbeddedFile(GetEditorResources(), path);
+        const EmbeddedFile* file = FindEmbeddedFile(GetUiResources(), path);
         if (!file)
         {
             LOG_ERROR("[Editor] The embedded font {} is missing", path);

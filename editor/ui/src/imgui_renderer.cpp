@@ -14,7 +14,7 @@
 #include <crimson/core/log.hpp>
 #include <crimson/renderer/shader_compiler.hpp>
 
-#include "crimson_editor/editor_resources.hpp"
+#include "ui_resources.hpp"
 
 namespace crimson::editor::ui
 {
@@ -37,7 +37,7 @@ namespace crimson::editor::ui
     ImGuiRenderer::ImGuiRenderer(GpuResourceManager& gpu)
         : m_gpu(gpu)
     {
-        const EmbeddedFile* file = FindEmbeddedFile(GetEditorResources(), kShaderPath);
+        const EmbeddedFile* file = FindEmbeddedFile(GetUiResources(), kShaderPath);
         if (!file)
         {
             LOG_ERROR("[Editor] No embedded shader at '{}'", kShaderPath);

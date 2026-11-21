@@ -86,7 +86,7 @@ jobs:
 
       - name: Download the Git LFS files
         shell: pwsh
-        run: git lfs pull --include="editor/resources/**,engine/resources/**,samples/**"
+        run: git lfs pull --include="editor/resources/**,editor/ui/resources/**,engine/resources/**,samples/**"
 
       # MSYS2's Vulkan library is named libvulkan-1.dll, which wouldn't be on a user's machine.
       # The SDK's is vulkan-1.dll, which graphics drivers install.
@@ -191,7 +191,7 @@ jobs:
           submodules: recursive
 
       - name: Download the embedded files from Git LFS
-        run: git lfs pull --include="editor/resources/**,engine/resources/**"
+        run: git lfs pull --include="editor/resources/**,editor/ui/resources/**,engine/resources/**"
 
       # The Ubuntu mirror is sometimes so slow that downloading the packages takes most of an hour, so the ones it
       # sent before come from the cache. apt still installs them as usual, and only downloads what is newer.
@@ -328,7 +328,7 @@ jobs:
           submodules: recursive
 
       - name: Download the embedded files from Git LFS
-        run: git lfs pull --include="editor/resources/**,engine/resources/**"
+        run: git lfs pull --include="editor/resources/**,editor/ui/resources/**,engine/resources/**"
 
       # The Ubuntu mirror is sometimes so slow that downloading the packages takes most of an hour, so the ones it
       # sent before come from the cache. apt still installs them as usual, and only downloads what is newer.

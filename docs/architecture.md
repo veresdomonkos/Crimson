@@ -311,7 +311,7 @@ The engine's own shaders, materials, meshes and scenes live in `engine/resources
 
 The built-in meshes are sized like Unity's: `engine/meshes/SM_Cube.obj` (1 m), `SM_Sphere.obj` (1 m across), `SM_Cylinder.obj` and `SM_Capsule.obj` (2 m tall, 1 m across), `SM_Plane.obj` (10 m, facing up) and `SM_Quad.obj` (1 m, facing +Z). `tools/generate_primitives.ps1` makes them, so a change goes there and the script is run again.
 
-The embedded files are kept in Git LFS, like the editor's, and CI pulls `engine/resources/` and `editor/resources/` from LFS before building.
+The embedded files are kept in Git LFS, like the editor's, and CI pulls `engine/resources/`, `editor/resources/` and `editor/ui/resources/` from LFS before building.
 
 ## Editor
 
@@ -327,7 +327,7 @@ A project is a folder with a `project.crimson` file and an `assets/` folder. It 
 **The engine doesn't link ImGui and has no UI concepts.** The editor owns the ImGui context (in `EditorApplication`, which also makes sure the window, the backend and the context go in the right order) and two classes in `editor/src/ui/`:
 
 - **`ImGuiPlatform`** turns the window's events into ImGui's input events, and keeps the display's size, the time of the frame and the mouse cursor ImGui wants up to date before each `ImGui::NewFrame()`. ImGui's clipboard is the window's. Nothing in the editor reaches into GLFW.
-- **`ImGuiRenderer`** records ImGui's draw data as an `Overlay` pass, through `GpuResourceManager` and `FrameRecorder` like any other code. It has one material, made from `editor/resources/shaders/S_ImGui.hlsl`, for all of the UI, and each draw sets its texture with `MaterialProperties`, so there is no material for each texture. Its vertices and indices go into Stream buffers updated every frame, and each ImGui clip rect is the draw's `Scissor`. ImGui's own textures, the fonts, are kept as engine textures: it makes and updates them from the requests ImGui puts in its draw data (`ImGuiBackendFlags_RendererHasTextures`).
+- **`ImGuiRenderer`** records ImGui's draw data as an `Overlay` pass, through `GpuResourceManager` and `FrameRecorder` like any other code. It has one material, made from `editor/ui/resources/shaders/S_ImGui.hlsl`, for all of the UI, and each draw sets its texture with `MaterialProperties`, so there is no material for each texture. Its vertices and indices go into Stream buffers updated every frame, and each ImGui clip rect is the draw's `Scissor`. ImGui's own textures, the fonts, are kept as engine textures: it makes and updates them from the requests ImGui puts in its draw data (`ImGuiBackendFlags_RendererHasTextures`).
 - **An `ImTextureID` is a `TextureHandle`.** `ui::ToImTextureID` and `ui::FromImTextureID` convert between them, so showing a render target or a texture asset needs no registering, and a texture can be destroyed without telling ImGui first.
 
 ### Panels and menus
@@ -377,7 +377,7 @@ A copy of the open scene's unsaved changes is kept, to offer back after the edit
 ### Look and layout
 
 - **Theme:** the editor's colors and sizes are named once in `crimson_editor/ui/editor_theme.hpp` as design tokens (surfaces, one accent, status colors, a spacing scale, one radius, a type scale and a muted color for each kind of asset), and panels use those names rather than writing values out. The size follows the monitor's scaling when the editor starts. [ui.md](ui.md) has the tokens and the rules for them.
-- **Fonts and icons:** Inter Regular and Bold are used for text, at 14 px, with the [Lucide](https://lucide.dev) icon font merged into both, so a label can hold an icon from `crimson_editor/ui/icons.hpp`. Inter is loaded without its private use area, which is where Lucide's icons are. The fonts live in `editor/resources/` and are bundled like the engine's resources, but never go through the asset manager. Their licenses are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+- **Fonts and icons:** Inter Regular and Bold are used for text, at 14 px, with the [Lucide](https://lucide.dev) icon font merged into both, so a label can hold an icon from `crimson_editor/ui/icons.hpp`. Inter is loaded without its private use area, which is where Lucide's icons are. The fonts live in `editor/ui/resources/` and are bundled like the engine's resources, but never go through the asset manager. Their licenses are in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 - **Inspector rows:** they come from `crimson_editor/ui/property_fields.hpp`.
   - The label sits in a column on the left.
   - Vector fields have a stripe for each axis.

@@ -1,3 +1,5 @@
+add_subdirectory(ui)
+
 set(EDITOR_HEADERS
     include/crimson_editor/app_mode.hpp
     include/crimson_editor/asset_edits.hpp
@@ -31,18 +33,12 @@ set(EDITOR_HEADERS
     include/crimson_editor/ui/asset_tiles.hpp
     include/crimson_editor/ui/component_fields.hpp
     include/crimson_editor/ui/console_panel.hpp
-    include/crimson_editor/ui/editor_theme.hpp
     include/crimson_editor/ui/editor_ui.hpp
     include/crimson_editor/ui/hierarchy_panel.hpp
-    include/crimson_editor/ui/icons.hpp
-    include/crimson_editor/ui/imgui_platform.hpp
-    include/crimson_editor/ui/imgui_renderer.hpp
     include/crimson_editor/ui/inspector_panel.hpp
-    include/crimson_editor/ui/linear_color.hpp
     include/crimson_editor/ui/notifications.hpp
     include/crimson_editor/ui/panel.hpp
     include/crimson_editor/ui/preferences_panel.hpp
-    include/crimson_editor/ui/property_fields.hpp
     include/crimson_editor/ui/scene_settings_panel.hpp
     include/crimson_editor/ui/scene_viewport_panel.hpp
     include/crimson_editor/ui/stats_panel.hpp
@@ -76,16 +72,11 @@ set(EDITOR_SOURCES
     src/ui/asset_tiles.cpp
     src/ui/component_fields.cpp
     src/ui/console_panel.cpp
-    src/ui/editor_theme.cpp
     src/ui/editor_ui.cpp
     src/ui/hierarchy_panel.cpp
-    src/ui/imgui_platform.cpp
-    src/ui/imgui_renderer.cpp
     src/ui/inspector_panel.cpp
-    src/ui/linear_color.cpp
     src/ui/notifications.cpp
     src/ui/preferences_panel.cpp
-    src/ui/property_fields.cpp
     src/ui/scene_settings_panel.cpp
     src/ui/scene_viewport_panel.cpp
     src/ui/stats_panel.cpp
@@ -102,8 +93,7 @@ crimson_embed_resources(EditorCore DIRECTORY resources NAMESPACE crimson::editor
 target_link_libraries(EditorCore
     PUBLIC
         Engine
-        imgui
-        imguizmo
+        EditorUI
     PRIVATE
         nfd
 )

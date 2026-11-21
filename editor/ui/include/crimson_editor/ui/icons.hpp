@@ -8,7 +8,7 @@
 #include <crimson/asset_manager/importers/shader_asset.hpp>
 #include <crimson/asset_manager/importers/texture_asset.hpp>
 
-// Icons from the Lucide font (editor/resources/fonts/lucide.ttf, version 1.61.0), merged into the editor's fonts, so they
+// Icons from the Lucide font (editor/ui/resources/fonts/lucide.ttf, version 1.61.0), merged into the editor's fonts, so they
 // can go straight into a label: ImGui::Button(icons::kMove). Only the icons the editor uses are here. To add one, find its
 // codepoint in the codepoints.json of the same Lucide release, and write it as UTF-8.
 
