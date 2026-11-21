@@ -813,7 +813,7 @@ TEST_CASE_METHOD(Fixture, "Updating a region of a texture changes only that regi
     REQUIRE(mesh);
     REQUIRE(material);
 
-    // Four red texels, the first row being the bottom of the quad
+    // Four red texels. The mesh importer flips V, so the first row is the top of the quad.
     const std::array<unsigned char, 16> red = { 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 0, 0, 255 };
     const TextureHandle texture = gpu.CreateTexture({ .Width = 2, .Height = 2 }, red.data());
     REQUIRE(texture);
@@ -834,10 +834,10 @@ TEST_CASE_METHOD(Fixture, "Updating a region of a texture changes only that regi
     gpu.UpdateTexture(texture, { 1, 0, 1, 1 }, green.data());
 
     const Image after = render();
-    CHECK(IsNear(after.AtClip(0.5f, -0.5f), kGreen));
-    CHECK(IsNear(after.AtClip(-0.5f, -0.5f), kRed));
+    CHECK(IsNear(after.AtClip(0.5f, 0.5f), kGreen));
     CHECK(IsNear(after.AtClip(-0.5f, 0.5f), kRed));
-    CHECK(IsNear(after.AtClip(0.5f, 0.5f), kRed));
+    CHECK(IsNear(after.AtClip(-0.5f, -0.5f), kRed));
+    CHECK(IsNear(after.AtClip(0.5f, -0.5f), kRed));
 
     // A region of several rows has them one after the other
     const std::array<unsigned char, 8> blue = { 0, 0, 255, 255, 0, 0, 255, 255 };
@@ -847,8 +847,8 @@ TEST_CASE_METHOD(Fixture, "Updating a region of a texture changes only that regi
     const Image column = render();
     CHECK(IsNear(column.AtClip(-0.5f, -0.5f), kBlue));
     CHECK(IsNear(column.AtClip(-0.5f, 0.5f), kBlue));
-    CHECK(IsNear(column.AtClip(0.5f, -0.5f), kGreen));
-    CHECK(IsNear(column.AtClip(0.5f, 0.5f), kRed));
+    CHECK(IsNear(column.AtClip(0.5f, 0.5f), kGreen));
+    CHECK(IsNear(column.AtClip(0.5f, -0.5f), kRed));
 
     // What can't be updated is reported, and left as it was
     gpu.UpdateTexture(texture, { 1, 1, 2, 1 }, red.data());
@@ -859,7 +859,7 @@ TEST_CASE_METHOD(Fixture, "Updating a region of a texture changes only that regi
     gpu.UpdateTexture(mipped, { 0, 0, 1, 1 }, green.data());
     CHECK(ExpectLoggedErrors("mip levels") == 1);
 
-    CHECK(IsNear(render().AtClip(0.5f, 0.5f), kRed));
+    CHECK(IsNear(render().AtClip(0.5f, -0.5f), kRed));
 
     gpu.DestroyTexture(mipped);
     gpu.SetMaterialTexture(material, "Albedo", {});
@@ -1042,6 +1042,10 @@ TEST_CASE_METHOD(Fixture, "Material properties change one draw, not its material
 {
     Project.Write("left.obj", MakeQuad(-1.0f, -1.0f, 0.0f, 1.0f));
     Project.Write("right.obj", MakeQuad(0.0f, -1.0f, 1.0f, 1.0f));
+    Project.Write("textured.hlsl", kTintedTextureShader);
+    Project.Write("image.bmp", MakeImage());
+    Project.Write("textured.mat", R"({ "shader": "textured.hlsl", "cull": "none", "textures": { "Albedo": "image.bmp" }, "properties": { "Tint": [1, 1, 1, 1] } })");
+    Project.Write("all.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
 
     GpuResourceManager& gpu = *Gpu().GPUResources;
     AssetManager assets(gpu, Project.Path());
@@ -1092,11 +1096,6 @@ TEST_CASE_METHOD(Fixture, "Material properties change one draw, not its material
     CHECK(IsNear(without.AtClip(0.5f, 0.0f), kRed));
 
     // Textures: the blue image of the material, or the green one a draw brings
-    Project.Write("textured.hlsl", kTintedTextureShader);
-    Project.Write("image.bmp", MakeImage());
-    Project.Write("textured.mat", R"({ "shader": "textured.hlsl", "cull": "none", "textures": { "Albedo": "image.bmp" }, "properties": { "Tint": [1, 1, 1, 1] } })");
-    Project.Write("all.obj", MakeQuad(-1.0f, -1.0f, 1.0f, 1.0f));
-
     const Mesh* all = assets.Get<MeshAsset>("all.obj");
     const MaterialHandle textured = *assets.Get<MaterialAsset>("textured.mat");
     REQUIRE(all);
