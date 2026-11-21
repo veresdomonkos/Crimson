@@ -11,7 +11,7 @@
 #include "crimson_editor/ui/editor_theme.hpp"
 #include "crimson_editor/ui/icons.hpp"
 
-namespace crimson::editor::ui
+namespace crimson::editor
 {
     ui::Color AssetColor(AssetType type)
     {

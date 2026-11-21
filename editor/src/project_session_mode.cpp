@@ -15,23 +15,23 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "crimson_editor/editor_settings.hpp"
+#include "crimson_editor/panels/asset_browser_panel.hpp"
+#include "crimson_editor/panels/console_panel.hpp"
+#include "crimson_editor/panels/hierarchy_panel.hpp"
+#include "crimson_editor/panels/inspector_panel.hpp"
+#include "crimson_editor/panels/preferences_panel.hpp"
+#include "crimson_editor/panels/scene_settings_panel.hpp"
+#include "crimson_editor/panels/scene_viewport_panel.hpp"
+#include "crimson_editor/panels/stats_panel.hpp"
+#include "crimson_editor/panels/viewport_panel.hpp"
 #include "crimson_editor/recent_projects.hpp"
 #include "crimson_editor/script_editor.hpp"
-#include "crimson_editor/ui/asset_browser_panel.hpp"
-#include "crimson_editor/ui/console_panel.hpp"
 #include "crimson_editor/ui/editor_theme.hpp"
-#include "crimson_editor/ui/hierarchy_panel.hpp"
 #include "crimson_editor/ui/icons.hpp"
 #include "crimson_editor/ui/input.hpp"
 #include "crimson_editor/ui/layout.hpp"
 #include "crimson_editor/ui/menus.hpp"
 #include "crimson_editor/ui/widgets.hpp"
-#include "crimson_editor/ui/inspector_panel.hpp"
-#include "crimson_editor/ui/preferences_panel.hpp"
-#include "crimson_editor/ui/scene_settings_panel.hpp"
-#include "crimson_editor/ui/scene_viewport_panel.hpp"
-#include "crimson_editor/ui/stats_panel.hpp"
-#include "crimson_editor/ui/viewport_panel.hpp"
 
 namespace crimson::editor
 {
@@ -112,16 +112,16 @@ namespace crimson::editor
 
     void ProjectSessionMode::SetupUI()
     {
-        m_sceneViewport = &m_workspace.AddPanel<ui::SceneViewportPanel>(m_mainColor, 16.0f / 9.0f, m_context, m_sceneView);
-        m_workspace.AddPanel<ui::ViewportPanel>(ui::PanelInfo{ .Title = "Shadow Map", .Icon = ui::icons::kTexture, .Slot = ui::DockSlot::RightBottom, .FillsWindow = true },
+        m_sceneViewport = &m_workspace.AddPanel<SceneViewportPanel>(m_mainColor, 16.0f / 9.0f, m_context, m_sceneView);
+        m_workspace.AddPanel<ViewportPanel>(ui::PanelInfo{ .Title = "Shadow Map", .Icon = ui::icons::kTexture, .Slot = ui::DockSlot::RightBottom, .FillsWindow = true },
                                                 m_sceneRenderer->GetShadowAtlas(), 1.0f);
-        m_assetBrowser = &m_workspace.AddPanel<ui::AssetBrowserPanel>(m_context, m_services.Settings, m_services.AppWindow);
-        m_console = &m_workspace.AddPanel<ui::ConsolePanel>();
-        m_workspace.AddPanel<ui::HierarchyPanel>(m_context);
-        m_workspace.AddPanel<ui::InspectorPanel>(m_context);
-        m_workspace.AddPanel<ui::StatsPanel>(m_frameStats, m_services.RendererType);
-        m_workspace.AddPanel<ui::SceneSettingsPanel>(m_context);
-        m_preferences = &m_workspace.AddPanel<ui::PreferencesPanel>(m_services.Settings, m_services.AppWindow);
+        m_assetBrowser = &m_workspace.AddPanel<AssetBrowserPanel>(m_context, m_services.Settings, m_services.AppWindow);
+        m_console = &m_workspace.AddPanel<ConsolePanel>();
+        m_workspace.AddPanel<HierarchyPanel>(m_context);
+        m_workspace.AddPanel<InspectorPanel>(m_context);
+        m_workspace.AddPanel<StatsPanel>(m_frameStats, m_services.RendererType);
+        m_workspace.AddPanel<SceneSettingsPanel>(m_context);
+        m_preferences = &m_workspace.AddPanel<PreferencesPanel>(m_services.Settings, m_services.AppWindow);
     }
 
     void ProjectSessionMode::SetupCommands()
@@ -182,7 +182,7 @@ namespace crimson::editor
 
         // What went wrong is already in the Console, and on screen, as each failure logs an error
         if (saved)
-            m_notifications.Push(ui::Notifications::Kind::Success, "Saved");
+            m_notifications.Push(Notifications::Kind::Success, "Saved");
 
         return saved;
     }
@@ -207,7 +207,7 @@ namespace crimson::editor
         {
             // Stays if something couldn't be saved, as it is better than losing the edit
             if (m_session.SaveAllAndClose())
-                m_notifications.Push(ui::Notifications::Kind::Success, "Saved");
+                m_notifications.Push(Notifications::Kind::Success, "Saved");
         }
 
         if (ui::Button("Discard"))
@@ -300,7 +300,7 @@ namespace crimson::editor
                 ? "1 asset this scene uses is missing, see the Console"
                 : std::to_string(missing) + " assets this scene uses are missing, see the Console";
 
-            m_notifications.Push(ui::Notifications::Kind::Warning, text);
+            m_notifications.Push(Notifications::Kind::Warning, text);
         }
 
         // The editor camera stays where it is while a scene camera is looked through

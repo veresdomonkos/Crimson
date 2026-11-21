@@ -27,22 +27,22 @@ set(EDITOR_HEADERS
 
     include/crimson_editor/panels/asset_look.hpp
 
-    include/crimson_editor/ui/asset_browser_panel.hpp
-    include/crimson_editor/ui/asset_drag.hpp
-    include/crimson_editor/ui/asset_field.hpp
-    include/crimson_editor/ui/asset_inspector.hpp
-    include/crimson_editor/ui/asset_picker.hpp
-    include/crimson_editor/ui/asset_tiles.hpp
-    include/crimson_editor/ui/component_fields.hpp
-    include/crimson_editor/ui/console_panel.hpp
-    include/crimson_editor/ui/hierarchy_panel.hpp
-    include/crimson_editor/ui/inspector_panel.hpp
-    include/crimson_editor/ui/notifications.hpp
-    include/crimson_editor/ui/preferences_panel.hpp
-    include/crimson_editor/ui/scene_settings_panel.hpp
-    include/crimson_editor/ui/scene_viewport_panel.hpp
-    include/crimson_editor/ui/stats_panel.hpp
-    include/crimson_editor/ui/viewport_panel.hpp
+    include/crimson_editor/panels/asset_browser_panel.hpp
+    include/crimson_editor/panels/asset_drag.hpp
+    include/crimson_editor/panels/asset_field.hpp
+    include/crimson_editor/panels/asset_inspector.hpp
+    include/crimson_editor/panels/asset_picker.hpp
+    include/crimson_editor/panels/asset_tiles.hpp
+    include/crimson_editor/panels/component_fields.hpp
+    include/crimson_editor/panels/console_panel.hpp
+    include/crimson_editor/panels/hierarchy_panel.hpp
+    include/crimson_editor/panels/inspector_panel.hpp
+    include/crimson_editor/panels/notifications.hpp
+    include/crimson_editor/panels/preferences_panel.hpp
+    include/crimson_editor/panels/scene_settings_panel.hpp
+    include/crimson_editor/panels/scene_viewport_panel.hpp
+    include/crimson_editor/panels/stats_panel.hpp
+    include/crimson_editor/panels/viewport_panel.hpp
 )
 
 set(EDITOR_SOURCES
@@ -67,21 +67,21 @@ set(EDITOR_SOURCES
 
     src/panels/asset_look.cpp
 
-    src/ui/asset_browser_panel.cpp
-    src/ui/asset_field.cpp
-    src/ui/asset_inspector.cpp
-    src/ui/asset_picker.cpp
-    src/ui/asset_tiles.cpp
-    src/ui/component_fields.cpp
-    src/ui/console_panel.cpp
-    src/ui/hierarchy_panel.cpp
-    src/ui/inspector_panel.cpp
-    src/ui/notifications.cpp
-    src/ui/preferences_panel.cpp
-    src/ui/scene_settings_panel.cpp
-    src/ui/scene_viewport_panel.cpp
-    src/ui/stats_panel.cpp
-    src/ui/viewport_panel.cpp
+    src/panels/asset_browser_panel.cpp
+    src/panels/asset_field.cpp
+    src/panels/asset_inspector.cpp
+    src/panels/asset_picker.cpp
+    src/panels/asset_tiles.cpp
+    src/panels/component_fields.cpp
+    src/panels/console_panel.cpp
+    src/panels/hierarchy_panel.cpp
+    src/panels/inspector_panel.cpp
+    src/panels/notifications.cpp
+    src/panels/preferences_panel.cpp
+    src/panels/scene_settings_panel.cpp
+    src/panels/scene_viewport_panel.cpp
+    src/panels/stats_panel.cpp
+    src/panels/viewport_panel.cpp
 )
 
 # Everything but main, so the tests can link and drive the editor

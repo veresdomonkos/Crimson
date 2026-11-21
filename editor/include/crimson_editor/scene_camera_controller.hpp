@@ -4,7 +4,7 @@
 #include <crimson/renderer/camera_data.hpp>
 #include <crimson/scene/entity.hpp>
 
-#include "crimson_editor/ui/viewport_panel.hpp"
+#include "crimson_editor/panels/viewport_panel.hpp"
 
 namespace crimson::editor
 {
@@ -12,7 +12,7 @@ namespace crimson::editor
     class SceneCameraController
     {
     public:
-        SceneCameraController(PerspectiveCamera& camera, Input& input, Window& window, const ui::ViewportPanel& viewport);
+        SceneCameraController(PerspectiveCamera& camera, Input& input, Window& window, const ViewportPanel& viewport);
 
         // Sets the point that orbiting goes around and zooming goes towards
         void SetPivot(const glm::vec3& pivot);
@@ -45,7 +45,7 @@ namespace crimson::editor
         PerspectiveCamera& m_camera;
         Input& m_input;
         Window& m_window;
-        const ui::ViewportPanel& m_viewport;
+        const ViewportPanel& m_viewport;
 
         Gesture m_gesture = Gesture::None;
         MouseButton m_gestureButton = MouseButton::Right;

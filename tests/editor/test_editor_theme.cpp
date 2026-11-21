@@ -150,7 +150,7 @@ TEST_CASE("Every corner has the one radius and every border is 1 px", "[editor][
 
 TEST_CASE("Panels write out no colors, radii or font sizes", "[editor][theme]")
 {
-    const std::filesystem::path folder = std::filesystem::path(CRIMSON_SOURCE_DIR) / "editor" / "src" / "ui";
+    const std::filesystem::path folder = std::filesystem::path(CRIMSON_SOURCE_DIR) / "editor" / "src" / "panels";
     REQUIRE(std::filesystem::is_directory(folder));
 
     const std::regex forbidden(

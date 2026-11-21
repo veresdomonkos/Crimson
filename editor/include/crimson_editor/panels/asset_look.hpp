@@ -5,7 +5,7 @@
 #include "crimson_editor/ui/painter.hpp"
 #include "crimson_editor/ui/types.hpp"
 
-namespace crimson::editor::ui
+namespace crimson::editor
 {
     // What tells the kinds of assets apart: the color they are drawn in, and their icon
     [[nodiscard]] ui::Color AssetColor(AssetType type);

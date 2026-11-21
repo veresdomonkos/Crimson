@@ -26,7 +26,7 @@
 #include <crimson_editor/editor_settings.hpp>
 #include <crimson_editor/project_manager_mode.hpp>
 #include <crimson_editor/project_session_mode.hpp>
-#include <crimson_editor/ui/asset_field.hpp>
+#include <crimson_editor/panels/asset_field.hpp>
 #include <crimson_editor/ui/window.hpp>
 
 #include "gpu/gpu_test.hpp"
@@ -332,8 +332,8 @@ namespace
 // field is drawn the way the Inspector draws its own, and the picker is opened for it.
 TEST_CASE_METHOD(AssetFixture, "The asset picker opens from a field and draws both views", "[editor]")
 {
-    using crimson::editor::ui::AssetField;
-    using crimson::editor::ui::AssetPicker;
+    using crimson::editor::AssetField;
+    using crimson::editor::AssetPicker;
 
     AssetPicker& picker = Context().Picker;
     AssetID texture;

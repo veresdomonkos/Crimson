@@ -16,7 +16,7 @@ namespace crimson::editor
     constexpr float kZoomSensitivity = 0.005f;
     constexpr float kMinPivotDistance = 0.1f;
 
-    SceneCameraController::SceneCameraController(PerspectiveCamera& camera, Input& input, Window& window, const ui::ViewportPanel& viewport)
+    SceneCameraController::SceneCameraController(PerspectiveCamera& camera, Input& input, Window& window, const ViewportPanel& viewport)
         : m_camera(camera), m_input(input), m_window(window), m_viewport(viewport)
     {
     }

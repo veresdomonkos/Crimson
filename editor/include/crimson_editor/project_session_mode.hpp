@@ -12,11 +12,11 @@
 #include "crimson_editor/project_session.hpp"
 #include "crimson_editor/scene_camera_controller.hpp"
 #include "crimson_editor/scene_view.hpp"
-#include "crimson_editor/ui/asset_browser_panel.hpp"
-#include "crimson_editor/ui/console_panel.hpp"
-#include "crimson_editor/ui/notifications.hpp"
-#include "crimson_editor/ui/preferences_panel.hpp"
-#include "crimson_editor/ui/viewport_panel.hpp"
+#include "crimson_editor/panels/asset_browser_panel.hpp"
+#include "crimson_editor/panels/console_panel.hpp"
+#include "crimson_editor/panels/notifications.hpp"
+#include "crimson_editor/panels/preferences_panel.hpp"
+#include "crimson_editor/panels/viewport_panel.hpp"
 #include "crimson_editor/ui/workspace.hpp"
 
 namespace crimson::editor
@@ -86,13 +86,13 @@ namespace crimson::editor
         FrameStats m_frameStats;
 
         ui::Workspace m_workspace;
-        const ui::ViewportPanel* m_sceneViewport = nullptr;
-        ui::AssetBrowserPanel* m_assetBrowser = nullptr;
-        ui::ConsolePanel* m_console = nullptr;
-        ui::PreferencesPanel* m_preferences = nullptr;
+        const ViewportPanel* m_sceneViewport = nullptr;
+        AssetBrowserPanel* m_assetBrowser = nullptr;
+        ConsolePanel* m_console = nullptr;
+        PreferencesPanel* m_preferences = nullptr;
 
         // Clicking a message shows the Console
-        ui::Notifications m_notifications;
+        Notifications m_notifications;
         std::unique_ptr<SceneCameraController> m_cameraController;
 
         float m_sinceShaderCheck = 0.0f;

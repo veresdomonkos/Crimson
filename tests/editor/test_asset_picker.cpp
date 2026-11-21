@@ -3,20 +3,20 @@
 #include <vector>
 
 #include <crimson/asset_manager/importers/material_asset.hpp>
-#include <crimson_editor/ui/asset_field.hpp>
-#include <crimson_editor/ui/asset_picker.hpp>
+#include <crimson_editor/panels/asset_field.hpp>
+#include <crimson_editor/panels/asset_picker.hpp>
 
 #include "support/fake_gpu.hpp"
 #include "support/temp_folder.hpp"
 
 using namespace crimson;
-using crimson::editor::ui::AssetFieldText;
-using crimson::editor::ui::AssetPicker;
-using crimson::editor::ui::PickerEntry;
+using crimson::editor::AssetFieldText;
+using crimson::editor::AssetPicker;
+using crimson::editor::PickerEntry;
 using crimson::tests::FakeGpuResourceManager;
 using crimson::tests::TempFolder;
 
-namespace asset_picker = crimson::editor::ui::asset_picker;
+namespace asset_picker = crimson::editor::asset_picker;
 
 static std::vector<const AssetInfo*> Pointers(const std::vector<AssetInfo>& assets)
 {
