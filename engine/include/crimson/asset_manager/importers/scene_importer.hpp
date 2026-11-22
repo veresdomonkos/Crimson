@@ -14,6 +14,7 @@ namespace crimson
 
         // A copy of the engine's template scene
         std::optional<std::string> NewFile(const AssetManager&) const override;
+        std::optional<std::string> AddMissingIds(const AssetSource& source) const override;
         std::optional<std::string> UpdateReferences(const AssetSource& source, const std::unordered_map<std::string, AssetID>& moved, const AssetManager&) const override;
     };
 }

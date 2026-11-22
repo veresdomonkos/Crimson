@@ -233,6 +233,8 @@ A scene is saved as a `.scene` asset: readable JSON with the entities nested the
 }
 ```
 
+Every entity has an id, which stays the same across loads. The entities of a hand-written file that have none get one written into the file the first time it is read, and a file that can't be written then doesn't open. The engine's own scenes have their ids checked in.
+
 `mainCamera` is the id of the entity that is the scene's main camera, and is left out while none is chosen. A file without it, as older ones are, loads as none chosen, and an id with no entity keeps its reference, so that undoing a delete makes it work again.
 
 `CaptureNode` and `ApplyNode` capture and set one entity apart from its children, which undo uses.

@@ -122,6 +122,8 @@ namespace crimson
         bool Delete(AssetID id);
 
         // The bytes of a project or engine asset's file. Logs when it fails.
+        // A file that lacks ids its type keeps across loads gets them written in first. It is const as that changes
+        // no manager state, only the asset's own file.
         [[nodiscard]] std::optional<std::string> ReadSource(AssetID id) const;
 
         // What an asset's file says, for a type whose files hold data (see its struct). Nothing if it can't be read or parsed.

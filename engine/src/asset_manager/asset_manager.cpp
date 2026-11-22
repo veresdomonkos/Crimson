@@ -615,7 +615,27 @@ namespace crimson
     std::optional<std::string> AssetManager::ReadSource(AssetID id) const
     {
         const auto it = m_assets.find(id);
-        return it != m_assets.end() ? SourceOf(it->second).Read() : std::nullopt;
+        if (it == m_assets.end())
+            return std::nullopt;
+
+        const Record& record = it->second;
+
+        if (!record.Info.ReadOnly)
+        {
+            if (const std::optional<std::string> filled = record.Importer->AddMissingIds(SourceOf(record)))
+            {
+                if (!WriteFileSafely(m_root / fs::path(record.Info.Path), *filled))
+                {
+                    LOG_ERROR("[Assets] {} has entities without an id and can't be written to give them one", record.Info.Path);
+                    return std::nullopt;
+                }
+
+                LOG_INFO("[Assets] Gave the entities in {} their ids", record.Info.Path);
+                return filled;
+            }
+        }
+
+        return SourceOf(record).Read();
     }
 
     bool AssetManager::WriteFile(AssetID id, const std::string& contents)

@@ -8,6 +8,8 @@
 #include <string_view>
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/asset_manager/meta_file.hpp>
 #include <crimson/asset_manager/importers/material_asset.hpp>
@@ -42,6 +44,12 @@ namespace
     std::string SceneWith(std::string_view entities)
     {
         return R"({ "version": 1, "entities": [ )" + std::string(entities) + " ] }";
+    }
+
+    // Parse wants ids, which hand-written text in a test leaves out
+    std::string WithIds(std::string text)
+    {
+        return scene_data::AddMissingIds(text).value_or(text);
     }
 
     std::string InstanceOf(std::string_view name, std::string_view path)
@@ -127,7 +135,7 @@ TEST_CASE_METHOD(Fixture, "Scene files written by hand work", "[scene data]")
     Temp.Write("thing.obj", kTriangleObj);
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = scene_data::Parse(SceneWith(R"({ "name": "A", "meshRenderer": { "mesh": "thing.obj" } })"), assets, "test");
+    const auto data = scene_data::Parse(WithIds(SceneWith(R"({ "name": "A", "meshRenderer": { "mesh": "thing.obj" } })")), assets, "test");
 
     REQUIRE(data);
     REQUIRE(data->Roots.size() == 1);
@@ -144,10 +152,63 @@ TEST_CASE_METHOD(Fixture, "A broken scene file doesn't load", "[scene data]")
     CHECK_FALSE(scene_data::Parse("{ not json", assets, "test"));
     CHECK_FALSE(scene_data::Parse(R"({ "version": 2 })", assets, "test"));
     CHECK_FALSE(scene_data::Parse(R"({ "version": 0 })", assets, "test"));
-    CHECK_FALSE(scene_data::Parse(SceneWith(R"({ "position": "here" })"), assets, "test"));
+    CHECK_FALSE(scene_data::Parse(WithIds(SceneWith(R"({ "position": "here" })")), assets, "test"));
     CHECK_FALSE(scene_data::Parse(SceneWith(R"({ "id": "not hex" })"), assets, "test"));
-    CHECK_FALSE(scene_data::Parse(SceneWith(R"({ "light": 5 })"), assets, "test"));
-    CHECK_FALSE(scene_data::Parse(SceneWith(R"({ "light": { "intensity": "bright" } })"), assets, "test"));
+    CHECK_FALSE(scene_data::Parse(SceneWith(R"({ "name": "A" })"), assets, "test"));
+    CHECK_FALSE(scene_data::Parse(WithIds(SceneWith(R"({ "light": 5 })")), assets, "test"));
+    CHECK_FALSE(scene_data::Parse(WithIds(SceneWith(R"({ "light": { "intensity": "bright" } })")), assets, "test"));
+}
+
+TEST_CASE_METHOD(Fixture, "Entities without an id are given one", "[scene data]")
+{
+    const std::string text = SceneWith(R"({ "name": "A", "children": [ { "name": "B" } ] }, { "id": "00000000000000ff", "name": "C" })");
+
+    const auto filled = scene_data::AddMissingIds(text);
+    REQUIRE(filled);
+
+    const nlohmann::ordered_json j = nlohmann::ordered_json::parse(*filled);
+    const auto& entities = j.at("entities");
+    const auto& child = entities[0].at("children")[0];
+
+    CHECK(AssetID::FromString(entities[0].at("id").get<std::string>()));
+    CHECK(AssetID::FromString(child.at("id").get<std::string>()));
+    CHECK(entities[0].items().begin().key() == "id");
+    CHECK(child.items().begin().key() == "id");
+    CHECK(entities[1].at("id") == "00000000000000ff");
+
+    SECTION("Nothing is left to give")
+    {
+        CHECK_FALSE(scene_data::AddMissingIds(*filled));
+    }
+
+    SECTION("Text that isn't a scene is left alone")
+    {
+        CHECK_FALSE(scene_data::AddMissingIds("{ not json"));
+        CHECK_FALSE(scene_data::AddMissingIds(R"({ "version": 1, "entities": [ { "id": "not hex" } ] })"));
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "New ids replace every id, and the main camera follows", "[scene data]")
+{
+    SceneData data;
+    SceneNode child{ .Id = AssetID::Generate(), .Name = "Child" };
+    SceneNode root{ .Id = AssetID::Generate(), .Name = "Root" };
+    root.Children.push_back(child);
+    data.Roots.push_back(root);
+    data.Settings.MainCamera = child.Id;
+
+    SceneData renewed = data;
+    scene_data::GiveNewIds(renewed);
+
+    const AssetID newRoot = renewed.Roots[0].Id;
+    const AssetID newChild = renewed.Roots[0].Children[0].Id;
+
+    CHECK(newRoot);
+    CHECK(newChild);
+    CHECK(newRoot != newChild);
+    CHECK(newRoot != root.Id);
+    CHECK(newChild != child.Id);
+    CHECK(renewed.Settings.MainCamera == newChild);
 }
 
 TEST_CASE_METHOD(Fixture, "An empty material slot stays empty in the file", "[scene data]")
@@ -399,7 +460,7 @@ TEST_CASE_METHOD(Fixture, "A missing material stays in its slot", "[scene data]"
     Temp.Write("thing.obj", kTriangleObj);
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = scene_data::Parse(SceneWith(R"({ "meshRenderer": { "mesh": "thing.obj", "materials": [ "gone.mat" ] } })"), assets, "test");
+    const auto data = scene_data::Parse(WithIds(SceneWith(R"({ "meshRenderer": { "mesh": "thing.obj", "materials": [ "gone.mat" ] } })")), assets, "test");
     REQUIRE(data);
 
     Scene scene;
@@ -514,7 +575,7 @@ TEST_CASE_METHOD(Fixture, "A renamed folder keeps a scene's references working",
 
 TEST_CASE_METHOD(Fixture, "A component that isn't registered is kept as it was", "[scene data]")
 {
-    const std::string text = SceneWith(R"({ "name": "Door", "health": { "max": 3, "armor": [ 1, 2 ] }, "light": { "type": "spot" } })");
+    const std::string text = WithIds(SceneWith(R"({ "name": "Door", "health": { "max": 3, "armor": [ 1, 2 ] }, "light": { "type": "spot" } })"));
     AssetManager assets(Gpu, Temp.Path());
 
     const auto data = scene_data::Parse(text, assets, "test");
@@ -596,8 +657,8 @@ TEST_CASE_METHOD(Fixture, "A light's fields are read from a file as they were wr
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = scene_data::Parse(SceneWith(R"({ "light": { "type": "spot", "color": [ 1.0, 0.5, 0.2 ], "intensity": 10.0, "range": 12.0,
-        "innerCone": 20.0, "outerCone": 35.0, "castsShadow": true } })"), assets, "test");
+    const auto data = scene_data::Parse(WithIds(SceneWith(R"({ "light": { "type": "spot", "color": [ 1.0, 0.5, 0.2 ], "intensity": 10.0, "range": 12.0,
+        "innerCone": 20.0, "outerCone": 35.0, "castsShadow": true } })")), assets, "test");
     REQUIRE(data);
 
     Scene scene;
@@ -609,7 +670,7 @@ TEST_CASE_METHOD(Fixture, "A light's fields are read from a file as they were wr
 
     SECTION("A type it doesn't know is a point light, with a warning")
     {
-        const auto unknown = scene_data::Parse(SceneWith(R"({ "light": { "type": "laser" } })"), assets, "test");
+        const auto unknown = scene_data::Parse(WithIds(SceneWith(R"({ "light": { "type": "laser" } })")), assets, "test");
         REQUIRE(unknown);
         CHECK(FieldOf<int32_t>(assets, unknown->Roots[0], "light", "type") == static_cast<int32_t>(LightType::Point));
     }
@@ -619,7 +680,7 @@ TEST_CASE_METHOD(Fixture, "A transform's keys stay at the node's level", "[scene
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = scene_data::Parse(SceneWith(R"({ "name": "A", "position": [1, 2, 3], "scale": [2, 2, 2] })"), assets, "test");
+    const auto data = scene_data::Parse(WithIds(SceneWith(R"({ "name": "A", "position": [1, 2, 3], "scale": [2, 2, 2] })")), assets, "test");
     REQUIRE(data);
     REQUIRE(data->Roots.size() == 1);
 
@@ -806,7 +867,7 @@ TEST_CASE_METHOD(Fixture, "A scene file without a main camera loads it as unset"
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = scene_data::Parse(R"({ "version": 1, "environment": { "exposure": 2.0 }, "entities": [ { "name": "A" } ] })", assets, "test");
+    const auto data = scene_data::Parse(R"({ "version": 1, "environment": { "exposure": 2.0 }, "entities": [ { "id": "00000000000000a1", "name": "A" } ] })", assets, "test");
 
     REQUIRE(data);
     CHECK(data->Settings.MainCamera == AssetID{});
