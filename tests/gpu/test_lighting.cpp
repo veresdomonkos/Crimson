@@ -230,17 +230,31 @@ TEST_CASE_METHOD(Fixture, "The scene is tone mapped from linear HDR values", "[l
         CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(188, 188, 188), 4));
     }
 
-    SECTION("ACES follows its curve")
+    // The expected values below come from Polyphony Digital's sample implementation of GT7's tone mapping,
+    // run on the same colors, taken to Rec.2020 and back to Rec.709 as the shader does
+    SECTION("GT7 takes 1 as 100 nits, of SDR white's 250")
     {
-        // 1 comes out as 0.8038, which encodes to 231
+        // 1 comes out as 0.4, which encodes to 170
         Lighting.AmbientColor = glm::vec3(1.0f);
-        Subject->SetToneMapping(1.0f, ToneMapper::Aces);
-        CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(231, 231, 231), 4));
+        Subject->SetToneMapping(1.0f, ToneMapper::Gt7);
+        CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(170, 170, 170), 4));
     }
 
-    SECTION("ACES tells very bright values apart, where clamping can't")
+    SECTION("GT7 rolls off towards white")
     {
-        Subject->SetToneMapping(1.0f, ToneMapper::Aces);
+        // 2.5 comes out as 0.835, which encodes to 236, and 5 reaches white
+        Subject->SetToneMapping(1.0f, ToneMapper::Gt7);
+
+        Lighting.AmbientColor = glm::vec3(2.5f);
+        CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(236, 236, 236), 4));
+
+        Lighting.AmbientColor = glm::vec3(5.0f);
+        CHECK(IsNear(PixelAt(Render(), glm::vec3(0.0f)), glm::ivec3(255, 255, 255)));
+    }
+
+    SECTION("GT7 tells very bright values apart, where clamping can't")
+    {
+        Subject->SetToneMapping(1.0f, ToneMapper::Gt7);
 
         Lighting.AmbientColor = glm::vec3(1.5f);
         const int bright = Brightness(PixelAt(Render(), glm::vec3(0.0f)));
@@ -663,7 +677,7 @@ TEST_CASE_METHOD(Fixture, "A selected mesh gets an outline", "[lighting]")
         CHECK_FALSE(IsNear(PixelAt(image, glm::vec3(0.0f)), glm::ivec3(255, 166, 26), 40));
 
         // The same color as with no tone mapping, as it is drawn after that
-        Subject->SetToneMapping(0.5f, ToneMapper::Aces);
+        Subject->SetToneMapping(0.5f, ToneMapper::Gt7);
         const Image mapped = Render(wall);
         int exact = 0;
 

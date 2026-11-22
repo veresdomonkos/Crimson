@@ -236,7 +236,7 @@ TEST_CASE_METHOD(Fixture, "The scene's settings are part of a step", "[scene edi
     REQUIRE(History.Commit());
 
     REQUIRE(History.Undo());
-    CHECK(Settings.PostProcessing.Exposure == 1.0f);
+    CHECK(Settings.PostProcessing.Exposure == PostProcessSettings{}.Exposure);
 
     REQUIRE(History.Redo());
     CHECK(Settings.PostProcessing.Exposure == 2.0f);

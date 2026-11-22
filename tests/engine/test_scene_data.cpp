@@ -130,6 +130,30 @@ TEST_CASE_METHOD(Fixture, "Numbers are written the short way", "[scene data]")
     CHECK(text.find("\"ambient\": [0.05, 0.05, 0.05]") != std::string::npos);
 }
 
+TEST_CASE_METHOD(Fixture, "Every tone mapper survives a save", "[scene data]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+
+    for (const ToneMapper mapper : { ToneMapper::Gt7, ToneMapper::None })
+    {
+        SceneData data;
+        data.Settings.PostProcessing.Mapper = mapper;
+
+        const auto parsed = scene_data::Parse(scene_data::Write(data, assets), assets, "test");
+        REQUIRE(parsed);
+        CHECK(parsed->Settings.PostProcessing.Mapper == mapper);
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "Scenes saved with ACES, the old tone mapper, load with GT7", "[scene data]")
+{
+    AssetManager assets(Gpu, Temp.Path());
+
+    const auto data = scene_data::Parse(R"({ "version": 1, "environment": { "toneMapper": "aces" } })", assets, "test");
+    REQUIRE(data);
+    CHECK(data->Settings.PostProcessing.Mapper == ToneMapper::Gt7);
+}
+
 TEST_CASE_METHOD(Fixture, "Scene files written by hand work", "[scene data]")
 {
     Temp.Write("thing.obj", kTriangleObj);

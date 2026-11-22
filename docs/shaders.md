@@ -81,6 +81,7 @@ Includes resolve relative to the shader's folder, then to the engine's shaders.
 | `crimson/lighting.hlsli` | `Surface`, and the light leaving a point on a surface with the scene's lights, shadows and ambient light: `ComputeLightingBurley(Surface)` with Burley's diffuse, and `ComputeLightingCallisto(Surface, CallistoParams)` with the [Callisto BRDF](#s_litcallisto-and-s_litmaskcallisto). `SampleLight` is how much of one light reaches the point, for a lighting function of your own. Includes `bindings`, `brdf`, `math` and `transforms`. |
 | `crimson/brdf.hlsli` | the BRDFs' parts: `DistributionGGX`, `VisibilitySmithGGX`, `FresnelSchlick`, `EnvironmentBRDF` and `DiffuseBurley`, and for the Callisto BRDF `CallistoParams`, `DiffuseCallisto`, `CallistoTerminator` and `FresnelSchlickFalloff` |
 | `crimson/callisto_presets.hlsli` | `CallistoParams` to start from: `DefaultCallistoParams()`, and the values the Callisto talk fitted to ten measured materials, such as `CallistoBlueFabric()` and `CallistoTwoLayerSilver()` |
+| `crimson/color_space.hlsli` | converting colors: `REC709_TO_REC2020` and `REC2020_TO_REC709` for linear colors, `EncodeSrgb`, the PQ curve of HDR10 (`NitsToPq`, `PqToNits`), and `RgbToICtCp` and `ICtCpToRgb`, which take and give linear Rec.2020 in cd/m^2 |
 
 ## Built-in shaders and materials
 
