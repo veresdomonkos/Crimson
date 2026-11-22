@@ -41,7 +41,9 @@ Machine-specific settings (build folder, PATH) and personal commit rules are not
 
 ## Graph
 ```
-intake (task text: drafts and creates the issue after one yes) -> plan -> [user approves] -> implement -> review --PASS--> finish --> ship (one yes from the user)
+task text, no issue yet: draft issue -> [user says yes] -> create issue --> (intake, as an issue number)
+
+intake -> plan -> [user approves] -> implement -> review --PASS--> finish --> ship (one yes from the user)
             ^                           ^           |
             |                           +---fix-----+   (blocking findings routed "fix")
             +-------replan--------------------------+   (routed "replan", or same finding twice)
