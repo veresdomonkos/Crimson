@@ -1,7 +1,7 @@
 ---
 name: crimson-deliver
 description: Deliver a Crimson task end to end - plan, user approval, implementation, independent review, fix loop, commits - or enter the flow at one step (plan only, implement an approved plan, review hand-written changes, commit, resume). Use when the user runs /crimson-deliver with an issue number, a task description, or a step name.
-argument-hint: <issue | task text> | plan <issue | text> | implement | review [what it should do] | commit | ship | resume
+argument-hint: <issue | task text> | plan <issue | text> | implement | review [issue | what it should do] | commit | ship | resume | ask <question>
 model: sonnet
 effort: medium
 ---
@@ -20,7 +20,7 @@ The first word picks where you enter the graph. Anything else is a full run, sta
 | `<issue number>` or `<task text>` | intake | ship (after your yes) |
 | `plan <issue \| text>` | intake | plan approved |
 | `implement` | implement, using the approved `plan.md` already in `.git/deliver/` | ship (after your yes) |
-| `review [what the change should do]` | review, for changes the user wrote by hand | the verdict, or finish if the user asks |
+| `review [<issue number> \| what the change should do]` | review, for changes the user wrote by hand | ship, after your yes on the verdict |
 | `commit` | finish | commits |
 | `ship` | ship | the PR is open |
 | `resume` | the node in `.git/deliver/state.md` | ship (after your yes) |
@@ -126,14 +126,14 @@ One status line to the user between rounds ("Round 2: review failed on 2 finding
 ### Entering at review (hand-written changes)
 There is no plan and no report, and the working tree is dirty on purpose.
 1. Skip intake's clean-tree check and reset. `mkdir -p .git/deliver`, delete any old `review.md`, `report.md` and `plan.md`.
-2. Write `task.md` from the user's words after `review`; if they gave none, ask what the change is meant to do, in one question.
+2. **An issue number** (`173` or `#173`, alone or with other words): `gh issue view <n>`, assign it with `gh issue edit <n> --add-assignee @me`, and write the issue's text into `task.md` with a line `Issue: #<n>`. The reviewer's checklist is then the issue's "Done when"; any other words go into `task.md` as context. **No issue:** write `task.md` from the user's words; if they gave none, ask what the change is meant to do, in one question. Keep the current branch; if it is `main`, ask first.
 3. Size from `git diff HEAD --stat` and `git status --short` (file count and areas only; don't read code), using the intake definitions. Tell the reviewer's model and effort as usual.
 4. Spawn the reviewer: "Review round 1 of the uncommitted changes against `.git/deliver/task.md`. There is no plan; derive the acceptance checklist from the task."
 5. With no plan, a `replan` route has nothing to revise: treat it as `ask`. The fix loop otherwise works as above (the implementer fixes from `review.md` alone).
-6. On PASS, report the verdict and stop. Go on to finish only if the user asks.
+6. On PASS, report the verdict and ask once: "Commit and open a PR?" Yes goes on to finish, then ship.
 
 ## finish
-Without `report.md` (entered through `review` or `commit`), propose commit chunks from `git diff HEAD --stat` (whole files per chunk) and confirm them with the user. Otherwise read only the "Commits" section of `report.md`.
+Without `report.md` (entered through `review` or `commit`), propose commit chunks from `git diff HEAD --stat` (whole files per chunk) and confirm them with the user. The issue for `Fixes #<n>` comes from `task.md`; with no `task.md`, ask whether there is one. Otherwise read only the "Commits" section of `report.md`.
 - `git reset -q` to unstage the snapshot, then commit in the planned chunks per CONTRIBUTING.md: lowercase present-tense subject, body says why, last commit ends `Fixes #<n>` when there is an issue. Each commit builds on its own; merge chunks the report says can't be split. Never `--no-verify`.
 - Don't push in this node; go straight on to ship.
 - Tell the user, in the same message as the ship question: commits, minor findings left open (from the reviewer's reply), rounds taken.
@@ -141,7 +141,7 @@ Without `report.md` (entered through `review` or `commit`), propose commit chunk
 ## ship
 Follows finish, or is entered directly with `ship`. It publishes work, so the one yes in step 2 is required; the user needs no command to get here.
 1. Refuse on `main`, with uncommitted changes, or if the last review in `.git/deliver/review.md` is a FAIL.
-2. Draft the PR from `git log main..HEAD` and the issue number in `task.md`, following CONTRIBUTING.md's pull request rules: what changed and why, `Fixes #<n>` when there is an issue. Show the title and body and ask once: "Push and open this PR?" Yes continues. No stops here, with the commits kept; `/crimson-deliver ship` picks it up later.
+2. Draft the PR from `git log main..HEAD` and the issue number in `task.md` (or the `Fixes #` line in the commits), following CONTRIBUTING.md's pull request rules: what changed and why, `Fixes #<n>` when there is an issue. Show the title and body and ask once: "Push and open this PR?" Yes continues. No stops here, with the commits kept; `/crimson-deliver ship` picks it up later.
 3. `git push -u origin <branch>`, then `gh pr create --base main` with that title and body. Don't merge.
 4. Give the user the PR link.
 

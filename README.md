@@ -115,6 +115,7 @@ The work is planned in [milestones](https://github.com/veresdomonkos/Crimson/mil
 - [architecture](docs/architecture.md): the engine and the editor
 - [shaders](docs/shaders.md): writing shaders
 - [development](docs/development.md): building, testing, releasing and profiling
+- [deliver](docs/deliver.md): taking an issue to a pull request with Claude Code's `/crimson-deliver`
 
 ## License
 
