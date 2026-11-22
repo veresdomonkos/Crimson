@@ -6,7 +6,7 @@
 
 The session you type in is the router. It never writes code. Three subagents do the work, `crimson-planner`, `crimson-implementer` and `crimson-reviewer` (in [`.claude/agents/`](../.claude/agents/)), and each step is a new one, so nothing piles up between rounds. They pass the plan, the report and the review through files in `.git/deliver/`, which are never committed.
 
-1. **Intake:** reads the issue, assigns it to you, creates the branch named per CONTRIBUTING, and sizes the task S, M or L.
+1. **Intake:** reads the issue, assigns it to you, creates the branch named per CONTRIBUTING, and sizes the task S, M or L. Given a short description instead of an issue number, it first drafts the issue (problem, scope, done when, labels), shows it, and creates it on GitHub after your yes. Say no and it carries on from the text alone, without an issue.
 2. **Plan:** the planner writes the plan, and you approve it. This is the one stop in the loop.
 3. **Implement and review:** the implementer writes the code and the tests and builds. The reviewer rebuilds, reruns the tests and checks the change against the plan. A failed review sends each blocking finding back as a **fix** (the plan is right, the code is wrong), a **replan** (the plan is flawed) or an **ask** (it needs your decision). After three failed rounds it stops and asks you.
 4. **Finish:** commits in the chunks the plan set, with `Fixes #<n>` on the last one.

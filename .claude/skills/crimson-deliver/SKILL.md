@@ -41,7 +41,7 @@ Machine-specific settings (build folder, PATH) and personal commit rules are not
 
 ## Graph
 ```
-intake -> plan -> [user approves] -> implement -> review --PASS--> finish --> ship (one yes from the user)
+intake (task text: drafts and creates the issue after one yes) -> plan -> [user approves] -> implement -> review --PASS--> finish --> ship (one yes from the user)
             ^                           ^           |
             |                           +---fix-----+   (blocking findings routed "fix")
             +-------replan--------------------------+   (routed "replan", or same finding twice)
@@ -75,7 +75,10 @@ Entered by `/crimson-deliver resume` after an interruption (closed terminal, cra
 ## intake
 1. Working tree must be clean; if not, ask the user.
 2. Reset: `rm -rf .git/deliver && mkdir -p .git/deliver`.
-3. **Issue number:** `gh issue view <n>`, then `gh issue edit <n> --add-assignee @me`. **Text:** use as is; if too vague to plan, ask one focused question.
+3. **Issue number:** `gh issue view <n>`, then `gh issue edit <n> --add-assignee @me`. **Text:** make an issue from it, so the run has a "Done when" list and a `Fixes #<n>`. If the text is too vague to write one, ask one focused question first.
+   1. Draft it in the shape CONTRIBUTING.md gives: a short imperative title, then **Problem**, **Scope**, **Done when** (a `- [ ]` checklist) and **Where to start**. Write only from the user's words; you don't read code, so if the files aren't known, write "Left to the plan." under Where to start. Pick one label each for `type:`, `area:`, `priority:` and `size:` from CONTRIBUTING.md's table (`size:` is your guess, as below). No milestone.
+   2. Show the title, labels and body and ask once: "Create this issue?" It publishes to GitHub, so this yes is required. **Yes:** `gh issue create --title <t> --body-file <f> --label <l>,... --assignee @me` (write the body to a file in `.git/deliver/`, which step 2 has just made), and take the number from the URL it prints. **No, or "skip":** use the text as is, with no issue; `Fixes #` is then left out, as before. Changes requested: redraft and ask again.
+   3. From here the number is an issue number: steps 4 and 6 treat it like one, and `task.md` gets the line `Issue: #<n>`. The issue is already assigned, so skip `gh issue edit`.
 4. **Branch:** on `main`, create one named per CONTRIBUTING.md (`gh issue develop <n> --name <type>/<short-name> --base main --checkout`, or `git switch -c`). On a task branch already, ask whether to use it.
 5. **Size:** S = one area, few files, no new design. L = design change across engine and editor, or an issue sized L. M = the rest.
 6. Write `task.md`, set `state.md`.
