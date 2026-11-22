@@ -35,8 +35,7 @@ namespace
 {
     constexpr std::string_view kQuad = "v -1 0 1\nv 1 0 1\nv 1 0 -1\nv -1 0 -1\nvn 0 1 0\nf 1//1 2//1 3//1 4//1\n";
 
-    // With ids, as the editor saves them. An entity without one gets a new id on every load, so a scene loaded again
-    // would never match a copy of it.
+    // With ids, as the editor saves them. A file without any gets them written in when it is first read, so they stay.
     constexpr std::string_view kMainScene = R"({ "version": 1, "entities": [
             { "id": "00000000000000a1", "name": "Floor", "meshRenderer": { "mesh": "meshes/floor.obj", "materials": [ "materials/floor.mat" ] } },
             { "id": "00000000000000a2", "name": "Pyramid", "meshRenderer": { "mesh": "meshes/pyramid.obj" } },
@@ -699,6 +698,60 @@ TEST_CASE_METHOD(Fixture, "A copy goes once the scene is back to its file, or on
 
         CHECK(closed == 1);
         CHECK_FALSE(fs::exists(CopyOf(id)));
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "A scene file without ids keeps the ids it is given", "[project session]")
+{
+    Temp.Write("Game/assets/scenes/main.scene", R"({ "version": 1, "entities": [ { "name": "Floor" }, { "name": "Sun", "light": { "type": "directional" } } ] })");
+    Reopen();
+
+    const SceneID id = MainScene();
+
+    SECTION("A restored copy counts as unchanged once its changes are undone")
+    {
+        World().CreateEntity("Unsaved");
+        Session().WriteRecovery();
+
+        Reopen();
+        REQUIRE(Session().GetOfferedRecovery());
+        REQUIRE(fs::exists(CopyOf(id)));
+
+        Session().RestoreRecovery();
+        Session().Update(0.0f);
+        REQUIRE(HasEntityNamed(World(), "Unsaved"));
+
+        World().DestroyEntity(Root(World().GetRoots().size() - 1));
+        Session().WriteRecovery();
+
+        CHECK_FALSE(Session().CheckSceneChanged());
+        CHECK_FALSE(fs::exists(CopyOf(id)));
+    }
+
+    SECTION("The main camera survives saving and opening again")
+    {
+        const Entity camera = World().CreateEntity("Camera");
+        camera.AddComponent<CameraComponent>();
+        Session().GetSettings().MainCamera = IdOf(camera);
+        REQUIRE(Session().SaveAll());
+
+        Reopen();
+
+        const AssetID main = Session().GetSettings().MainCamera;
+        REQUIRE(main);
+
+        bool found = false;
+
+        for (auto [handle, name] : World().GetRegistry().view<NameComponent>().each())
+        {
+            if (name.Name == "Camera")
+            {
+                found = true;
+                CHECK(name.Id == main);
+            }
+        }
+
+        CHECK(found);
     }
 }
 

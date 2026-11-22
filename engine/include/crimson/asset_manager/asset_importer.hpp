@@ -72,6 +72,10 @@ namespace crimson
             return std::nullopt;
         }
 
+        // The file's text with the ids it needs to stay the same across loads filled in. Nothing if it lacks none.
+        // Only a type whose file has such ids reads it.
+        [[nodiscard]] virtual std::optional<std::string> AddMissingIds(const AssetSource&) const { return std::nullopt; }
+
         // Whether a change to the file on disk should load the asset again
         [[nodiscard]] virtual bool ReloadsWhenChanged() const { return false; }
 

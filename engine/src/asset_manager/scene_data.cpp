@@ -228,12 +228,13 @@ namespace crimson
     {
         SceneNode node;
 
+        node.Name = j.value("name", std::string{});
+
         const auto id = j.find("id");
         node.Id = id != j.end() ? AssetID::FromString(id->get<std::string>()) : AssetID{};
         if (!node.Id)
-            node.Id = AssetID::Generate();
+            throw std::runtime_error(std::format("an entity ('{}') has no valid id", node.Name));
 
-        node.Name = j.value("name", std::string{});
         node.Active = j.value("active", true);
 
         // The fields of the components that are part of the node, like the transform, are the node's own keys
@@ -356,6 +357,45 @@ namespace crimson
         return updated;
     }
 
+    // Gives the nodes that have no id one, first among their keys as Write has it
+    static bool AddNodeIds(nlohmann::ordered_json& node)
+    {
+        if (!node.is_object())
+            return false;
+
+        bool added = false;
+
+        if (!node.contains("id"))
+        {
+            nlohmann::ordered_json withId = nlohmann::ordered_json::object();
+            withId["id"] = AssetID::Generate().ToString();
+
+            for (auto& [key, value] : node.items())
+                withId[key] = std::move(value);
+
+            node = std::move(withId);
+            added = true;
+        }
+
+        if (const auto children = node.find("children"); children != node.end() && children->is_array())
+        {
+            for (nlohmann::ordered_json& child : *children)
+                added = AddNodeIds(child) || added;
+        }
+
+        return added;
+    }
+
+    static void GiveNodeIds(SceneNode& node, std::unordered_map<AssetID, AssetID>& renamed)
+    {
+        const AssetID id = AssetID::Generate();
+        renamed.emplace(node.Id, id);
+        node.Id = id;
+
+        for (SceneNode& child : node.Children)
+            GiveNodeIds(child, renamed);
+    }
+
     namespace scene_data
     {
         std::optional<SceneData> Parse(std::string_view text, const AssetManager& assets, std::string_view name)
@@ -438,6 +478,34 @@ namespace crimson
             }
 
             return updated ? std::optional(DumpScene(j)) : std::nullopt;
+        }
+
+        std::optional<std::string> AddMissingIds(std::string_view text)
+        {
+            nlohmann::ordered_json j = nlohmann::ordered_json::parse(text, nullptr, false);
+            if (!j.is_object())
+                return std::nullopt;
+
+            bool added = false;
+
+            if (const auto entities = j.find("entities"); entities != j.end() && entities->is_array())
+            {
+                for (nlohmann::ordered_json& entity : *entities)
+                    added = AddNodeIds(entity) || added;
+            }
+
+            return added ? std::optional(DumpScene(j)) : std::nullopt;
+        }
+
+        void GiveNewIds(SceneData& data)
+        {
+            std::unordered_map<AssetID, AssetID> renamed;
+
+            for (SceneNode& root : data.Roots)
+                GiveNodeIds(root, renamed);
+
+            if (const auto camera = renamed.find(data.Settings.MainCamera); camera != renamed.end())
+                data.Settings.MainCamera = camera->second;
         }
     }
 }

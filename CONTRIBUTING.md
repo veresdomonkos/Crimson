@@ -1,6 +1,6 @@
 # Contributing
 
-How work on Crimson goes, from an issue to a merged pull request. How the engine is put together is in [docs/architecture.md](docs/architecture.md), writing shaders in [docs/shaders.md](docs/shaders.md), and building and testing in [docs/development.md](docs/development.md).
+How work on Crimson goes, from an issue to a merged pull request. How the engine is put together is in [docs/architecture.md](docs/architecture.md), writing shaders in [docs/shaders.md](docs/shaders.md), and building and testing in [docs/development.md](docs/development.md). The steps below can also be run with Claude Code's `/crimson-deliver`, which [docs/deliver.md](docs/deliver.md) describes.
 
 ## Issues
 

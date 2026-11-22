@@ -15,15 +15,22 @@ namespace crimson
 
     std::optional<std::string> SceneImporter::NewFile(const AssetManager& assets) const
     {
-        // Read and written again, as parsing gives every node an id of its own, for two new scenes not to share any
-        const std::optional<SceneData> data = assets.Read(assets.Find<SceneAsset>(kNewSceneTemplate));
+        // The template's ids are its own, so each new scene gets new ones, for two new scenes not to share any
+        std::optional<SceneData> data = assets.Read(assets.Find<SceneAsset>(kNewSceneTemplate));
         if (!data)
         {
             LOG_ERROR("[SceneImporter] Can't read {}", kNewSceneTemplate);
             return std::nullopt;
         }
 
+        scene_data::GiveNewIds(*data);
         return scene_data::Write(*data, assets);
+    }
+
+    std::optional<std::string> SceneImporter::AddMissingIds(const AssetSource& source) const
+    {
+        const std::optional<std::string> text = source.Read();
+        return text ? scene_data::AddMissingIds(*text) : std::nullopt;
     }
 
     std::optional<std::string> SceneImporter::UpdateReferences(const AssetSource& source, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets) const

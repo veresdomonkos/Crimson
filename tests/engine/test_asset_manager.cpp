@@ -28,6 +28,7 @@
 #include <crimson/asset_manager/importers/shader_asset.hpp>
 #include <crimson/asset_manager/importers/texture_asset.hpp>
 
+#include <crimson/core/engine_resources.hpp>
 #include <crimson/core/log.hpp>
 #include <crimson/scene/scene_renderer.hpp>
 
@@ -679,7 +680,7 @@ TEST_CASE("Engine assets saved under their old names still load", "[assets]")
 
     SECTION("A scene")
     {
-        const std::string text = R"({ "version": 1, "entities": [ { "meshRenderer": { "mesh": { "guid": ")" + EngineIdOf("engine/meshes/cube.obj")
+        const std::string text = R"({ "version": 1, "entities": [ { "id": "00000000000000b2", "meshRenderer": { "mesh": { "guid": ")" + EngineIdOf("engine/meshes/cube.obj")
             + R"(", "path": "engine/meshes/cube.obj" }, "materials": [ "engine/materials/default.mat" ] } } ] })";
 
         const auto data = scene_data::Parse(text, assets, "test");
@@ -751,6 +752,104 @@ TEST_CASE("Opening a project writes the engine's new names into its files", "[as
     CHECK_THAT(sceneText, Catch::Matchers::ContainsSubstring(R"("path": "engine/meshes/SM_Cube.obj")"));
     CHECK_THAT(sceneText, Catch::Matchers::ContainsSubstring(assets.FindId("engine/meshes/SM_Cube.obj").ToString()));
     CHECK_THAT(sceneText, !Catch::Matchers::ContainsSubstring("meshes/cube.obj"));
+}
+
+TEST_CASE("A scene file's entities get ids that stay", "[assets]")
+{
+    constexpr std::string_view kIdless = R"({ "version": 1, "entities": [ { "name": "A", "children": [ { "name": "B" } ] }, { "name": "C" } ] })";
+
+    const TempFolder temp;
+    const fs::path file = temp.Write("level.scene", kIdless);
+
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+    const SceneID id = assets.Find<SceneAsset>("level.scene");
+    REQUIRE(id);
+
+    const auto first = assets.Read(id);
+    const auto second = assets.Read(id);
+    REQUIRE(first);
+    REQUIRE(second);
+    CHECK(*first == *second);
+    CHECK(first->Roots[0].Id);
+    CHECK_THAT(ReadFile(file), Catch::Matchers::ContainsSubstring(first->Roots[0].Id.ToString()));
+
+    SECTION("Another manager over the folder reads the same ids")
+    {
+        const AssetManager other(gpu, temp.Path());
+        const auto again = other.Read(other.Find<SceneAsset>("level.scene"));
+        REQUIRE(again);
+        CHECK(*again == *first);
+    }
+
+    SECTION("A file edited back to no ids after the manager was built gets them again, and keeps them")
+    {
+        temp.Write("level.scene", kIdless);
+
+        const auto third = assets.Read(id);
+        const auto fourth = assets.Read(id);
+        REQUIRE(third);
+        REQUIRE(fourth);
+        CHECK(*third == *fourth);
+    }
+}
+
+TEST_CASE("A scene file that can't be given ids doesn't load", "[assets]")
+{
+    const TempFolder temp;
+    temp.Write("level.scene", R"({ "version": 1, "entities": [ { "name": "A" } ] })");
+
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+    const SceneID id = assets.Find<SceneAsset>("level.scene");
+    REQUIRE(id);
+
+    // A directory where the temporary file goes, for the write to fail whatever the platform says about permissions
+    fs::create_directory(temp.Path() / "level.scene.saving");
+
+    const LogCounter errors(LogLevel::Error, "without an id");
+    CHECK_FALSE(assets.Read(id));
+    CHECK(errors.Count() == 1);
+}
+
+TEST_CASE("Every engine scene loads", "[assets]")
+{
+    FakeGpuResourceManager gpu;
+    const AssetManager assets(gpu, fs::path("does/not/exist"));
+
+    int scenes = 0;
+
+    for (const EmbeddedFile& file : GetEngineResources())
+    {
+        if (!file.Path.ends_with(".scene"))
+            continue;
+
+        ++scenes;
+        DYNAMIC_SECTION(file.Path)
+        {
+            CHECK(assets.Read(assets.Find<SceneAsset>("engine/" + std::string(file.Path))));
+        }
+    }
+
+    CHECK(scenes > 0);
+}
+
+TEST_CASE("New scenes share no ids with each other or the template", "[assets]")
+{
+    const TempFolder temp;
+    FakeGpuResourceManager gpu;
+    AssetManager assets(gpu, temp.Path());
+
+    const auto first = assets.Read(assets.Create<SceneAsset>("a.scene"));
+    const auto second = assets.Read(assets.Create<SceneAsset>("b.scene"));
+    const auto base = assets.Read(assets.Find<SceneAsset>("engine/scenes/internal/SC_NewScene.scene"));
+    REQUIRE(first);
+    REQUIRE(second);
+    REQUIRE(base);
+
+    CHECK(first->Roots[0].Id != second->Roots[0].Id);
+    CHECK(first->Roots[0].Id != base->Roots[0].Id);
+    CHECK(second->Roots[0].Id != base->Roots[0].Id);
 }
 
 namespace

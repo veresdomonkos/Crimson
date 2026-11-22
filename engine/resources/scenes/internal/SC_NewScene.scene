@@ -7,6 +7,7 @@
   },
   "entities": [
     {
+      "id": "5c1e9a47b30d82f6",
       "name": "Sun",
       "position": [0.0, 8.0, 0.0],
       "rotation": [-59.753746, 59.036243, 0.0],

@@ -66,6 +66,7 @@ namespace crimson
     {
         // Invalid JSON, a newer version or a wrongly typed field give nothing, for a broken file not to be saved over.
         // A reference to an asset that isn't there keeps its id, and is written back as it was. The name is what errors report.
+        // Every entity needs an id, and AddMissingIds gives them.
         [[nodiscard]] std::optional<SceneData> Parse(std::string_view text, const AssetManager& assets, std::string_view name);
 
         [[nodiscard]] std::string Write(const SceneData& data, const AssetManager& assets);
@@ -73,5 +74,12 @@ namespace crimson
         // Points a .scene file's references to assets that moved (old path to id) at where they are now, and leaves the rest
         // of it as it is. Gives the new text, or nothing if no reference moved.
         [[nodiscard]] std::optional<std::string> UpdateReferences(std::string_view text, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets);
+
+        // The text with an id given to every entity that has none (an invalid one stays, for Parse to reject).
+        // Nothing if the text isn't a scene object, or every entity has one.
+        [[nodiscard]] std::optional<std::string> AddMissingIds(std::string_view text);
+
+        // An id of its own for every entity, with the main camera following its entity
+        void GiveNewIds(SceneData& data);
     }
 }
