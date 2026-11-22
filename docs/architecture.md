@@ -138,7 +138,7 @@ There is one path from the OS into the engine: the window sends events, and ever
 1. Shadows
 2. Outline mask, if something is selected
 3. The scene, into its own RGBA16F target with a depth buffer. Values can go well above 1.
-4. Tone mapping, into the target the caller gave it: exposure, then ACES (or only clamping), then the sRGB encoding
+4. Tone mapping, into the target the caller gave it: exposure, then GT7 (or only clamping), then the sRGB encoding
 5. Outline, in display colors, so it stays the color it was set to
 
 Lights are kept in a GPU buffer, in the style of glTF's `KHR_lights_punctual`, and there can be any number of directional, point and spot lights. What the default shader does with them, and what colors and intensities mean, is in [shaders.md](shaders.md).
@@ -218,7 +218,7 @@ A scene is saved as a `.scene` asset: readable JSON with the entities nested the
 ```json
 {
   "version": 1,
-  "environment": { "ambient": [0.05, 0.05, 0.05], "exposure": 1.0, "toneMapper": "aces" },
+  "environment": { "ambient": [0.05, 0.05, 0.05], "exposure": 2.5, "toneMapper": "gt7" },
   "mainCamera": "5be2c90d7a41f3a8",
   "entities": [
     {

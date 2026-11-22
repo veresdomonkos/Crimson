@@ -19,8 +19,8 @@ namespace crimson
     // Post-processing of what the scene's cameras see
     struct PostProcessSettings
     {
-        float Exposure = 1.0f;
-        ToneMapper Mapper = ToneMapper::Aces;
+        float Exposure = 2.5f; // GT7 takes 1.0 as 100 nits of SDR white's 250, so this brings 1.0 about to where the old ACES curve had it
+        ToneMapper Mapper = ToneMapper::Gt7;
 
         bool operator==(const PostProcessSettings&) const = default;
     };

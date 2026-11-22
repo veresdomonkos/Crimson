@@ -1,6 +1,6 @@
 # Third-party notices
 
-The editor bundles the fonts below from `editor/ui/resources/fonts/`, and the engine builds in MikkTSpace. Their licenses follow.
+The editor bundles the fonts below from `editor/ui/resources/fonts/`, the engine builds in MikkTSpace, and its tone mapping shader is ported from Polyphony Digital's GT7 tone mapping. Their licenses follow.
 
 ## Inter
 
@@ -173,4 +173,32 @@ freely, subject to the following restrictions:
 2. Altered source versions must be plainly marked as such, and must not be
    misrepresented as being the original software.
 3. This notice may not be removed or altered from any source distribution.
+```
+
+## GT7 Tone Mapping
+
+`engine/resources/shaders/internal/S_ToneMap.hlsl` ports the GT7 tone mapping operator (`Gt7Curve`, `ToneMapGt7` and their constants) from Polyphony Digital's sample implementation, version 1.0 (2025-08-10), presented in the SIGGRAPH 2025 course [Physically Based Shading in Theory and Practice](https://blog.selfshadow.com/publications/s2025-shading-course/). The inverse ICtCp coefficients in `engine/resources/shaders/crimson/color_space.hlsli` are the rounded values from the same sample. Licensed under the MIT License.
+
+```
+MIT License
+
+Copyright (c) 2025 Polyphony Digital Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```

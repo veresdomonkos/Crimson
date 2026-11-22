@@ -38,6 +38,18 @@ namespace crimson
         return shortest;
     }
 
+    // A tone mapper as the scene file names it
+    static const char* ToneMapperName(ToneMapper mapper)
+    {
+        return mapper == ToneMapper::None ? "none" : "gt7";
+    }
+
+    // GT7 for any other name, which takes scenes saved with ACES, the tone mapper of before, to GT7
+    static ToneMapper ParseToneMapper(std::string_view name)
+    {
+        return name == "none" ? ToneMapper::None : ToneMapper::Gt7;
+    }
+
     // Like a dump with two spaces, except for lists of numbers staying on one line, for vectors to read as vectors
     static std::string DumpScene(const nlohmann::ordered_json& j)
     {
@@ -377,7 +389,7 @@ namespace crimson
                 {
                     data.Settings.Ambient = ReadVec3(*environment, "ambient", data.Settings.Ambient);
                     data.Settings.PostProcessing.Exposure = environment->value("exposure", data.Settings.PostProcessing.Exposure);
-                    data.Settings.PostProcessing.Mapper = environment->value("toneMapper", std::string("aces")) == "none" ? ToneMapper::None : ToneMapper::Aces;
+                    data.Settings.PostProcessing.Mapper = ParseToneMapper(environment->value("toneMapper", std::string("gt7")));
                 }
 
                 if (const auto mainCamera = j.find("mainCamera"); mainCamera != j.end())
@@ -406,7 +418,7 @@ namespace crimson
             j["environment"] = {
                 { "ambient", WriteVec3(data.Settings.Ambient) },
                 { "exposure", ShortNumber(data.Settings.PostProcessing.Exposure) },
-                { "toneMapper", data.Settings.PostProcessing.Mapper == ToneMapper::None ? "none" : "aces" }
+                { "toneMapper", ToneMapperName(data.Settings.PostProcessing.Mapper) }
             };
 
             // Left out while unset, for a scene without one to be written as it always was

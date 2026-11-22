@@ -96,14 +96,14 @@ namespace crimson::editor
 
         PostProcessSettings& post = m_context.Session.GetSettings().PostProcessing;
 
-        constexpr std::array kToneMapperNames = { "ACES", "None" };
+        constexpr std::array kToneMapperNames = { "GT7", "None" }; // in ToneMapper's order
 
         // The label sits after the widgets, as it does for the other fields of this panel
         ui::NextItemWidth(ui::ItemWidth() - (ui::TextSize("Exposure").x + ui::InnerSpacing().x));
         bool changed;
         {
             const ui::IdScope scope("Exposure");
-            changed = ui::props::SliderField(post.Exposure, 0.05f, 16.0f, "%.2f", ui::props::SliderScale::Logarithmic);
+            changed = ui::props::SliderField(post.Exposure, 0.05f, 25.0f, "%.2f", ui::props::SliderScale::Logarithmic);
         }
 
         {

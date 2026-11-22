@@ -2,8 +2,8 @@
   "version": 1,
   "environment": {
     "ambient": [0.05, 0.05, 0.05],
-    "exposure": 1.0,
-    "toneMapper": "aces"
+    "exposure": 2.5,
+    "toneMapper": "gt7"
   },
   "entities": [
     {

@@ -481,7 +481,7 @@ TEST_CASE_METHOD(Fixture, "Scene edits can be undone and redone", "[project sess
         Session().Update(0.0f);
 
         Session().Undo();
-        CHECK(Session().GetSettings().PostProcessing.Exposure == 1.0f);
+        CHECK(Session().GetSettings().PostProcessing.Exposure == PostProcessSettings{}.Exposure);
 
         Session().Redo();
         CHECK(Session().GetSettings().PostProcessing.Exposure == 2.0f);
