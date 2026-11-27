@@ -219,16 +219,16 @@ A scene is saved as a `.scene` asset: readable JSON with the entities nested the
 {
   "version": 1,
   "environment": { "ambient": [0.05, 0.05, 0.05], "exposure": 2.5, "toneMapper": "gt7" },
-  "mainCamera": "5be2c90d7a41f3a8",
+  "mainCamera": "13e89c50-ba3f-4a4d-8a9a-2c6fae5a2c75",
   "entities": [
     {
-      "id": "a7c31e5d90b24f16",
+      "id": "832eb400-7f79-4c6e-b137-fb0299430230",
       "name": "Floor",
       "position": [0, -0.5, 0],
       "meshRenderer": { "mesh": "meshes/floor.obj", "materials": ["materials/floor.mat"] },
       "children": []
     },
-    { "id": "63fd20ab1c8e47d9", "name": "Crate", "position": [2, 0, 0], "instance": "scenes/crate.scene" }
+    { "id": "939c2b44-976e-4d65-abd6-c68fabe85a90", "name": "Crate", "position": [2, 0, 0], "instance": "scenes/crate.scene" }
   ]
 }
 ```
@@ -259,7 +259,7 @@ Hand-written references can be plain paths. Saving writes both the id and the pa
 | `MeshImporter` | `Mesh` (vertex/index buffers, sub-meshes and slot names, e.g. `.obj`) | geometry, no data | no |
 | `SceneImporter` | nothing, as a scene isn't loaded to the GPU | `SceneData` | a copy of the engine's template scene |
 
-Assets are addressed by a path relative to `assets/`, or by `AssetID`, and load on first use with `Get`. A load that fails is logged once and gives null. A file's id lives in the `.meta` written next to it, so those belong in version control.
+Assets are addressed by a path relative to `assets/`, or by `AssetID`, and load on first use with `Get`. A load that fails is logged once and gives null. A file's id lives in the `.meta` written next to it, so those belong in version control. An id is a random 128-bit GUID (UUID version 4), written in its canonical text form. An engine resource has no `.meta`, so its id is the version 5 UUID of its path in a fixed namespace (`kAssetPathNamespace`), and so is the id of a missing reference written as only a path.
 
 Where the type is known, ids carry it: `TextureID`, `MeshID`, `ShaderID`, `MaterialID` and `SceneID` are `TypedAssetID<TextureAsset>` and so on, each defined in its type's header, so a material's shader can't be given a texture, and ids of different types don't compare. Only the asset manager makes one, after checking the type, with `As<T>(id)` or `Find<T>(path)`. One turns back into a plain `AssetID` by itself, which is what the selection, drag and drop and the removed assets use. `Get(id)` gives what that type loads as, and `Get<T>(path)` is the shortcut for code that knows the path. A reference that is missing keeps the type it was read as, so it stays typed until its file is back. `AssetType` is the type's name as files write it, made with `AssetType::Of<T>()` and asked with `Is<T>()`, and a default one means none. Each type that loads keeps what it loaded in its own `AssetStore<T>` (`engine/include/crimson/asset_manager/asset_store.hpp`). Every asset has a slot there, and for every type the slot also keeps the data it is using (`Data`, for the types whose files hold data), the files it was made from with their times (`Files`, which is how a change on disk is noticed), and the assets it was made from (`Uses`).
 

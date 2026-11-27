@@ -7,6 +7,7 @@ add_executable(CrimsonTests
     support/temp_folder.hpp
 
     engine/test_asset_editing.cpp
+    engine/test_asset_id.cpp
     engine/test_asset_manager.cpp
     engine/test_component_registry.cpp
     engine/test_frame.cpp
@@ -20,6 +21,7 @@ add_executable(CrimsonTests
     engine/test_scene_camera.cpp
     engine/test_scene_data.cpp
     engine/test_scene_renderer.cpp
+    engine/test_sha1.cpp
     engine/test_shader_cache.cpp
     engine/test_shaders.cpp
     engine/test_shadow_atlas.cpp

@@ -7,7 +7,7 @@
   },
   "entities": [
     {
-      "id": "5d5ca7328e8680bb",
+      "id": "7b092620-3db1-4e8c-a428-26490e319db1",
       "name": "Floor",
       "active": true,
       "position": [0.0, -0.5, 0.0],
@@ -15,12 +15,12 @@
       "scale": [1.0, 1.0, 1.0],
       "meshRenderer": {
         "mesh": {
-          "guid": "94355c53d8df4b76",
+          "guid": "2a59382a-8974-4bef-a98c-7ad3de16ba5d",
           "path": "meshes/floor.obj"
         },
         "materials": [
           {
-            "guid": "c769ee5d5bc701d2",
+            "guid": "87c6a01c-0df5-4efd-ac41-3b82bbeeaecb",
             "path": "materials/floor.mat"
           }
         ],
@@ -28,7 +28,7 @@
       }
     },
     {
-      "id": "47e706f7172fc4f5",
+      "id": "3bb17ef1-ec83-46e8-a046-80327c9f9258",
       "name": "Pyramid",
       "active": true,
       "position": [-1.6747603, -0.5, 0.0],
@@ -36,12 +36,12 @@
       "scale": [1.0, 1.0, 1.0],
       "meshRenderer": {
         "mesh": {
-          "guid": "c658e853806d4476",
+          "guid": "b8255787-dce6-4276-ac1c-1f5437e9f936",
           "path": "meshes/pyramid.obj"
         },
         "materials": [
           {
-            "guid": "ec1cd4caa08993f8",
+            "guid": "1965f1ff-17c7-4ff7-9e37-0c00ead37f77",
             "path": "materials/pyramid.mat"
           }
         ],
@@ -49,7 +49,7 @@
       }
     },
     {
-      "id": "b41f7e2a9c063d58",
+      "id": "8797a90a-7aa7-4c26-9df6-03d513b76dd9",
       "name": "Bunny",
       "active": true,
       "position": [2.2985759, -0.8206066, 2.6433892],
@@ -57,12 +57,12 @@
       "scale": [9.71918, 9.71918, 9.71918],
       "meshRenderer": {
         "mesh": {
-          "guid": "9485c71393af28a8",
+          "guid": "f4d88eeb-d38b-4595-b83f-9ac0b069eb11",
           "path": "meshes/stanford-bunny.obj"
         },
         "materials": [
           {
-            "guid": "a7c31e5d90b24f16",
+            "guid": "832eb400-7f79-4c6e-b137-fb0299430230",
             "path": "materials/bunny.mat"
           }
         ],
@@ -70,7 +70,7 @@
       }
     },
     {
-      "id": "af0f7ddfcb32bfa3",
+      "id": "ba0361ec-56a4-4635-9feb-5bace69fad84",
       "name": "Lights",
       "active": true,
       "position": [0.0, 0.0, 0.0],
@@ -78,7 +78,7 @@
       "scale": [1.0, 1.0, 1.0],
       "children": [
         {
-          "id": "1432f67ccf49d462",
+          "id": "4535c352-1f38-4358-b97e-21f287abc0e1",
           "name": "Sun",
           "active": true,
           "position": [0.0, 8.0, 0.0],
@@ -95,7 +95,7 @@
           }
         },
         {
-          "id": "b72b3bc16b015867",
+          "id": "2bcc2e2c-5c2b-4c2a-8ce0-053c518b6338",
           "name": "Orange Point",
           "active": true,
           "position": [2.0, 3.0, 0.0],
@@ -112,7 +112,7 @@
           }
         },
         {
-          "id": "854f452a789fa9e9",
+          "id": "65df81ba-311a-4af3-8f5f-6b3f575b9086",
           "name": "Red Point",
           "active": true,
           "position": [-2.0, 3.0, 0.0],
@@ -129,7 +129,7 @@
           }
         },
         {
-          "id": "78448aeb6e7aaa88",
+          "id": "6c5fd77e-bbc1-49ad-99c4-06d7abc6c3eb",
           "name": "Blue Spot",
           "active": true,
           "position": [0.0, 4.0, 3.0],

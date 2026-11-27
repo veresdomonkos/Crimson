@@ -1,39 +1,49 @@
 #pragma once
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-#include <random>
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <cstdio>
+
+#include "crimson/core/hash.hpp"
 
 namespace crimson
 {
+    // A 128-bit GUID, an RFC 9562 UUID. Bytes are in the order of the text, so byte 0 is its first two digits.
     struct AssetID
     {
-        uint64_t Value = 0;
+        std::array<std::uint8_t, 16> Bytes{};
 
-        explicit operator bool() const { return Value != 0; }
+        explicit operator bool() const
+        {
+            for (const std::uint8_t b : Bytes)
+                if (b != 0)
+                    return true;
+
+            return false;
+        }
+
         bool operator==(const AssetID&) const = default;
 
-        static AssetID Generate()
-        {
-            static std::mt19937_64 rng{ std::random_device{}() };
-            uint64_t v = 0;
-            while (v == 0) v = rng();
-            return AssetID{ v };
-        }
+        // A random one (version 4), from the system's entropy
+        static AssetID Generate();
 
-        [[nodiscard]] std::string ToString() const
-        {
-            char buf[17];
-            std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(Value));
-            return buf;
-        }
+        // The version 5 UUID of a name in a namespace, the same every time, for ids that can't be stored anywhere
+        static AssetID FromName(const AssetID& nameSpace, std::string_view name);
 
-        static AssetID FromString(const std::string& s) { return AssetID{ std::stoull(s, nullptr, 16) }; }
+        // Lowercase xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        [[nodiscard]] std::string ToString() const;
+
+        // Throws std::invalid_argument unless the text is exactly that, in either case
+        static AssetID FromString(std::string_view text);
     };
+
+    // The namespace of ids named by an asset path, such as engine/meshes/SM_Cube.obj. It is part of the file format and
+    // never changes, as that would change the id of every engine resource. Engine resources and references written as
+    // only a path share it on purpose: the same path is the same asset.
+    inline constexpr AssetID kAssetPathNamespace{ { 0x15, 0xe9, 0x77, 0x74, 0x22, 0xc0, 0x47, 0xd0, 0x83, 0x83, 0x61, 0xa4, 0x5b, 0xeb, 0x95, 0xb2 } };
 
     // A type of asset, known by the name its files have. Only AssetType::Of makes one, from a type's struct, so the name
     // is always the type's own and lives as long as the program. A default one is no type.
@@ -94,7 +104,8 @@ struct std::hash<crimson::AssetID>
 {
     size_t operator()(const crimson::AssetID& id) const noexcept
     {
-        return std::hash<uint64_t>{}(id.Value);
+        // Only for hash tables, not for identity
+        return static_cast<size_t>(crimson::Fnv1a(std::string_view(reinterpret_cast<const char*>(id.Bytes.data()), id.Bytes.size())));
     }
 };
 

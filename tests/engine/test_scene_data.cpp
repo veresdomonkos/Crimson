@@ -185,7 +185,7 @@ TEST_CASE_METHOD(Fixture, "A broken scene file doesn't load", "[scene data]")
 
 TEST_CASE_METHOD(Fixture, "Entities without an id are given one", "[scene data]")
 {
-    const std::string text = SceneWith(R"({ "name": "A", "children": [ { "name": "B" } ] }, { "id": "00000000000000ff", "name": "C" })");
+    const std::string text = SceneWith(R"({ "name": "A", "children": [ { "name": "B" } ] }, { "id": "00000000-0000-4000-8000-0000000000ff", "name": "C" })");
 
     const auto filled = scene_data::AddMissingIds(text);
     REQUIRE(filled);
@@ -198,7 +198,7 @@ TEST_CASE_METHOD(Fixture, "Entities without an id are given one", "[scene data]"
     CHECK(AssetID::FromString(child.at("id").get<std::string>()));
     CHECK(entities[0].items().begin().key() == "id");
     CHECK(child.items().begin().key() == "id");
-    CHECK(entities[1].at("id") == "00000000000000ff");
+    CHECK(entities[1].at("id") == "00000000-0000-4000-8000-0000000000ff");
 
     SECTION("Nothing is left to give")
     {
@@ -891,7 +891,7 @@ TEST_CASE_METHOD(Fixture, "A scene file without a main camera loads it as unset"
 {
     AssetManager assets(Gpu, Temp.Path());
 
-    const auto data = scene_data::Parse(R"({ "version": 1, "environment": { "exposure": 2.0 }, "entities": [ { "id": "00000000000000a1", "name": "A" } ] })", assets, "test");
+    const auto data = scene_data::Parse(R"({ "version": 1, "environment": { "exposure": 2.0 }, "entities": [ { "id": "00000000-0000-4000-8000-0000000000a1", "name": "A" } ] })", assets, "test");
 
     REQUIRE(data);
     CHECK(data->Settings.MainCamera == AssetID{});
@@ -904,7 +904,7 @@ TEST_CASE_METHOD(Fixture, "A main camera that isn't there keeps its reference", 
     AssetManager assets(Gpu, Temp.Path());
 
     SceneData data;
-    data.Settings.MainCamera = AssetID{ 0x1234abcd };
+    data.Settings.MainCamera = AssetID::Generate();
 
     const std::string text = scene_data::Write(data, assets);
     CHECK(text.find("\"mainCamera\"") != std::string::npos);

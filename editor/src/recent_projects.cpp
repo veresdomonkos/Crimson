@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <stdexcept>
 #include <utility>
 
 #include <crimson/core/log.hpp>
@@ -10,6 +11,23 @@
 
 namespace crimson::editor
 {
+    // One bad hint, such as an id from before GUIDs, doesn't cost the whole list
+    static AssetID ReadLastScene(const nlohmann::json& entry)
+    {
+        const auto it = entry.find("lastScene");
+        if (it == entry.end() || !it->is_string())
+            return {};
+
+        try
+        {
+            return AssetID::FromString(it->get<std::string>());
+        }
+        catch (const std::invalid_argument&)
+        {
+            return {};
+        }
+    }
+
     RecentProjects::RecentProjects(std::filesystem::path file)
         : m_file(std::move(file))
     {
@@ -32,7 +50,7 @@ namespace crimson::editor
                     .Name = project.at("name").get<std::string>(),
                     .Path = std::filesystem::path(project.at("path").get<std::string>()),
                     .LastOpened = project.value("lastOpened", int64_t{ 0 }),
-                    .LastScene = AssetID::FromString(project.value("lastScene", std::string("0")))
+                    .LastScene = ReadLastScene(project)
                 });
             }
         }

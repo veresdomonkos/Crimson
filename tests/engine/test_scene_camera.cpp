@@ -181,7 +181,7 @@ TEST_CASE("The main camera falls back to the first active camera in hierarchy or
 
     SECTION("A reference to nothing")
     {
-        CHECK(FindMainCamera(scene, AssetID{ 0x5555 }) == child);
+        CHECK(FindMainCamera(scene, AssetID::Generate()) == child);
     }
 
     SECTION("A reference to an entity without a camera")
