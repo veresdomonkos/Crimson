@@ -23,6 +23,13 @@ namespace crimson
 
     [[nodiscard]] nlohmann::ordered_json WriteAssetRef(const AssetManager& assets, AssetID id);
 
+    // The same shape without the assets, for files read before there are any. Never throws or logs, so a hand-edited
+    // file can't fail on it: what can't be read is left empty.
+    [[nodiscard]] AssetRef ParseAssetRef(const nlohmann::json& ref);
+
+    // { guid, path } for an id (no path if empty), the path as a string if there is no id, null for an empty one
+    [[nodiscard]] nlohmann::ordered_json WriteAssetRef(const AssetRef& ref);
+
     // Points a reference to an asset that moved (old path to id) at where it is now. Returns whether it changed.
     bool UpdateAssetRef(nlohmann::ordered_json& ref, const std::unordered_map<std::string, AssetID>& moved, const AssetManager& assets);
 }

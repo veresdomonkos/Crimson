@@ -50,31 +50,48 @@ namespace crimson
     // A missing one is remembered as the type it was expected to be
     static AssetID ReadAnyAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
     {
-        if (ref.is_string())
-        {
-            std::string path = ref.get<std::string>();
-            if (const AssetID id = assets.FindId(path))
-                return id;
+        AssetRef parsed = ParseAssetRef(ref);
 
-            return path.empty() ? AssetID{} : RememberMissing(assets, {}, std::move(path), expected, context);
+        if (const AssetID id = assets.Redirect(parsed.Id); id && assets.GetInfo(id))
+            return id;
+
+        if (const AssetID byPath = parsed.Path.empty() ? AssetID{} : assets.FindId(parsed.Path))
+        {
+            if (parsed.Id)
+                LOG_WARN("[Assets] {}: stale guid, found by path '{}'", context, parsed.Path);
+
+            return byPath;
         }
+
+        return parsed ? RememberMissing(assets, parsed.Id, std::move(parsed.Path), expected, context) : AssetID{};
+    }
+
+    AssetRef ParseAssetRef(const nlohmann::json& ref)
+    {
+        if (ref.is_string())
+            return { {}, ref.get<std::string>() };
 
         if (!ref.is_object())
             return {};
 
-        if (const AssetID id = ReadGuid(assets, ref))
-            return id;
+        return { ReadGuid(ref), ref.contains("path") && ref["path"].is_string() ? ref["path"].get<std::string>() : std::string() };
+    }
 
-        std::string path = ref.contains("path") && ref["path"].is_string() ? ref["path"].get<std::string>() : std::string();
-
-        if (const AssetID byPath = path.empty() ? AssetID{} : assets.FindId(path))
+    nlohmann::ordered_json WriteAssetRef(const AssetRef& ref)
+    {
+        if (ref.Id)
         {
-            LOG_WARN("[Assets] {}: stale guid, found by path '{}'", context, path);
-            return byPath;
+            nlohmann::ordered_json json = { { "guid", ref.Id.ToString() } };
+            if (!ref.Path.empty())
+                json["path"] = ref.Path;
+
+            return json;
         }
 
-        const AssetID guid = ReadGuid(ref);
-        return guid || !path.empty() ? RememberMissing(assets, guid, std::move(path), expected, context) : AssetID{};
+        if (!ref.Path.empty())
+            return ref.Path;
+
+        return {};
     }
 
     AssetID ReadAssetRef(const AssetManager& assets, const nlohmann::json& ref, AssetType expected, std::string_view context)
@@ -102,20 +119,11 @@ namespace crimson
     nlohmann::ordered_json WriteAssetRef(const AssetManager& assets, AssetID id)
     {
         if (const AssetInfo* info = assets.GetInfo(id))
-            return { { "guid", id.ToString() }, { "path", info->Path } };
+            return WriteAssetRef(AssetRef{ id, info->Path });
 
         // Written back as it was read, for it to work again once the file is back
         if (const MissingAssetRef* missing = assets.GetMissing(id))
-        {
-            if (missing->PathOnly)
-                return missing->Path;
-
-            nlohmann::ordered_json ref = { { "guid", id.ToString() } };
-            if (!missing->Path.empty())
-                ref["path"] = missing->Path;
-
-            return ref;
-        }
+            return WriteAssetRef(AssetRef{ missing->PathOnly ? AssetID{} : id, missing->Path });
 
         return {};
     }

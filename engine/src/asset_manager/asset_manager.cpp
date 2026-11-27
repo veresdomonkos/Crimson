@@ -264,6 +264,14 @@ namespace crimson
         return renamed != m_renamedPaths.end() ? renamed->second : AssetID{};
     }
 
+    AssetID AssetManager::FindId(const AssetRef& ref) const
+    {
+        if (const AssetID id = Redirect(ref.Id); id && GetInfo(id))
+            return id;
+
+        return ref.Path.empty() ? AssetID{} : FindId(std::string_view(ref.Path));
+    }
+
     AssetID AssetManager::Redirect(AssetID id) const
     {
         if (GetInfo(id))
