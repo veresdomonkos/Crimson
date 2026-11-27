@@ -103,10 +103,13 @@ Based on Unity's scene view. Mouse controls start over the Scene panel, and the 
 
 The work is planned in [milestones](https://github.com/veresdomonkos/Crimson/milestones):
 
-- **v0.1, Safe scene editing:** editing a scene can't lose work, and the first tagged release is out.
-- **v0.2, Assets and instances:** real content comes in without hand-written files, and instances can differ from their source.
-- **v0.3, Rendering quality:** lighting and shadows hold up on a large level such as Sponza.
-- **v0.4, Running a scene:** a scene can run, in the editor first, then as a game outside of it.
+- **v0.1, First game:** the first release, an engine you can make a game with: import real models, build a scene, write gameplay code, play it in the editor and ship it as a standalone player.
+- **v0.2, Gameplay systems:** physics, audio, animation and game UI, the systems a game needs beyond moving things around.
+- **v0.3, Authoring:** building content is comfortable: scene editing, instances that can differ from their source, and an asset workflow that reloads, previews and knows what uses what.
+- **v0.4, Rendering quality:** lighting and shadows hold up on a large level such as Sponza.
+- **v0.5, Speed and polish:** the editor stays responsive while loading and compiling, and looks and feels like a finished tool.
+
+Each milestone is split into epics, issues labeled `type: epic` whose parts are their sub-issues. Issues that have to come first are marked as blocking the ones that need them.
 
 ## Contributing
 
