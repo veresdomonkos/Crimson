@@ -109,6 +109,8 @@ set(ENGINE_SOURCES
     src/core/file_write.cpp
     src/core/input.cpp
     src/core/log.cpp
+    src/core/sha1.cpp
+    src/core/sha1.hpp
 
     src/graphics/create_graphics_backend.hpp
     src/graphics/graphics_backend.cpp
