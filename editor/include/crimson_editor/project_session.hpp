@@ -121,6 +121,9 @@ namespace crimson::editor
         // Keeps the project's main scene pointing at its asset after the assets changed
         void SyncMainScene();
 
+        // Logs if the project file can't be written
+        void WriteMainScene(AssetRef scene);
+
         // Asks what to do with the scene's copy if it is newer than the scene's file, and deletes it if it isn't
         void OfferRecovery(SceneID id);
         // Deletes the open scene's copy if this session wrote or restored it

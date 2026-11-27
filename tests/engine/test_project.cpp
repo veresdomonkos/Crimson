@@ -263,7 +263,7 @@ TEST_CASE("A project's main scene is kept in the project file", "[project]")
 
     SECTION("It is written by id and path, and loaded again")
     {
-        REQUIRE(project->SetMainScene(id, "scenes/demo.scene"));
+        REQUIRE(project->SetMainScene({ id, "scenes/demo.scene" }));
 
         const nlohmann::json json = nlohmann::json::parse(ReadFile(file));
         CHECK(json.at("version") == 1);
@@ -278,8 +278,8 @@ TEST_CASE("A project's main scene is kept in the project file", "[project]")
 
     SECTION("An empty id clears it")
     {
-        REQUIRE(project->SetMainScene(id, "scenes/demo.scene"));
-        REQUIRE(project->SetMainScene({}, {}));
+        REQUIRE(project->SetMainScene({ id, "scenes/demo.scene" }));
+        REQUIRE(project->SetMainScene({}));
 
         CHECK_FALSE(project->GetMainScene().Id);
         CHECK_FALSE(nlohmann::json::parse(ReadFile(file)).contains("mainScene"));
@@ -294,6 +294,19 @@ TEST_CASE("A project's main scene is kept in the project file", "[project]")
         REQUIRE(loaded);
         CHECK(loaded->GetMainScene().Id == id);
         CHECK(loaded->GetMainScene().Path == "scenes/demo.scene");
+    }
+
+    SECTION("A path-only main scene is kept")
+    {
+        temp.Write("Game/project.crimson", R"({ "name": "Game", "version": 1, "mainScene": "scenes/demo.scene" })");
+
+        auto loaded = Project::Load(project->Root());
+        REQUIRE(loaded);
+        CHECK_FALSE(loaded->GetMainScene().Id);
+        CHECK(loaded->GetMainScene().Path == "scenes/demo.scene");
+
+        REQUIRE(loaded->SetMainScene({ {}, "scenes/demo.scene" }));
+        CHECK(nlohmann::json::parse(ReadFile(file)).at("mainScene") == "scenes/demo.scene");
     }
 
     SECTION("One that is wrong is ignored, and doesn't stop the project from opening")
@@ -313,13 +326,13 @@ TEST_CASE("A project's main scene is kept in the project file", "[project]")
 
     SECTION("A file that can't be written keeps the old one")
     {
-        REQUIRE(project->SetMainScene(id, "scenes/demo.scene"));
+        REQUIRE(project->SetMainScene({ id, "scenes/demo.scene" }));
 
         // A folder where the project file is makes the write fail on every platform
         fs::remove(file);
         fs::create_directory(file);
 
-        CHECK_FALSE(project->SetMainScene({}, {}));
+        CHECK_FALSE(project->SetMainScene({}));
         CHECK(project->GetMainScene().Id == id);
     }
 }

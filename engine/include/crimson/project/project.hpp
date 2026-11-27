@@ -9,14 +9,6 @@
 
 namespace crimson
 {
-    // The scene a built game starts with, as the project file holds it. It is a raw reference, as loading the project
-    // comes before there are assets to look it up in.
-    struct MainSceneRef
-    {
-        AssetID Id;
-        std::string Path; // relative to the assets folder, to find it by if the id is stale
-    };
-
     // A folder with a project file and an assets folder. The errors are meant to be shown to the user.
     class Project
     {
@@ -43,20 +35,35 @@ namespace crimson
         // Returns false if it can't be created.
         bool EnsureDataDir() const;
 
-        // Both empty if there is none
-        [[nodiscard]] const MainSceneRef& GetMainScene() const { return m_mainScene; }
+        // The scene a built game starts with. Empty if there is none. It is not looked up, as loading the project comes
+        // before there are assets.
+        [[nodiscard]] const AssetRef& GetMainScene() const { return m_mainScene; }
 
-        // An empty id clears it. Writes the project file, and returns false, keeping the old one, if that fails. Logs
+        // An empty one clears it. Writes the project file, and returns false, keeping the old one, if that fails. Logs
         // nothing, for the caller to report.
-        [[nodiscard]] bool SetMainScene(AssetID id, std::string path);
+        [[nodiscard]] bool SetMainScene(AssetRef scene);
     private:
-        Project(std::string name, std::filesystem::path root, MainSceneRef mainScene)
+        Project(std::string name, std::filesystem::path root, AssetRef mainScene)
             : m_name(std::move(name)), m_root(std::move(root)), m_mainScene(std::move(mainScene)) {}
 
         [[nodiscard]] bool Save() const;
 
+        // Applies a change to a copy and writes that, so a failed write leaves this as it was
+        template <typename Change>
+        [[nodiscard]] bool SaveWith(Change&& change)
+        {
+            Project next = *this;
+            change(next);
+
+            if (!next.Save())
+                return false;
+
+            *this = std::move(next);
+            return true;
+        }
+
         std::string m_name;
         std::filesystem::path m_root;
-        MainSceneRef m_mainScene;
+        AssetRef m_mainScene;
     };
 }

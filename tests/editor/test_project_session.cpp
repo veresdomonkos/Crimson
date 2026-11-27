@@ -848,7 +848,7 @@ TEST_CASE_METHOD(Fixture, "A project's main scene is kept, and followed when it 
         const auto project = Project::Load(Created.Root());
         REQUIRE(project);
         Project edited = *project;
-        REQUIRE(edited.SetMainScene(AssetID::Generate(), "scenes/other.scene"));
+        REQUIRE(edited.SetMainScene({ AssetID::Generate(), "scenes/other.scene" }));
 
         Open.reset();
         Open.emplace(*Project::Load(Created.Root()), Gpu, Recents, [this] { return Editing; });
@@ -874,7 +874,7 @@ TEST_CASE_METHOD(Fixture, "A project's main scene is kept, and followed when it 
 TEST_CASE_METHOD(Fixture, "A main scene that is missing at open is kept, with a warning", "[project session]")
 {
     Project edited = *Project::Load(Created.Root());
-    REQUIRE(edited.SetMainScene(AssetID::Generate(), "scenes/gone.scene"));
+    REQUIRE(edited.SetMainScene({ AssetID::Generate(), "scenes/gone.scene" }));
 
     const LogCounter warnings(LogLevel::Warn, "main scene");
     const LogCounter errors(LogLevel::Error, "");

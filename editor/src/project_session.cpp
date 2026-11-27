@@ -59,7 +59,7 @@ namespace crimson::editor
 
         LoadScene(ChooseScene(m_recents.GetLastScene(m_project.Root())));
 
-        if (const MainSceneRef& main = m_project.GetMainScene(); main.Id && !m_assets.GetInfo(main.Id) && !m_assets.FindId(main.Path))
+        if (const AssetRef& main = m_project.GetMainScene(); main && !m_assets.FindId(main))
             LOG_WARN("[Project] The main scene {} isn't there, so it is kept in case it comes back", main.Path);
 
         SyncMainScene();
@@ -67,7 +67,7 @@ namespace crimson::editor
 
     SceneID ProjectSession::GetMainScene() const
     {
-        return m_assets.As<SceneAsset>(m_project.GetMainScene().Id);
+        return m_assets.As<SceneAsset>(m_assets.FindId(m_project.GetMainScene()));
     }
 
     void ProjectSession::SetMainScene(SceneID id)
@@ -76,7 +76,12 @@ namespace crimson::editor
         if (!info)
             return;
 
-        if (!m_project.SetMainScene(id, info->Path))
+        WriteMainScene({ id, info->Path });
+    }
+
+    void ProjectSession::WriteMainScene(AssetRef scene)
+    {
+        if (!m_project.SetMainScene(std::move(scene)))
             LOG_ERROR("[Project] Can't write the main scene to {}", Project::kFileName);
     }
 
@@ -84,18 +89,19 @@ namespace crimson::editor
     {
         m_seenAssetsVersion = m_assets.Version();
 
-        const MainSceneRef main = m_project.GetMainScene();
-        if (!main.Id && main.Path.empty())
+        const AssetRef main = m_project.GetMainScene();
+        if (!main)
             return;
 
         // A stale id, such as from a scene that was recreated, is found by its path
-        AssetID id = m_assets.GetInfo(main.Id) ? main.Id : m_assets.FindId(main.Path);
+        const AssetID id = m_assets.FindId(main);
         const AssetInfo* info = m_assets.GetInfo(id);
-        if (!info || !info->Type.Is<SceneAsset>() || (id == main.Id && info->Path == main.Path))
+        if (!info || !info->Type.Is<SceneAsset>())
             return;
 
-        if (!m_project.SetMainScene(id, info->Path))
-            LOG_ERROR("[Project] Can't write the main scene to {}", Project::kFileName);
+        AssetRef current{ id, info->Path };
+        if (current != main)
+            WriteMainScene(std::move(current));
     }
 
     bool ProjectSession::CheckSceneChanged()
@@ -186,8 +192,7 @@ namespace crimson::editor
         {
             LOG_WARN("[Project] The main scene {} was deleted, so the project has none now", m_project.GetMainScene().Path);
 
-            if (!m_project.SetMainScene({}, {}))
-                LOG_ERROR("[Project] Can't write the main scene to {}", Project::kFileName);
+            WriteMainScene({});
         }
 
         const auto isRemoved = [removed](AssetID id) { return std::ranges::find(removed, id) != removed.end(); };

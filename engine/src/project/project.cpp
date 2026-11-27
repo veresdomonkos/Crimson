@@ -3,13 +3,13 @@
 #include <algorithm>
 #include <array>
 #include <fstream>
-#include <stdexcept>
 #include <system_error>
 #include <utility>
 
 #include <nlohmann/json.hpp>
 
 #include "crimson/core/file_write.hpp"
+#include "asset_manager/asset_ref.hpp"
 #include "platform/files.hpp"
 
 namespace fs = std::filesystem;
@@ -17,39 +17,6 @@ namespace fs = std::filesystem;
 namespace crimson
 {
     constexpr int kProjectVersion = 1;
-
-    // A hand-edited file can't block opening the project, so anything wrong with it means no main scene
-    static MainSceneRef ReadMainScene(const nlohmann::json& json)
-    {
-        MainSceneRef ref;
-
-        const auto it = json.find("mainScene");
-        if (it == json.end())
-            return ref;
-
-        if (it->is_string())
-        {
-            ref.Path = it->get<std::string>();
-        }
-        else if (it->is_object())
-        {
-            if (const auto guid = it->find("guid"); guid != it->end() && guid->is_string())
-            {
-                try
-                {
-                    ref.Id = AssetID::FromString(guid->get<std::string>());
-                }
-                catch (const std::invalid_argument&)
-                {
-                }
-            }
-
-            if (const auto path = it->find("path"); path != it->end() && path->is_string())
-                ref.Path = path->get<std::string>();
-        }
-
-        return ref;
-    }
 
     std::expected<Project, std::string> Project::Load(const fs::path& path)
     {
@@ -73,7 +40,11 @@ namespace crimson
             if (version < 1 || version > kProjectVersion)
                 return std::unexpected("Unsupported project version " + std::to_string(version) + " in " + root.string());
 
-            return Project(json.at("name").get<std::string>(), std::move(root), ReadMainScene(json));
+            // A hand-edited file can't block opening the project, so a main scene that can't be read is none
+            const auto scene = json.find("mainScene");
+            AssetRef mainScene = scene != json.end() ? ParseAssetRef(*scene) : AssetRef{};
+
+            return Project(json.at("name").get<std::string>(), std::move(root), std::move(mainScene));
         }
         catch (const nlohmann::json::exception& e)
         {
@@ -108,22 +79,15 @@ namespace crimson
     {
         nlohmann::ordered_json json = { { "name", m_name }, { "version", kProjectVersion } };
 
-        if (m_mainScene.Id)
-            json["mainScene"] = { { "guid", m_mainScene.Id.ToString() }, { "path", m_mainScene.Path } };
+        if (m_mainScene)
+            json["mainScene"] = WriteAssetRef(m_mainScene);
 
         return WriteFileSafely(m_root / kFileName, json.dump(2) + '\n');
     }
 
-    bool Project::SetMainScene(AssetID id, std::string path)
+    bool Project::SetMainScene(AssetRef scene)
     {
-        MainSceneRef next{ id, id ? std::move(path) : std::string() };
-        std::swap(m_mainScene, next);
-
-        if (Save())
-            return true;
-
-        std::swap(m_mainScene, next);
-        return false;
+        return SaveWith([&](Project& project) { project.m_mainScene = std::move(scene); });
     }
 
     bool Project::EnsureDataDir() const
