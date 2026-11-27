@@ -29,7 +29,18 @@ One branch per issue, made from the issue so GitHub links the two:
 gh issue develop <number> --name feature/<short-name> --base main --checkout
 ```
 
-The prefix says what kind of change it is: `feature/`, `fix/`, `refactor/`, `chore/` or `docs/`. The name after it is lowercase, with hyphens between words. Nothing is committed on `main` directly.
+The prefix says what kind of change it is: `feature/`, `improvement/`, `fix/`, `refactor/`, `chore/` or `docs/`. It comes from the issue's `type:` label:
+
+| Label | Prefix |
+|---|---|
+| `type: feature` | `feature/` |
+| `type: improvement` | `improvement/` |
+| `type: bug` | `fix/` |
+| `type: refactor` | `refactor/` |
+| `type: chore` | `chore/` |
+| `type: docs` | `docs/` |
+
+The name after it is lowercase, with hyphens between words. Nothing is committed on `main` directly.
 
 ## Commits
 
