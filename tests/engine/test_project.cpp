@@ -245,3 +245,81 @@ TEST_CASE("The data folder is made when needed, and hidden on Windows", "[projec
     // Again on a folder that is already there
     CHECK(project->EnsureDataDir());
 }
+
+TEST_CASE("A project's main scene is kept in the project file", "[project]")
+{
+    const TempFolder temp;
+    auto project = Project::Create(temp.Path(), "Game");
+    REQUIRE(project);
+
+    const fs::path file = project->Root() / Project::kFileName;
+    const AssetID id = AssetID::FromString("3d2215de-4684-4f85-b18d-c0fb98cd2d47");
+
+    SECTION("A new project has none")
+    {
+        CHECK_FALSE(project->GetMainScene().Id);
+        CHECK_FALSE(nlohmann::json::parse(ReadFile(file)).contains("mainScene"));
+    }
+
+    SECTION("It is written by id and path, and loaded again")
+    {
+        REQUIRE(project->SetMainScene(id, "scenes/demo.scene"));
+
+        const nlohmann::json json = nlohmann::json::parse(ReadFile(file));
+        CHECK(json.at("version") == 1);
+        CHECK(json.at("mainScene").at("guid") == id.ToString());
+        CHECK(json.at("mainScene").at("path") == "scenes/demo.scene");
+
+        const auto loaded = Project::Load(project->Root());
+        REQUIRE(loaded);
+        CHECK(loaded->GetMainScene().Id == id);
+        CHECK(loaded->GetMainScene().Path == "scenes/demo.scene");
+    }
+
+    SECTION("An empty id clears it")
+    {
+        REQUIRE(project->SetMainScene(id, "scenes/demo.scene"));
+        REQUIRE(project->SetMainScene({}, {}));
+
+        CHECK_FALSE(project->GetMainScene().Id);
+        CHECK_FALSE(nlohmann::json::parse(ReadFile(file)).contains("mainScene"));
+    }
+
+    SECTION("A hand-written one is loaded")
+    {
+        temp.Write("Game/project.crimson", R"({ "name": "Game", "version": 1,
+            "mainScene": { "guid": "3d2215de-4684-4f85-b18d-c0fb98cd2d47", "path": "scenes/demo.scene" } })");
+
+        const auto loaded = Project::Load(project->Root());
+        REQUIRE(loaded);
+        CHECK(loaded->GetMainScene().Id == id);
+        CHECK(loaded->GetMainScene().Path == "scenes/demo.scene");
+    }
+
+    SECTION("One that is wrong is ignored, and doesn't stop the project from opening")
+    {
+        const std::string_view text = GENERATE(as<std::string_view>{},
+            R"({ "name": "Game", "version": 1, "mainScene": { "guid": "nonsense", "path": 3 } })",
+            R"({ "name": "Game", "version": 1, "mainScene": 42 })",
+            R"({ "name": "Game", "version": 1, "mainScene": [ "a" ] })");
+        CAPTURE(text);
+        temp.Write("Game/project.crimson", text);
+
+        const auto loaded = Project::Load(project->Root());
+        REQUIRE(loaded);
+        CHECK_FALSE(loaded->GetMainScene().Id);
+        CHECK(loaded->GetMainScene().Path.empty());
+    }
+
+    SECTION("A file that can't be written keeps the old one")
+    {
+        REQUIRE(project->SetMainScene(id, "scenes/demo.scene"));
+
+        // A folder where the project file is makes the write fail on every platform
+        fs::remove(file);
+        fs::create_directory(file);
+
+        CHECK_FALSE(project->SetMainScene({}, {}));
+        CHECK(project->GetMainScene().Id == id);
+    }
+}

@@ -5,8 +5,18 @@
 #include <string_view>
 #include <utility>
 
+#include "crimson/asset_manager/asset_id.hpp"
+
 namespace crimson
 {
+    // The scene a built game starts with, as the project file holds it. It is a raw reference, as loading the project
+    // comes before there are assets to look it up in.
+    struct MainSceneRef
+    {
+        AssetID Id;
+        std::string Path; // relative to the assets folder, to find it by if the id is stale
+    };
+
     // A folder with a project file and an assets folder. The errors are meant to be shown to the user.
     class Project
     {
@@ -32,10 +42,21 @@ namespace crimson
         // Creates the data folder if it isn't there yet. On Windows it is also hidden, as the dot only hides it elsewhere.
         // Returns false if it can't be created.
         bool EnsureDataDir() const;
+
+        // Both empty if there is none
+        [[nodiscard]] const MainSceneRef& GetMainScene() const { return m_mainScene; }
+
+        // An empty id clears it. Writes the project file, and returns false, keeping the old one, if that fails. Logs
+        // nothing, for the caller to report.
+        [[nodiscard]] bool SetMainScene(AssetID id, std::string path);
     private:
-        Project(std::string name, std::filesystem::path root) : m_name(std::move(name)), m_root(std::move(root)) {}
+        Project(std::string name, std::filesystem::path root, MainSceneRef mainScene)
+            : m_name(std::move(name)), m_root(std::move(root)), m_mainScene(std::move(mainScene)) {}
+
+        [[nodiscard]] bool Save() const;
 
         std::string m_name;
         std::filesystem::path m_root;
+        MainSceneRef m_mainScene;
     };
 }
