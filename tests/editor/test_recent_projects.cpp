@@ -141,6 +141,17 @@ TEST_CASE("A damaged list is ignored", "[recent projects]")
     CHECK(recents.GetEntries().empty());
 }
 
+TEST_CASE("A last scene that isn't a GUID is dropped, and the project stays", "[recent projects]")
+{
+    const TempFolder temp;
+    const RecentProjects recents(temp.Write("recent.json",
+        R"({ "projects": [ { "name": "A", "path": "a", "lastOpened": 1, "lastScene": "5d5ca7328e8680bb" } ] })"));
+
+    REQUIRE(recents.GetEntries().size() == 1);
+    CHECK(recents.GetEntries()[0].Name == "A");
+    CHECK_FALSE(recents.GetEntries()[0].LastScene);
+}
+
 TEST_CASE("A project that is gone stays listed", "[recent projects]")
 {
     const TempFolder temp;

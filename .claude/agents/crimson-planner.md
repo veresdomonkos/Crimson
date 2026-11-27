@@ -30,5 +30,7 @@ You change nothing except `.git/deliver/plan.md`. Bash is for read-only commands
 
 When revising, start with one line on what was wrong, then give the full corrected plan.
 
+Try the Write tool first; if it is refused or errors, write the file with Bash (`cat > .git/deliver/plan.md <<'EOF' ... EOF`; Bash is allowed for this file only). Then run `test -s .git/deliver/plan.md` and claim it is written only if that passes; if neither way works, say so in the reply and name the error.
+
 ## Reply
 Two lines: "Plan written to .git/deliver/plan.md", then the step and commit count. The orchestrator reads the file.

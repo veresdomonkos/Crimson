@@ -37,9 +37,9 @@ namespace
 
     // With ids, as the editor saves them. A file without any gets them written in when it is first read, so they stay.
     constexpr std::string_view kMainScene = R"({ "version": 1, "entities": [
-            { "id": "00000000000000a1", "name": "Floor", "meshRenderer": { "mesh": "meshes/floor.obj", "materials": [ "materials/floor.mat" ] } },
-            { "id": "00000000000000a2", "name": "Pyramid", "meshRenderer": { "mesh": "meshes/pyramid.obj" } },
-            { "id": "00000000000000a3", "name": "Sun", "light": { "type": "directional" } }
+            { "id": "00000000-0000-4000-8000-0000000000a1", "name": "Floor", "meshRenderer": { "mesh": "meshes/floor.obj", "materials": [ "materials/floor.mat" ] } },
+            { "id": "00000000-0000-4000-8000-0000000000a2", "name": "Pyramid", "meshRenderer": { "mesh": "meshes/pyramid.obj" } },
+            { "id": "00000000-0000-4000-8000-0000000000a3", "name": "Sun", "light": { "type": "directional" } }
         ] })";
 
     // One pixel

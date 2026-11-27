@@ -9,7 +9,6 @@
 #include <utility>
 #include "crimson/asset_manager/meta_file.hpp"
 #include "crimson/core/engine_resources.hpp"
-#include "crimson/core/hash.hpp"
 #include "crimson/core/log.hpp"
 
 #include "engine_renames.hpp"
@@ -24,7 +23,7 @@ namespace crimson
     // An engine resource has no meta to store an id in, and scenes must find it again in any project.
     static AssetID EngineResourceId(std::string_view path)
     {
-        return AssetID{ Fnv1a(path) };
+        return AssetID::FromName(kAssetPathNamespace, path);
     }
 
     static std::string NormalizeExt(const fs::path& p)

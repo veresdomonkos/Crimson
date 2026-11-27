@@ -1,12 +1,10 @@
 #include "asset_ref.hpp"
 
-#include <cstdint>
 #include <exception>
 #include <string>
 #include <utility>
 
 #include "crimson/asset_manager/asset_manager.hpp"
-#include "crimson/core/hash.hpp"
 #include "crimson/core/log.hpp"
 
 namespace crimson
@@ -35,18 +33,11 @@ namespace crimson
         return id && assets.GetInfo(id) ? id : AssetID{};
     }
 
-    // An id for a reference written as only a path, the same every time it is read. FNV-1a.
-    static AssetID IdForPath(std::string_view path)
-    {
-        const uint64_t hash = Fnv1a(path);
-        return AssetID{ hash != 0 ? hash : 1 };
-    }
-
     static AssetID RememberMissing(const AssetManager& assets, AssetID id, std::string path, AssetType type, std::string_view context)
     {
         const bool pathOnly = !id;
         if (pathOnly)
-            id = IdForPath(path);
+            id = AssetID::FromName(kAssetPathNamespace, path);
 
         const std::string shown = path.empty() ? id.ToString() : path;
 

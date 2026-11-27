@@ -119,7 +119,7 @@ TEST_CASE("A drop gives what was dragged", "[editor][drag drop]")
 
     SECTION("an asset")
     {
-        const AssetID id{ 0x0123456789abcdefull };
+        const AssetID id = AssetID::Generate();
         DragRig<AssetID> rig(id);
 
         rig.DragOverTarget();

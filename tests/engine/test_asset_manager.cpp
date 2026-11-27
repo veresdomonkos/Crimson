@@ -459,7 +459,7 @@ TEST_CASE("Typed ids only come from assets of their type", "[assets]")
 
     SECTION("So does an id or path that doesn't exist")
     {
-        CHECK_FALSE(assets.As<MeshAsset>(AssetID{ 1234 }));
+        CHECK_FALSE(assets.As<MeshAsset>(AssetID::Generate()));
         CHECK_FALSE(assets.Find<MeshAsset>("no/such.obj"));
         CHECK(assets.Get(MeshID{}) == nullptr);
     }
@@ -643,16 +643,10 @@ static std::string ReadFile(const fs::path& file)
     return std::string(std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>());
 }
 
-// The id an engine asset had at a path, FNV-1a of it
+// The id an engine asset has at a path
 static std::string EngineIdOf(std::string_view path)
 {
-    uint64_t hash = 0xcbf29ce484222325ull;
-    for (const unsigned char c : path)
-    {
-        hash ^= c;
-        hash *= 0x100000001b3ull;
-    }
-    return AssetID{ hash }.ToString();
+    return AssetID::FromName(kAssetPathNamespace, path).ToString();
 }
 
 TEST_CASE("Engine assets saved under their old names still load", "[assets]")
@@ -680,7 +674,7 @@ TEST_CASE("Engine assets saved under their old names still load", "[assets]")
 
     SECTION("A scene")
     {
-        const std::string text = R"({ "version": 1, "entities": [ { "id": "00000000000000b2", "meshRenderer": { "mesh": { "guid": ")" + EngineIdOf("engine/meshes/cube.obj")
+        const std::string text = R"({ "version": 1, "entities": [ { "id": "00000000-0000-4000-8000-0000000000b2", "meshRenderer": { "mesh": { "guid": ")" + EngineIdOf("engine/meshes/cube.obj")
             + R"(", "path": "engine/meshes/cube.obj" }, "materials": [ "engine/materials/default.mat" ] } } ] })";
 
         const auto data = scene_data::Parse(text, assets, "test");
@@ -695,7 +689,8 @@ TEST_CASE("Engine assets saved under their old names still load", "[assets]")
 
     SECTION("An id that was never an engine asset's stays as it is")
     {
-        CHECK(assets.Redirect(AssetID{ 42 }) == AssetID{ 42 });
+        const AssetID other = AssetID::Generate();
+        CHECK(assets.Redirect(other) == other);
         CHECK(assets.Redirect(lit) == lit);
     }
 }
@@ -1101,7 +1096,7 @@ TEST_CASE("A meta file naming another type is warned about, and its importer's t
 {
     const TempFolder temp;
     temp.Write("tri.obj", kTriangleObj);
-    temp.Write("tri.obj.meta", R"({ "guid": "00000000000000ab", "type": "Texture", "importerVersion": 1, "settings": {} })");
+    temp.Write("tri.obj.meta", R"({ "guid": "00000000-0000-0000-0000-0000000000ab", "type": "Texture", "importerVersion": 1, "settings": {} })");
     FakeGpuResourceManager gpu;
 
     const LogCounter warnings(LogLevel::Warn, "says it is a Texture, but its importer makes Mesh");
@@ -1109,7 +1104,7 @@ TEST_CASE("A meta file naming another type is warned about, and its importer's t
 
     CHECK(warnings.Count() == 1);
 
-    const AssetInfo* info = assets.GetInfo(AssetID{ 0xab });
+    const AssetInfo* info = assets.GetInfo(AssetID::FromString("00000000-0000-0000-0000-0000000000ab"));
     REQUIRE(info);
     CHECK(info->Path == "tri.obj");
     CHECK(info->Type.Is<MeshAsset>());

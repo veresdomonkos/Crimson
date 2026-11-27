@@ -53,7 +53,9 @@ any node, after an interruption --resume--> re-run the node named in state.md
 ```
 Each reviewer finding carries a `route:` (`fix`, `replan` or `ask`). After a FAIL, take the highest-priority route present: `ask` > `replan` > `fix`.
 
-**Check every output.** After each agent returns, run `test -s` on the file it owns (`plan.md`, `report.md` or `review.md`). If it is missing or empty, spawn the same agent type again with "Your output file `<path>` is missing; write it now." For the implementer add: "The implementation is already in the working tree; read `git diff HEAD --stat`, run the build and tests, and write the report from that." Never take the place of a missing file with the agent's reply.
+**Check every output.** After each agent returns, run `test -s` on the file it owns (`plan.md`, `report.md` or `review.md`). If it is missing or empty, spawn the same agent type again with "Your output file `<path>` is missing; write it now." For the implementer add: "The implementation is already in the working tree; read `git diff HEAD --stat`, run the build and tests, and write the report from that." The agent's claim that it wrote the file is not proof; only `test -s` counts. Never take the place of a missing file with the agent's reply.
+- Retry once, with the cause named: add "The Write tool may be refused for `.git/` paths; write the file with Bash (`cat > <path> <<'EOF'`) and check it with `test -s`."
+- If the file is still missing after that retry, stop and tell the user, with the agent's stated error. Don't loop and don't write the file yourself.
 
 ## resume
 Entered by `/crimson-deliver resume` after an interruption (closed terminal, crash, usage limit). Subagents keep no memory and every node needs only its files, so resuming means re-running the node in flight, never rebuilding a conversation.
