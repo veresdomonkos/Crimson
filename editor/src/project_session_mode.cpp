@@ -20,6 +20,7 @@
 #include "crimson_editor/panels/hierarchy_panel.hpp"
 #include "crimson_editor/panels/inspector_panel.hpp"
 #include "crimson_editor/panels/preferences_panel.hpp"
+#include "crimson_editor/panels/project_settings_panel.hpp"
 #include "crimson_editor/panels/scene_settings_panel.hpp"
 #include "crimson_editor/panels/scene_viewport_panel.hpp"
 #include "crimson_editor/panels/stats_panel.hpp"
@@ -122,6 +123,7 @@ namespace crimson::editor
         m_workspace.AddPanel<StatsPanel>(m_frameStats, m_services.RendererType);
         m_workspace.AddPanel<SceneSettingsPanel>(m_context);
         m_preferences = &m_workspace.AddPanel<PreferencesPanel>(m_services.Settings, m_services.AppWindow);
+        m_projectSettings = &m_workspace.AddPanel<ProjectSettingsPanel>(m_context);
     }
 
     void ProjectSessionMode::SetupCommands()
@@ -144,6 +146,9 @@ namespace crimson::editor
 
         m_workspace.AddCommand({ .MenuPath = "Edit/Preferences...", .Priority = 150,
                                  .Run = [this] { m_preferences->Show(); } });
+
+        m_workspace.AddCommand({ .MenuPath = "Edit/Project Settings...", .Priority = 151,
+                                 .Run = [this] { m_projectSettings->Show(); } });
 
         // While flying, F is a key of the camera
         m_workspace.AddCommand({ .Shortcuts = { { Key::F } },

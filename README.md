@@ -70,6 +70,7 @@ It needs a C++23 compiler, CMake 3.22+, the [Vulkan SDK](https://vulkan.lunarg.c
 | **Assets** | the project's files. Drag them into the scene or the Inspector, and right-click for more. **Show Engine Content** adds the engine's built-in ones under an Engine root of their own, named with a prefix for their kind: `S_Lit.hlsl`, `M_Default.mat`, `SM_Cube.obj`. |
 | **Console** | everything the engine logs |
 | **Scene Settings** | ambient light, the main camera and post-processing (exposure and tone mapping), saved with the scene |
+| **Project Settings** | settings saved with the project and shared by everyone on it, for now the main scene, the one a built game starts with. Opened from **Edit > Project Settings**. |
 | **Stats** | frame times, draw calls and triangles |
 
 Every panel but Scene can be closed from its tab and opened again from **View**, which also has **Reset Layout**.
