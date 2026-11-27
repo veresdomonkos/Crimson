@@ -58,6 +58,41 @@ namespace crimson::editor
         m_history.AddSource(m_assetEdits);
 
         LoadScene(ChooseScene(m_recents.GetLastScene(m_project.Root())));
+
+        ReadProjectSettings();
+    }
+
+    void ProjectSession::SetProjectSettings(const ProjectSettings& settings)
+    {
+        if (settings == m_projectSettings)
+            return;
+
+        ProjectSettings old = std::exchange(m_projectSettings, settings);
+
+        if (!SaveProjectSettings())
+            m_projectSettings = old;
+    }
+
+    void ProjectSession::ReadProjectSettings()
+    {
+        m_seenAssetsVersion = m_assets.Version();
+        m_projectSettings = project_settings::Read(m_project.GetSettings(), m_assets);
+
+        // A moved asset has a new path, and a stale id or a path-only reference is written as it was found
+        SaveProjectSettings();
+    }
+
+    bool ProjectSession::SaveProjectSettings()
+    {
+        nlohmann::ordered_json written = project_settings::Write(m_projectSettings, m_assets);
+        if (written == m_project.GetSettings())
+            return true;
+
+        if (m_project.SetSettings(std::move(written)))
+            return true;
+
+        LOG_ERROR("[Project] Can't write the settings to {}", Project::kFileName);
+        return false;
     }
 
     bool ProjectSession::CheckSceneChanged()
@@ -80,6 +115,9 @@ namespace crimson::editor
 
     void ProjectSession::Update(float deltaTime)
     {
+        if (m_assets.Version() != m_seenAssetsVersion)
+            ReadProjectSettings();
+
         // Between frames, as loading a scene and restoring a copy create GPU resources
         if (m_sceneToLoad)
         {

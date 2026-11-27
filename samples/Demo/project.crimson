@@ -1,4 +1,10 @@
 {
   "name": "Demo",
-  "version": 1
+  "version": 1,
+  "settings": {
+    "mainScene": {
+      "guid": "3d2215de-4684-4f85-b18d-c0fb98cd2d47",
+      "path": "scenes/demo.scene"
+    }
+  }
 }

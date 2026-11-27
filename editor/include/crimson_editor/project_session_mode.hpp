@@ -16,6 +16,7 @@
 #include "crimson_editor/panels/console_panel.hpp"
 #include "crimson_editor/panels/notifications.hpp"
 #include "crimson_editor/panels/preferences_panel.hpp"
+#include "crimson_editor/panels/project_settings_panel.hpp"
 #include "crimson_editor/panels/viewport_panel.hpp"
 #include "crimson_editor/ui/workspace.hpp"
 
@@ -90,6 +91,7 @@ namespace crimson::editor
         AssetBrowserPanel* m_assetBrowser = nullptr;
         ConsolePanel* m_console = nullptr;
         PreferencesPanel* m_preferences = nullptr;
+        ProjectSettingsPanel* m_projectSettings = nullptr;
 
         // Clicking a message shows the Console
         Notifications m_notifications;

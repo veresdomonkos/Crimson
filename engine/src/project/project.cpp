@@ -8,6 +8,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "crimson/core/file_write.hpp"
 #include "platform/files.hpp"
 
 namespace fs = std::filesystem;
@@ -32,13 +33,17 @@ namespace crimson
 
         try
         {
-            const nlohmann::json json = nlohmann::json::parse(file);
+            const nlohmann::ordered_json json = nlohmann::ordered_json::parse(file);
 
             const int version = json.value("version", 0);
             if (version < 1 || version > kProjectVersion)
                 return std::unexpected("Unsupported project version " + std::to_string(version) + " in " + root.string());
 
-            return Project(json.at("name").get<std::string>(), std::move(root));
+            // A hand-edited file can't block opening the project, so settings that aren't an object are none
+            const auto settings = json.find("settings");
+            nlohmann::ordered_json section = settings != json.end() && settings->is_object() ? *settings : nlohmann::ordered_json::object();
+
+            return Project(json.at("name").get<std::string>(), std::move(root), std::move(section));
         }
         catch (const nlohmann::json::exception& e)
         {
@@ -61,14 +66,27 @@ namespace crimson
         if (error)
             return std::unexpected("Can't create " + root.string() + ": " + error.message());
 
-        std::ofstream file(root / kFileName);
-        file << nlohmann::json{ { "name", name }, { "version", kProjectVersion } }.dump(2) << '\n';
-        file.close();
+        Project project(name, std::move(root), nlohmann::ordered_json::object());
 
-        if (!file)
-            return std::unexpected("Can't write the project file in " + root.string());
+        if (!project.Save())
+            return std::unexpected("Can't write the project file in " + project.m_root.string());
 
-        return Project(name, std::move(root));
+        return project;
+    }
+
+    bool Project::Save() const
+    {
+        nlohmann::ordered_json json = { { "name", m_name }, { "version", kProjectVersion } };
+
+        if (!m_settings.empty())
+            json["settings"] = m_settings;
+
+        return WriteFileSafely(m_root / kFileName, json.dump(2) + '\n');
+    }
+
+    bool Project::SetSettings(nlohmann::ordered_json settings)
+    {
+        return SaveWith([&](Project& project) { project.m_settings = std::move(settings); });
     }
 
     bool Project::EnsureDataDir() const

@@ -5,6 +5,8 @@
 #include <string_view>
 #include <utility>
 
+#include <nlohmann/json.hpp>
+
 namespace crimson
 {
     // A folder with a project file and an assets folder. The errors are meant to be shown to the user.
@@ -32,10 +34,36 @@ namespace crimson
         // Creates the data folder if it isn't there yet. On Windows it is also hidden, as the dot only hides it elsewhere.
         // Returns false if it can't be created.
         bool EnsureDataDir() const;
+
+        // The settings section as it is written, not read here, as loading a project comes before there are assets.
+        // project_settings::Read reads it.
+        [[nodiscard]] const nlohmann::ordered_json& GetSettings() const { return m_settings; }
+
+        // Writes the project file, and returns false, keeping the old settings, if that fails. Logs nothing, for the
+        // caller to report.
+        [[nodiscard]] bool SetSettings(nlohmann::ordered_json settings);
     private:
-        Project(std::string name, std::filesystem::path root) : m_name(std::move(name)), m_root(std::move(root)) {}
+        Project(std::string name, std::filesystem::path root, nlohmann::ordered_json settings)
+            : m_name(std::move(name)), m_root(std::move(root)), m_settings(std::move(settings)) {}
+
+        [[nodiscard]] bool Save() const;
+
+        // Applies a change to a copy and writes that, so a failed write leaves this as it was
+        template <typename Change>
+        [[nodiscard]] bool SaveWith(Change&& change)
+        {
+            Project next = *this;
+            change(next);
+
+            if (!next.Save())
+                return false;
+
+            *this = std::move(next);
+            return true;
+        }
 
         std::string m_name;
         std::filesystem::path m_root;
+        nlohmann::ordered_json m_settings = nlohmann::ordered_json::object();
     };
 }

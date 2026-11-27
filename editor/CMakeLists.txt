@@ -39,6 +39,7 @@ set(EDITOR_HEADERS
     include/crimson_editor/panels/inspector_panel.hpp
     include/crimson_editor/panels/notifications.hpp
     include/crimson_editor/panels/preferences_panel.hpp
+    include/crimson_editor/panels/project_settings_panel.hpp
     include/crimson_editor/panels/scene_settings_panel.hpp
     include/crimson_editor/panels/scene_viewport_panel.hpp
     include/crimson_editor/panels/stats_panel.hpp
@@ -78,6 +79,7 @@ set(EDITOR_SOURCES
     src/panels/inspector_panel.cpp
     src/panels/notifications.cpp
     src/panels/preferences_panel.cpp
+    src/panels/project_settings_panel.cpp
     src/panels/scene_settings_panel.cpp
     src/panels/scene_viewport_panel.cpp
     src/panels/stats_panel.cpp

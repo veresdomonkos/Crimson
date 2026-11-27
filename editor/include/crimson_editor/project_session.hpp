@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -8,6 +9,7 @@
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/asset_manager/importers/scene_asset.hpp>
 #include <crimson/project/project.hpp>
+#include <crimson/project/project_settings.hpp>
 #include <crimson/renderer/resource_manager.hpp>
 #include <crimson/scene/entity.hpp>
 
@@ -46,6 +48,12 @@ namespace crimson::editor
         // For undo of the scene: record an entity before changing it, or after creating it. The selected one is recorded already.
         [[nodiscard]] SceneEdits& GetSceneEdits() { return m_sceneEdits; }
         [[nodiscard]] EditHistory& GetHistory() { return m_history; }
+
+        // The project's settings, which are not the ones of the scene the editor opens. A reference keeps its asset when
+        // that moves, and stays as a missing one when its asset is gone, like any reference in an asset file. Setting
+        // writes project.crimson, and keeps the old ones if that fails.
+        [[nodiscard]] const ProjectSettings& GetProjectSettings() const { return m_projectSettings; }
+        void SetProjectSettings(const ProjectSettings& settings);
 
         // The file of the scene. Invalid if the scene couldn't be loaded, and then there is nothing to save to.
         [[nodiscard]] SceneID GetSceneAsset() const { return m_sceneAsset; }
@@ -112,6 +120,12 @@ namespace crimson::editor
         void ShowScene(const SceneData& data, SceneID id);
         void DoRestoreRecovery();
 
+        // Reads the settings from the project file, and writes them back if what they point to changed
+        void ReadProjectSettings();
+
+        // Logs if the project file can't be written
+        bool SaveProjectSettings();
+
         // Asks what to do with the scene's copy if it is newer than the scene's file, and deletes it if it isn't
         void OfferRecovery(SceneID id);
         // Deletes the open scene's copy if this session wrote or restored it
@@ -162,6 +176,8 @@ namespace crimson::editor
         bool m_edited = false;
 
         size_t m_missingAssets = 0;
+        uint64_t m_seenAssetsVersion = 0;
+        ProjectSettings m_projectSettings;
 
         float m_sinceSceneCheck = 0.0f;
         float m_sinceRecovery = 0.0f;
