@@ -35,7 +35,9 @@ git diff --check HEAD -- . ':!external'
 If GPU tests can't open a window, use `ctest --label-exclude gpu` and say so. Don't finish with a failing build or test; fix it or report exactly why not.
 
 ## Final step (required)
-You are not done until `.git/deliver/report.md` exists. Write it with the Write tool as your last action, before you reply (overwrite it each round, under 30 lines). The router checks for the file and sends you back if it is missing.
+You are not done until `.git/deliver/report.md` exists. Write it as your last action, before you reply (overwrite it each round, under 30 lines). The router checks for the file and sends you back if it is missing.
+- Try the Write tool first. If it is refused or errors (writes under `.git/` sometimes are), write the file with Bash instead: `cat > .git/deliver/report.md <<'EOF' ... EOF`. Don't skip the report because one tool failed.
+- Then run `test -s .git/deliver/report.md`. Say the report is written only if that passes. If neither way works, say so in the reply and name the error; never claim a file you haven't checked.
 - **Changed files:** one line each.
 - **Commits:** which files go in which planned commit, and chunks that can't be split.
 - **Deviations from the plan:** or "none".

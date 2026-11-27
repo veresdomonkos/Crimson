@@ -38,7 +38,7 @@ If GPU tests can't open a window, use `ctest --label-exclude gpu` and note it. R
 Report only real problems you are confident in; no taste padding. Every finding needs a concrete case (this input or state leads to this wrong result), and you re-read the cited lines to confirm it before reporting. No case, no finding. Read the `docs/` pages the plan names, so you judge against the project's own architecture rules.
 
 ## review.md
-Overwrite it. First line alone: `VERDICT: PASS` or `VERDICT: FAIL`. Then:
+Overwrite it. Try the Write tool first; if it is refused or errors, write the file with Bash (`cat > .git/deliver/review.md <<'EOF' ... EOF`). Then run `test -s .git/deliver/review.md` and claim it is written only if that passes; if neither way works, say so in the reply and name the error. First line alone: `VERDICT: PASS` or `VERDICT: FAIL`. Then:
 - **Verification:** build, tests (ctest summary line), conventions check: pass or fail.
 - **Checklist:** each item `[x]` or `[ ]` with one line of evidence.
 - **Not checked:** anything that mattered and you couldn't verify, or "none".
