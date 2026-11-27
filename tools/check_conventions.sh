@@ -30,8 +30,8 @@ check_branch()
         return
     fi
 
-    if ! printf '%s\n' "$name" | grep -Eqx '(feature|fix|refactor|chore|docs)/[a-z0-9]+(-[a-z0-9]+)*'; then
-        fail "Branch '$name' has to be feature/, fix/, refactor/, chore/ or docs/, then a lowercase name with hyphens." \
+    if ! printf '%s\n' "$name" | grep -Eqx '(feature|improvement|fix|refactor|chore|docs)/[a-z0-9]+(-[a-z0-9]+)*'; then
+        fail "Branch '$name' has to be feature/, improvement/, fix/, refactor/, chore/ or docs/, then a lowercase name with hyphens." \
              "Rename it with: git branch -m <prefix>/<short-name>"
     fi
 }
