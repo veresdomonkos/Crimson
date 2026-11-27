@@ -9,6 +9,7 @@
 #include <crimson/asset_manager/asset_manager.hpp>
 #include <crimson/asset_manager/importers/scene_asset.hpp>
 #include <crimson/project/project.hpp>
+#include <crimson/project/project_settings.hpp>
 #include <crimson/renderer/resource_manager.hpp>
 #include <crimson/scene/entity.hpp>
 
@@ -48,10 +49,11 @@ namespace crimson::editor
         [[nodiscard]] SceneEdits& GetSceneEdits() { return m_sceneEdits; }
         [[nodiscard]] EditHistory& GetHistory() { return m_history; }
 
-        // The scene a built game starts with, which is the project's and not the one the editor opens. Empty if there is
-        // none or it isn't there. It follows the scene when that moves, and is cleared with a warning when it is deleted.
-        [[nodiscard]] SceneID GetMainScene() const;
-        void SetMainScene(SceneID id);
+        // The project's settings, which are not the ones of the scene the editor opens. A reference keeps its asset when
+        // that moves, and stays as a missing one when its asset is gone, like any reference in an asset file. Setting
+        // writes project.crimson, and keeps the old ones if that fails.
+        [[nodiscard]] const ProjectSettings& GetProjectSettings() const { return m_projectSettings; }
+        void SetProjectSettings(const ProjectSettings& settings);
 
         // The file of the scene. Invalid if the scene couldn't be loaded, and then there is nothing to save to.
         [[nodiscard]] SceneID GetSceneAsset() const { return m_sceneAsset; }
@@ -118,11 +120,11 @@ namespace crimson::editor
         void ShowScene(const SceneData& data, SceneID id);
         void DoRestoreRecovery();
 
-        // Keeps the project's main scene pointing at its asset after the assets changed
-        void SyncMainScene();
+        // Reads the settings from the project file, and writes them back if what they point to changed
+        void ReadProjectSettings();
 
         // Logs if the project file can't be written
-        void WriteMainScene(AssetRef scene);
+        bool SaveProjectSettings();
 
         // Asks what to do with the scene's copy if it is newer than the scene's file, and deletes it if it isn't
         void OfferRecovery(SceneID id);
@@ -175,6 +177,7 @@ namespace crimson::editor
 
         size_t m_missingAssets = 0;
         uint64_t m_seenAssetsVersion = 0;
+        ProjectSettings m_projectSettings;
 
         float m_sinceSceneCheck = 0.0f;
         float m_sinceRecovery = 0.0f;

@@ -5,7 +5,7 @@
 #include <string_view>
 #include <utility>
 
-#include "crimson/asset_manager/asset_id.hpp"
+#include <nlohmann/json.hpp>
 
 namespace crimson
 {
@@ -35,16 +35,16 @@ namespace crimson
         // Returns false if it can't be created.
         bool EnsureDataDir() const;
 
-        // The scene a built game starts with. Empty if there is none. It is not looked up, as loading the project comes
-        // before there are assets.
-        [[nodiscard]] const AssetRef& GetMainScene() const { return m_mainScene; }
+        // The settings section as it is written, not read here, as loading a project comes before there are assets.
+        // project_settings::Read reads it.
+        [[nodiscard]] const nlohmann::ordered_json& GetSettings() const { return m_settings; }
 
-        // An empty one clears it. Writes the project file, and returns false, keeping the old one, if that fails. Logs
-        // nothing, for the caller to report.
-        [[nodiscard]] bool SetMainScene(AssetRef scene);
+        // Writes the project file, and returns false, keeping the old settings, if that fails. Logs nothing, for the
+        // caller to report.
+        [[nodiscard]] bool SetSettings(nlohmann::ordered_json settings);
     private:
-        Project(std::string name, std::filesystem::path root, AssetRef mainScene)
-            : m_name(std::move(name)), m_root(std::move(root)), m_mainScene(std::move(mainScene)) {}
+        Project(std::string name, std::filesystem::path root, nlohmann::ordered_json settings)
+            : m_name(std::move(name)), m_root(std::move(root)), m_settings(std::move(settings)) {}
 
         [[nodiscard]] bool Save() const;
 
@@ -64,6 +64,6 @@ namespace crimson
 
         std::string m_name;
         std::filesystem::path m_root;
-        AssetRef m_mainScene;
+        nlohmann::ordered_json m_settings = nlohmann::ordered_json::object();
     };
 }

@@ -78,6 +78,7 @@ set(ENGINE_PUBLIC_HEADERS
     include/crimson/scene/tone_mapper.hpp
 
     include/crimson/project/project.hpp
+    include/crimson/project/project_settings.hpp
     include/crimson/project/shader_includes.hpp
 )
 
@@ -152,6 +153,7 @@ set(ENGINE_SOURCES
     src/platform/vulkan/vulkan_resources.hpp
 
     src/project/project.cpp
+    src/project/project_settings.cpp
     src/project/shader_includes.cpp
 
     src/renderer/draw_material.hpp

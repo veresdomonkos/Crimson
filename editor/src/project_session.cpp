@@ -59,49 +59,40 @@ namespace crimson::editor
 
         LoadScene(ChooseScene(m_recents.GetLastScene(m_project.Root())));
 
-        if (const AssetRef& main = m_project.GetMainScene(); main && !m_assets.FindId(main))
-            LOG_WARN("[Project] The main scene {} isn't there, so it is kept in case it comes back", main.Path);
-
-        SyncMainScene();
+        ReadProjectSettings();
     }
 
-    SceneID ProjectSession::GetMainScene() const
+    void ProjectSession::SetProjectSettings(const ProjectSettings& settings)
     {
-        return m_assets.As<SceneAsset>(m_assets.FindId(m_project.GetMainScene()));
-    }
-
-    void ProjectSession::SetMainScene(SceneID id)
-    {
-        const AssetInfo* info = m_assets.GetInfo(id);
-        if (!info)
+        if (settings == m_projectSettings)
             return;
 
-        WriteMainScene({ id, info->Path });
+        ProjectSettings old = std::exchange(m_projectSettings, settings);
+
+        if (!SaveProjectSettings())
+            m_projectSettings = old;
     }
 
-    void ProjectSession::WriteMainScene(AssetRef scene)
-    {
-        if (!m_project.SetMainScene(std::move(scene)))
-            LOG_ERROR("[Project] Can't write the main scene to {}", Project::kFileName);
-    }
-
-    void ProjectSession::SyncMainScene()
+    void ProjectSession::ReadProjectSettings()
     {
         m_seenAssetsVersion = m_assets.Version();
+        m_projectSettings = project_settings::Read(m_project.GetSettings(), m_assets);
 
-        const AssetRef main = m_project.GetMainScene();
-        if (!main)
-            return;
+        // A moved asset has a new path, and a stale id or a path-only reference is written as it was found
+        SaveProjectSettings();
+    }
 
-        // A stale id, such as from a scene that was recreated, is found by its path
-        const AssetID id = m_assets.FindId(main);
-        const AssetInfo* info = m_assets.GetInfo(id);
-        if (!info || !info->Type.Is<SceneAsset>())
-            return;
+    bool ProjectSession::SaveProjectSettings()
+    {
+        nlohmann::ordered_json written = project_settings::Write(m_projectSettings, m_assets);
+        if (written == m_project.GetSettings())
+            return true;
 
-        AssetRef current{ id, info->Path };
-        if (current != main)
-            WriteMainScene(std::move(current));
+        if (m_project.SetSettings(std::move(written)))
+            return true;
+
+        LOG_ERROR("[Project] Can't write the settings to {}", Project::kFileName);
+        return false;
     }
 
     bool ProjectSession::CheckSceneChanged()
@@ -125,7 +116,7 @@ namespace crimson::editor
     void ProjectSession::Update(float deltaTime)
     {
         if (m_assets.Version() != m_seenAssetsVersion)
-            SyncMainScene();
+            ReadProjectSettings();
 
         // Between frames, as loading a scene and restoring a copy create GPU resources
         if (m_sceneToLoad)
@@ -186,13 +177,6 @@ namespace crimson::editor
 
             if (m_selectedAsset == id)
                 SelectAsset({});
-        }
-
-        if (const AssetID main = m_project.GetMainScene().Id; main && std::ranges::find(removed, main) != removed.end())
-        {
-            LOG_WARN("[Project] The main scene {} was deleted, so the project has none now", m_project.GetMainScene().Path);
-
-            WriteMainScene({});
         }
 
         const auto isRemoved = [removed](AssetID id) { return std::ranges::find(removed, id) != removed.end(); };

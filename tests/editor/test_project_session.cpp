@@ -15,6 +15,7 @@
 #include <crimson/asset_manager/importers/texture_asset.hpp>
 #include <crimson/scene/scene_camera.hpp>
 #include <crimson/scene/scene_serializer.hpp>
+#include <crimson_editor/panels/asset_field.hpp>
 #include <crimson_editor/project_session.hpp>
 #include <crimson_editor/recent_projects.hpp>
 
@@ -23,6 +24,7 @@
 #include "support/temp_folder.hpp"
 
 using namespace crimson;
+using crimson::editor::AssetFieldText;
 using crimson::editor::ProjectSession;
 using crimson::editor::RecentProjects;
 using crimson::tests::FakeGpuResourceManager;
@@ -57,6 +59,17 @@ namespace
     {
         std::ifstream stream(file, std::ios::binary);
         return { std::istreambuf_iterator<char>(stream), std::istreambuf_iterator<char>() };
+    }
+
+    nlohmann::ordered_json MainSceneSection(AssetID id, std::string_view path)
+    {
+        return { { "mainScene", { { "guid", id.ToString() }, { "path", path } } } };
+    }
+
+    // What the project file says the main scene's path is
+    std::string MainScenePath(const fs::path& root)
+    {
+        return Project::Load(root)->GetSettings().at("mainScene").at("path").get<std::string>();
     }
 
     bool HasEntityNamed(Scene& scene, std::string_view name)
@@ -819,10 +832,10 @@ TEST_CASE_METHOD(Fixture, "A project's main scene is kept, and followed when it 
     const SceneID main = MainScene();
     const SceneID other = Assets().Create<SceneAsset>("scenes/other.scene");
     REQUIRE(other);
-    CHECK_FALSE(Session().GetMainScene());
+    CHECK_FALSE(Session().GetProjectSettings().MainScene);
 
-    Session().SetMainScene(other);
-    CHECK(Session().GetMainScene() == other);
+    Session().SetProjectSettings({ .MainScene = other });
+    CHECK(Session().GetProjectSettings().MainScene == other);
 
     SECTION("It is in the file, and the scene the editor opens stays the user's")
     {
@@ -830,7 +843,7 @@ TEST_CASE_METHOD(Fixture, "A project's main scene is kept, and followed when it 
         Open.reset();
         Open.emplace(*Project::Load(Created.Root()), Gpu, Recents, [this] { return Editing; });
 
-        CHECK(Session().GetMainScene() == other);
+        CHECK(Session().GetProjectSettings().MainScene == other);
         CHECK(Session().GetSceneAsset() == main);
     }
 
@@ -839,50 +852,89 @@ TEST_CASE_METHOD(Fixture, "A project's main scene is kept, and followed when it 
         REQUIRE(Assets().Rename(other, "scenes/moved.scene"));
         Session().Update(0.0f);
 
-        CHECK(Session().GetMainScene() == other);
-        CHECK(Project::Load(Created.Root())->GetMainScene().Path == "scenes/moved.scene");
+        CHECK(Session().GetProjectSettings().MainScene == other);
+        CHECK(MainScenePath(Created.Root()) == "scenes/moved.scene");
     }
 
     SECTION("A stale id is found by the path")
     {
-        const auto project = Project::Load(Created.Root());
-        REQUIRE(project);
-        Project edited = *project;
-        REQUIRE(edited.SetMainScene({ AssetID::Generate(), "scenes/other.scene" }));
+        Project edited = *Project::Load(Created.Root());
+        REQUIRE(edited.SetSettings(MainSceneSection(AssetID::Generate(), "scenes/other.scene")));
 
         Open.reset();
         Open.emplace(*Project::Load(Created.Root()), Gpu, Recents, [this] { return Editing; });
 
-        CHECK(Session().GetMainScene() == other);
-        CHECK(Project::Load(Created.Root())->GetMainScene().Id == AssetID(other));
+        CHECK(Session().GetProjectSettings().MainScene == other);
+        CHECK((*Project::Load(Created.Root())).GetSettings().at("mainScene").at("guid") == AssetID(other).ToString());
     }
 
-    SECTION("Deleting it clears it, with a warning")
+    SECTION("Deleting it keeps it as missing")
     {
         const LogCounter warnings(LogLevel::Warn, "main scene");
 
         REQUIRE(Assets().Delete(other));
         const std::array removed = { AssetID(other) };
         Session().ForgetAssets(removed);
+        Session().Update(0.0f);
 
-        CHECK_FALSE(Session().GetMainScene());
-        CHECK_FALSE(Project::Load(Created.Root())->GetMainScene().Id);
-        CHECK(warnings.Count() == 1);
+        CHECK(Session().GetProjectSettings().MainScene == other);
+        CHECK(Assets().IsMissing(other));
+        CHECK(AssetFieldText(Assets(), other, AssetType::Of<SceneAsset>()) == "Missing: scenes/other.scene");
+        CHECK(MainScenePath(Created.Root()) == "scenes/other.scene");
+        CHECK(Project::Load(Created.Root())->GetSettings().at("mainScene").at("guid") == AssetID(other).ToString());
+        CHECK(warnings.Count() == 0);
+    }
+
+    SECTION("Setting none clears it, without a warning")
+    {
+        const LogCounter warnings(LogLevel::Warn, "main scene");
+
+        Session().SetProjectSettings({});
+
+        CHECK_FALSE(Session().GetProjectSettings().MainScene);
+        CHECK(warnings.Count() == 0);
+        CHECK_FALSE(Project::Load(Created.Root())->GetSettings().contains("mainScene"));
+    }
+
+    SECTION("Setting the same settings again leaves the file alone")
+    {
+        const std::string before = ReadBytes(Created.Root() / Project::kFileName);
+
+        Session().SetProjectSettings({ .MainScene = other });
+
+        CHECK(ReadBytes(Created.Root() / Project::kFileName) == before);
     }
 }
 
-TEST_CASE_METHOD(Fixture, "A main scene that is missing at open is kept, with a warning", "[project session]")
+TEST_CASE_METHOD(Fixture, "A main scene that is missing at open is kept as missing, with a warning", "[project session]")
 {
+    const AssetID guid = AssetID::Generate();
+
     Project edited = *Project::Load(Created.Root());
-    REQUIRE(edited.SetMainScene({ AssetID::Generate(), "scenes/gone.scene" }));
+    REQUIRE(edited.SetSettings(MainSceneSection(guid, "scenes/gone.scene")));
+    const std::string before = ReadBytes(Created.Root() / Project::kFileName);
 
     const LogCounter warnings(LogLevel::Warn, "main scene");
     const LogCounter errors(LogLevel::Error, "");
     Open.reset();
     Open.emplace(*Project::Load(Created.Root()), Gpu, Recents, [this] { return Editing; });
 
-    CHECK_FALSE(Session().GetMainScene());
+    const SceneID missing = Session().GetProjectSettings().MainScene;
+    CHECK(AssetID(missing) == guid);
+    CHECK(Assets().IsMissing(missing));
+    CHECK(AssetFieldText(Assets(), missing, AssetType::Of<SceneAsset>()) == "Missing: scenes/gone.scene");
     CHECK(warnings.Count() == 1);
     CHECK(errors.Count() == 0);
-    CHECK(Project::Load(Created.Root())->GetMainScene().Path == "scenes/gone.scene");
+    CHECK(ReadBytes(Created.Root() / Project::kFileName) == before);
+
+    SECTION("It is found again once the scene is back")
+    {
+        const SceneID back = Assets().Create<SceneAsset>("scenes/gone.scene");
+        REQUIRE(back);
+        Session().Update(0.0f);
+
+        CHECK(Session().GetProjectSettings().MainScene == back);
+        CHECK_FALSE(Assets().IsMissing(Session().GetProjectSettings().MainScene));
+        CHECK(Project::Load(Created.Root())->GetSettings().at("mainScene").at("guid") == AssetID(back).ToString());
+    }
 }

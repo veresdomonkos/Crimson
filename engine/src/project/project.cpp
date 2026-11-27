@@ -9,7 +9,6 @@
 #include <nlohmann/json.hpp>
 
 #include "crimson/core/file_write.hpp"
-#include "asset_manager/asset_ref.hpp"
 #include "platform/files.hpp"
 
 namespace fs = std::filesystem;
@@ -34,17 +33,17 @@ namespace crimson
 
         try
         {
-            const nlohmann::json json = nlohmann::json::parse(file);
+            const nlohmann::ordered_json json = nlohmann::ordered_json::parse(file);
 
             const int version = json.value("version", 0);
             if (version < 1 || version > kProjectVersion)
                 return std::unexpected("Unsupported project version " + std::to_string(version) + " in " + root.string());
 
-            // A hand-edited file can't block opening the project, so a main scene that can't be read is none
-            const auto scene = json.find("mainScene");
-            AssetRef mainScene = scene != json.end() ? ParseAssetRef(*scene) : AssetRef{};
+            // A hand-edited file can't block opening the project, so settings that aren't an object are none
+            const auto settings = json.find("settings");
+            nlohmann::ordered_json section = settings != json.end() && settings->is_object() ? *settings : nlohmann::ordered_json::object();
 
-            return Project(json.at("name").get<std::string>(), std::move(root), std::move(mainScene));
+            return Project(json.at("name").get<std::string>(), std::move(root), std::move(section));
         }
         catch (const nlohmann::json::exception& e)
         {
@@ -67,7 +66,7 @@ namespace crimson
         if (error)
             return std::unexpected("Can't create " + root.string() + ": " + error.message());
 
-        Project project(name, std::move(root), {});
+        Project project(name, std::move(root), nlohmann::ordered_json::object());
 
         if (!project.Save())
             return std::unexpected("Can't write the project file in " + project.m_root.string());
@@ -79,15 +78,15 @@ namespace crimson
     {
         nlohmann::ordered_json json = { { "name", m_name }, { "version", kProjectVersion } };
 
-        if (m_mainScene)
-            json["mainScene"] = WriteAssetRef(m_mainScene);
+        if (!m_settings.empty())
+            json["settings"] = m_settings;
 
         return WriteFileSafely(m_root / kFileName, json.dump(2) + '\n');
     }
 
-    bool Project::SetMainScene(AssetRef scene)
+    bool Project::SetSettings(nlohmann::ordered_json settings)
     {
-        return SaveWith([&](Project& project) { project.m_mainScene = std::move(scene); });
+        return SaveWith([&](Project& project) { project.m_settings = std::move(settings); });
     }
 
     bool Project::EnsureDataDir() const
