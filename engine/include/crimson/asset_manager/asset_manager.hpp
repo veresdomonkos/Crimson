@@ -66,9 +66,6 @@ namespace crimson
         [[nodiscard]] const AssetInfo* GetInfo(AssetID id) const;
         [[nodiscard]] AssetID FindId(std::string_view path) const; // an engine asset's old path finds it under its new one
 
-        // The reference's asset if it exists, else the one at its path. Empty if neither is there. Logs nothing.
-        [[nodiscard]] AssetID FindId(const AssetRef& ref) const;
-
         // The id an engine asset that was renamed has now, for one that was saved with its old id. Any other id stays.
         [[nodiscard]] AssetID Redirect(AssetID id) const;
         [[nodiscard]] std::vector<const AssetInfo*> List(AssetType type) const; // sorted by path

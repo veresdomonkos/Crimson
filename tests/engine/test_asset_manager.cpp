@@ -32,7 +32,6 @@
 #include <crimson/core/log.hpp>
 #include <crimson/scene/scene_renderer.hpp>
 
-#include "asset_manager/asset_ref.hpp"
 #include "asset_manager/engine_renames.hpp"
 
 #include "support/fake_gpu.hpp"
@@ -694,100 +693,6 @@ TEST_CASE("Engine assets saved under their old names still load", "[assets]")
         CHECK(assets.Redirect(other) == other);
         CHECK(assets.Redirect(lit) == lit);
     }
-}
-
-TEST_CASE("An asset reference is read and written without the assets", "[assets]")
-{
-    const AssetID id = AssetID::FromString("3d2215de-4684-4f85-b18d-c0fb98cd2d47");
-    const std::string guid = id.ToString();
-
-    SECTION("Reading")
-    {
-        const AssetRef both = ParseAssetRef({ { "guid", guid }, { "path", "a/b.scene" } });
-        CHECK(both.Id == id);
-        CHECK(both.Path == "a/b.scene");
-
-        const AssetRef path = ParseAssetRef("a/b.scene");
-        CHECK_FALSE(path.Id);
-        CHECK(path.Path == "a/b.scene");
-
-        const AssetRef badGuid = ParseAssetRef({ { "guid", "nonsense" }, { "path", "a/b.scene" } });
-        CHECK_FALSE(badGuid.Id);
-        CHECK(badGuid.Path == "a/b.scene");
-
-        const AssetRef badPath = ParseAssetRef({ { "guid", guid }, { "path", 3 } });
-        CHECK(badPath.Id == id);
-        CHECK(badPath.Path.empty());
-
-        CHECK_FALSE(ParseAssetRef(42));
-        CHECK_FALSE(ParseAssetRef({ "a" }));
-        CHECK_FALSE(ParseAssetRef(nlohmann::json()));
-    }
-
-    SECTION("Writing, and reading it back")
-    {
-        const AssetRef both{ id, "a/b.scene" };
-        const nlohmann::ordered_json object = WriteAssetRef(both);
-        CHECK(object.at("guid") == guid);
-        CHECK(object.at("path") == "a/b.scene");
-        CHECK(ParseAssetRef(object) == both);
-
-        const AssetRef onlyId{ id, {} };
-        const nlohmann::ordered_json guidOnly = WriteAssetRef(onlyId);
-        CHECK(guidOnly.is_object());
-        CHECK_FALSE(guidOnly.contains("path"));
-        CHECK(ParseAssetRef(guidOnly) == onlyId);
-
-        const AssetRef onlyPath{ {}, "a/b.scene" };
-        const nlohmann::ordered_json text = WriteAssetRef(onlyPath);
-        CHECK(text == "a/b.scene");
-        CHECK(ParseAssetRef(text) == onlyPath);
-
-        const nlohmann::ordered_json none = WriteAssetRef(AssetRef{});
-        CHECK(none.is_null());
-        CHECK_FALSE(ParseAssetRef(none));
-    }
-}
-
-TEST_CASE("A reference finds its asset by id, or by path when the id is stale", "[assets]")
-{
-    const TempFolder temp;
-    temp.Write("level.scene", R"({ "version": 1, "entities": [] })");
-
-    FakeGpuResourceManager gpu;
-    const AssetManager assets(gpu, temp.Path());
-    const AssetID level = assets.FindId("level.scene");
-    REQUIRE(level);
-
-    const LogCounter warnings(LogLevel::Warn, "");
-
-    SECTION("An id that exists")
-    {
-        CHECK(assets.FindId(AssetRef{ level, "elsewhere.scene" }) == level);
-        CHECK(assets.FindId(AssetRef{ level, {} }) == level);
-    }
-
-    SECTION("A stale id finds the asset at the path")
-    {
-        CHECK(assets.FindId(AssetRef{ AssetID::Generate(), "level.scene" }) == level);
-        CHECK(assets.FindId(AssetRef{ {}, "level.scene" }) == level);
-    }
-
-    SECTION("Neither is nothing")
-    {
-        CHECK_FALSE(assets.FindId(AssetRef{ AssetID::Generate(), "gone.scene" }));
-        CHECK_FALSE(assets.FindId(AssetRef{ AssetID::Generate(), {} }));
-        CHECK_FALSE(assets.FindId(AssetRef{}));
-    }
-
-    SECTION("An engine asset's old id gives its new one")
-    {
-        const AssetID lit = assets.FindId("engine/shaders/S_Lit.hlsl");
-        REQUIRE(lit);
-        CHECK(assets.FindId(AssetRef{ AssetID::FromString(EngineIdOf("engine/shaders/main.hlsl")), {} }) == lit);
-    }
-
-    CHECK(warnings.Count() == 0);
 }
 
 TEST_CASE("The renderer's own shaders and materials are internal", "[assets]")

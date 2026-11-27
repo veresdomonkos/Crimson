@@ -45,18 +45,6 @@ namespace crimson
     // only a path share it on purpose: the same path is the same asset.
     inline constexpr AssetID kAssetPathNamespace{ { 0x15, 0xe9, 0x77, 0x74, 0x22, 0xc0, 0x47, 0xd0, 0x83, 0x83, 0x61, 0xa4, 0x5b, 0xeb, 0x95, 0xb2 } };
 
-    // An asset reference as a file holds it, not yet looked up, for files read before there are assets (such as the
-    // project file). The path is relative to assets/ and finds the asset if the id is stale. A path with no id is a
-    // hand-written one. AssetManager::FindId looks it up.
-    struct AssetRef
-    {
-        AssetID Id;
-        std::string Path;
-
-        explicit operator bool() const { return Id || !Path.empty(); }
-        bool operator==(const AssetRef&) const = default;
-    };
-
     // A type of asset, known by the name its files have. Only AssetType::Of makes one, from a type's struct, so the name
     // is always the type's own and lives as long as the program. A default one is no type.
     class AssetType
