@@ -58,6 +58,44 @@ namespace crimson::editor
         m_history.AddSource(m_assetEdits);
 
         LoadScene(ChooseScene(m_recents.GetLastScene(m_project.Root())));
+
+        if (const MainSceneRef& main = m_project.GetMainScene(); main.Id && !m_assets.GetInfo(main.Id) && !m_assets.FindId(main.Path))
+            LOG_WARN("[Project] The main scene {} isn't there, so it is kept in case it comes back", main.Path);
+
+        SyncMainScene();
+    }
+
+    SceneID ProjectSession::GetMainScene() const
+    {
+        return m_assets.As<SceneAsset>(m_project.GetMainScene().Id);
+    }
+
+    void ProjectSession::SetMainScene(SceneID id)
+    {
+        const AssetInfo* info = m_assets.GetInfo(id);
+        if (!info)
+            return;
+
+        if (!m_project.SetMainScene(id, info->Path))
+            LOG_ERROR("[Project] Can't write the main scene to {}", Project::kFileName);
+    }
+
+    void ProjectSession::SyncMainScene()
+    {
+        m_seenAssetsVersion = m_assets.Version();
+
+        const MainSceneRef main = m_project.GetMainScene();
+        if (!main.Id && main.Path.empty())
+            return;
+
+        // A stale id, such as from a scene that was recreated, is found by its path
+        AssetID id = m_assets.GetInfo(main.Id) ? main.Id : m_assets.FindId(main.Path);
+        const AssetInfo* info = m_assets.GetInfo(id);
+        if (!info || !info->Type.Is<SceneAsset>() || (id == main.Id && info->Path == main.Path))
+            return;
+
+        if (!m_project.SetMainScene(id, info->Path))
+            LOG_ERROR("[Project] Can't write the main scene to {}", Project::kFileName);
     }
 
     bool ProjectSession::CheckSceneChanged()
@@ -80,6 +118,9 @@ namespace crimson::editor
 
     void ProjectSession::Update(float deltaTime)
     {
+        if (m_assets.Version() != m_seenAssetsVersion)
+            SyncMainScene();
+
         // Between frames, as loading a scene and restoring a copy create GPU resources
         if (m_sceneToLoad)
         {
@@ -139,6 +180,14 @@ namespace crimson::editor
 
             if (m_selectedAsset == id)
                 SelectAsset({});
+        }
+
+        if (const AssetID main = m_project.GetMainScene().Id; main && std::ranges::find(removed, main) != removed.end())
+        {
+            LOG_WARN("[Project] The main scene {} was deleted, so the project has none now", m_project.GetMainScene().Path);
+
+            if (!m_project.SetMainScene({}, {}))
+                LOG_ERROR("[Project] Can't write the main scene to {}", Project::kFileName);
         }
 
         const auto isRemoved = [removed](AssetID id) { return std::ranges::find(removed, id) != removed.end(); };

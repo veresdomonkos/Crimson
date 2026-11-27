@@ -1,5 +1,6 @@
 #pragma once
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -46,6 +47,11 @@ namespace crimson::editor
         // For undo of the scene: record an entity before changing it, or after creating it. The selected one is recorded already.
         [[nodiscard]] SceneEdits& GetSceneEdits() { return m_sceneEdits; }
         [[nodiscard]] EditHistory& GetHistory() { return m_history; }
+
+        // The scene a built game starts with, which is the project's and not the one the editor opens. Empty if there is
+        // none or it isn't there. It follows the scene when that moves, and is cleared with a warning when it is deleted.
+        [[nodiscard]] SceneID GetMainScene() const;
+        void SetMainScene(SceneID id);
 
         // The file of the scene. Invalid if the scene couldn't be loaded, and then there is nothing to save to.
         [[nodiscard]] SceneID GetSceneAsset() const { return m_sceneAsset; }
@@ -112,6 +118,9 @@ namespace crimson::editor
         void ShowScene(const SceneData& data, SceneID id);
         void DoRestoreRecovery();
 
+        // Keeps the project's main scene pointing at its asset after the assets changed
+        void SyncMainScene();
+
         // Asks what to do with the scene's copy if it is newer than the scene's file, and deletes it if it isn't
         void OfferRecovery(SceneID id);
         // Deletes the open scene's copy if this session wrote or restored it
@@ -162,6 +171,7 @@ namespace crimson::editor
         bool m_edited = false;
 
         size_t m_missingAssets = 0;
+        uint64_t m_seenAssetsVersion = 0;
 
         float m_sinceSceneCheck = 0.0f;
         float m_sinceRecovery = 0.0f;

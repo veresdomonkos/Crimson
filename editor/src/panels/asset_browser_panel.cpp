@@ -458,6 +458,18 @@ namespace crimson::editor
 
         ui::Separator();
 
+        if (item.Type.Is<SceneAsset>())
+        {
+            const SceneID scene = m_context.Session.GetAssets().As<SceneAsset>(item.Id);
+            const bool isMain = scene && m_context.Session.GetMainScene() == scene;
+
+            if (ui::MenuItem("Set as Main Scene", {}, true, isMain))
+                m_context.Session.SetMainScene(scene);
+
+            ui::Tooltip("The scene a built game starts with");
+            ui::Separator();
+        }
+
         // The materials its .mtl describes, one for each slot that has none
         if (item.Type.Is<MeshAsset>() && file.extension() == ".obj")
         {

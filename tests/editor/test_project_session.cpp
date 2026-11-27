@@ -813,3 +813,76 @@ TEST_CASE_METHOD(Fixture, "A copy that can't be read is deleted", "[project sess
     CHECK_FALSE(fs::exists(copy));
     CHECK_FALSE(Session().GetOfferedRecovery());
 }
+
+TEST_CASE_METHOD(Fixture, "A project's main scene is kept, and followed when it moves", "[project session]")
+{
+    const SceneID main = MainScene();
+    const SceneID other = Assets().Create<SceneAsset>("scenes/other.scene");
+    REQUIRE(other);
+    CHECK_FALSE(Session().GetMainScene());
+
+    Session().SetMainScene(other);
+    CHECK(Session().GetMainScene() == other);
+
+    SECTION("It is in the file, and the scene the editor opens stays the user's")
+    {
+        Recents.SetLastScene(Created.Root(), main);
+        Open.reset();
+        Open.emplace(*Project::Load(Created.Root()), Gpu, Recents, [this] { return Editing; });
+
+        CHECK(Session().GetMainScene() == other);
+        CHECK(Session().GetSceneAsset() == main);
+    }
+
+    SECTION("Moving the scene keeps it, with the new path")
+    {
+        REQUIRE(Assets().Rename(other, "scenes/moved.scene"));
+        Session().Update(0.0f);
+
+        CHECK(Session().GetMainScene() == other);
+        CHECK(Project::Load(Created.Root())->GetMainScene().Path == "scenes/moved.scene");
+    }
+
+    SECTION("A stale id is found by the path")
+    {
+        const auto project = Project::Load(Created.Root());
+        REQUIRE(project);
+        Project edited = *project;
+        REQUIRE(edited.SetMainScene(AssetID::Generate(), "scenes/other.scene"));
+
+        Open.reset();
+        Open.emplace(*Project::Load(Created.Root()), Gpu, Recents, [this] { return Editing; });
+
+        CHECK(Session().GetMainScene() == other);
+        CHECK(Project::Load(Created.Root())->GetMainScene().Id == AssetID(other));
+    }
+
+    SECTION("Deleting it clears it, with a warning")
+    {
+        const LogCounter warnings(LogLevel::Warn, "main scene");
+
+        REQUIRE(Assets().Delete(other));
+        const std::array removed = { AssetID(other) };
+        Session().ForgetAssets(removed);
+
+        CHECK_FALSE(Session().GetMainScene());
+        CHECK_FALSE(Project::Load(Created.Root())->GetMainScene().Id);
+        CHECK(warnings.Count() == 1);
+    }
+}
+
+TEST_CASE_METHOD(Fixture, "A main scene that is missing at open is kept, with a warning", "[project session]")
+{
+    Project edited = *Project::Load(Created.Root());
+    REQUIRE(edited.SetMainScene(AssetID::Generate(), "scenes/gone.scene"));
+
+    const LogCounter warnings(LogLevel::Warn, "main scene");
+    const LogCounter errors(LogLevel::Error, "");
+    Open.reset();
+    Open.emplace(*Project::Load(Created.Root()), Gpu, Recents, [this] { return Editing; });
+
+    CHECK_FALSE(Session().GetMainScene());
+    CHECK(warnings.Count() == 1);
+    CHECK(errors.Count() == 0);
+    CHECK(Project::Load(Created.Root())->GetMainScene().Path == "scenes/gone.scene");
+}
